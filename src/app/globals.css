@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/*
+ * TCM Brand — xanh dương bão hòa cao lấy từ logo gốc (wordmark "TCM" + "Targeted Marketing").
+ * Thang màu 50–950 để dùng nhất quán cho nút, badge, biểu đồ, trạng thái active.
+ * Chờ file logo gốc (SVG/PNG) từ chủ dự án để hiệu chỉnh chính xác nếu cần.
+ */
+:root {
+  --brand-50: #eef6ff;
+  --brand-100: #dcecff;
+  --brand-200: #b3d9ff;
+  --brand-300: #7ac0ff;
+  --brand-400: #3aa2ff;
+  --brand-500: #0b84fa;
+  --brand-600: #0068e6;
+  --brand-700: #0052b8;
+  --brand-800: #023f8f;
+  --brand-900: #0a3269;
+  --brand-950: #061d40;
+
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --surface-2: #f6f8fb;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --muted-foreground: #64748b;
+
+  --success: #16a34a;
+  --success-bg: #ecfdf3;
+  --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+
+  --radius: 10px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+  --color-brand-950: var(--brand-950);
+
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/*
+ * Theme toggle chủ động (xem theme-toggle.tsx): [data-theme] trên <html> luôn thắng.
+ * Chưa có lựa chọn (trước khi JS chạy) → theo prefers-color-scheme hệ điều hành.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0a1120;
+    --foreground: #e7edf7;
+    --surface: #0f1830;
+    --surface-2: #131f3d;
+    --border: #223052;
+    --border-strong: #2c3d66;
+    --muted-foreground: #93a3c2;
+
+    --success-bg: #0f2a1c;
+    --warning-bg: #2c2109;
+    --danger-bg: #2c1112;
+
+    --brand-50: #061d40;
+    --brand-100: #0a3269;
+    --brand-950: #eef6ff;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #0a1120;
+  --foreground: #e7edf7;
+  --surface: #0f1830;
+  --surface-2: #131f3d;
+  --border: #223052;
+  --border-strong: #2c3d66;
+  --muted-foreground: #93a3c2;
+
+  --success-bg: #0f2a1c;
+  --warning-bg: #2c2109;
+  --danger-bg: #2c1112;
+
+  --brand-50: #061d40;
+  --brand-100: #0a3269;
+  --brand-950: #eef6ff;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}

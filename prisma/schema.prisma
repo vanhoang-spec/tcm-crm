@@ -1,0 +1,184 @@
+// TCM — Nền tảng tối thiểu + Module ① Khách hàng
+// SQLite cho dev (dễ chạy local). Chuyển sang PostgreSQL khi lên staging/production
+// chỉ cần đổi provider + DATABASE_URL — schema giữ nguyên (tránh dùng tính năng riêng của sqlite).
+// Enum "mềm" (industry, ...) đi qua OptionSet/OptionItem để admin tự cấu hình (không hard-code).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────
+// NỀN TẢNG — Identity / Tổ chức
+// ─────────────────────────────────────────────────────────
+
+model Team {
+  id        String   @id @default(cuid())
+  code      String   @unique // A1 | A2 | A3
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff           Staff[]
+  ownedClients    Client[]         @relation("ClientOwnerTeam")
+  transfersFrom   ClientTransfer[] @relation("TransferFromTeam")
+  transfersTo     ClientTransfer[] @relation("TransferToTeam")
+
+  @@map("team")
+}
+
+model Department {
+  id       String  @id @default(cuid())
+  code     String  @unique // ACCOUNT | PLANNING | CREATIVE | OPE | PRO | PCC | FIN | HR | CEO
+  name     String
+  isActive Boolean @default(true)
+
+  staff Staff[]
+
+  @@map("department")
+}
+
+model Staff {
+  id           String   @id @default(cuid())
+  code         String?  @unique
+  fullName     String
+  email        String   @unique
+  phone        String?
+  title        String?
+  departmentId String?
+  teamId       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department Department? @relation(fields: [departmentId], references: [id])
+  team       Team?       @relation(fields: [teamId], references: [id])
+
+  introducedClients       Client[]         @relation("ClientIntroducer")
+  clientTransfersRequested ClientTransfer[] @relation("TransferRequestedBy")
+  clientTransfersApproved  ClientTransfer[] @relation("TransferApprovedBy")
+
+  @@map("staff")
+}
+
+// ─────────────────────────────────────────────────────────
+// NỀN TẢNG — Danh mục động (admin cấu hình) & Audit
+// ─────────────────────────────────────────────────────────
+
+model OptionSet {
+  id   String @id @default(cuid())
+  code String @unique // vd: industry, project_type, channel, fail_reason...
+  name String
+
+  items OptionItem[]
+
+  @@map("option_set")
+}
+
+model OptionItem {
+  id       String  @id @default(cuid())
+  setId    String
+  code     String
+  labelVi  String
+  labelEn  String?
+  sort     Int     @default(0)
+  isActive Boolean @default(true)
+
+  set OptionSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  clientsAsIndustry Client[] @relation("ClientIndustry")
+
+  @@unique([setId, code])
+  @@map("option_item")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  field      String
+  oldValue   String?
+  newValue   String?
+  action     String // CREATE | UPDATE | DELETE
+  changedBy  String?
+  changedAt  DateTime @default(now())
+  reason     String?
+
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
+// ─────────────────────────────────────────────────────────
+// MODULE ① — KHÁCH HÀNG
+// ─────────────────────────────────────────────────────────
+
+model Client {
+  id              String   @id @default(cuid())
+  code            String   @unique // vd LOF, DHG, CTL
+  name            String
+  brand           String?
+  industryId      String?
+  isNew           Boolean  @default(true)
+  introducerId    String?
+  ownerTeamId     String // team đang phụ trách — quyết định row-level visibility
+  paymentTermDays Int      @default(90)
+  address         String?
+  phone           String?
+  email           String?
+  note            String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  industry   OptionItem? @relation("ClientIndustry", fields: [industryId], references: [id])
+  introducer Staff?      @relation("ClientIntroducer", fields: [introducerId], references: [id])
+  ownerTeam  Team        @relation("ClientOwnerTeam", fields: [ownerTeamId], references: [id])
+
+  contacts  Contact[]
+  transfers ClientTransfer[]
+
+  @@map("client")
+}
+
+model Contact {
+  id        String    @id @default(cuid())
+  clientId  String
+  name      String
+  title     String?
+  phone     String?
+  email     String?
+  birthday  DateTime?
+  address   String?
+  isPrimary Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("contact")
+}
+
+/// Chuyển khách hàng giữa 2 team Account — khác với Handover (chuyển dự án, ở module ③)
+model ClientTransfer {
+  id              String   @id @default(cuid())
+  clientId        String
+  fromTeamId      String
+  toTeamId        String
+  reason          String
+  transferredById String
+  approvedById    String?
+  transferredAt   DateTime @default(now())
+
+  client        Client @relation(fields: [clientId], references: [id])
+  fromTeam      Team   @relation("TransferFromTeam", fields: [fromTeamId], references: [id])
+  toTeam        Team   @relation("TransferToTeam", fields: [toTeamId], references: [id])
+  transferredBy Staff  @relation("TransferRequestedBy", fields: [transferredById], references: [id])
+  approvedBy    Staff? @relation("TransferApprovedBy", fields: [approvedById], references: [id])
+
+  @@map("client_transfer")
+}

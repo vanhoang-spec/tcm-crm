@@ -2,12 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
-import { clientFormSchema } from "@/lib/validators/client";
+import {
+  getClientFormSchema,
+  getContactListSchema,
+  MAX_CONTACTS,
+  OTHER_INTRODUCER,
+} from "@/lib/validators/client";
 
 function toNullable(v: string | undefined) {
   return v && v.trim() !== "" ? v : null;
+}
+
+/** "OTHER" (Khác — không phải nhân viên công ty) → lưu introducerId = null. */
+function resolveIntroducerId(introducerId: string) {
+  return introducerId === OTHER_INTRODUCER ? null : introducerId;
 }
 
 export type ClientFormState = {
@@ -16,11 +27,15 @@ export type ClientFormState = {
 };
 
 async function parseClientForm(formData: FormData) {
+  const t = await getTranslations("validation.client");
   const raw = {
     code: String(formData.get("code") ?? ""),
     name: String(formData.get("name") ?? ""),
-    brand: String(formData.get("brand") ?? ""),
+    taxCode: String(formData.get("taxCode") ?? ""),
+    brandName: String(formData.get("brandName") ?? ""),
     industryId: String(formData.get("industryId") ?? ""),
+    statusId: String(formData.get("statusId") ?? ""),
+    classificationId: String(formData.get("classificationId") ?? ""),
     ownerTeamId: String(formData.get("ownerTeamId") ?? ""),
     introducerId: String(formData.get("introducerId") ?? ""),
     isNew: formData.get("isNew") === "on",
@@ -28,52 +43,114 @@ async function parseClientForm(formData: FormData) {
     address: String(formData.get("address") ?? ""),
     phone: String(formData.get("phone") ?? ""),
     email: String(formData.get("email") ?? ""),
+    bankAccount: String(formData.get("bankAccount") ?? ""),
     note: String(formData.get("note") ?? ""),
   };
 
-  return clientFormSchema.safeParse(raw);
+  return getClientFormSchema(t).safeParse(raw);
+}
+
+/** Đọc mảng người liên hệ từ FormData: contact_name_0, contact_title_0, ... (index 0-9). */
+function parseContactsFromFormData(formData: FormData) {
+  const rows: { name: string; title: string; phone: string; email: string }[] = [];
+  for (let i = 0; i < MAX_CONTACTS; i++) {
+    const name = String(formData.get(`contact_name_${i}`) ?? "").trim();
+    const title = String(formData.get(`contact_title_${i}`) ?? "").trim();
+    const phone = String(formData.get(`contact_phone_${i}`) ?? "").trim();
+    const email = String(formData.get(`contact_email_${i}`) ?? "").trim();
+    if (!name && !title && !phone && !email) continue; // dòng trống bị bỏ qua
+    rows.push({ name, title, phone, email });
+  }
+  return rows;
+}
+
+async function resolveBrandId(brandName: string) {
+  const brand = await prisma.brand.upsert({
+    where: { name: brandName.trim() },
+    update: {},
+    create: { name: brandName.trim() },
+  });
+  return brand.id;
+}
+
+/** Khách hàng mới tạo luôn ở "Tiềm năng" — không cho chọn tay lúc tạo mới. */
+async function resolvePotentialStatusId() {
+  const item = await prisma.optionItem.findFirst({
+    where: { set: { code: "client_status" }, code: "POTENTIAL" },
+  });
+  if (!item) throw new Error("Missing option_item client_status/POTENTIAL — run seed.");
+  return item.id;
 }
 
 export async function createClient(_prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
+  const tContact = await getTranslations("validation.contact");
   const parsed = await parseClientForm(formData);
-  if (!parsed.success) {
-    return { fieldErrors: flattenZodErrors(parsed.error) };
+  const contactsParsed = getContactListSchema(tContact).safeParse(parseContactsFromFormData(formData));
+
+  const fieldErrors: Record<string, string> = {};
+  if (!parsed.success) Object.assign(fieldErrors, flattenZodErrors(parsed.error));
+  if (!contactsParsed.success) {
+    const issue = contactsParsed.error.issues[0];
+    const rowIndex = typeof issue?.path[0] === "number" ? issue.path[0] : null;
+    fieldErrors.contacts =
+      rowIndex !== null
+        ? tContact("rowError", { n: rowIndex + 1, message: issue.message })
+        : (issue?.message ?? tContact("listInvalid"));
+  }
+  if (!parsed.success || !contactsParsed.success) {
+    return { fieldErrors };
   }
   const data = parsed.data;
+  const contacts = contactsParsed.data;
 
+  const tClient = await getTranslations("validation.client");
   const existing = await prisma.client.findUnique({ where: { code: data.code } });
   if (existing) {
-    return { fieldErrors: { code: "Mã khách hàng đã tồn tại" } };
+    return { fieldErrors: { code: tClient("codeExists") } };
   }
 
   const staffId = await getCurrentStaffId();
+  const brandId = await resolveBrandId(data.brandName);
+  const statusId = await resolvePotentialStatusId();
 
-  const client = await prisma.client.create({
-    data: {
-      code: data.code,
-      name: data.name,
-      brand: toNullable(data.brand),
-      industryId: toNullable(data.industryId),
-      ownerTeamId: data.ownerTeamId,
-      introducerId: toNullable(data.introducerId),
-      isNew: data.isNew,
-      paymentTermDays: data.paymentTermDays,
-      address: toNullable(data.address),
-      phone: toNullable(data.phone),
-      email: toNullable(data.email),
-      note: toNullable(data.note),
-    },
-  });
+  const client = await prisma.$transaction(async (tx) => {
+    const created = await tx.client.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        taxCode: data.taxCode,
+        brandId,
+        industryId: data.industryId,
+        statusId,
+        classificationId: data.classificationId,
+        ownerTeamId: data.ownerTeamId,
+        introducerId: resolveIntroducerId(data.introducerId),
+        isNew: data.isNew,
+        paymentTermDays: data.paymentTermDays,
+        address: data.address,
+        phone: data.phone,
+        email: data.email,
+        bankAccount: data.bankAccount,
+        note: toNullable(data.note),
+      },
+    });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: "client",
-      entityId: client.id,
-      field: "*",
-      newValue: JSON.stringify(data),
-      action: "CREATE",
-      changedBy: staffId,
-    },
+    await tx.contact.createMany({
+      data: contacts.map((c, i) => ({ ...c, clientId: created.id, isPrimary: i === 0 })),
+    });
+
+    await tx.auditLog.create({
+      data: {
+        entityType: "client",
+        entityId: created.id,
+        field: "*",
+        newValue: JSON.stringify({ ...data, brandId, statusId, contactsCount: contacts.length }),
+        action: "CREATE",
+        changedBy: staffId,
+      },
+    });
+
+    return created;
   });
 
   revalidatePath("/clients");
@@ -85,6 +162,7 @@ export async function updateClient(
   _prevState: ClientFormState,
   formData: FormData,
 ): Promise<ClientFormState> {
+  const tClient = await getTranslations("validation.client");
   const parsed = await parseClientForm(formData);
   if (!parsed.success) {
     return { fieldErrors: flattenZodErrors(parsed.error) };
@@ -93,30 +171,35 @@ export async function updateClient(
 
   const before = await prisma.client.findUnique({ where: { id: clientId } });
   if (!before) {
-    return { error: "Không tìm thấy khách hàng." };
+    return { error: tClient("notFound") };
   }
 
   const duplicateCode = await prisma.client.findFirst({
     where: { code: data.code, NOT: { id: clientId } },
   });
   if (duplicateCode) {
-    return { fieldErrors: { code: "Mã khách hàng đã tồn tại" } };
+    return { fieldErrors: { code: tClient("codeExists") } };
   }
 
   const staffId = await getCurrentStaffId();
+  const brandId = await resolveBrandId(data.brandName);
 
   const after = {
     code: data.code,
     name: data.name,
-    brand: toNullable(data.brand),
-    industryId: toNullable(data.industryId),
+    taxCode: data.taxCode,
+    brandId,
+    industryId: data.industryId,
+    statusId: data.statusId,
+    classificationId: data.classificationId,
     ownerTeamId: data.ownerTeamId,
-    introducerId: toNullable(data.introducerId),
+    introducerId: resolveIntroducerId(data.introducerId),
     isNew: data.isNew,
     paymentTermDays: data.paymentTermDays,
-    address: toNullable(data.address),
-    phone: toNullable(data.phone),
-    email: toNullable(data.email),
+    address: data.address,
+    phone: data.phone,
+    email: data.email,
+    bankAccount: data.bankAccount,
     note: toNullable(data.note),
   };
 
@@ -170,7 +253,7 @@ export async function transferClient(clientId: string, toTeamId: string, reason:
         newValue: toTeamId,
         action: "UPDATE",
         changedBy: staffId,
-        reason: `Chuyển khách hàng: ${reason}`,
+        reason,
       },
     }),
   ]);
@@ -179,9 +262,28 @@ export async function transferClient(clientId: string, toTeamId: string, reason:
   revalidatePath(`/clients/${clientId}`);
 }
 
+export async function addCareNote(clientId: string, formData: FormData) {
+  const note = String(formData.get("note") ?? "").trim();
+  if (!note) return;
+
+  const staffId = await getCurrentStaffId();
+  await prisma.careNote.create({
+    data: { clientId, note, staffId },
+  });
+
+  revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/clients/care-report");
+}
+
 export async function addContact(clientId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) return;
+  const title = String(formData.get("title") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  if (!name || !title || !phone || !email) return;
+
+  const count = await prisma.contact.count({ where: { clientId } });
+  if (count >= MAX_CONTACTS) return;
 
   const isPrimary = formData.get("isPrimary") === "on";
   if (isPrimary) {
@@ -189,14 +291,7 @@ export async function addContact(clientId: string, formData: FormData) {
   }
 
   await prisma.contact.create({
-    data: {
-      clientId,
-      name,
-      title: toNullable(String(formData.get("title") ?? "")),
-      phone: toNullable(String(formData.get("phone") ?? "")),
-      email: toNullable(String(formData.get("email") ?? "")),
-      isPrimary,
-    },
+    data: { clientId, name, title, phone, email, isPrimary },
   });
 
   revalidatePath(`/clients/${clientId}`);

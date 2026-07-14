@@ -1,34 +1,40 @@
 import { Users, Gavel, Briefcase, Warehouse } from "lucide-react";
+import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
+import { formatNumber } from "@/lib/utils";
+import type { Locale } from "@/i18n/locales";
 
 export default async function DashboardPage() {
-  const [clientCount, teamCount] = await Promise.all([
+  const [clientCount, teamCount, t, tNav, locale] = await Promise.all([
     prisma.client.count({ where: { isActive: true } }),
     prisma.team.count(),
+    getTranslations("dashboard"),
+    getTranslations("nav"),
+    getLocale() as Promise<Locale>,
   ]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Tổng quan</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Nền tảng vận hành nội bộ TCM — khung hệ thống đang xây dựng theo từng module.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Users} label="Khách hàng đang quản lý" value={String(clientCount)} sub={`trên ${teamCount} team`} />
-        <StatCard icon={Gavel} label="Bidding & Hợp đồng" value="—" sub="Module sắp triển khai" muted />
-        <StatCard icon={Briefcase} label="Dự án đang chạy" value="—" sub="Module sắp triển khai" muted />
-        <StatCard icon={Warehouse} label="Kho hàng" value="—" sub="Module sắp triển khai" muted />
+        <StatCard
+          icon={Users}
+          label={t("clientsManaged")}
+          value={formatNumber(clientCount, locale)}
+          sub={t("acrossTeams", { count: formatNumber(teamCount, locale) })}
+        />
+        <StatCard icon={Gavel} label={tNav("bidding")} value="—" sub={t("moduleComingSoon")} muted />
+        <StatCard icon={Briefcase} label={t("runningProjects")} value="—" sub={t("moduleComingSoon")} muted />
+        <StatCard icon={Warehouse} label={tNav("inventory")} value="—" sub={t("moduleComingSoon")} muted />
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-5">
-        <h2 className="text-sm font-semibold text-foreground">Lộ trình module</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Đi theo khung kiến trúc đã thống nhất: Nền tảng → ① Khách hàng (đang xây) → ② Bidding &amp; Hợp đồng →
-          ③ Quản lý dự án ↔ ⑧ Kho hàng → ④ Chi phí &amp; Công nợ → ⑤ Nhân sự → ⑥ KPI/Thưởng-Phạt → ⑦ Lương.
-        </p>
+        <h2 className="text-sm font-semibold text-foreground">{t("roadmapTitle")}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t("roadmapDesc")}</p>
       </div>
     </div>
   );

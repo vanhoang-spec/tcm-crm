@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
 import { NAV_ITEMS, SETTINGS_ITEM } from "./nav-items";
 
 function NavLink({ item, onNavigate }: { item: (typeof NAV_ITEMS)[number]; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const tNav = useTranslations("nav");
+  const tCommon = useTranslations("common");
   const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
   const Icon = item.icon;
   const disabled = item.status === "soon";
@@ -15,7 +18,7 @@ function NavLink({ item, onNavigate }: { item: (typeof NAV_ITEMS)[number]; onNav
   const content = (
     <span className="flex w-full items-center gap-3">
       <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-      <span className="flex-1 truncate">{item.label}</span>
+      <span className="flex-1 truncate">{tNav(item.labelKey)}</span>
       {item.module && (
         <span
           className={cn(
@@ -28,7 +31,7 @@ function NavLink({ item, onNavigate }: { item: (typeof NAV_ITEMS)[number]; onNav
       )}
       {disabled && (
         <span className="shrink-0 rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          sắp có
+          {tCommon("comingSoon")}
         </span>
       )}
     </span>

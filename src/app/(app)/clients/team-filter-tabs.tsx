@@ -2,8 +2,16 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { Team } from "@prisma/client";
 
-export function TeamFilterTabs({ teams, activeCode }: { teams: Team[]; activeCode?: string }) {
-  const tabs = [{ code: undefined, label: "Tất cả" }, ...teams.map((t) => ({ code: t.code, label: t.code }))];
+export function TeamFilterTabs({
+  teams,
+  activeCode,
+  allLabel,
+}: {
+  teams: Team[];
+  activeCode?: string;
+  allLabel: string;
+}) {
+  const tabs = [{ code: undefined, label: allLabel }, ...teams.map((t) => ({ code: t.code, label: t.code }))];
 
   return (
     <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-2 p-1">

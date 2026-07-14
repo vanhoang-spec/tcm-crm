@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { Sun, Moon } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type Theme = "light" | "dark";
 
@@ -30,14 +31,15 @@ function setTheme(theme: Theme) {
 
 export function ThemeToggle() {
   const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const t = useTranslations("theme");
 
   return (
     <button
       type="button"
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
       className="rounded-lg p-2 text-muted-foreground hover:bg-surface-2 hover:text-foreground"
-      aria-label={theme === "dark" ? "Chuyển sang nền sáng" : "Chuyển sang nền tối"}
-      title={theme === "dark" ? "Nền sáng" : "Nền tối"}
+      aria-label={theme === "dark" ? t("toLight") : t("toDark")}
+      title={theme === "dark" ? t("light") : t("dark")}
     >
       {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
     </button>

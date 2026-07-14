@@ -4,6 +4,7 @@ import {
   Users,
   Gavel,
   Briefcase,
+  Palette,
   Warehouse,
   Wallet,
   UsersRound,
@@ -14,7 +15,7 @@ import {
 
 export type NavItem = {
   module: string | null;
-  label: string;
+  labelKey: string; // key trong namespace "nav" của messages/{locale}.json
   href: string;
   icon: LucideIcon;
   status: "active" | "soon";
@@ -23,21 +24,22 @@ export type NavItem = {
 // Thứ tự đúng theo blueprint kiến trúc đã chốt (xem plan file):
 // Nền tảng → ① Khách hàng → ② Bidding & Contract → ③ Dự án ↔ ⑧ Kho → ④ Chi phí → ⑤⑥⑦ Con người
 export const NAV_ITEMS: NavItem[] = [
-  { module: null, label: "Tổng quan", href: "/", icon: LayoutDashboard, status: "active" },
-  { module: "①", label: "Khách hàng", href: "/clients", icon: Users, status: "active" },
-  { module: "②", label: "Bidding & Hợp đồng", href: "/bidding", icon: Gavel, status: "soon" },
-  { module: "③", label: "Quản lý dự án", href: "/projects", icon: Briefcase, status: "soon" },
-  { module: "⑧", label: "Kho hàng", href: "/inventory", icon: Warehouse, status: "soon" },
-  { module: "④", label: "Chi phí & Công nợ", href: "/finance", icon: Wallet, status: "soon" },
-  { module: "⑤", label: "Nhân sự", href: "/staff", icon: UsersRound, status: "soon" },
-  { module: "⑥", label: "KPI & Thưởng/Phạt", href: "/kpi", icon: Award, status: "soon" },
-  { module: "⑦", label: "Lương", href: "/payroll", icon: Banknote, status: "soon" },
+  { module: null, labelKey: "overview", href: "/", icon: LayoutDashboard, status: "active" },
+  { module: "①", labelKey: "clients", href: "/clients", icon: Users, status: "active" },
+  { module: "②", labelKey: "bidding", href: "/bidding", icon: Gavel, status: "active" },
+  { module: "③", labelKey: "projects", href: "/projects", icon: Briefcase, status: "active" },
+  { module: "✦", labelKey: "creative", href: "/creative", icon: Palette, status: "active" },
+  { module: "⑧", labelKey: "inventory", href: "/inventory", icon: Warehouse, status: "soon" },
+  { module: "④", labelKey: "finance", href: "/finance", icon: Wallet, status: "soon" },
+  { module: "⑤", labelKey: "staff", href: "/staff", icon: UsersRound, status: "soon" },
+  { module: "⑥", labelKey: "kpi", href: "/kpi", icon: Award, status: "soon" },
+  { module: "⑦", labelKey: "payroll", href: "/payroll", icon: Banknote, status: "soon" },
 ];
 
 export const SETTINGS_ITEM: NavItem = {
   module: null,
-  label: "Thiết lập hệ thống",
+  labelKey: "settings",
   href: "/settings",
   icon: Settings,
-  status: "soon",
+  status: "active",
 };

@@ -1,16 +1,25 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Mail, Phone, MapPin, Star, ArrowLeftRight } from "lucide-react";
+import { ArrowLeft, Pencil, Mail, Phone, MapPin, Star, ArrowLeftRight, Landmark } from "lucide-react";
+import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
-import { formatDate } from "@/lib/utils";
-import { addContact, transferClientAction } from "../actions";
+import { formatDate, formatDateTime, formatNumber, pickLabel } from "@/lib/utils";
+import type { Locale } from "@/i18n/locales";
+import { addCareNote, addContact, transferClientAction } from "../actions";
+import { MAX_CONTACTS } from "@/lib/validators/client";
 
 const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
   A1: "brand",
   A2: "success",
   A3: "warning",
+};
+
+const STATUS_TONE: Record<string, "brand" | "success" | "neutral"> = {
+  POTENTIAL: "brand",
+  ACTIVE: "success",
+  INACTIVE: "neutral",
 };
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,34 +30,45 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     include: {
       ownerTeam: true,
       industry: true,
+      status: true,
+      classification: true,
       introducer: true,
+      brand: true,
       contacts: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
       transfers: {
         include: { fromTeam: true, toTeam: true, transferredBy: true },
         orderBy: { transferredAt: "desc" },
       },
+      careNotes: {
+        include: { staff: true },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
   if (!client) notFound();
 
-  const [teams, auditEntries] = await Promise.all([
+  const [teams, auditEntries, t, tForm, locale] = await Promise.all([
     prisma.team.findMany({ where: { NOT: { id: client.ownerTeamId } }, orderBy: { code: "asc" } }),
     prisma.auditLog.findMany({
       where: { entityType: "client", entityId: client.id },
       orderBy: { changedAt: "desc" },
       take: 10,
     }),
+    getTranslations("clients.detail"),
+    getTranslations("clients.form"),
+    getLocale() as Promise<Locale>,
   ]);
 
   const addContactWithId = addContact.bind(null, client.id);
   const transferWithId = transferClientAction.bind(null, client.id);
+  const addCareNoteWithId = addCareNote.bind(null, client.id);
 
   return (
     <div className="max-w-4xl space-y-6">
       <div>
         <Link href="/clients" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5" />
-          Quay lại danh sách
+          {t("backToList")}
         </Link>
       </div>
 
@@ -57,18 +77,26 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">{client.name}</h1>
             <span className="font-mono text-xs text-muted-foreground">{client.code}</span>
-            {client.isNew && <Badge tone="brand">KH Mới</Badge>}
+            {client.isNew && <Badge tone="brand">{t("isNewBadge")}</Badge>}
           </div>
-          {client.brand && <p className="mt-1 text-sm text-muted-foreground">Brand: {client.brand}</p>}
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("brandAndTax", { brand: client.brand.name, taxCode: client.taxCode })}
+          </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge tone={TEAM_TONE[client.ownerTeam.code] ?? "neutral"}>Team {client.ownerTeam.code}</Badge>
-            {client.industry && <Badge tone="neutral">{client.industry.labelVi}</Badge>}
-            <Badge tone="neutral">Payment term {client.paymentTermDays} ngày</Badge>
+            <Badge tone={TEAM_TONE[client.ownerTeam.code] ?? "neutral"}>
+              {t("teamBadge", { code: client.ownerTeam.code })}
+            </Badge>
+            <Badge tone="neutral">{pickLabel(client.industry, locale)}</Badge>
+            <Badge tone={STATUS_TONE[client.status.code] ?? "neutral"}>{pickLabel(client.status, locale)}</Badge>
+            <Badge tone="neutral">{pickLabel(client.classification, locale)}</Badge>
+            <Badge tone="neutral">
+              {t("paymentTermBadge", { days: formatNumber(client.paymentTermDays, locale) })}
+            </Badge>
           </div>
         </div>
         <LinkButton href={`/clients/${client.id}/edit`} variant="secondary" size="sm">
           <Pencil className="h-3.5 w-3.5" />
-          Sửa thông tin
+          {t("editInfo")}
         </LinkButton>
       </div>
 
@@ -76,7 +104,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <div className="space-y-6 lg:col-span-2">
           {/* Contacts */}
           <section className="rounded-xl border border-border bg-surface p-5">
-            <h2 className="text-sm font-semibold text-foreground">Người liên hệ</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("contactsTitle")}</h2>
             <ul className="mt-3 divide-y divide-border">
               {client.contacts.map((c) => (
                 <li key={c.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
@@ -102,54 +130,99 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 </li>
               ))}
               {client.contacts.length === 0 && (
-                <li className="py-3 text-sm text-muted-foreground">Chưa có người liên hệ nào.</li>
+                <li className="py-3 text-sm text-muted-foreground">{t("noContacts")}</li>
               )}
             </ul>
 
+            {client.contacts.length < MAX_CONTACTS ? (
+              <details className="mt-4 rounded-lg border border-dashed border-border-strong p-3">
+                <summary className="cursor-pointer text-xs font-medium text-brand-600">{t("addContact")}</summary>
+                <form action={addContactWithId} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <input name="name" placeholder={tForm("contactName")} required className={smallInput} />
+                  <input name="title" placeholder={tForm("contactTitle")} required className={smallInput} />
+                  <input name="phone" placeholder={tForm("contactPhone")} required className={smallInput} />
+                  <input name="email" type="email" placeholder={tForm("contactEmail")} required className={smallInput} />
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
+                    <input type="checkbox" name="isPrimary" className="h-3.5 w-3.5 rounded border-border-strong" />
+                    {t("primaryContact")}
+                  </label>
+                  <div className="sm:col-span-2">
+                    <button
+                      type="submit"
+                      className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600"
+                    >
+                      {t("saveContact")}
+                    </button>
+                  </div>
+                </form>
+              </details>
+            ) : (
+              <p className="mt-4 text-xs text-muted-foreground">{t("maxContactsReached", { max: MAX_CONTACTS })}</p>
+            )}
+          </section>
+
+          {/* Thông tin chăm sóc */}
+          <section className="rounded-xl border border-border bg-surface p-5">
+            <h2 className="text-sm font-semibold text-foreground">{t("careTitle")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("careHint")}</p>
+
+            <ul className="mt-3 space-y-3">
+              {client.careNotes.map((n) => (
+                <li key={n.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+                  <p className="text-xs text-muted-foreground">
+                    {t("careEntry", { date: formatDateTime(n.createdAt, locale), staff: n.staff?.fullName ?? "—" })}
+                  </p>
+                  <p className="mt-0.5 text-sm text-foreground">{n.note}</p>
+                </li>
+              ))}
+              {client.careNotes.length === 0 && <li className="text-sm text-muted-foreground">{t("noCare")}</li>}
+            </ul>
+
             <details className="mt-4 rounded-lg border border-dashed border-border-strong p-3">
-              <summary className="cursor-pointer text-xs font-medium text-brand-600">+ Thêm người liên hệ</summary>
-              <form action={addContactWithId} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input name="name" placeholder="Họ tên *" required className={smallInput} />
-                <input name="title" placeholder="Chức danh" className={smallInput} />
-                <input name="phone" placeholder="Số điện thoại" className={smallInput} />
-                <input name="email" type="email" placeholder="Email" className={smallInput} />
-                <label className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
-                  <input type="checkbox" name="isPrimary" className="h-3.5 w-3.5 rounded border-border-strong" />
-                  Đặt làm liên hệ chính
-                </label>
-                <div className="sm:col-span-2">
-                  <button
-                    type="submit"
-                    className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600"
-                  >
-                    Lưu liên hệ
-                  </button>
-                </div>
+              <summary className="cursor-pointer text-xs font-medium text-brand-600">{t("addCare")}</summary>
+              <form action={addCareNoteWithId} className="mt-3 space-y-2">
+                <textarea
+                  name="note"
+                  required
+                  rows={3}
+                  placeholder={t("careNotePlaceholder")}
+                  className="w-full rounded-lg border border-border-strong bg-surface px-2.5 py-2 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                />
+                <button
+                  type="submit"
+                  className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600"
+                >
+                  {t("saveCare")}
+                </button>
               </form>
             </details>
           </section>
 
           {/* Placeholders cho module chưa xây */}
           <section className="rounded-xl border border-dashed border-border-strong bg-surface-2 p-5">
-            <h2 className="text-sm font-semibold text-muted-foreground">Lịch sử dự án</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Sẽ hiển thị khi module ③ Quản lý dự án hoàn thành.</p>
+            <h2 className="text-sm font-semibold text-muted-foreground">{t("projectHistoryTitle")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("projectHistoryPending")}</p>
           </section>
           <section className="rounded-xl border border-dashed border-border-strong bg-surface-2 p-5">
-            <h2 className="text-sm font-semibold text-muted-foreground">Công nợ &amp; Margin theo khách</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Sẽ hiển thị khi module ④ Chi phí &amp; Công nợ hoàn thành.</p>
+            <h2 className="text-sm font-semibold text-muted-foreground">{t("financeTitle")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("financePending")}</p>
           </section>
         </div>
 
         <div className="space-y-6">
           {/* Info */}
           <section className="rounded-xl border border-border bg-surface p-5 text-sm">
-            <h2 className="text-sm font-semibold text-foreground">Thông tin chung</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("generalInfoTitle")}</h2>
             <dl className="mt-3 space-y-2 text-xs">
-              <InfoRow label="Người giới thiệu" value={client.introducer?.fullName ?? "—"} />
-              <InfoRow label="Điện thoại" value={client.phone ?? "—"} icon={Phone} />
-              <InfoRow label="Email" value={client.email ?? "—"} icon={Mail} />
-              <InfoRow label="Địa chỉ" value={client.address ?? "—"} icon={MapPin} />
-              {client.note && <InfoRow label="Ghi chú" value={client.note} />}
+              <InfoRow
+                label={t("introducerLabel")}
+                value={client.introducer?.fullName ?? t("introducerOther")}
+              />
+              <InfoRow label={t("phoneLabel")} value={client.phone} icon={Phone} />
+              <InfoRow label={t("emailLabel")} value={client.email} icon={Mail} />
+              <InfoRow label={t("addressLabel")} value={client.address} icon={MapPin} />
+              <InfoRow label={t("bankAccountLabel")} value={client.bankAccount} icon={Landmark} />
+              {client.note && <InfoRow label={t("noteLabel")} value={client.note} />}
             </dl>
           </section>
 
@@ -157,37 +230,38 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <section className="rounded-xl border border-border bg-surface p-5">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
               <ArrowLeftRight className="h-4 w-4" />
-              Chuyển khách hàng
+              {t("transferTitle")}
             </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Chuyển khách sang team Account khác. Khác với Handover dự án — thao tác này đổi team phụ trách toàn bộ
-              khách hàng.
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("transferDesc")}</p>
             <form action={transferWithId} className="mt-3 space-y-2">
               <select name="toTeamId" required className={smallInput}>
-                <option value="">— Chọn team nhận —</option>
-                {teams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.code} — {t.name}
+                <option value="">{t("selectReceivingTeam")}</option>
+                {teams.map((tm) => (
+                  <option key={tm.id} value={tm.id}>
+                    {tm.code} — {tm.name}
                   </option>
                 ))}
               </select>
-              <input name="reason" placeholder="Lý do chuyển *" required className={smallInput} />
+              <input name="reason" placeholder={t("transferReasonPlaceholder")} required className={smallInput} />
               <button
                 type="submit"
                 className="h-8 w-full rounded-lg border border-border-strong text-xs font-medium text-foreground hover:bg-surface-2"
               >
-                Xác nhận chuyển
+                {t("confirmTransfer")}
               </button>
             </form>
 
             {client.transfers.length > 0 && (
               <ul className="mt-4 space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
-                {client.transfers.map((t) => (
-                  <li key={t.id}>
-                    {t.fromTeam.code} → {t.toTeam.code} · {formatDate(t.transferredAt)}
+                {client.transfers.map((tr) => (
+                  <li key={tr.id}>
+                    {t("transferHistoryLine", {
+                      from: tr.fromTeam.code,
+                      to: tr.toTeam.code,
+                      date: formatDate(tr.transferredAt),
+                    })}
                     <br />
-                    <span className="italic">&ldquo;{t.reason}&rdquo;</span> — {t.transferredBy.fullName}
+                    <span className="italic">&ldquo;{tr.reason}&rdquo;</span> — {tr.transferredBy.fullName}
                   </li>
                 ))}
               </ul>
@@ -196,7 +270,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
           {/* Audit log */}
           <section className="rounded-xl border border-border bg-surface p-5">
-            <h2 className="text-sm font-semibold text-foreground">Nhật ký thay đổi</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("auditTitle")}</h2>
             <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
               {auditEntries.map((a) => (
                 <li key={a.id} className="border-b border-border pb-2 last:border-0 last:pb-0">
@@ -204,7 +278,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   {formatDate(a.changedAt)}
                 </li>
               ))}
-              {auditEntries.length === 0 && <li>Chưa có thay đổi nào.</li>}
+              {auditEntries.length === 0 && <li>{t("noAuditEntries")}</li>}
             </ul>
           </section>
         </div>

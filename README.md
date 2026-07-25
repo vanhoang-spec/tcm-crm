@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TCM CRM — Nền tảng vận hành nội bộ
 
-## Getting Started
+Hệ thống vận hành nội bộ cho **TCM** (agency event & activation): khách hàng → bidding/CO-CE → quản lý dự án → chi phí & công nợ → nhân sự → KPI → kho, kèm chat nội bộ và trợ lý AI.
 
-First, run the development server:
+Next.js 16 (App Router) · React 19 · Prisma + SQLite · next-intl (vi/en) · Tailwind 4.
+
+## Bắt đầu
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+# đặt file .env vào thư mục gốc (nhận riêng — không commit)
+npx prisma migrate deploy
+npx prisma generate
+npm run db:seed
+npm run dev          # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Đăng nhập bằng email `@tcmbtl.com`; mật khẩu chung ban đầu `TCM123456` (bắt buộc đổi lần đầu).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tài liệu
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| File | Nội dung |
+|---|---|
+| **[HANDOVER.md](HANDOVER.md)** | **Đọc trước tiên** — bàn giao, quy ước bắt buộc, bản đồ module, nghiệp vụ cốt lõi, deploy, hạn chế đã biết |
+| [docs/PLAN-HISTORY.md](docs/PLAN-HISTORY.md) | Lịch sử thiết kế đầy đủ — lý do đằng sau mỗi quyết định kiến trúc |
+| [AGENTS.md](AGENTS.md) | Lưu ý cho trợ lý AI về phiên bản Next.js |
 
-## Learn More
+## Lệnh kiểm tra trước khi giao việc
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npx tsc --noEmit
+npx eslint src --quiet
+npx next build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Kèm kiểm tra khớp key i18n vi/en — xem mục 4.2 trong [HANDOVER.md](HANDOVER.md).

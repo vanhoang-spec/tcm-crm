@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { formatNumber, pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
+import { isClientProfileComplete } from "@/lib/client-profile";
 import { TeamFilterTabs } from "./team-filter-tabs";
 import { ConcentrationBanner } from "./concentration-banner";
 
@@ -24,9 +25,9 @@ const STATUS_TONE: Record<string, "brand" | "success" | "neutral"> = {
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string; q?: string }>;
+  searchParams: Promise<{ team?: string; status?: string; q?: string }>;
 }) {
-  const { team, q } = await searchParams;
+  const { team, status, q } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("clients.list"), getLocale() as Promise<Locale>]);
 
   const [teams, clients] = await Promise.all([
@@ -35,6 +36,7 @@ export default async function ClientsPage({
       where: {
         isActive: true,
         ownerTeamId: team ? (await prisma.team.findUnique({ where: { code: team } }))?.id : undefined,
+        status: status ? { code: status } : undefined,
         ...(q
           ? {
               OR: [
@@ -66,9 +68,12 @@ export default async function ClientsPage({
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <LinkButton href="/clients/care-report" variant="secondary">
             {t("careReportLink")}
+          </LinkButton>
+          <LinkButton href="/clients/import" variant="secondary">
+            {t("importLink")}
           </LinkButton>
           <LinkButton href="/clients/new">
             <Plus className="h-4 w-4" />
@@ -110,8 +115,13 @@ export default async function ClientsPage({
                 <Badge tone={STATUS_TONE[c.status.code] ?? "neutral"}>{pickLabel(c.status, locale)}</Badge>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-                <Badge tone={TEAM_TONE[c.ownerTeam.code] ?? "neutral"}>{c.ownerTeam.code}</Badge>
-                <span className="text-muted-foreground">{pickLabel(c.industry, locale)}</span>
+                {c.ownerTeam ? (
+                  <Badge tone={TEAM_TONE[c.ownerTeam.code] ?? "neutral"}>{c.ownerTeam.code}</Badge>
+                ) : (
+                  <Badge tone="neutral">{t("teamUnassigned")}</Badge>
+                )}
+                <span className="text-muted-foreground">{c.industry ? pickLabel(c.industry, locale) : "—"}</span>
+                {!isClientProfileComplete(c) && <Badge tone="warning">{t("profileIncomplete")}</Badge>}
               </div>
               <span className="mt-2 block text-xs font-medium text-brand-600">{t("viewDetail")}</span>
             </Link>
@@ -123,9 +133,9 @@ export default async function ClientsPage({
       </ul>
 
       <div className="hidden overflow-hidden rounded-xl border border-border bg-surface sm:block">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
         <table className="w-full min-w-[720px] text-sm">
-          <thead className="border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
             <tr>
               <th className="px-4 py-3">{t("colCode")}</th>
               <th className="px-4 py-3">{t("colClient")}</th>
@@ -143,16 +153,27 @@ export default async function ClientsPage({
                   {c.code}
                 </td>
                 <td className="px-4 py-3">
-                  <Link href={`/clients/${c.id}`} className="font-medium text-foreground hover:text-brand-600">
-                    {c.name}
-                  </Link>
+                  <div className="flex items-center gap-1.5">
+                    <Link href={`/clients/${c.id}`} className="font-medium text-foreground hover:text-brand-600">
+                      {c.name}
+                    </Link>
+                    {!isClientProfileComplete(c) && (
+                      <span title={t("profileIncompleteHint")}>
+                        <Badge tone="warning">{t("profileIncomplete")}</Badge>
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-muted-foreground">{c.brand.name}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge tone="neutral">{pickLabel(c.industry, locale)}</Badge>
+                  <Badge tone="neutral">{c.industry ? pickLabel(c.industry, locale) : "—"}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge tone={TEAM_TONE[c.ownerTeam.code] ?? "neutral"}>{c.ownerTeam.code}</Badge>
+                  {c.ownerTeam ? (
+                    <Badge tone={TEAM_TONE[c.ownerTeam.code] ?? "neutral"}>{c.ownerTeam.code}</Badge>
+                  ) : (
+                    <Badge tone="neutral">{t("teamUnassigned")}</Badge>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {t("paymentTermValue", { days: formatNumber(c.paymentTermDays, locale) })}

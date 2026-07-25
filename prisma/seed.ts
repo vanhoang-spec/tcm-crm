@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { createHash } from "crypto";
+import { TCM_FAMILY_GROUP_NAME } from "../src/lib/chat";
+import { currentPeriodCode } from "../src/lib/creative-cost";
 
 const prisma = new PrismaClient();
 
@@ -44,99 +46,151 @@ async function main() {
   for (const d of departments) {
     await prisma.department.upsert({ where: { code: d.code }, update: {}, create: d });
   }
-  const accountDept = await prisma.department.findUniqueOrThrow({ where: { code: "ACCOUNT" } });
-  const ceoDept = await prisma.department.findUniqueOrThrow({ where: { code: "CEO" } });
-
-  // ── Staff (PIC mẫu) ──
-  const ceo = await prisma.staff.upsert({
-    where: { email: "ceo@tcm.vn" },
-    update: {},
-    create: { fullName: "CEO TCM", email: "ceo@tcm.vn", departmentId: ceoDept.id, title: "CEO" },
-  });
-  const thao = await prisma.staff.upsert({
-    where: { email: "thao@tcm.vn" },
-    update: {},
-    create: {
-      fullName: "Thảo (Account)",
-      email: "thao@tcm.vn",
-      departmentId: accountDept.id,
-      teamId: a1.id,
-      title: "Account Manager",
-    },
-  });
-  const yen = await prisma.staff.upsert({
-    where: { email: "yen@tcm.vn" },
-    update: {},
-    create: {
-      fullName: "Yến (Account)",
-      email: "yen@tcm.vn",
-      departmentId: accountDept.id,
-      teamId: a2.id,
-      title: "Account Manager",
-    },
-  });
-  const ha = await prisma.staff.upsert({
-    where: { email: "ha@tcm.vn" },
-    update: {},
-    create: {
-      fullName: "Hà (Account)",
-      email: "ha@tcm.vn",
-      departmentId: accountDept.id,
-      teamId: a3.id,
-      title: "Account Manager",
-    },
-  });
-  const bdDirector = await prisma.staff.upsert({
-    where: { email: "bd@tcm.vn" },
-    update: {},
-    create: { fullName: "BD Director TCM", email: "bd@tcm.vn", departmentId: ceoDept.id, title: "BD Director" },
-  });
-
-  // ── Nhân sự các phòng ban nhận Order (Planning/Creative/Purchasing/Operation/Production) ──
-  const orderDepartments: { code: string; title: string }[] = [
-    { code: "PLANNING", title: "Planning Lead" },
-    { code: "CREATIVE", title: "Creative Lead" },
-    { code: "PCC", title: "Purchasing Lead" },
-    { code: "OPE", title: "Operation Lead" },
-    { code: "PRO", title: "Production Lead" },
+  // ── Nhân sự thật (42 người, Danh sach NS.xlsx — cập nhật 2026-07-22) ──
+  // Thay toàn bộ khối "Staff (PIC mẫu)" demo cũ. Giữ nguyên tên biến cũ (ceo/thao/yen/...) làm alias
+  // trỏ sang người thật tương ứng, để phần còn lại của file (project/bidding/chat/KPI/timekeeping...)
+  // không phải sửa — chỉ nguồn dữ liệu đổi từ demo sang thật.
+  type StaffRow = {
+    code: string | null; fullName: string; location: "TPHCM" | "HÀ NỘI"; deptExcel: string;
+    title: string; managerName: string | null; gender: "Nam" | "Nữ"; phone: string;
+    dob: [number, number, number]; email: string; firstWorkDate: [number, number, number]; roleText: string;
+  };
+  const STAFF_ROWS: StaffRow[] = [
+    { code: "TCM-0001", fullName: "NGUYỄN ĐẠO BÌNH", location: "TPHCM", deptExcel: "General", title: "Chairman of the Board", managerName: null, gender: "Nam", phone: "0793282879", dob: [12, 3, 1973], email: "ndbinh@tcmbtl.com", firstWorkDate: [28, 8, 2000], roleText: "Board of Management" },
+    { code: null, fullName: "NGUYỄN VĂN HOÀNG", location: "TPHCM", deptExcel: "General", title: "Chief Executive Officer (CEO)", managerName: "NGUYỄN ĐẠO BÌNH", gender: "Nam", phone: "0983114803", dob: [15, 11, 1977], email: "nvhoang@tcmbtl.com", firstWorkDate: [1, 7, 2026], roleText: "CEO cum Super Admin" },
+    { code: null, fullName: "TRƯƠNG VĂN TƯƠI", location: "TPHCM", deptExcel: "Account 1", title: "Senior Account Executive", managerName: "HỒ HỒNG PHƯỚC", gender: "Nam", phone: "0939064298", dob: [28, 2, 1994], email: "tvtuoi@tcmbtl.com", firstWorkDate: [4, 9, 2024], roleText: "Account Staff" },
+    { code: null, fullName: "HỒ HỒNG PHƯỚC", location: "TPHCM", deptExcel: "Account 1", title: "Account Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0966339603", dob: [20, 4, 1996], email: "hhphuoc@tcmbtl.com", firstWorkDate: [19, 2, 2025], roleText: "Account Manager" },
+    { code: null, fullName: "NGUYỄN THỊ YẾN MINH", location: "TPHCM", deptExcel: "Account 2", title: "Assistant Account Manager", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0796955876", dob: [2, 11, 2001], email: "ntyminh@tcmbtl.com", firstWorkDate: [10, 6, 2024], roleText: "Account Staff" },
+    { code: null, fullName: "ĐẶNG THỊ Ý NHƯ", location: "TPHCM", deptExcel: "Account 2", title: "Senior Account Executive", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0336609797", dob: [7, 9, 2001], email: "dtynhu@tcmbtl.com", firstWorkDate: [11, 8, 2025], roleText: "Account Staff" },
+    { code: null, fullName: "TRẦN THỊ BẢO TRÂN", location: "TPHCM", deptExcel: "Account 2", title: "Account Executive", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0931951105", dob: [2, 4, 2001], email: "ttbtran@tcmbtl.com", firstWorkDate: [8, 10, 2025], roleText: "Account Staff" },
+    { code: null, fullName: "HỨA THỊ TRÂM ANH", location: "TPHCM", deptExcel: "Account 2", title: "Senior Account Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0963839246", dob: [15, 10, 1987], email: "httanh@tcmbtl.com", firstWorkDate: [29, 12, 2025], roleText: "Account Manager" },
+    { code: null, fullName: "TRẦN THỊ KIM NHI", location: "TPHCM", deptExcel: "Account 2", title: "Account Executive", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0344065254", dob: [1, 11, 2001], email: "ttknhi@tcmbtl.com", firstWorkDate: [30, 3, 2026], roleText: "Account Staff" },
+    { code: null, fullName: "NGUYỄN PHAN HÀ UYÊN", location: "TPHCM", deptExcel: "Account 3", title: "Account Manager", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0919708048", dob: [1, 9, 1991], email: "nphuyen@tcmbtl.com", firstWorkDate: [21, 4, 2025], roleText: "Account Staff" },
+    { code: null, fullName: "VÕ NGỌC HUYỀN DUYÊN", location: "TPHCM", deptExcel: "Account 3", title: "Senior Account Executive", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0768611271", dob: [27, 1, 2000], email: "vnhduyen@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Account Staff" },
+    { code: null, fullName: "TRẦN THU HÀ", location: "TPHCM", deptExcel: "Account 3", title: "Account Director", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0909111235", dob: [12, 7, 1995], email: "ttha@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Account Manager" },
+    { code: null, fullName: "TRẦN THỊ BẢO NGỌC", location: "TPHCM", deptExcel: "Account 3", title: "Senior Account Executive", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0965812575", dob: [19, 2, 1999], email: "ttbngoc@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Account Staff" },
+    { code: null, fullName: "NGUYỄN KHÁNH LY", location: "TPHCM", deptExcel: "Account 3", title: "Account Executive", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0868778976", dob: [25, 12, 2001], email: "nkly@tcmbtl.com", firstWorkDate: [21, 10, 2025], roleText: "Account Staff" },
+    { code: null, fullName: "LÊ HUỲNH KIM YẾN", location: "TPHCM", deptExcel: "Account 3", title: "Account Manager", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0908587937", dob: [18, 5, 1988], email: "lhkyen@tcmbtl.com", firstWorkDate: [2, 12, 2025], roleText: "Account Staff" },
+    { code: "TCM-0054", fullName: "TRẦN NGUYỄN THÙY AN", location: "TPHCM", deptExcel: "Creative", title: "2D Designer", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nữ", phone: "0932640910", dob: [9, 10, 2001], email: "tntan@tcmbtl.com", firstWorkDate: [1, 6, 2024], roleText: "Creative Staff" },
+    { code: null, fullName: "NGUYỄN HOÀNG HIỆP", location: "TPHCM", deptExcel: "Creative", title: "Creative Director", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nam", phone: "0394966100", dob: [17, 8, 1989], email: "nhhiep@tcmbtl.com", firstWorkDate: [9, 7, 2025], roleText: "Creative Director" },
+    { code: null, fullName: "TRẦN SONG HUYỀN", location: "TPHCM", deptExcel: "Creative", title: "Art Manager", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nữ", phone: "0905582681", dob: [3, 1, 1996], email: "tshuyen@tcmbtl.com", firstWorkDate: [18, 8, 2025], roleText: "Creative Staff" },
+    { code: null, fullName: "LÊ MINH QUANG", location: "TPHCM", deptExcel: "Creative", title: "Design Manager", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nam", phone: "0903342341", dob: [5, 1, 1977], email: "lmquang@tcmbtl.com", firstWorkDate: [1, 10, 2025], roleText: "Creative Staff" },
+    { code: null, fullName: "HÀ CÔNG THANH TRÚC", location: "TPHCM", deptExcel: "Creative", title: "Designer", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nữ", phone: "0366880372", dob: [5, 5, 1995], email: "hcttruc@tcmbtl.com", firstWorkDate: [5, 1, 2026], roleText: "Creative Staff" },
+    { code: null, fullName: "NGUYỄN THANH CẦM", location: "TPHCM", deptExcel: "Creative", title: "3D Designer", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nam", phone: "0353283918", dob: [12, 10, 1994], email: "ntcam@tcmbtl.com", firstWorkDate: [13, 4, 2026], roleText: "Creative Staff" },
+    { code: null, fullName: "PHẠM THU HUYỀN", location: "TPHCM", deptExcel: "Finance", title: "Chief Financial Officer (CFO)", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0918554996", dob: [23, 1, 1977], email: "pthuyen@tcmbtl.com", firstWorkDate: [10, 8, 2026], roleText: "CFO" },
+    { code: "TCM-0039", fullName: "LÊ THỊ PHƯƠNG ANH", location: "TPHCM", deptExcel: "Finance", title: "General Accountant", managerName: "PHẠM THU HUYỀN", gender: "Nữ", phone: "0398389191", dob: [21, 4, 1998], email: "ltpanh@tcmbtl.com", firstWorkDate: [12, 10, 2023], roleText: "Accounting Staff" },
+    { code: null, fullName: "TRẦN THỊ MỸ ÁI", location: "TPHCM", deptExcel: "Finance", title: "General Accountant", managerName: "PHẠM THU HUYỀN", gender: "Nữ", phone: "0961176795", dob: [12, 2, 1997], email: "ttmai@tcmbtl.com", firstWorkDate: [22, 4, 2026], roleText: "Accounting Staff" },
+    { code: "TCM-0010", fullName: "LÊ NGỌC CHÂU", location: "TPHCM", deptExcel: "HR", title: "Assistant HR Manager", managerName: "TRẦN THỊ HẢI YẾN", gender: "Nữ", phone: "0939680519", dob: [9, 10, 1995], email: "lnchau@tcmbtl.com", firstWorkDate: [3, 6, 2019], roleText: "Administration Staff" },
+    { code: "TCM-0022", fullName: "TRẦN THỊ HẢI YẾN", location: "TPHCM", deptExcel: "HR", title: "Senior HR Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0969664719", dob: [12, 1, 1995], email: "tthyen@tcmbtl.com", firstWorkDate: [14, 2, 2023], roleText: "HR Manager" },
+    // Không có email thật trong nguồn — placeholder nội bộ xác định, không dùng cho notification/chat thật.
+    { code: "TCM-0040", fullName: "NGUYỄN THANH BÌNH", location: "TPHCM", deptExcel: "HR", title: "Security Guard", managerName: "TRẦN THỊ HẢI YẾN", gender: "Nam", phone: "0932161628", dob: [2, 12, 1961], email: "nguyenthanhbinh.tcm0040@tcm.internal", firstWorkDate: [16, 10, 2023], roleText: "Administration Staff" },
+    { code: null, fullName: "TRƯƠNG ĐÌNH VŨ", location: "TPHCM", deptExcel: "HR", title: "IT Executive", managerName: "TRẦN THỊ HẢI YẾN", gender: "Nam", phone: "0329869243", dob: [19, 5, 1996], email: "tdvu@tcmbtl.com", firstWorkDate: [4, 5, 2026], roleText: "IT support" },
+    { code: null, fullName: "LƯ NGUYỄN THANH XUYÊN", location: "TPHCM", deptExcel: "Operation", title: "Assistant Field Manager", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0901877887", dob: [25, 8, 1992], email: "lntxuyen@tcmbtl.com", firstWorkDate: [15, 7, 2024], roleText: "Operations Staff" },
+    { code: null, fullName: "CAO NHẬT PHONG", location: "TPHCM", deptExcel: "Operation", title: "Field Supervisor", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0907676240", dob: [4, 2, 1988], email: "cnphong@tcmbtl.com", firstWorkDate: [12, 5, 2025], roleText: "Operations Staff" },
+    { code: null, fullName: "HOÀNG MINH ĐỨC", location: "HÀ NỘI", deptExcel: "Operation", title: "Field Supervisor", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0978969704", dob: [31, 7, 1996], email: "hmduc@tcmbtl.com", firstWorkDate: [8, 9, 2025], roleText: "Operations Staff" },
+    { code: null, fullName: "TRẦN HOÀI HẬN", location: "TPHCM", deptExcel: "Operation", title: "Senior Operation Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nam", phone: "0937030991", dob: [3, 9, 1991], email: "thhan@tcmbtl.com", firstWorkDate: [15, 9, 2025], roleText: "Operations Manager" },
+    { code: null, fullName: "NGUYỄN XUÂN CẢNH", location: "TPHCM", deptExcel: "Operation", title: "Field Supervisor", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0974864107", dob: [22, 5, 2001], email: "nxcanh@tcmbtl.com", firstWorkDate: [22, 9, 2025], roleText: "Operations Staff" },
+    { code: null, fullName: "VŨ THỊ HUYỀN TRANG", location: "TPHCM", deptExcel: "Operation", title: "Admin Operation", managerName: "TRẦN HOÀI HẬN", gender: "Nữ", phone: "0929126240", dob: [29, 8, 2002], email: "vthtrang@tcmbtl.com", firstWorkDate: [23, 10, 2025], roleText: "Operations Staff" },
+    { code: null, fullName: "NGUYỄN HỮU DANH", location: "TPHCM", deptExcel: "Operation", title: "Field Executive", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0902849223", dob: [26, 1, 2001], email: "nhdanh@tcmbtl.com", firstWorkDate: [17, 11, 2025], roleText: "Operations Staff" },
+    { code: null, fullName: "TRẦN ĐÌNH DUY", location: "HÀ NỘI", deptExcel: "Operation", title: "Field Executive", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0936954567", dob: [29, 9, 1998], email: "tdduy@tcmbtl.com", firstWorkDate: [1, 6, 2026], roleText: "Operations Staff" },
+    { code: null, fullName: "DƯƠNG MỸ NGỌC", location: "TPHCM", deptExcel: "Planning", title: "Planning Executive", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0354670617", dob: [10, 11, 2002], email: "dmngoc@tcmbtl.com", firstWorkDate: [25, 3, 2025], roleText: "Planning Staff" },
+    { code: null, fullName: "HỒ SĨ BẢO", location: "TPHCM", deptExcel: "Production", title: "Business Development & Production Director", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nam", phone: "0907785645", dob: [20, 5, 1986], email: "hsbao@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Production Manager" },
+    { code: null, fullName: "PHẠM LONG BÌNH", location: "TPHCM", deptExcel: "Production", title: "Production Supervisor", managerName: "HỒ SĨ BẢO", gender: "Nam", phone: "0834546246", dob: [19, 1, 1988], email: "plbinh@tcmbtl.com", firstWorkDate: [1, 10, 2025], roleText: "Production Staff" },
+    { code: null, fullName: "TRẦN NGUYỄN HUỲNH NHƯ", location: "TPHCM", deptExcel: "Production", title: "Production Executive", managerName: "HỒ SĨ BẢO", gender: "Nữ", phone: "0945797240", dob: [3, 8, 1996], email: "tnhnhu@tcmbtl.com", firstWorkDate: [22, 4, 2026], roleText: "Production Staff" },
+    { code: null, fullName: "ĐÀM ÁNH TUYẾT", location: "TPHCM", deptExcel: "Purchasing", title: "Purchasing Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0914510100", dob: [1, 10, 1979], email: "datuyet@tcmbtl.com", firstWorkDate: [4, 8, 2025], roleText: "Purchasing Manager" },
+    { code: null, fullName: "BÙI THỊ THÙY TRANG", location: "TPHCM", deptExcel: "Purchasing", title: "Purchasing Executive", managerName: "ĐÀM ÁNH TUYẾT", gender: "Nữ", phone: "0348689495", dob: [3, 9, 1995], email: "btttrang@tcmbtl.com", firstWorkDate: [3, 9, 2025], roleText: "Purchasing Staff" },
   ];
-  const orderLeadByCode: Record<string, { id: string }> = {};
-  for (const d of orderDepartments) {
-    const dept = await prisma.department.findUniqueOrThrow({ where: { code: d.code } });
-    orderLeadByCode[d.code] = await prisma.staff.upsert({
-      where: { email: `${d.code.toLowerCase()}@tcm.vn` },
+
+  const DEPT_MAP: Record<string, string> = {
+    General: "CEO", "Account 1": "ACCOUNT", "Account 2": "ACCOUNT", "Account 3": "ACCOUNT",
+    Creative: "CREATIVE", Finance: "FIN", HR: "HR", Operation: "OPE", Planning: "PLANNING",
+    Production: "PRO", Purchasing: "PCC",
+  };
+  const TEAM_MAP: Record<string, string | undefined> = { "Account 1": "A1", "Account 2": "A2", "Account 3": "A3" };
+  // Role text → code trong bảng phân quyền (roleSeeds ở dưới xa hơn trong file). ACCOUNT_DIRECTOR/
+  // PLANNING_MANAGER/HR_STAFF cố ý KHÔNG xuất hiện — chưa có ai giữ 3 vị trí này theo đúng thực tế.
+  const ROLE_MAP: Record<string, string> = {
+    "Board of Management": "BOARD_OF_MANAGEMENT",
+    "CEO cum Super Admin": "ADMIN",
+    "Account Staff": "ACCOUNT_STAFF",
+    "Account Manager": "ACCOUNT_MANAGER",
+    "Creative Staff": "CREATIVE_STAFF",
+    "Creative Director": "CREATIVE_DIRECTOR",
+    CFO: "CFO",
+    "Accounting Staff": "ACCOUNTANT_STAFF",
+    "Administration Staff": "ADMIN_STAFF",
+    "HR Manager": "HR_MANAGER",
+    "IT support": "IT_STAFF",
+    "Operations Staff": "OPERATIONS_STAFF",
+    "Operations Manager": "OPERATIONS_MANAGER",
+    "Planning Staff": "PLANNING_STAFF",
+    "Production Manager": "PRODUCTION_MANAGER",
+    "Production Staff": "PRODUCTION_STAFF",
+    "Purchasing Manager": "PURCHASING_MANAGER",
+    "Purchasing Staff": "PURCHASING_STAFF",
+  };
+
+  const deptByCode: Record<string, { id: string }> = {};
+  for (const d of await prisma.department.findMany()) deptByCode[d.code] = { id: d.id };
+  const teamByCode: Record<string, { id: string }> = { A1: a1, A2: a2, A3: a3 };
+
+  // Vòng 1: tạo/upsert toàn bộ 42 nhân sự thật. CHƯA gán roleId ở đây — bảng phân quyền (roleByCode)
+  // được seed muộn hơn trong file này; roleId gán ở Vòng 3 (gần cuối file, cạnh roleSeeds).
+  const staffByFullName = new Map<string, Awaited<ReturnType<typeof prisma.staff.upsert>>>();
+  for (const row of STAFF_ROWS) {
+    const teamCode = TEAM_MAP[row.deptExcel];
+    const created = await prisma.staff.upsert({
+      where: { email: row.email },
       update: {},
-      create: { fullName: d.title, email: `${d.code.toLowerCase()}@tcm.vn`, departmentId: dept.id, title: d.title },
+      create: {
+        fullName: row.fullName,
+        email: row.email,
+        code: row.code,
+        phone: row.phone,
+        title: row.title,
+        gender: row.gender,
+        workLocation: row.location,
+        departmentId: deptByCode[DEPT_MAP[row.deptExcel]].id,
+        teamId: teamCode ? teamByCode[teamCode].id : null,
+        dateOfBirth: new Date(row.dob[2], row.dob[1] - 1, row.dob[0]),
+        firstWorkDate: new Date(row.firstWorkDate[2], row.firstWorkDate[1] - 1, row.firstWorkDate[0]),
+      },
     });
+    staffByFullName.set(row.fullName, created);
+  }
+  // Vòng 2: gán managerId (người quản lý trực tiếp thật, dùng dựng org chart) — Chairman không có
+  // manager, là root duy nhất của cây tổ chức.
+  for (const row of STAFF_ROWS) {
+    if (!row.managerName) continue;
+    const manager = staffByFullName.get(row.managerName);
+    if (!manager) throw new Error(`Seed lỗi: không tìm thấy manager "${row.managerName}" cho "${row.fullName}"`);
+    await prisma.staff.update({ where: { email: row.email }, data: { managerId: manager.id } });
   }
 
-  // ── Nhân sự HR + IT (để test Project Team đa phòng ban ở module ③) ──
-  const hrDept = await prisma.department.findUniqueOrThrow({ where: { code: "HR" } });
-  const itDept = await prisma.department.findUniqueOrThrow({ where: { code: "IT" } });
-  const hrStaff = await prisma.staff.upsert({
-    where: { email: "hr@tcm.vn" },
-    update: {},
-    create: { fullName: "HR Lead", email: "hr@tcm.vn", departmentId: hrDept.id, title: "HR Lead" },
-  });
-  const itStaff = await prisma.staff.upsert({
-    where: { email: "it@tcm.vn" },
-    update: {},
-    create: { fullName: "IT Support", email: "it@tcm.vn", departmentId: itDept.id, title: "IT Support" },
-  });
+  // ── Alias sang tên biến cũ — phần còn lại của file KHÔNG đổi, chỉ nguồn dữ liệu đổi sang người thật ──
+  const ceo = staffByFullName.get("NGUYỄN VĂN HOÀNG")!;
+  const thao = staffByFullName.get("HỒ HỒNG PHƯỚC")!; // Account Manager, team A1
+  const yen = staffByFullName.get("HỨA THỊ TRÂM ANH")!; // Senior Account Manager, team A2
+  const ha = staffByFullName.get("TRẦN THU HÀ")!; // Account Director, team A3 — cũng là lead phòng ACCOUNT
+  const bdDirector = staffByFullName.get("HỒ SĨ BẢO")!; // Business Development & Production Director — 1 người giữ cả 2 vai trò thật
+  const hrStaff = staffByFullName.get("TRẦN THỊ HẢI YẾN")!; // Senior HR Manager
+  const itStaff = staffByFullName.get("TRƯƠNG ĐÌNH VŨ")!; // IT Executive (dept Excel = HR, KHÔNG phải dept IT)
+  const accountant = staffByFullName.get("LÊ THỊ PHƯƠNG ANH")!; // General Accountant, MSNV TCM-0039
+  const cfo = staffByFullName.get("PHẠM THU HUYỀN")!;
+  const seniorDesigner = staffByFullName.get("LÊ MINH QUANG")!; // Design Manager
+  const artist3d = staffByFullName.get("NGUYỄN THANH CẦM")!; // 3D Designer
+  const creativeDept = deptByCode["CREATIVE"]; // dùng lại ở khối seed Project Team phía dưới
+  const creativeLead = staffByFullName.get("NGUYỄN HOÀNG HIỆP")!; // Creative Director
 
-  // ── Nhân sự team Creative (Creative Lead = CD; + designers để Dashboard per-member có dữ liệu) ──
-  const creativeDept = await prisma.department.findUniqueOrThrow({ where: { code: "CREATIVE" } });
-  const creativeLead = await prisma.staff.findUniqueOrThrow({ where: { email: "creative@tcm.vn" } });
-  const seniorDesigner = await prisma.staff.upsert({
-    where: { email: "designer1@tcm.vn" },
-    update: {},
-    create: { fullName: "Minh (Senior Designer)", email: "designer1@tcm.vn", departmentId: creativeDept.id, title: "Senior Designer" },
-  });
-  const artist3d = await prisma.staff.upsert({
-    where: { email: "designer2@tcm.vn" },
-    update: {},
-    create: { fullName: "Long (3D Artist)", email: "designer2@tcm.vn", departmentId: creativeDept.id, title: "3D Artist" },
-  });
+  // ── Nhân sự trưởng các phòng ban nhận Order (Planning/Creative/Purchasing/Operation/Production) ──
+  // KHÔNG tạo mới — trỏ thẳng vào người thật tương ứng đã import ở Vòng 1.
+  const orderLeadByCode: Record<string, { id: string }> = {
+    CREATIVE: creativeLead,
+    PLANNING: staffByFullName.get("DƯƠNG MỸ NGỌC")!, // hiện chỉ có 1 nhân sự Planning thật
+    PCC: staffByFullName.get("ĐÀM ÁNH TUYẾT")!,
+    OPE: staffByFullName.get("TRẦN HOÀI HẬN")!,
+    PRO: bdDirector, // Hồ Sĩ Bảo
+  };
 
   // ── Helper dùng chung: seed 1 OptionSet + các OptionItem ──
   async function seedOptionSet(
@@ -385,6 +439,27 @@ async function main() {
     { module: "bidding", key: "order_response_days", value: "4" }, // Gợi ý timeline mặc định cho Order phòng ban (Day 4-5)
     { module: "clients", key: "care_interval_active_days", value: "60" }, // Active: tối đa 2 tháng/lần chăm sóc
     { module: "clients", key: "care_interval_inactive_days", value: "90" }, // Inactive: tối đa 3 tháng/lần
+    { module: "finance", key: "max_advance_count_per_staff", value: "3" }, // CFO: tối đa 3 lần tạm ứng đang giữ / NV
+    { module: "finance", key: "max_outstanding_advance_amount_per_staff", value: "50000000" }, // 50 triệu VND đang giữ / NV
+    { module: "finance", key: "cashflow_weekly_buckets", value: "4" }, // CFO: số chu kỳ tuần trên /finance/cashflow
+    { module: "finance", key: "cashflow_monthly_buckets", value: "2" }, // CFO: số chu kỳ tháng tiếp theo
+    // ── Đăng nhập ── mật khẩu chung cấp cho nhân sự mới / khi admin cấp lại. Nhân sự BẮT BUỘC
+    //    đổi ngay lần đăng nhập đầu (Staff.mustChangePassword mặc định true) — xem src/lib/auth.ts.
+    { module: "auth", key: "default_password", value: "TCM123456" },
+    { module: "communication", key: "super_admin_titles", value: "CEO, BD Director" }, // chức danh xem all group chat
+    { module: "communication", key: "message_poll_seconds", value: "4" }, // nhịp client tự tải tin nhắn mới
+    { module: "timekeeping", key: "standard_week_hours", value: "40" }, // khung chuẩn 40h/tuần
+    { module: "timekeeping", key: "annual_leave_days", value: "12" }, // phép năm tiêu chuẩn
+    { module: "timekeeping", key: "carryover_deadline", value: "03-31" }, // phép năm cũ dùng được đến 31/3 năm sau
+    // ── Module ⑥ KPI — khung 75/25. Phase 1 zero-sum: floor=cap=1.0 ⇒ hệ số margin trung hòa,
+    //    quỹ luôn chia đủ; BoD bật co giãn sau bằng cách hạ floor_factor (không cần sửa code).
+    { module: "kpi", key: "pool_percent", value: "25" }, // % lương full gom vào quỹ performance
+    { module: "kpi", key: "target_margin_pct", value: "31" }, // margin đạt target → hệ số 1.0
+    { module: "kpi", key: "floor_margin_pct", value: "15" }, // margin ≤ mức này → hệ số sàn
+    { module: "kpi", key: "floor_factor", value: "1" }, // sàn hệ số quỹ (1 = zero-sum)
+    { module: "kpi", key: "cap_factor", value: "1" }, // trần hệ số (BoD chốt: chưa thưởng vượt)
+    { module: "kpi", key: "empty_window_factor", value: "1" }, // pool không có dự án finished trong cửa sổ — chỉnh theo mùa vụ
+    { module: "kpi", key: "margin_window_months", value: "3" }, // cửa sổ trượt tính margin (tháng)
   ]) {
     await prisma.setting.upsert({
       where: { module_key_scope_scopeRef: { module: s.module, key: s.key, scope: "GLOBAL", scopeRef: "" } },
@@ -547,6 +622,146 @@ async function main() {
     },
   ]);
 
+  // ── MODULE ③ — Mẫu Master Timeline (2 archetype từ file thật JBVN/KUN) ──
+  async function seedTimelineTemplate(
+    name: string,
+    projectTypeCode: string,
+    viewMode: string,
+    columns: string[],
+    sections: {
+      code: string;
+      nameVi: string;
+      nameEn: string;
+      items: {
+        title: string;
+        parentLabel?: string;
+        dept?: string;
+        durationDays?: number;
+        unit?: string;
+        qty?: number;
+      }[];
+    }[],
+  ) {
+    const existing = await prisma.timelineTemplate.findFirst({ where: { name } });
+    if (existing) return;
+    await prisma.timelineTemplate.create({
+      data: {
+        name,
+        projectTypeId: projectTypes[projectTypeCode],
+        viewMode,
+        columnsJson: JSON.stringify(columns),
+        sections: {
+          create: sections.map((s, si) => ({
+            code: s.code,
+            nameVi: s.nameVi,
+            nameEn: s.nameEn,
+            sort: si,
+            items: {
+              create: s.items.map((it, ii) => ({
+                title: it.title,
+                parentLabel: it.parentLabel ?? null,
+                defaultDepartmentCode: it.dept ?? null,
+                defaultDurationDays: it.durationDays ?? null,
+                defaultUnit: it.unit ?? null,
+                defaultQty: it.qty ?? null,
+                sort: ii,
+              })),
+            },
+          })),
+        },
+      },
+    });
+  }
+
+  // Mẫu GANTT ~ JBVN "Master timeline" (sự kiện lớn, vòng revise thiết kế + lead-time sản xuất).
+  await seedTimelineTemplate(
+    "Convention / Gala (Gantt)",
+    "EVENT",
+    "GANTT",
+    ["pic2", "accountable", "duration", "deadline", "status"],
+    [
+      {
+        code: "ADMIN",
+        nameVi: "Hành chính & Hợp đồng",
+        nameEn: "Admin & Contract",
+        items: [
+          { title: "Chốt báo giá", dept: "ACCOUNT", durationDays: 2 },
+          { title: "Ký hợp đồng", dept: "ACCOUNT", durationDays: 3 },
+          { title: "Tạm ứng đợt 1", dept: "ACCOUNT", durationDays: 2 },
+        ],
+      },
+      {
+        code: "VENUE",
+        nameVi: "Địa điểm",
+        nameEn: "Venue",
+        items: [
+          { title: "Chốt venue", dept: "OPE", durationDays: 3 },
+          { title: "Chốt menu", dept: "OPE", durationDays: 2 },
+          { title: "Chốt hotel & booking phòng", dept: "OPE", durationDays: 4 },
+        ],
+      },
+      {
+        code: "DESIGN",
+        nameVi: "Thiết kế & Sản xuất",
+        nameEn: "Design & Production",
+        items: [
+          { title: "Photobooth", dept: "CREATIVE" },
+          { title: "Design lần 1", parentLabel: "Photobooth", dept: "CREATIVE", durationDays: 3 },
+          { title: "Revise & Feedback", parentLabel: "Photobooth", dept: "CREATIVE", durationDays: 2 },
+          { title: "Duyệt màu / chất liệu", parentLabel: "Photobooth", dept: "CREATIVE", durationDays: 2 },
+          { title: "Sản xuất", parentLabel: "Photobooth", dept: "PRO", durationDays: 7 },
+          { title: "POSM & Standee", dept: "CREATIVE" },
+          { title: "Design lần 1", parentLabel: "POSM & Standee", dept: "CREATIVE", durationDays: 3 },
+          { title: "Revise & final", parentLabel: "POSM & Standee", dept: "CREATIVE", durationDays: 2 },
+          { title: "Sản xuất", parentLabel: "POSM & Standee", dept: "PRO", durationDays: 5 },
+        ],
+      },
+    ],
+  );
+
+  // Mẫu CHECKLIST ~ KUN "Checklist" (activation/roadshow: BOM số lượng/ĐVT + ma trận nhân sự).
+  await seedTimelineTemplate(
+    "Activation / Roadshow (Checklist)",
+    "CAMPAIGN",
+    "CHECKLIST",
+    ["pic2", "qty", "unit", "deadline", "status"],
+    [
+      {
+        code: "PREP",
+        nameVi: "I. Chuẩn bị",
+        nameEn: "I. Preparation",
+        items: [
+          { title: "Ký hợp đồng & tạm ứng 50%", dept: "ACCOUNT" },
+          { title: "Thiết kế & in ấn", dept: "CREATIVE" },
+          { title: "Standee nhôm", parentLabel: "Thiết kế & in ấn", dept: "PRO", unit: "bộ", qty: 30 },
+          { title: "Leaflet", parentLabel: "Thiết kế & in ấn", dept: "PRO", unit: "tờ", qty: 600 },
+          { title: "Booth Tết", parentLabel: "Thiết kế & in ấn", dept: "PRO", unit: "bộ", qty: 1 },
+          { title: "Sản xuất POSM", dept: "PRO" },
+          { title: "Nhân sự", dept: "HR" },
+          { title: "Training nhân sự", parentLabel: "Nhân sự", dept: "HR" },
+        ],
+      },
+      {
+        code: "LOGISTICS",
+        nameVi: "II. Vận chuyển & Set-up",
+        nameEn: "II. Logistics & Set-up",
+        items: [
+          { title: "Vận chuyển HCM - tỉnh", dept: "OPE", unit: "xe", qty: 4 },
+          { title: "Set-up POSM + đường trượt", dept: "OPE" },
+          { title: "Test & tổng duyệt", dept: "OPE" },
+        ],
+      },
+      {
+        code: "GOODS",
+        nameVi: "III. Hàng hóa",
+        nameEn: "III. Goods",
+        items: [
+          { title: "Nhận hàng từ nhà phân phối", dept: "OPE", unit: "thùng", qty: 100 },
+        ],
+      },
+    ],
+  );
+
   // ── Vài project mẫu (các trạng thái khác nhau) ──
   const clientsForProj = await prisma.client.findMany({ where: { code: { in: ["DHG", "DIA", "LOF", "CTL"] } } });
   const byCode: Record<string, (typeof clientsForProj)[number]> = Object.fromEntries(
@@ -690,7 +905,11 @@ async function main() {
           startDate: day(2),
           endDate: day(6),
           ownerStaffId: orderLeadByCode["PRO"].id,
+          secondaryOwnerStaffId: orderLeadByCode["PCC"].id,
           departmentCode: "PRO",
+          accountableParty: "TCM",
+          quantity: 200,
+          unit: "phần",
           statusId: timelineStatusItems.NOT_STARTED,
           sort: 1,
         },
@@ -721,6 +940,100 @@ async function main() {
           sort: 0,
         },
       });
+
+      // Vài hạng mục bổ sung để Dashboard "Tiến độ theo bộ phận" có số liệu thật cho mọi bộ phận
+      // (Account/Planning/OPE/PRO/PCC) — kể cả PCC chưa từng làm chủ hạng mục nào trước đây, và
+      // mỗi bộ phận có ít nhất 1 dòng quá hạn (endDate trong quá khứ) để card không toàn hiện 0.
+      await prisma.timelineItem.create({
+        data: {
+          projectId: pmProject.id,
+          parentId: phase1.id,
+          title: "Chốt danh sách khách mời VIP",
+          startDate: day(-5),
+          endDate: day(-1), // quá hạn
+          departmentCode: "ACCOUNT",
+          statusId: timelineStatusItems.IN_PROGRESS,
+          sort: 2,
+        },
+      });
+      await prisma.timelineItem.create({
+        data: {
+          projectId: pmProject.id,
+          parentId: phase1.id,
+          title: "Lên proposal concept chi tiết",
+          startDate: day(0),
+          endDate: day(5),
+          ownerStaffId: orderLeadByCode["PLANNING"].id,
+          departmentCode: "PLANNING",
+          statusId: timelineStatusItems.IN_PROGRESS,
+          sort: 3,
+        },
+      });
+      await prisma.timelineItem.create({
+        data: {
+          projectId: pmProject.id,
+          parentId: phase1.id,
+          title: "Duyệt outline kịch bản trình BGĐ",
+          startDate: day(-6),
+          endDate: day(-2), // quá hạn
+          ownerStaffId: orderLeadByCode["PLANNING"].id,
+          departmentCode: "PLANNING",
+          statusId: timelineStatusItems.NOT_STARTED,
+          sort: 4,
+        },
+      });
+      await prisma.timelineItem.create({
+        data: {
+          projectId: pmProject.id,
+          parentId: phase2.id,
+          title: "Thuê mặt bằng & xin phép hiện trường",
+          startDate: day(-4),
+          endDate: day(-1), // quá hạn
+          ownerStaffId: orderLeadByCode["OPE"].id,
+          departmentCode: "OPE",
+          statusId: timelineStatusItems.BLOCKED,
+          sort: 1,
+        },
+      });
+      await prisma.timelineItem.create({
+        data: {
+          projectId: pmProject.id,
+          parentId: phase1.id,
+          title: "Sản xuất backdrop & standee",
+          startDate: day(-3),
+          endDate: day(-1), // quá hạn
+          ownerStaffId: orderLeadByCode["PRO"].id,
+          departmentCode: "PRO",
+          statusId: timelineStatusItems.IN_PROGRESS,
+          sort: 5,
+        },
+      });
+      await prisma.timelineItem.create({
+        data: {
+          projectId: pmProject.id,
+          parentId: phase1.id,
+          title: "Đặt hàng quà tặng vendor",
+          startDate: day(1),
+          endDate: day(6),
+          ownerStaffId: orderLeadByCode["PCC"].id,
+          departmentCode: "PCC",
+          statusId: timelineStatusItems.NOT_STARTED,
+          sort: 6,
+        },
+      });
+      await prisma.timelineItem.create({
+        data: {
+          projectId: pmProject.id,
+          parentId: phase1.id,
+          title: "Chốt báo giá NCC in ấn",
+          startDate: day(-5),
+          endDate: day(-2), // quá hạn
+          ownerStaffId: orderLeadByCode["PCC"].id,
+          departmentCode: "PCC",
+          statusId: timelineStatusItems.NOT_STARTED,
+          sort: 7,
+        },
+      });
     }
 
     // Guest invite mẫu (magic-link) — token thô cố định để test: SEED-GUEST-TOKEN-DEMO
@@ -735,6 +1048,83 @@ async function main() {
           tokenHash: sha256("SEED-GUEST-TOKEN-DEMO"),
           createdById: yen.id,
         },
+      });
+    }
+
+    // Ma trận nhân sự mẫu (KUN-style) — hiển thị khi timeline viewMode=CHECKLIST.
+    if ((await prisma.projectStaffing.count({ where: { projectId: pmProject.id } })) === 0) {
+      const staffingRows = [
+        { role: "PG/PB", cells: { "Check in": 4, "Bán hàng": 4, Game: 2 } },
+        { role: "Mascot", cells: { "Check in": 2 } },
+        { role: "Sup", cells: { "Check in": 1, "Bán hàng": 1, Game: 1 } },
+        { role: "Helper", cells: { Chung: 4 } },
+      ];
+      let sSort = 0;
+      const staffingData = staffingRows.flatMap((r) =>
+        Object.entries(r.cells).map(([zone, hc]) => ({
+          projectId: pmProject.id,
+          roleLabel: r.role,
+          zoneLabel: zone,
+          headcount: hc,
+          sort: sSort++,
+        })),
+      );
+      await prisma.projectStaffing.createMany({ data: staffingData });
+    }
+
+    // CostSheet mẫu (CTRACT) + 2 revision để demo so sánh phiên bản CO/CE.
+    if ((await prisma.costSheet.count({ where: { projectId: pmProject.id } })) === 0) {
+      const sheet = await prisma.costSheet.create({
+        data: {
+          projectId: pmProject.id,
+          version: "CTRACT",
+          scenario: "COST_UP",
+          ceTotal: BigInt(120000000),
+          coTotal: BigInt(80000000),
+          chiHo: BigInt(5000000),
+          vatPct: 8,
+          minMarginPct: 31,
+          approvedById: ceo.id,
+          approvedAt: new Date(),
+        },
+      });
+      const fieldSection = await prisma.costSheetSection.create({
+        data: { costSheetId: sheet.id, code: "FIELD", nameVi: "Triển khai hiện trường", colorSlot: "brand", sort: 0 },
+      });
+      await prisma.costLine.createMany({
+        data: [
+          { costSheetId: sheet.id, sectionId: fieldSection.id, itemName: "Đội PG/PB roadshow", lineType: "QTY_PRICE", quantity: 8, unit: "người/ngày", unitPrice: BigInt(800000), amount: BigInt(6400000), sort: 0 },
+          { costSheetId: sheet.id, sectionId: fieldSection.id, itemName: "Xe di chuyển đoàn", lineType: "QTY_PRICE", quantity: 5, unit: "ngày", unitPrice: BigInt(2500000), amount: BigInt(12500000), sort: 1 },
+        ],
+      });
+      const snap = (peopleAmount: number, coTotal: number, ceTotal: number) =>
+        JSON.stringify({
+          sections: [
+            {
+              code: "FIELD", nameVi: "Triển khai hiện trường", isProxy: false,
+              lines: [
+                { itemName: "Đội PG/PB roadshow", lineType: "QTY_PRICE", quantity: peopleAmount / 800000, unit: "người/ngày", unitPrice: 800000, fixedAmount: null, percentVal: null, amount: peopleAmount },
+                { itemName: "Xe di chuyển đoàn", lineType: "QTY_PRICE", quantity: 5, unit: "ngày", unitPrice: 2500000, fixedAmount: null, percentVal: null, amount: 12500000 },
+              ],
+            },
+          ],
+          totals: { coTotal, ceTotal, chiHo: 5000000, marginPct: ((ceTotal - coTotal) / ceTotal) * 100 },
+        });
+      await prisma.costSheetRevision.createMany({
+        data: [
+          {
+            costSheetId: sheet.id, revNo: 1, isBaseline: true,
+            ceTotal: BigInt(110000000), coTotal: BigInt(72000000), chiHo: BigInt(5000000),
+            marginPct: 34.5, note: "Bản hợp đồng gốc", createdById: yen.id,
+            snapshotJson: snap(6400000, 72000000, 110000000),
+          },
+          {
+            costSheetId: sheet.id, revNo: 2, isBaseline: false,
+            ceTotal: BigInt(120000000), coTotal: BigInt(80000000), chiHo: BigInt(5000000),
+            marginPct: 33.3, note: "Khách tăng số lượng PG/PB (phát sinh)", createdById: yen.id,
+            snapshotJson: snap(9600000, 80000000, 120000000),
+          },
+        ],
       });
     }
   }
@@ -816,12 +1206,817 @@ async function main() {
     });
   }
 
+  // ── Sub-module PLANNING — job mẫu (T001 BIDDING: research xong, proposal v2 đang review) ──
+  // Hiện chỉ có 1 nhân sự Planning thật (Dương Mỹ Ngọc) — cô ấy đóng cả 2 vai trò: người nhận Order
+  // (orderLeadByCode["PLANNING"]) lẫn người thực thi job. Kịch bản dưới đây vì vậy có "tự giao/tự
+  // duyệt việc" — không phải lỗi, phản ánh đúng thực tế công ty hiện chỉ có 1 người ở vị trí này.
+  const planner = orderLeadByCode["PLANNING"];
+  const planningLead = orderLeadByCode["PLANNING"];
+
+  if (projT001) {
+    let planningOrder = await prisma.projectOrder.findUnique({
+      where: { projectId_department: { projectId: projT001.id, department: "PLANNING" } },
+    });
+    if (!planningOrder) {
+      planningOrder = await prisma.projectOrder.create({
+        data: {
+          projectId: projT001.id,
+          department: "PLANNING",
+          status: "ACCEPTED",
+          briefLinkUrl: "https://drive.google.com/drive/folders/seed-brief-placeholder",
+          extraBriefInfo: "Khách cần proposal activation hè — ưu tiên insight Gen Z, ngân sách ~1,2 tỷ.",
+          outputRequest: "Research thị trường + design brief + proposal trình khách",
+          sentById: thao.id,
+          acceptedAt: new Date(),
+          acceptedById: planningLead.id,
+        },
+      });
+    }
+    if ((await prisma.planningJob.count({ where: { projectId: projT001.id } })) === 0) {
+      const dayMs = 24 * 60 * 60 * 1000;
+      const job = await prisma.planningJob.create({
+        data: {
+          projectId: projT001.id,
+          orderId: planningOrder.id,
+          briefLinkUrl: planningOrder.briefLinkUrl,
+          briefNote: planningOrder.extraBriefInfo,
+          requestedById: thao.id,
+          stages: {
+            create: [
+              {
+                stage: "RESEARCH", sort: 0, assigneeId: planner.id, assignedById: planningLead.id,
+                assignedAt: new Date(Date.now() - 6 * dayMs), dueAt: new Date(Date.now() - 4 * dayMs),
+                resultLinkUrl: "https://drive.google.com/drive/folders/seed-research", hoursSpent: 6,
+                completedAt: new Date(Date.now() - 4 * dayMs),
+              },
+              {
+                stage: "DESIGN_BRIEF", sort: 1, assigneeId: planner.id, assignedById: planningLead.id,
+                assignedAt: new Date(Date.now() - 4 * dayMs), dueAt: new Date(Date.now() - 2 * dayMs),
+                resultLinkUrl: "https://drive.google.com/drive/folders/seed-design-brief", hoursSpent: 3.5,
+                completedAt: new Date(Date.now() - 2 * dayMs),
+              },
+              {
+                stage: "PROPOSAL", sort: 2, assigneeId: planner.id, assignedById: planningLead.id,
+                assignedAt: new Date(Date.now() - 2 * dayMs), dueAt: new Date(Date.now() + 2 * dayMs),
+              },
+            ],
+          },
+          versions: {
+            create: [
+              {
+                versionNo: 1, resultLinkUrl: "https://drive.google.com/drive/folders/seed-proposal-v1",
+                hoursSpent: 8, submittedById: planner.id, submittedAt: new Date(Date.now() - 1 * dayMs),
+                status: "NEEDS_REVISION", reviewNote: "Bổ sung phần cơ chế khuyến mãi + timeline roadshow chi tiết hơn.",
+                reviewedById: planningLead.id, reviewedAt: new Date(Date.now() - 1 * dayMs),
+              },
+              {
+                versionNo: 2, resultLinkUrl: "https://drive.google.com/drive/folders/seed-proposal-v2",
+                hoursSpent: 4.25, submittedById: planner.id, submittedAt: new Date(),
+                status: "IN_REVIEW",
+              },
+            ],
+          },
+        },
+      });
+      void job;
+    }
+  }
+
+  // ── Task nội bộ theo bộ phận (PLANNING/PCC/OPE/PRO) — mirror pattern seedCreativeOrder ở trên,
+  // KHÔNG gọi spawnTasksForDepartmentOrder (idempotent-key nội bộ, không cần cho dữ liệu demo tĩnh).
+  // Dùng dự án T002 (pmProject, PROCESSING) — đã có sẵn TimelineItem cho cả 4 bộ phận (xem seed ở trên).
+  if (projT002) {
+    const deptTaskSeeds: {
+      department: "PLANNING" | "PCC" | "OPE" | "PRO";
+      assignee: { id: string };
+      lead: { id: string };
+      tasks: Array<{
+        sourceKey: string;
+        title: string;
+        status: "UNASSIGNED" | "ASSIGNED" | "SUBMITTED" | "DELIVERED";
+        deliverableLinkUrl?: string;
+        hoursSpent?: number;
+        revisionCount?: number;
+      }>;
+    }[] = [
+      {
+        department: "PLANNING",
+        assignee: orderLeadByCode["PLANNING"],
+        lead: orderLeadByCode["PLANNING"],
+        tasks: [
+          { sourceKey: "TL:seed-planning-1", title: "Đề xuất concept roadshow Tết", status: "UNASSIGNED" },
+          { sourceKey: "TL:seed-planning-2", title: "Research insight khách hàng mục tiêu", status: "DELIVERED", deliverableLinkUrl: "https://drive.google.com/drive/folders/seed-dept-planning", hoursSpent: 4.5 },
+        ],
+      },
+      {
+        department: "PCC",
+        assignee: orderLeadByCode["PCC"],
+        lead: orderLeadByCode["PCC"],
+        tasks: [
+          { sourceKey: "TL:seed-pcc-1", title: "Đặt hàng quà tặng vendor", status: "ASSIGNED" },
+          { sourceKey: "TL:seed-pcc-2", title: "Chốt báo giá NCC in ấn", status: "SUBMITTED", deliverableLinkUrl: "https://drive.google.com/drive/folders/seed-dept-pcc", hoursSpent: 2 },
+        ],
+      },
+      {
+        department: "OPE",
+        assignee: orderLeadByCode["OPE"],
+        lead: orderLeadByCode["OPE"],
+        tasks: [
+          { sourceKey: "TL:seed-ope-1", title: "Thuê mặt bằng & xin phép hiện trường", status: "ASSIGNED" },
+          { sourceKey: "TL:seed-ope-2", title: "Set-up & tổng duyệt", status: "DELIVERED", deliverableLinkUrl: "https://drive.google.com/drive/folders/seed-dept-ope", hoursSpent: 6.25, revisionCount: 1 },
+        ],
+      },
+      {
+        department: "PRO",
+        assignee: orderLeadByCode["PRO"],
+        lead: orderLeadByCode["PRO"],
+        tasks: [
+          { sourceKey: "TL:seed-pro-1", title: "Sản xuất backdrop & standee", status: "UNASSIGNED" },
+          { sourceKey: "TL:seed-pro-2", title: "Đặt in POSM & vật phẩm", status: "ASSIGNED" },
+        ],
+      },
+    ];
+
+    for (const seedDept of deptTaskSeeds) {
+      if (!seedDept.assignee) continue; // phòng ban chưa có nhân sự thật (hiếm, phòng thân trọng)
+      let order = await prisma.projectOrder.findUnique({
+        where: { projectId_department: { projectId: projT002.id, department: seedDept.department } },
+      });
+      if (!order) {
+        order = await prisma.projectOrder.create({
+          data: {
+            projectId: projT002.id,
+            department: seedDept.department,
+            status: "ACCEPTED",
+            sentById: yen.id,
+            acceptedAt: new Date(),
+            acceptedById: seedDept.lead.id,
+          },
+        });
+      }
+      if ((await prisma.departmentTask.count({ where: { orderId: order.id } })) === 0) {
+        await prisma.departmentTask.createMany({
+          data: seedDept.tasks.map((task) => ({
+            projectId: projT002!.id,
+            department: seedDept.department,
+            orderId: order!.id,
+            orderedById: yen.id,
+            sourceKey: task.sourceKey,
+            title: task.title,
+            status: task.status,
+            ...(task.status !== "UNASSIGNED"
+              ? { assigneeId: seedDept.assignee.id, assignedById: seedDept.lead.id, assignedAt: new Date() }
+              : {}),
+            ...(task.deliverableLinkUrl
+              ? {
+                  deliverableLinkUrl: task.deliverableLinkUrl,
+                  hoursSpent: task.hoursSpent,
+                  submittedAt: new Date(),
+                  revisionCount: task.revisionCount ?? 0,
+                  ...(task.status === "DELIVERED"
+                    ? { reviewedById: seedDept.lead.id, reviewedAt: new Date(), deliveredAt: new Date() }
+                    : {}),
+                }
+              : {}),
+          })),
+        });
+      }
+    }
+  }
+
+  // ── MODULE ④ Chi phí & Công nợ — đồng bộ CO nội bộ + tạm ứng/thanh toán/công nợ mẫu (dự án T002 PROCESSING) ──
+  if (projT002) {
+    const financeSheet = await prisma.costSheet.findFirst({
+      where: { projectId: projT002.id, version: "CTRACT" },
+      orderBy: { createdAt: "desc" },
+      include: {
+        sections: { orderBy: { sort: "asc" }, include: { lines: { orderBy: { sort: "asc" } } } },
+        revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } },
+      },
+    });
+    if (financeSheet && (await prisma.financeCostLine.count({ where: { projectId: projT002.id } })) === 0) {
+      const revNo = financeSheet.revisions[0]?.revNo ?? 0;
+      let sort = 0;
+      const createdLines: { id: string; amount: bigint; itemName: string }[] = [];
+      for (const s of financeSheet.sections) {
+        if (s.isProxy) continue;
+        for (const l of s.lines) {
+          const line = await prisma.financeCostLine.create({
+            data: {
+              projectId: projT002.id,
+              lineKey: `${s.code}‖${l.itemName}`,
+              sectionCode: s.code,
+              sectionName: s.nameVi,
+              itemName: l.itemName,
+              specs: l.specs,
+              amount: l.amount,
+              vendorId: l.vendorId,
+              sort: sort++,
+              sourceRevNo: revNo,
+            },
+          });
+          createdLines.push({ id: line.id, amount: l.amount, itemName: l.itemName });
+        }
+      }
+      // Tạm ứng mẫu: 1 STAFF (DISBURSED) + 1 VENDOR (REQUESTED) trên dòng đầu tiên nếu có.
+      if (createdLines[0]) {
+        const half = createdLines[0].amount / BigInt(2);
+        await prisma.advance.create({
+          data: {
+            financeCostLineId: createdLines[0].id, projectId: projT002.id, installmentNo: 1, amount: half,
+            advanceType: "STAFF", recipientStaffId: orderLeadByCode["PRO"]?.id ?? yen.id,
+            bankName: "Vietcombank", bankAccountNo: "0123456789", bankAccountHolder: "Production Lead",
+            status: "DISBURSED", requestedById: yen.id, disbursedById: accountant.id, disbursedAt: new Date(),
+          },
+        });
+      }
+      if (createdLines[1]) {
+        await prisma.advance.create({
+          data: {
+            financeCostLineId: createdLines[1].id, projectId: projT002.id, installmentNo: 1, amount: createdLines[1].amount / BigInt(3),
+            advanceType: "VENDOR", recipientVendorId: (await prisma.vendor.findFirst())?.id,
+            bankName: "ACB", bankAccountNo: "9988776655", bankAccountHolder: "Cty Nhân sự sự kiện 123",
+            status: "REQUESTED", requestedById: yen.id,
+          },
+        });
+      }
+    }
+
+    // Thanh toán NCC mẫu
+    const anyVendor = await prisma.vendor.findFirst();
+    if (anyVendor && (await prisma.vendorPayment.count({ where: { projectId: projT002.id } })) === 0) {
+      await prisma.vendorPayment.create({
+        data: { vendorId: anyVendor.id, projectId: projT002.id, amount: BigInt(15_000_000), dueDate: new Date(Date.now() + 7 * 864e5), status: "SCHEDULED", invoiceNo: "NCC-2026-001", createdById: accountant.id },
+      });
+    }
+
+    // Công nợ mẫu: 1 hóa đơn quá hạn (để test AR aging + reminder) + 1 thanh toán một phần
+    const t002Client = await prisma.project.findUnique({ where: { id: projT002.id }, select: { clientId: true } });
+    if (t002Client && (await prisma.clientInvoice.count({ where: { projectId: projT002.id } })) === 0) {
+      const inv = await prisma.clientInvoice.create({
+        data: {
+          projectId: projT002.id, clientId: t002Client.clientId, invoiceNo: "HD-2026-DIA-01",
+          invoiceDate: new Date(Date.now() - 60 * 864e5), amount: BigInt(120_000_000),
+          dueDate: new Date(Date.now() - 20 * 864e5), createdById: accountant.id,
+        },
+      });
+      await prisma.clientPayment.create({
+        data: { invoiceId: inv.id, amount: BigInt(40_000_000), paidDate: new Date(Date.now() - 10 * 864e5), method: "Chuyển khoản", createdById: accountant.id },
+      });
+    }
+  }
+
+  // ── Operations (OPE) — mẫu CtvBatch/CtvContract, dữ liệu khớp 2 dòng mẫu trong file Excel
+  // "Bang chi tiet thanh toan thue ngoai.xlsx" (form BM08/QT.TCM.16) ──
+  if (projT002 && (await prisma.ctvBatch.count({ where: { projectId: projT002.id } })) === 0) {
+    const opeLead = await prisma.staff.findFirst({ where: { title: "Operations Manager" } });
+    const batch = await prisma.ctvBatch.create({
+      data: {
+        projectId: projT002.id,
+        name: "BM08 — đợt 1",
+        programFrom: "01/06/2024",
+        programTo: "07/06/2024",
+        teamLeader: "Nguyễn Văn Nam",
+        workLocation: "TP.HCM",
+        createdById: (opeLead ?? yen).id,
+      },
+    });
+    await prisma.ctvContract.createMany({
+      data: [
+        {
+          batchId: batch.id, sort: 1, fullName: "Trần Văn A", gender: "Nam", dateOfBirth: "01/02/2000",
+          nationality: "VN", idNumber: "012345678910", idIssueDate: "10/02/2027", idIssuePlace: "HCM",
+          permanentAddress: "6F Phan Kế Bính, Phường Tân Định, HCM", taxCode: "090909090909",
+          bankAccountNo: "1234567890", bankName: "ACB", bankBranch: "HCM", phone: "0979022257",
+          eventName: "Bipp", executionDate: "01/06/2024", executionLocation: "HCM",
+          workItem: "Dịch vụ Điều phối sự kiện", unit: "Gói", quantity: 1, unitPrice: BigInt(500_000),
+          amount: BigInt(500_000), grossNet: "N",
+        },
+        {
+          batchId: batch.id, sort: 2, fullName: "Trần Văn B", gender: "Nữ", dateOfBirth: "03/04/1998",
+          nationality: "VN", idNumber: "012345678911", idIssueDate: "05/07/2002", idIssuePlace: "HCM",
+          permanentAddress: "86 Lê Văn Duyệt, Phường Gia Định, HCM", taxCode: "0808080808",
+          bankAccountNo: "1987654321", bankName: "VCB", bankBranch: "HCM", phone: "0978198412",
+          eventName: "Bllooon", executionDate: "05/07/2024", executionLocation: "Cần Thơ",
+          workItem: "Biểu diễn mở màn", unit: "Gói", quantity: 1, unitPrice: BigInt(10_000_000),
+          amount: BigInt(10_000_000), grossNet: "G",
+        },
+      ],
+    });
+  }
+
+  // ── MODULE ⑨ Communication — chat mẫu (1 DIRECT + 1 GROUP nhiều admin) ──
+  if ((await prisma.conversation.count()) === 0) {
+    const t0 = Date.now();
+    const at = (minAgo: number) => new Date(t0 - minAgo * 60_000);
+
+    // DIRECT: CEO ↔ Yến
+    const direct = await prisma.conversation.create({
+      data: {
+        type: "DIRECT",
+        createdById: ceo.id,
+        members: { create: [{ staffId: ceo.id }, { staffId: yen.id }] },
+      },
+    });
+    await prisma.message.create({ data: { conversationId: direct.id, senderId: ceo.id, type: "TEXT", body: "Em ơi dự án Activation Tết tiến độ sao rồi?", createdAt: at(120) } });
+    await prisma.message.create({ data: { conversationId: direct.id, senderId: yen.id, type: "TEXT", body: "Dạ em đang chốt CO/CE với bên sản xuất, chiều em gửi anh ạ.", createdAt: at(118) } });
+
+    // GROUP: nhiều admin (Yến tạo + admin, Thảo được bổ nhiệm admin), 2 member
+    const group = await prisma.conversation.create({
+      data: {
+        type: "GROUP",
+        name: "BTC — Activation Tết",
+        createdById: yen.id,
+        members: {
+          create: [
+            { staffId: yen.id, role: "ADMIN" },
+            { staffId: thao.id, role: "ADMIN" },
+            { staffId: creativeLead.id, role: "MEMBER" },
+            { staffId: seniorDesigner.id, role: "MEMBER" },
+          ],
+        },
+      },
+    });
+    await prisma.message.createMany({
+      data: [
+        { conversationId: group.id, senderId: yen.id, type: "SYSTEM", systemEvent: "GROUP_CREATED", body: null, createdAt: at(200) },
+        { conversationId: group.id, senderId: yen.id, type: "SYSTEM", systemEvent: "MEMBER_ADDED", body: thao.fullName, createdAt: at(199) },
+        { conversationId: group.id, senderId: yen.id, type: "SYSTEM", systemEvent: "MEMBER_ADDED", body: creativeLead.fullName, createdAt: at(198) },
+        { conversationId: group.id, senderId: yen.id, type: "SYSTEM", systemEvent: "MEMBER_ADDED", body: seniorDesigner.fullName, createdAt: at(197) },
+        { conversationId: group.id, senderId: yen.id, type: "TEXT", body: "Cả nhà ơi, deadline key visual là thứ 5 nhé.", createdAt: at(60) },
+        { conversationId: group.id, senderId: creativeLead.id, type: "LINK", body: null, linkText: "Thư mục brief & moodboard", linkUrl: "https://drive.google.com/drive/folders/brief-tet", createdAt: at(55) },
+        { conversationId: group.id, senderId: yen.id, type: "SYSTEM", systemEvent: "ROLE_PROMOTED", body: thao.fullName, createdAt: at(50) },
+      ],
+    });
+    // @all mẫu
+    const allMsg = await prisma.message.create({
+      data: { conversationId: group.id, senderId: thao.id, type: "TEXT", body: "@all nhớ cập nhật tiến độ trước 5h chiều nay giúp mình!", createdAt: at(10) },
+    });
+    await prisma.messageMention.create({ data: { messageId: allMsg.id, isAll: true } });
+  }
+
+  // ── "GIA ĐÌNH TCM" — group mặc định gồm TOÀN BỘ nhân sự hiện có, avatar = logo TCM ──
+  // Guard riêng (không dùng chung `conversation.count()===0` ở trên) để chạy lại `db:seed` trên DB
+  // đã có sẵn hội thoại (từ các lần seed/test trước) vẫn thêm được nhóm này nếu chưa tồn tại.
+  if (!(await prisma.conversation.findFirst({ where: { type: "GROUP", name: TCM_FAMILY_GROUP_NAME } }))) {
+    const allStaff = await prisma.staff.findMany({ where: { isActive: true }, select: { id: true, fullName: true } });
+    if (allStaff.length > 0) {
+      const family = await prisma.conversation.create({
+        data: {
+          type: "GROUP",
+          name: TCM_FAMILY_GROUP_NAME,
+          avatarKey: "/brand/icon-square.png",
+          createdById: ceo.id,
+          members: { create: allStaff.map((s) => ({ staffId: s.id, role: s.id === ceo.id ? "ADMIN" : "MEMBER" })) },
+        },
+      });
+      const others = allStaff.filter((s) => s.id !== ceo.id);
+      const famT0 = Date.now();
+      const famAt = (minAgo: number) => new Date(famT0 - minAgo * 60_000);
+      await prisma.message.create({
+        data: { conversationId: family.id, senderId: ceo.id, type: "SYSTEM", systemEvent: "GROUP_CREATED", body: null, createdAt: famAt(others.length + 1) },
+      });
+      await prisma.message.createMany({
+        data: others.map((s, i) => ({
+          conversationId: family.id,
+          senderId: ceo.id,
+          type: "SYSTEM",
+          systemEvent: "MEMBER_ADDED",
+          body: s.fullName,
+          createdAt: famAt(others.length - i),
+        })),
+      });
+    }
+  }
+
+  // ── Cơ sở tri thức (KB) — danh mục động + vài tài liệu mẫu (dạng link, không cần file thật) ──
+  const kbCategories = await seedOptionSet("kb_category", "Danh mục cơ sở tri thức", [
+    { code: "GENERAL", labelVi: "Chung", labelEn: "General" },
+    { code: "CREDENTIALS", labelVi: "Năng lực (Credentials)", labelEn: "Credentials" },
+    { code: "ISO", labelVi: "ISO", labelEn: "ISO" },
+    { code: "HSE", labelVi: "An toàn – Sức khỏe – Môi trường (HS&E)", labelEn: "Health, Safety & Environment" },
+  ]);
+  const kbDocsSeed = [
+    { categoryCode: "GENERAL", title: "Sổ tay nhân viên TCM", description: "Quy định chung, quy trình làm việc nội bộ.", linkUrl: "https://drive.google.com/tcm-employee-handbook" },
+    { categoryCode: "CREDENTIALS", title: "TCM Company Profile 2026", description: "Hồ sơ năng lực công ty, dùng cho pitch/proposal.", linkUrl: "https://drive.google.com/tcm-company-profile" },
+    { categoryCode: "HSE", title: "Sổ tay An toàn, Sức khỏe & Môi trường (HS&E)", description: "TCM-HSE-MAN-01 — quy trình an toàn hiện trường BTL, PPE, ứng phó khẩn cấp.", linkUrl: "https://drive.google.com/tcm-hse-manual" },
+  ];
+  for (const [i, d] of kbDocsSeed.entries()) {
+    const categoryId = kbCategories[d.categoryCode];
+    if (!categoryId) continue;
+    await prisma.kbDocument.upsert({
+      where: { id: `seed-kb-${d.categoryCode.toLowerCase()}-${i}` },
+      update: {},
+      create: {
+        id: `seed-kb-${d.categoryCode.toLowerCase()}-${i}`,
+        categoryId,
+        title: d.title,
+        description: d.description,
+        linkUrl: d.linkUrl,
+        sort: i,
+        uploadedById: ceo.id,
+      },
+    });
+  }
+
+  // ── Cost-per-task Creative — ngân sách lương theo vị trí + ma trận % (kỳ hiện tại, cycle mặc định MONTH) ──
+  const costPeriodCode = currentPeriodCode("MONTH", new Date());
+  const salarySeed: { title: string; monthlySalary: bigint }[] = [
+    { title: "Creative Lead", monthlySalary: BigInt(25_000_000) },
+    { title: "Senior Designer", monthlySalary: BigInt(18_000_000) },
+    { title: "3D Artist", monthlySalary: BigInt(16_000_000) },
+  ];
+  for (const s of salarySeed) {
+    await prisma.creativeSalaryBudget.upsert({
+      where: { positionTitle_periodCode: { positionTitle: s.title, periodCode: costPeriodCode } },
+      update: {},
+      create: { positionTitle: s.title, periodCode: costPeriodCode, monthlySalary: s.monthlySalary },
+    });
+  }
+  const ratioSeed: { title: string; typeCode: string; percent: number }[] = [
+    { title: "Creative Lead", typeCode: "FA", percent: 40 },
+    { title: "Creative Lead", typeCode: "TECH_DRAW", percent: 20 },
+    { title: "Creative Lead", typeCode: "KV_2D", percent: 20 },
+    { title: "Creative Lead", typeCode: "VIDEO", percent: 20 },
+    { title: "Senior Designer", typeCode: "KV_2D", percent: 40 },
+    { title: "Senior Designer", typeCode: "POSM_2D", percent: 30 },
+    { title: "Senior Designer", typeCode: "FA", percent: 20 },
+    { title: "Senior Designer", typeCode: "VIDEO", percent: 10 },
+    { title: "3D Artist", typeCode: "BOOTH_3D", percent: 45 },
+    { title: "3D Artist", typeCode: "STAGE_3D", percent: 35 },
+    { title: "3D Artist", typeCode: "TECH_DRAW", percent: 20 },
+  ];
+  for (const r of ratioSeed) {
+    const taskTypeId = creativeTaskTypes[r.typeCode];
+    if (!taskTypeId) continue;
+    await prisma.creativeAllocationRatio.upsert({
+      where: { positionTitle_taskTypeId_periodCode: { positionTitle: r.title, taskTypeId, periodCode: costPeriodCode } },
+      update: {},
+      create: { positionTitle: r.title, taskTypeId, periodCode: costPeriodCode, percent: r.percent },
+    });
+  }
+
+  // ── MODULE ⑧ Kho — danh mục nhóm hàng + kho HCM/ĐN + item mẫu + phiếu mẫu (idempotent) ──
+  await seedOptionSet("inventory_category", "Nhóm hàng kho", [
+    { code: "BOOTH", labelVi: "Booth / Quầy kệ", labelEn: "Booth / Counter" },
+    { code: "POSM", labelVi: "POSM", labelEn: "POSM" },
+    { code: "SOUND_LIGHT", labelVi: "Âm thanh ánh sáng", labelEn: "Sound & Light" },
+    { code: "UNIFORM", labelVi: "Đồng phục / PG kit", labelEn: "Uniform / PG kit" },
+    { code: "TOOL", labelVi: "Dụng cụ thi công", labelEn: "Tools" },
+    { code: "CONSUMABLE", labelVi: "Vật tư tiêu hao", labelEn: "Consumables" },
+  ]);
+  const invCat = async (code: string) =>
+    (await prisma.optionItem.findFirst({ where: { set: { code: "inventory_category" }, code } }))?.id ?? null;
+
+  const whHcm = await prisma.warehouse.upsert({
+    where: { code: "HCM" },
+    update: {},
+    create: { code: "HCM", name: "Kho tổng HCM", location: "TP. Hồ Chí Minh", isMain: true },
+  });
+  const whDn = await prisma.warehouse.upsert({
+    where: { code: "DN" },
+    update: {},
+    create: { code: "DN", name: "Kho phụ Đà Nẵng", location: "Đà Nẵng" },
+  });
+
+  const bandroll = await prisma.inventoryItem.upsert({
+    where: { code: "BANDROLL" },
+    update: {},
+    create: { code: "BANDROLL", name: "Bandroll sự kiện", categoryId: await invCat("CONSUMABLE"), unit: "cái", isReusable: false },
+  });
+  const barie = await prisma.inventoryItem.upsert({
+    where: { code: "BARIE01" },
+    update: {},
+    create: { code: "BARIE01", name: "Hàng rào barie", categoryId: await invCat("TOOL"), unit: "cái", isReusable: true },
+  });
+  const boothSet = await prisma.inventoryItem.upsert({
+    where: { code: "BOOTH01" },
+    update: {},
+    create: { code: "BOOTH01", name: "Booth sampling 3x3", categoryId: await invCat("BOOTH"), unit: "bộ", isReusable: true, partCount: 3 },
+  });
+  const boothParts: { id: string }[] = [];
+  for (let n = 1; n <= 3; n++) {
+    boothParts.push(
+      await prisma.inventoryItem.upsert({
+        where: { code: `BOOTH01-${n}` },
+        update: {},
+        create: {
+          code: `BOOTH01-${n}`,
+          name: `Booth sampling 3x3 — Phần ${n}`,
+          categoryId: await invCat("BOOTH"),
+          unit: "kiện",
+          isReusable: true,
+          parentItemId: boothSet.id,
+          partNo: n,
+        },
+      })
+    );
+  }
+
+  // Phiếu mẫu + số dư — chỉ tạo 1 lần (sổ cái bất biến, số dư phải khớp phiếu)
+  const invProject = createdProjects["T002DIA26A2"];
+  if ((await prisma.stockDocument.count()) === 0 && invProject) {
+    const ym = `${String(new Date().getFullYear()).slice(2)}${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+    // NK-001: nhập kho tổng HCM
+    await prisma.stockDocument.create({
+      data: {
+        code: `NK-${ym}-001`,
+        type: "IMPORT",
+        status: "COMPLETED",
+        toWarehouseId: whHcm.id,
+        note: "Nhập tồn đầu kỳ",
+        createdById: ceo.id,
+        lines: {
+          create: [
+            { itemId: bandroll.id, quantity: 100, sort: 0 },
+            { itemId: barie.id, quantity: 20, sort: 1 },
+            ...boothParts.map((p, i) => ({ itemId: p.id, quantity: 5, sort: 2 + i })),
+          ],
+        },
+      },
+    });
+    // NK-002: nhập kho phụ ĐN
+    await prisma.stockDocument.create({
+      data: {
+        code: `NK-${ym}-002`,
+        type: "IMPORT",
+        status: "COMPLETED",
+        toWarehouseId: whDn.id,
+        createdById: ceo.id,
+        lines: { create: [{ itemId: barie.id, quantity: 4, sort: 0 }] },
+      },
+    });
+    // CK-001: chuyển HCM→ĐN đang vận chuyển (PENDING — đã trừ nguồn)
+    await prisma.stockDocument.create({
+      data: {
+        code: `CK-${ym}-001`,
+        type: "TRANSFER",
+        status: "PENDING",
+        fromWarehouseId: whHcm.id,
+        toWarehouseId: whDn.id,
+        note: "Chuẩn bị event miền Trung",
+        createdById: ceo.id,
+        lines: { create: [{ itemId: barie.id, quantity: 5, sort: 0 }] },
+      },
+    });
+    // XE-001: xuất cho event T002 — quá hạn trả (demo reminder)
+    await prisma.stockDocument.create({
+      data: {
+        code: `XE-${ym}-001`,
+        type: "ISSUE",
+        status: "COMPLETED",
+        fromWarehouseId: whHcm.id,
+        projectId: invProject.id,
+        expectedReturnAt: new Date(Date.now() - 24 * 3600 * 1000),
+        note: "Đồ activation Diageo Tết",
+        createdById: ceo.id,
+        lines: {
+          create: [
+            { itemId: barie.id, quantity: 3, sort: 0 },
+            { itemId: bandroll.id, quantity: 30, sort: 1 },
+          ],
+        },
+      },
+    });
+    // Số dư khớp toàn bộ phiếu trên: HCM barie 20−5(CK)−3(XE)=12, bandroll 100−30=70; ĐN barie 4; holding T002 barie 3
+    await prisma.stockBalance.createMany({
+      data: [
+        { warehouseId: whHcm.id, itemId: bandroll.id, quantity: 70 },
+        { warehouseId: whHcm.id, itemId: barie.id, quantity: 12 },
+        ...boothParts.map((p) => ({ warehouseId: whHcm.id, itemId: p.id, quantity: 5 })),
+        { warehouseId: whDn.id, itemId: barie.id, quantity: 4 },
+      ],
+    });
+    await prisma.projectHolding.create({ data: { projectId: invProject.id, itemId: barie.id, quantity: 3 } });
+  }
+
+  // ── MODULE ⑤ Chấm công & Ca làm việc — lead bộ phận + danh mục ca + loại nghỉ + tuần mẫu ──
+  const deptLeads: Record<string, string> = {
+    ACCOUNT: ha.id, // Trần Thu Hà — Account Director, cao nhất trong 3 team Account
+    PLANNING: orderLeadByCode["PLANNING"].id,
+    CREATIVE: creativeLead.id,
+    PCC: orderLeadByCode["PCC"].id,
+    OPE: orderLeadByCode["OPE"].id,
+    PRO: orderLeadByCode["PRO"].id,
+    FIN: cfo.id,
+    HR: hrStaff.id,
+    CEO: ceo.id,
+    // IT: để trống — 0 nhân sự phòng IT thật (Trương Đình Vũ nằm phòng HR theo Excel), không gán ép.
+  };
+  for (const [code, leadStaffId] of Object.entries(deptLeads)) {
+    await prisma.department.update({ where: { code }, data: { leadStaffId } });
+  }
+
+  const shiftSeed = [
+    { code: "SANG", name: "Ca sáng", startTime: "08:00", endTime: "12:00", sort: 0 },
+    { code: "CHIEU", name: "Ca chiều", startTime: "13:00", endTime: "17:00", sort: 1 },
+    { code: "TOI", name: "Ca tối", startTime: "18:00", endTime: "22:00", sort: 2 },
+  ];
+  const shiftByCode: Record<string, { id: string }> = {};
+  for (const s of shiftSeed) {
+    shiftByCode[s.code] = await prisma.workShift.upsert({
+      where: { code: s.code },
+      update: {},
+      create: { ...s, hours: 4 },
+    });
+  }
+
+  const leaveTypes = await seedOptionSet("leave_type", "Loại nghỉ", [
+    { code: "ANNUAL", labelVi: "Nghỉ phép năm", labelEn: "Annual leave" },
+    { code: "SICK", labelVi: "Nghỉ ốm", labelEn: "Sick leave" },
+    { code: "UNPAID", labelVi: "Nghỉ không lương", labelEn: "Unpaid leave" },
+    { code: "ABSENT", labelVi: "Vắng không phép", labelEn: "Absent" },
+    { code: "OTHER", labelVi: "Nghỉ khác", labelEn: "Other" },
+  ]);
+
+  // Tuần mẫu CONFIRMED cho dept CREATIVE (tuần hiện tại): Minh đủ 40h T2–T6;
+  // Long đổi 2 ca T6 sang T7 (vẫn 40h, không tăng ca) + 1 ca T2 sáng nghỉ phép năm.
+  if ((await prisma.scheduleWeek.count()) === 0) {
+    const now = new Date();
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const day = (offset: number) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + offset);
+    const week = await prisma.scheduleWeek.create({
+      data: {
+        departmentId: creativeDept.id,
+        weekStart: monday,
+        status: "CONFIRMED",
+        confirmedById: creativeLead.id,
+        confirmedAt: new Date(),
+      },
+    });
+    const rows: { staffId: string; date: Date; shiftId: string; leaveTypeId?: string }[] = [];
+    for (let d = 0; d < 5; d++) {
+      rows.push({ staffId: seniorDesigner.id, date: day(d), shiftId: shiftByCode["SANG"].id });
+      rows.push({ staffId: seniorDesigner.id, date: day(d), shiftId: shiftByCode["CHIEU"].id });
+    }
+    for (let d = 0; d < 4; d++) {
+      rows.push({
+        staffId: artist3d.id,
+        date: day(d),
+        shiftId: shiftByCode["SANG"].id,
+        ...(d === 0 ? { leaveTypeId: leaveTypes["ANNUAL"] } : {}),
+      });
+      rows.push({ staffId: artist3d.id, date: day(d), shiftId: shiftByCode["CHIEU"].id });
+    }
+    rows.push({ staffId: artist3d.id, date: day(5), shiftId: shiftByCode["SANG"].id });
+    rows.push({ staffId: artist3d.id, date: day(5), shiftId: shiftByCode["CHIEU"].id });
+    await prisma.shiftAssignment.createMany({
+      data: rows.map((r) => ({ weekId: week.id, staffId: r.staffId, date: r.date, shiftId: r.shiftId, leaveTypeId: r.leaveTypeId ?? null })),
+    });
+  }
+
+  // ── Bảng phân quyền (Role) — catalog phân cấp Director/Manager → Staff theo 9 nhóm chức năng.
+  // Nominal (chưa gate tính năng thật) — gán roleId cho nhân sự hiện có để phản ánh sơ đồ tổ chức;
+  // chủ dự án sẽ review và chỉnh lại qua /settings/roles.
+  type RoleSeed = { code: string; name: string; description?: string; groupCode: string; parentCode: string | null; sort: number };
+  const roleSeeds: RoleSeed[] = [
+    { code: "ADMIN", name: "Quản trị hệ thống (Admin)", groupCode: "ADMIN", parentCode: null, sort: 0 },
+    {
+      code: "BOARD_OF_MANAGEMENT",
+      name: "Hội đồng Quản lý (Board of Management)",
+      description: "Xem Dashboard chung, Chat, Cơ cấu tổ chức, Knowledge Base — không vào chi tiết từng module nghiệp vụ.",
+      groupCode: "BOD",
+      parentCode: null,
+      sort: 5,
+    },
+    { code: "CFO", name: "Giám đốc Tài chính (CFO)", groupCode: "FINANCE", parentCode: null, sort: 10 },
+    { code: "ACCOUNTANT_STAFF", name: "Nhân viên Kế toán (Accounting Staff)", groupCode: "FINANCE", parentCode: "CFO", sort: 11 },
+    { code: "HR_MANAGER", name: "Trưởng phòng Nhân sự (HR Manager)", groupCode: "HR", parentCode: null, sort: 20 },
+    { code: "HR_STAFF", name: "Nhân viên Nhân sự (HR Staff)", groupCode: "HR", parentCode: "HR_MANAGER", sort: 21 },
+    { code: "ADMIN_STAFF", name: "Nhân viên Hành chính (Administration Staff)", groupCode: "HR", parentCode: "HR_MANAGER", sort: 22 },
+    {
+      code: "ACCOUNT_DIRECTOR",
+      name: "Giám đốc Khách hàng (Account Director)",
+      description: "Overview toàn bộ các nhóm Account (A1/A2/A3 và mọi nhóm thêm sau này) — không giới hạn theo team.",
+      groupCode: "ACCOUNT",
+      parentCode: null,
+      sort: 30,
+    },
+    {
+      code: "ACCOUNT_MANAGER",
+      name: "Account Manager",
+      description: "Gán theo từng team Account cụ thể (A1/A2/A3) — chỉ xem được nhóm của riêng mình.",
+      groupCode: "ACCOUNT",
+      parentCode: "ACCOUNT_DIRECTOR",
+      sort: 31,
+    },
+    { code: "ACCOUNT_STAFF", name: "Account Staff", groupCode: "ACCOUNT", parentCode: "ACCOUNT_MANAGER", sort: 32 },
+    { code: "CREATIVE_DIRECTOR", name: "Creative Director", groupCode: "CREATIVE", parentCode: null, sort: 40 },
+    { code: "CREATIVE_STAFF", name: "Creative Staff", groupCode: "CREATIVE", parentCode: "CREATIVE_DIRECTOR", sort: 41 },
+    { code: "PLANNING_MANAGER", name: "Planning Manager", groupCode: "PLANNING", parentCode: null, sort: 50 },
+    { code: "PLANNING_STAFF", name: "Planning Staff", groupCode: "PLANNING", parentCode: "PLANNING_MANAGER", sort: 51 },
+    { code: "OPERATIONS_MANAGER", name: "Operations Manager", groupCode: "OPERATIONS", parentCode: null, sort: 60 },
+    { code: "OPERATIONS_STAFF", name: "Operations Staff", groupCode: "OPERATIONS", parentCode: "OPERATIONS_MANAGER", sort: 61 },
+    { code: "PRODUCTION_MANAGER", name: "Production Manager", groupCode: "PRODUCTION", parentCode: null, sort: 70 },
+    { code: "PRODUCTION_STAFF", name: "Production Staff", groupCode: "PRODUCTION", parentCode: "PRODUCTION_MANAGER", sort: 71 },
+    { code: "PURCHASING_MANAGER", name: "Purchasing Manager", groupCode: "PURCHASING", parentCode: null, sort: 80 },
+    { code: "PURCHASING_STAFF", name: "Purchasing Staff", groupCode: "PURCHASING", parentCode: "PURCHASING_MANAGER", sort: 81 },
+    { code: "IT_STAFF", name: "Nhân viên IT", groupCode: "IT", parentCode: null, sort: 90 },
+  ];
+  const roleByCode: Record<string, { id: string }> = {};
+  // Vòng 1: tạo/upsert không có parentRoleId (parent có thể chưa tồn tại) — vòng 2: gắn parentRoleId.
+  for (const r of roleSeeds) {
+    roleByCode[r.code] = await prisma.role.upsert({
+      where: { code: r.code },
+      update: { name: r.name, description: r.description ?? null, groupCode: r.groupCode, sort: r.sort },
+      create: { code: r.code, name: r.name, description: r.description ?? null, groupCode: r.groupCode, sort: r.sort },
+    });
+  }
+  for (const r of roleSeeds) {
+    if (!r.parentCode) continue;
+    await prisma.role.update({
+      where: { id: roleByCode[r.code].id },
+      data: { parentRoleId: roleByCode[r.parentCode].id },
+    });
+  }
+
+  // Vòng 3: gán roleId cho toàn bộ 42 nhân sự theo đúng cột "Role" trong Excel (ROLE_MAP, khai báo ở
+  // Vòng 1) — roleByCode chỉ có sẵn từ đây trở đi nên phải để tới cuối file. CHỈ điền chỗ trống
+  // (roleId null) — re-seed KHÔNG ghi đè chỉnh sửa tay của admin ở /settings/roles (bất biến từ AF-5).
+  for (const row of STAFF_ROWS) {
+    const roleCode = ROLE_MAP[row.roleText];
+    await prisma.staff.updateMany({
+      where: { email: row.email, roleId: null },
+      data: { roleId: roleByCode[roleCode].id },
+    });
+  }
+
+  // ── Module ⑥ KPI — tiêu chí đánh giá + lương vị trí + điểm mẫu ──
+  const kpiCriteriaSeed: { code: string; nameVi: string; nameEn: string; appliesTo: string; weight: number; sort: number; sourceType?: string; autoKey?: string }[] = [
+    { code: "WORK_QUALITY", nameVi: "Chất lượng công việc", nameEn: "Work quality", appliesTo: "ALL", weight: 3, sort: 1 },
+    { code: "DEADLINE", nameVi: "Deadline & cam kết", nameEn: "Deadline & commitment", appliesTo: "ALL", weight: 2, sort: 2 },
+    { code: "TEAMWORK", nameVi: "Tinh thần hợp tác", nameEn: "Teamwork", appliesTo: "ALL", weight: 1.5, sort: 3 },
+    { code: "INITIATIVE", nameVi: "Chủ động & sáng kiến", nameEn: "Initiative", appliesTo: "ALL", weight: 1.5, sort: 4 },
+    { code: "PROCESS", nameVi: "Tuân thủ quy trình", nameEn: "Process compliance", appliesTo: "ALL", weight: 1, sort: 5 },
+    { code: "ATTENDANCE", nameVi: "Chuyên cần", nameEn: "Attendance", appliesTo: "ALL", weight: 1, sort: 6, sourceType: "AUTO", autoKey: "ATTENDANCE" },
+    { code: "CREATIVE_ONTIME", nameVi: "Giao task đúng hạn", nameEn: "On-time delivery", appliesTo: "CREATIVE", weight: 2, sort: 7, sourceType: "AUTO", autoKey: "CREATIVE_ONTIME" },
+    { code: "TEAM_MGMT", nameVi: "Quản lý & phát triển team", nameEn: "Team management", appliesTo: "LEAD", weight: 2, sort: 8 },
+  ];
+  const kpiCritByCode: Record<string, { id: string }> = {};
+  for (const c of kpiCriteriaSeed) {
+    kpiCritByCode[c.code] = await prisma.kpiCriterion.upsert({
+      where: { code: c.code },
+      update: {},
+      create: { code: c.code, nameVi: c.nameVi, nameEn: c.nameEn, appliesTo: c.appliesTo, weight: c.weight, sort: c.sort, sourceType: c.sourceType ?? "MANUAL", autoKey: c.autoKey ?? null },
+    });
+  }
+
+  // Lương vị trí: sinh từ các cặp (title, dept) distinct đang có trong khung (ACCOUNT/PLANNING/CREATIVE/OPE/PRO) — số placeholder, BoD sửa ở /settings/kpi.
+  const kpiPeriod = `${new Date().getFullYear()}-M${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  const kpiDepts = ["ACCOUNT", "PLANNING", "CREATIVE", "OPE", "PRO"];
+  const kpiStaff = await prisma.staff.findMany({
+    where: { isActive: true, department: { code: { in: kpiDepts } } },
+    select: { id: true, title: true, department: { select: { code: true } } },
+  });
+  const seenPos = new Set<string>();
+  for (const s of kpiStaff) {
+    if (!s.title || !s.department) continue;
+    const key = `${s.title}__${s.department.code}`;
+    if (seenPos.has(key)) continue;
+    seenPos.add(key);
+    await prisma.positionSalary.upsert({
+      where: { positionTitle_departmentCode_periodCode: { positionTitle: s.title, departmentCode: s.department.code, periodCode: kpiPeriod } },
+      update: {},
+      create: { positionTitle: s.title, departmentCode: s.department.code, periodCode: kpiPeriod, monthlySalary: BigInt(20000000), note: "Placeholder — BoD cập nhật số thật" },
+    });
+  }
+
+  // Điểm mẫu tháng hiện tại cho pool CREATIVE để dashboard có số demo.
+  const creativeDemoStaff = kpiStaff.filter((s) => s.department?.code === "CREATIVE");
+  for (const s of creativeDemoStaff) {
+    for (const code of ["WORK_QUALITY", "DEADLINE", "TEAMWORK"]) {
+      await prisma.kpiScore.upsert({
+        where: { criterionId_staffId_periodCode: { criterionId: kpiCritByCode[code].id, staffId: s.id, periodCode: kpiPeriod } },
+        update: {},
+        create: { criterionId: kpiCritByCode[code].id, staffId: s.id, periodCode: kpiPeriod, score: 3 + Math.floor(Math.random() * 3) * 0.5, scoredById: ceo.id },
+      });
+    }
+  }
+
+  // ── Tái cơ cấu team Account (2026-07) ──
+  // Trâm Anh (lead A2) nghỉ 28/08/2026 → thôi làm leader; Phước (lead A1) kiêm lead A1+A2, gom về 1 team A2;
+  // A1 ngưng hoạt động từ 01/08/2026. Idempotent — chạy fresh-seed cho ra đúng cấu trúc hiện hành live.
+  {
+    const phuoc = await prisma.staff.findUnique({ where: { email: "hhphuoc@tcmbtl.com" } });
+    const tramAnh = await prisma.staff.findUnique({ where: { email: "httanh@tcmbtl.com" } });
+    if (phuoc && tramAnh) {
+      await prisma.staff.updateMany({ where: { teamId: a1.id }, data: { teamId: a2.id } });
+      await prisma.staff.updateMany({ where: { teamId: a2.id, managerId: tramAnh.id }, data: { managerId: phuoc.id } });
+      if (tramAnh.managerId !== phuoc.id) await prisma.staff.update({ where: { id: tramAnh.id }, data: { managerId: phuoc.id } });
+      await prisma.client.updateMany({ where: { ownerTeamId: a1.id }, data: { ownerTeamId: a2.id } });
+      await prisma.project.updateMany({ where: { ownerTeamId: a1.id }, data: { ownerTeamId: a2.id } });
+      await prisma.team.update({ where: { id: a2.id }, data: { name: "ACC 2 — Phước làm leader (gộp ACC 1 & 2)" } });
+      await prisma.team.update({ where: { id: a1.id }, data: { isActive: false } });
+    }
+  }
+
   console.log("✅ Seed hoàn tất:", {
     teams: [a1.code, a2.code, a3.code],
+    staffTotal: STAFF_ROWS.length,
     staff: [ceo.email, thao.email, yen.email, ha.email],
     brands: brandNames,
     clients: clientsSeed.map((c) => c.code),
-    optionSets: ["project_type", "contract_type", "fail_reason", "channel", "client_status", "client_classification", "complexity", "project_status"],
+    optionSets: ["project_type", "contract_type", "fail_reason", "channel", "client_status", "client_classification", "complexity", "project_status", "kb_category", "inventory_category"],
     projects: projSeed.map((p) => p.code),
   });
 }

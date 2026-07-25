@@ -234,15 +234,21 @@ export async function transferClient(clientId: string, toTeamId: string, reason:
   if (client.ownerTeamId === toTeamId) return;
 
   await prisma.$transaction([
-    prisma.clientTransfer.create({
-      data: {
-        clientId,
-        fromTeamId: client.ownerTeamId,
-        toTeamId,
-        reason,
-        transferredById: staffId ?? "",
-      },
-    }),
+    // Khách chưa có team (vd cấp BGĐ) không có "team cũ" để ghi log ClientTransfer (fromTeamId bắt buộc) —
+    // chỉ log chuyển giao thật khi có team nguồn, lần "giao team đầu tiên" chỉ update thẳng.
+    ...(client.ownerTeamId
+      ? [
+          prisma.clientTransfer.create({
+            data: {
+              clientId,
+              fromTeamId: client.ownerTeamId,
+              toTeamId,
+              reason,
+              transferredById: staffId ?? "",
+            },
+          }),
+        ]
+      : []),
     prisma.client.update({ where: { id: clientId }, data: { ownerTeamId: toTeamId } }),
     prisma.auditLog.create({
       data: {

@@ -32,9 +32,17 @@ async function notify(recipientStaffId: string, type: string, title: string, bod
   await prisma.notification.create({ data: { recipientStaffId, type, title, body, projectId } });
 }
 
-function done() {
+/** Revalidate /creative + /reminders, và (nếu biết dự án) tab ORDER — nơi hiện tín hiệu DONE của dòng timeline. */
+function done(projectId?: string) {
   revalidatePath("/creative");
   revalidatePath("/reminders");
+  if (projectId) revalidatePath(`/projects/${projectId}/orders`);
+}
+
+/** Đẩy ProjectOrderItem gốc (nếu task sinh từ Master Timeline) sang DONE — tín hiệu Creative→Timeline đã xong. */
+async function markOrderItemDone(orderItemId: string | null) {
+  if (!orderItemId) return;
+  await prisma.projectOrderItem.update({ where: { id: orderItemId }, data: { status: "DONE" } });
 }
 
 /** CD giao task cho 1 nhân sự — chọn loại task + tick "CD không cần duyệt" + deadline. */
@@ -52,13 +60,14 @@ export async function assignCreativeTask(taskId: string, formData: FormData) {
       taskTypeId: nullable(formData.get("taskTypeId")),
       cdApprovalNotRequired: formData.get("cdApprovalNotRequired") === "on",
       deadline: dateOrNull(formData.get("deadline")),
+      deadlineReminderSentAt: null, // đổi/đặt deadline → reset cờ để được nhắc lại nếu quá hạn mới
       assignedById: staffId,
       assignedAt: new Date(),
       status: "ASSIGNED",
     },
   });
   await notify(assigneeId, "CREATIVE_TASK_ASSIGNED", `Bạn được giao task Creative — dự án ${task.project.code}`, task.title, task.projectId);
-  done();
+  done(task.projectId);
 }
 
 /** Nhân sự bấm GỬI — nhập link thành phẩm + số giờ (bội số 0.25). Định tuyến theo cờ CD-không-cần-duyệt. */
@@ -84,11 +93,12 @@ export async function submitCreativeTask(taskId: string, formData: FormData) {
   });
 
   if (deliverStraight) {
+    await markOrderItemDone(task.orderItemId); // trả thẳng → đóng dòng timeline gốc
     if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, link, task.projectId);
   } else if (task.assignedById) {
     await notify(task.assignedById, "CREATIVE_TASK_NEEDS_APPROVAL", `Task Creative chờ CD duyệt — dự án ${task.project.code}`, task.title, task.projectId);
   }
-  done();
+  done(task.projectId);
 }
 
 /** CD duyệt task SUBMITTED → trả thành phẩm cho người ORDER. */
@@ -100,8 +110,9 @@ export async function approveCreativeTask(taskId: string) {
     where: { id: taskId },
     data: { status: "DELIVERED", reviewedById: staffId, reviewedAt: new Date(), deliveredAt: new Date() },
   });
+  await markOrderItemDone(task.orderItemId); // CD duyệt → đóng dòng timeline gốc
   if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, task.deliverableLinkUrl, task.projectId);
-  done();
+  done(task.projectId);
 }
 
 /** CD trả lại task để sửa → REVISION, tăng revisionCount, báo nhân sự. */
@@ -115,7 +126,7 @@ export async function rejectCreativeTask(taskId: string, formData: FormData) {
     data: { status: "REVISION", revisionCount: { increment: 1 }, reviewedById: staffId, reviewedAt: new Date() },
   });
   if (task.assigneeId) await notify(task.assigneeId, "CREATIVE_TASK_REVISION", `Task Creative cần sửa lại — dự án ${task.project.code}`, note ?? task.title, task.projectId);
-  done();
+  done(task.projectId);
 }
 
 /** CD tạo task lẻ (ngoài checklist) — chọn dự án + loại task + tên. */
@@ -123,8 +134,9 @@ export async function createCreativeTask(formData: FormData) {
   const projectId = nullable(formData.get("projectId"));
   const title = str(formData.get("title"));
   if (!projectId || !title) return;
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, include: { status: true } });
   if (!project) return;
+  if (isTaskLocked(project.status.code, project.finishedAt)) return; // không thêm task vào dự án đã khóa (hủy/thua/hết grace)
   await prisma.creativeTask.create({
     data: {
       projectId,
@@ -135,13 +147,13 @@ export async function createCreativeTask(formData: FormData) {
       status: "UNASSIGNED",
     },
   });
-  done();
+  done(projectId);
 }
 
-/** Xóa task chưa giao. */
+/** Xóa task chưa giao (và dự án chưa bị khóa). */
 export async function deleteCreativeTask(taskId: string) {
-  const task = await prisma.creativeTask.findUnique({ where: { id: taskId } });
+  const task = await loadUnlocked(taskId);
   if (!task || task.status !== "UNASSIGNED") return;
   await prisma.creativeTask.delete({ where: { id: taskId } });
-  done();
+  done(task.projectId);
 }

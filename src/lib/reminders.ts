@@ -1,6 +1,8 @@
 import { prisma } from "./prisma";
 import { getNumberSetting } from "./settings";
 import { ORDER_DEPARTMENT_LABELS } from "./bidding";
+import { ACTIVE_TASK_STATUSES, isTaskLocked } from "./creative";
+import { ACTIVE_DEPARTMENT_TASK_STATUSES } from "./department-tasks";
 
 function daysBetween(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
@@ -10,7 +12,7 @@ export type CareOverdueItem = {
   clientId: string;
   clientCode: string;
   clientName: string;
-  teamCode: string;
+  teamCode: string | null; // null = khách cấp BGĐ/chưa giao team
   statusCode: string;
   lastCareAt: Date | null;
   daysSince: number;
@@ -51,7 +53,7 @@ export async function getCareOverdueClients(teamCode?: string): Promise<CareOver
         clientId: c.id,
         clientCode: c.code,
         clientName: c.name,
-        teamCode: c.ownerTeam.code,
+        teamCode: c.ownerTeam?.code ?? null,
         statusCode: c.status.code,
         lastCareAt,
         daysSince,
@@ -245,5 +247,308 @@ export async function checkOrderDeadlineReminders(): Promise<void> {
       });
     }
     await prisma.projectOrder.update({ where: { id: order.id }, data: { deadlineReminderSentAt: new Date() } });
+  }
+}
+
+export type CreativeOverdueTask = {
+  taskId: string;
+  title: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  teamCode: string | null;
+  deadline: Date;
+  daysOverdue: number;
+};
+
+/** Task Creative đã quá deadline mà chưa trả (còn active) và dự án chưa khóa — thuần computed cho /reminders. */
+export async function getCreativeOverdueTasks(teamCode?: string): Promise<CreativeOverdueTask[]> {
+  const now = new Date();
+  const tasks = await prisma.creativeTask.findMany({
+    where: {
+      deadline: { lt: now },
+      status: { in: [...ACTIVE_TASK_STATUSES] },
+      ...(teamCode ? { project: { ownerTeam: { code: teamCode } } } : {}),
+    },
+    include: { project: { include: { status: true, ownerTeam: true } } },
+  });
+
+  return tasks
+    .filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt)) // lock là phép tính thời gian → lọc ở JS
+    .map((t) => ({
+      taskId: t.id,
+      title: t.title,
+      projectId: t.projectId,
+      projectCode: t.project.code,
+      projectName: t.project.name,
+      teamCode: t.project.ownerTeam?.code ?? null,
+      deadline: t.deadline as Date,
+      daysOverdue: daysBetween(t.deadline as Date, now),
+    }))
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+}
+
+/**
+ * No-cron: gọi mỗi lần layout render. Phát hiện task Creative quá deadline mà chưa trả → nhắc 1 lần
+ * cho người thực hiện (assignee) + người giao (CD). Idempotent qua `deadlineReminderSentAt` (reset khi
+ * đổi deadline ở assignCreativeTask). Lock là phép tính thời gian nên lọc ở JS trước khi gửi/gắn cờ.
+ */
+export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
+  const overdue = await prisma.creativeTask.findMany({
+    where: {
+      deadline: { lte: new Date() },
+      status: { in: [...ACTIVE_TASK_STATUSES] },
+      deadlineReminderSentAt: null,
+    },
+    include: { project: { include: { status: true } } },
+  });
+  const actionable = overdue.filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt));
+  if (actionable.length === 0) return;
+
+  for (const task of actionable) {
+    const recipientIds = new Set<string>();
+    if (task.assigneeId) recipientIds.add(task.assigneeId);
+    if (task.assignedById) recipientIds.add(task.assignedById);
+
+    if (recipientIds.size > 0) {
+      await prisma.notification.createMany({
+        data: Array.from(recipientIds).map((recipientStaffId) => ({
+          recipientStaffId,
+          type: "CREATIVE_TASK_DEADLINE_REMINDER",
+          title: `Quá hạn task Creative — dự án ${task.project.code}`,
+          body: task.title,
+          projectId: task.projectId,
+        })),
+      });
+    }
+    await prisma.creativeTask.update({ where: { id: task.id }, data: { deadlineReminderSentAt: new Date() } });
+  }
+}
+
+export type DepartmentTaskOverdueItem = {
+  taskId: string;
+  title: string;
+  department: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  teamCode: string | null;
+  deadline: Date;
+  daysOverdue: number;
+};
+
+/** Task bộ phận (PLANNING/PCC/OPE/PRO) đã quá deadline mà chưa trả (còn active) và dự án chưa khóa — thuần computed cho /reminders. */
+export async function getDepartmentTaskOverdueTasks(teamCode?: string): Promise<DepartmentTaskOverdueItem[]> {
+  const now = new Date();
+  const tasks = await prisma.departmentTask.findMany({
+    where: {
+      deadline: { lt: now },
+      status: { in: [...ACTIVE_DEPARTMENT_TASK_STATUSES] },
+      ...(teamCode ? { project: { ownerTeam: { code: teamCode } } } : {}),
+    },
+    include: { project: { include: { status: true, ownerTeam: true } } },
+  });
+
+  return tasks
+    .filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt)) // lock là phép tính thời gian → lọc ở JS
+    .map((t) => ({
+      taskId: t.id,
+      title: t.title,
+      department: t.department,
+      projectId: t.projectId,
+      projectCode: t.project.code,
+      projectName: t.project.name,
+      teamCode: t.project.ownerTeam?.code ?? null,
+      deadline: t.deadline as Date,
+      daysOverdue: daysBetween(t.deadline as Date, now),
+    }))
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+}
+
+/**
+ * No-cron: gọi mỗi lần layout render. Phát hiện task bộ phận quá deadline mà chưa trả → nhắc 1 lần
+ * cho người thực hiện (assignee) + người giao (lead). Idempotent qua `deadlineReminderSentAt` (reset khi
+ * đổi deadline ở assignDepartmentTask). Mirror checkCreativeTaskDeadlineReminders.
+ */
+export async function checkDepartmentTaskDeadlineReminders(): Promise<void> {
+  const overdue = await prisma.departmentTask.findMany({
+    where: {
+      deadline: { lte: new Date() },
+      status: { in: [...ACTIVE_DEPARTMENT_TASK_STATUSES] },
+      deadlineReminderSentAt: null,
+    },
+    include: { project: { include: { status: true } } },
+  });
+  const actionable = overdue.filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt));
+  if (actionable.length === 0) return;
+
+  for (const task of actionable) {
+    const recipientIds = new Set<string>();
+    if (task.assigneeId) recipientIds.add(task.assigneeId);
+    if (task.assignedById) recipientIds.add(task.assignedById);
+
+    if (recipientIds.size > 0) {
+      await prisma.notification.createMany({
+        data: Array.from(recipientIds).map((recipientStaffId) => ({
+          recipientStaffId,
+          type: "DEPT_TASK_DEADLINE_REMINDER",
+          title: `Quá hạn task ${task.department} — dự án ${task.project.code}`,
+          body: task.title,
+          projectId: task.projectId,
+        })),
+      });
+    }
+    await prisma.departmentTask.update({ where: { id: task.id }, data: { deadlineReminderSentAt: new Date() } });
+  }
+}
+
+export type AcceptanceSignReminderItem = {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  teamCode: string | null;
+  expectedAcceptanceSignDate: Date;
+  daysOverdue: number;
+};
+
+/** Dự án Đang nghiệm thu đã tới/qua "Ngày dự kiến khách ký" mà khách CHƯA xác nhận — thuần computed cho /reminders. */
+export async function getAcceptanceSignReminders(teamCode?: string): Promise<AcceptanceSignReminderItem[]> {
+  const now = new Date();
+  const projects = await prisma.project.findMany({
+    where: {
+      status: { code: "LIQUIDATION" },
+      contract: { expectedAcceptanceSignDate: { lte: now }, clientAcceptanceConfirmedAt: null },
+      ...(teamCode ? { ownerTeam: { code: teamCode } } : {}),
+    },
+    include: { ownerTeam: true, contract: true },
+  });
+
+  return projects
+    .filter((p) => p.contract?.expectedAcceptanceSignDate)
+    .map((p) => ({
+      projectId: p.id,
+      projectCode: p.code,
+      projectName: p.name,
+      teamCode: p.ownerTeam?.code ?? null,
+      expectedAcceptanceSignDate: p.contract!.expectedAcceptanceSignDate as Date,
+      daysOverdue: daysBetween(p.contract!.expectedAcceptanceSignDate as Date, now),
+    }))
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+}
+
+/**
+ * Không có cron — gọi mỗi lần layout render (như checkOrderDeadlineReminders). Idempotent qua
+ * `acceptanceReminderSentAt`: dự án Đang nghiệm thu tới/qua "Ngày dự kiến khách ký" mà khách chưa
+ * xác nhận nghiệm thu → nhắc Project Leader + Owner 1 lần (đổi mốc ngày sẽ reset cờ để nhắc lại).
+ */
+export async function checkAcceptanceSignReminders(): Promise<void> {
+  const overdue = await prisma.contract.findMany({
+    where: {
+      expectedAcceptanceSignDate: { lte: new Date() },
+      clientAcceptanceConfirmedAt: null,
+      acceptanceReminderSentAt: null,
+      project: { status: { code: "LIQUIDATION" } },
+    },
+    include: { project: true },
+  });
+  if (overdue.length === 0) return;
+
+  for (const c of overdue) {
+    const recipientIds = new Set<string>();
+    if (c.project.leaderId) recipientIds.add(c.project.leaderId);
+    if (c.project.ownerId) recipientIds.add(c.project.ownerId);
+
+    if (recipientIds.size > 0) {
+      await prisma.notification.createMany({
+        data: Array.from(recipientIds).map((recipientStaffId) => ({
+          recipientStaffId,
+          type: "ACCEPTANCE_SIGN_REMINDER",
+          title: `Đến hạn thu về biên bản nghiệm thu đã ký — dự án ${c.project.code}`,
+          body: c.project.name,
+          projectId: c.projectId,
+        })),
+      });
+    }
+    await prisma.contract.update({ where: { id: c.id }, data: { acceptanceReminderSentAt: new Date() } });
+  }
+}
+
+export type InventoryReturnReminderItem = {
+  documentId: string;
+  documentCode: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  teamCode: string | null;
+  expectedReturnAt: Date;
+  daysOverdue: number;
+};
+
+/** Phiếu XUẤT EVENT quá hạn trả mà dự án còn đồ tái sử dụng ở hiện trường — thuần computed cho /reminders + bell. */
+export async function getInventoryReturnReminders(teamCode?: string): Promise<InventoryReturnReminderItem[]> {
+  const now = new Date();
+  const docs = await prisma.stockDocument.findMany({
+    where: {
+      type: "ISSUE",
+      status: "COMPLETED",
+      expectedReturnAt: { lt: now },
+      project: {
+        inventoryHoldings: { some: { quantity: { gt: 0 } } },
+        ...(teamCode ? { ownerTeam: { code: teamCode } } : {}),
+      },
+    },
+    include: { project: { include: { ownerTeam: true } } },
+    orderBy: { expectedReturnAt: "asc" },
+  });
+  return docs
+    .filter((d) => d.project && d.expectedReturnAt)
+    .map((d) => ({
+      documentId: d.id,
+      documentCode: d.code,
+      projectId: d.projectId!,
+      projectCode: d.project!.code,
+      projectName: d.project!.name,
+      teamCode: d.project!.ownerTeam?.code ?? null,
+      expectedReturnAt: d.expectedReturnAt!,
+      daysOverdue: Math.floor((now.getTime() - d.expectedReturnAt!.getTime()) / (24 * 3600 * 1000)),
+    }));
+}
+
+/**
+ * Nhắc trả đồ event quá hạn (no-cron, idempotent qua returnReminderSentAt trong WHERE) —
+ * notify người tạo phiếu + staff OPE/PRO. Cờ được reset khi đổi expectedReturnAt (updateExpectedReturn).
+ */
+export async function checkInventoryReturnReminders(): Promise<void> {
+  const docs = await prisma.stockDocument.findMany({
+    where: {
+      type: "ISSUE",
+      status: "COMPLETED",
+      expectedReturnAt: { lt: new Date() },
+      returnReminderSentAt: null,
+      project: { inventoryHoldings: { some: { quantity: { gt: 0 } } } },
+    },
+    include: { project: { select: { code: true } } },
+  });
+  if (docs.length === 0) return;
+
+  const fieldStaff = await prisma.staff.findMany({
+    where: { department: { code: { in: ["OPE", "PRO"] } }, isActive: true },
+    select: { id: true },
+  });
+  for (const doc of docs) {
+    const recipientIds = new Set<string>(fieldStaff.map((s) => s.id));
+    if (doc.createdById) recipientIds.add(doc.createdById);
+    if (recipientIds.size > 0) {
+      await prisma.notification.createMany({
+        data: Array.from(recipientIds).map((recipientStaffId) => ({
+          recipientStaffId,
+          type: "INVENTORY_RETURN_OVERDUE",
+          title: `Quá hạn trả đồ event — phiếu ${doc.code} (dự án ${doc.project?.code ?? ""})`,
+          body: "Đồ tái sử dụng chưa trả về kho. Vui lòng tạo phiếu Trả về kho hoặc cập nhật hạn trả.",
+          projectId: doc.projectId,
+        })),
+      });
+    }
+    await prisma.stockDocument.update({ where: { id: doc.id }, data: { returnReminderSentAt: new Date() } });
   }
 }

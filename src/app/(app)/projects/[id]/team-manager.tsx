@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { CORE_DEPARTMENTS, SUPPORT_DEPARTMENTS } from "@/lib/projects";
 import { addProjectMember, removeProjectMember } from "../actions";
 
@@ -72,14 +73,13 @@ export function TeamManager({
       })}
 
       <form action={addProjectMember.bind(null, projectId)} className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
-        <select name="staffId" className={input + " min-w-[180px] flex-1"} required>
-          <option value="">{t("selectStaff")}</option>
-          {allStaff.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect
+          name="staffId"
+          required
+          placeholder={t("selectStaff")}
+          className="min-w-[180px] flex-1"
+          options={allStaff.map((s) => ({ value: s.id, label: s.label }))}
+        />
         <select name="roleInProject" defaultValue="CORE" className={input}>
           <option value="LEADER">{t("roleLEADER")}</option>
           <option value="CORE">{t("roleCORE")}</option>

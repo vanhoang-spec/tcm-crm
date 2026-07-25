@@ -16,6 +16,20 @@ import {
   ClipboardList,
   FileSpreadsheet,
   Palette,
+  CalendarClock,
+  Wallet,
+  MessagesSquare,
+  UserPlus,
+  BookOpen,
+  Sparkles,
+  Coins,
+  Warehouse,
+  Boxes,
+  Clock,
+  CalendarDays,
+  Plane,
+  ShieldCheck,
+  Award,
 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
@@ -24,6 +38,8 @@ export default async function SettingsPage() {
 
   const sections = [
     { href: "/settings/teams", icon: Users2, title: t("teamsTitle"), desc: t("teamsDesc") },
+    { href: "/settings/staff", icon: UserPlus, title: t("staffTitle"), desc: t("staffDesc") },
+    { href: "/settings/roles", icon: ShieldCheck, title: t("rolesTitle"), desc: t("rolesDesc") },
     { href: "/settings/options/industry", icon: Tags, title: t("industryTitle"), desc: t("industryDesc") },
     { href: "/settings/commission", icon: HandCoins, title: t("commissionTitle"), desc: t("commissionDesc") },
     { href: "/settings/options/client_status", icon: UserCheck, title: t("clientStatusTitle"), desc: t("clientStatusDesc") },
@@ -43,7 +59,19 @@ export default async function SettingsPage() {
     { href: "/settings/options/timeline_status", icon: ListFilter, title: t("timelineStatusTitle"), desc: t("timelineStatusDesc") },
     { href: "/settings/options/creative_task_type", icon: Palette, title: t("creativeTaskTypeTitle"), desc: t("creativeTaskTypeDesc") },
     { href: "/settings/costsheet-templates", icon: FileSpreadsheet, title: t("costsheetTemplatesTitle"), desc: t("costsheetTemplatesDesc") },
+    { href: "/settings/timeline-templates", icon: CalendarClock, title: t("timelineTemplatesTitle"), desc: t("timelineTemplatesDesc") },
     { href: "/settings/bidding", icon: SlidersHorizontal, title: t("biddingParamsTitle"), desc: t("biddingParamsDesc") },
+    { href: "/settings/finance", icon: Wallet, title: t("financeTitle"), desc: t("financeDesc") },
+    { href: "/settings/communication", icon: MessagesSquare, title: t("communicationTitle"), desc: t("communicationDesc") },
+    { href: "/settings/options/kb_category", icon: BookOpen, title: t("kbCategoryTitle"), desc: t("kbCategoryDesc") },
+    { href: "/settings/ai", icon: Sparkles, title: t("aiTitle"), desc: t("aiDesc") },
+    { href: "/settings/creative", icon: Coins, title: t("creativeCostTitle"), desc: t("creativeCostDesc") },
+    { href: "/settings/warehouses", icon: Warehouse, title: t("warehousesTitle"), desc: t("warehousesDesc") },
+    { href: "/settings/options/inventory_category", icon: Boxes, title: t("inventoryCategoryTitle"), desc: t("inventoryCategoryDesc") },
+    { href: "/settings/kpi", icon: Award, title: t("kpiTitle"), desc: t("kpiDesc") },
+    { href: "/settings/shifts", icon: Clock, title: t("shiftsTitle"), desc: t("shiftsDesc") },
+    { href: "/settings/timekeeping", icon: CalendarDays, title: t("timekeepingTitle"), desc: t("timekeepingDesc") },
+    { href: "/settings/options/leave_type", icon: Plane, title: t("leaveTypeTitle"), desc: t("leaveTypeDesc") },
   ];
 
   return (

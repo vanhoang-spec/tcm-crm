@@ -75,7 +75,9 @@ export default async function CareReportPage({
                 <Badge tone={STATUS_TONE[item.statusCode] ?? "neutral"}>{item.statusCode}</Badge>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-                <Badge tone={TEAM_TONE[item.teamCode] ?? "neutral"}>{item.teamCode}</Badge>
+                <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "neutral"}>
+                  {item.teamCode ?? t("teamUnassigned")}
+                </Badge>
                 <span className="font-medium text-danger">{formatNumber(item.daysSince, locale)}</span>
                 <span className="text-muted-foreground">{t("overdue", { threshold: formatNumber(item.thresholdDays, locale) })}</span>
               </div>
@@ -88,9 +90,9 @@ export default async function CareReportPage({
       </ul>
 
       <div className="hidden overflow-hidden rounded-xl border border-border bg-surface sm:block">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
         <table className="w-full min-w-[640px] text-sm">
-          <thead className="border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
             <tr>
               <th className="px-4 py-3">{t("colClient")}</th>
               <th className="px-4 py-3">{t("colTeam")}</th>
@@ -109,7 +111,9 @@ export default async function CareReportPage({
                   <div className="font-mono text-xs text-muted-foreground">{item.clientCode}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge tone={TEAM_TONE[item.teamCode] ?? "neutral"}>{item.teamCode}</Badge>
+                  <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "neutral"}>
+                    {item.teamCode ?? t("teamUnassigned")}
+                  </Badge>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{item.statusCode}</td>
                 <td className="px-4 py-3 text-muted-foreground">

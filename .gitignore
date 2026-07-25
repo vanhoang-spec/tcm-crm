@@ -37,6 +37,12 @@ yarn-error.log*
 /prisma/dev.db
 /prisma/dev.db-journal
 
+# chat attachment binaries (local disk, ngoài public/ — xem src/lib/chat-storage.ts)
+/storage
+
+# HS&E manual generator — isolated Node deps (docx/puppeteer). Source scripts committed; deps not.
+/docs/hse/node_modules
+
 # vercel
 .vercel
 

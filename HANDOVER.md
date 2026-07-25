@@ -1,0 +1,217 @@
+# BÀN GIAO DỰ ÁN — TCM CRM
+
+> Cập nhật: 25/07/2026. Tài liệu dành cho người tiếp nhận code + trợ lý AI (Claude Code) làm tiếp.
+> Đọc hết mục 1 trước khi làm bất cứ việc gì.
+
+---
+
+## 1. ⚠️ VIỆC PHẢI LÀM TRƯỚC KHI BÀN GIAO (chặn)
+
+**Tình trạng git hiện tại KHÔNG dùng để bàn giao được.**
+
+```
+Commit cuối:  3b8df48  "Add Bidding & Contract, Project Management, and Creative modules"
+Chưa commit:  171 file  (52 sửa + 119 mới)
+Migration:    33 trên đĩa — chỉ 3 có trong git
+```
+
+Nghĩa là: nếu đồng nghiệp `git clone` repo này, họ **mất khoảng 80% codebase**. Toàn bộ các module sau đây chỉ tồn tại trên ổ đĩa máy hiện tại, chưa vào git:
+
+`finance` · `chat` · `inventory` · `staff` (chấm công) · `kpi` · `planning` · `orgchart` · `kb` · `ai` · `act-as` · `profile` · `(auth)` · `api/` · phần lớn `settings/` · 30 migration · toàn bộ `src/lib` mới (47 file)
+
+### Cách xử lý (chạy trên máy hiện tại, TRƯỚC khi giao máy/repo)
+
+```bash
+cd D:/TCM/TCM_AI_CRM/TCM_CRM
+git status                 # xem lại lần cuối, chắc chắn không có file lạ
+git add -A
+git commit -m "Toàn bộ module còn lại: Finance, Chat, Inventory, Staff, KPI, Planning, Auth, AI, Dashboard, Org chart, KB, CTV Operations"
+```
+
+`.gitignore` đã loại đúng các thứ không nên commit (`.env`, `prisma/dev.db`, `/storage`, `node_modules`) nên `git add -A` an toàn. **Kiểm lại `git status` sau khi add** để chắc chắn không có file bí mật nào lọt vào.
+
+### Bàn giao thêm ngoài git
+
+| Thứ | Vì sao cần | Ghi chú |
+|---|---|---|
+| File `.env` | Chứa `DATABASE_URL`, 2 secret ký cookie, API key DeepSeek/Tavily | **Gửi riêng qua kênh bảo mật**, không commit |
+| `prisma/dev.db` | Dữ liệu thật đang làm việc (42 nhân sự, khách hàng, CO/CE đã nhập) | Copy tay nếu muốn giữ dữ liệu; nếu không thì seed lại từ đầu |
+| `~/.ssh/tcm_deploy` | Key SSH deploy lên server công ty | Gửi riêng, hoặc tạo key mới cho người tiếp nhận |
+| `docs/PLAN-HISTORY.md` | Toàn bộ lịch sử thiết kế + lý do từng quyết định (300KB) | Đã copy vào repo (xem mục 9) |
+
+---
+
+## 2. Dự án này là gì
+
+**Nền tảng vận hành nội bộ** (không chỉ CRM) cho **TCM** — agency event & activation, ~42 nhân sự, 3 team Account (A1/A2/A3), ~250 dự án/năm. Thay thế 3 board monday.com đang dùng rời rạc.
+
+Mục tiêu nghiệp vụ: một nguồn dữ liệu duy nhất, chuẩn hoá 3 team, chặn các chỗ chảy máu tiền (28,4 tỷ công nợ, 20,78 tỷ nghiệm thu chưa thu), tự động cảnh báo.
+
+**Stack:** Next.js 16 (App Router, Server Actions) · React 19 · Prisma 6 + SQLite · next-intl (vi/en) · Tailwind 4 · Zod 4. Node v24, npm 11.
+
+---
+
+## 3. Chạy được trong 5 phút
+
+```bash
+npm install
+# Đặt file .env vào thư mục gốc (nhận riêng — xem mục 1)
+npx prisma migrate deploy      # dựng schema (KHÔNG dùng migrate dev nếu đã có dev.db thật)
+npx prisma generate
+npm run db:seed                # seed 42 nhân sự thật + danh mục + dữ liệu mẫu
+npm run dev                    # http://localhost:3000
+```
+
+**Đăng nhập:** email công ty `@tcmbtl.com`. Tài khoản admin: `nvhoang@tcmbtl.com`.
+Mật khẩu chung ban đầu: **`TCM123456`** (setting `auth.default_password`) — hệ thống bắt đổi ngay lần đầu.
+
+Nếu DB hỏng/muốn làm lại sạch: `npx prisma migrate reset --force` rồi `npm run db:seed`.
+
+---
+
+## 4. Quy ước BẮT BUỘC (giữ đúng để code không phân mảnh)
+
+Đây là những luật đã áp dụng nhất quán toàn repo. Vi phạm sẽ tạo ra vùng code lệch chuẩn rất khó gỡ về sau.
+
+### 4.1 Kiến trúc
+- **Hàm thuần tách khỏi IO.** Mọi công thức nghiệp vụ nằm ở `src/lib/*.ts` (47 file), nhận/trả số thuần, **không** gọi Prisma. Server Action chỉ nạp dữ liệu → gọi hàm thuần → ghi DB. Ví dụ chuẩn: `src/lib/bidding.ts`, `src/lib/kpi.ts`, `src/lib/creative-cost.ts`.
+- **Không tin số từ client.** Server Action **luôn tính lại** tổng tiền từ payload thô (xem `saveCostSheet` trong `src/app/(app)/bidding/actions.ts`).
+- **Tiền = `BigInt` (VND) trong DB**, `Number` khi tính (VND < 2^53 nên an toàn), `toNum()` ở biên. Không dùng float cho tiền trong DB.
+- **Enum "mềm" đi qua `OptionSet`/`OptionItem`** để admin tự sửa trong Settings (trạng thái dự án, loại task, nhóm hàng...). Chỉ hard-code khi state machine phụ thuộc (`code` cố định, label lấy từ DB qua `pickLabel`).
+
+### 4.2 i18n — luật cứng
+- Mọi chuỗi hiển thị đều qua `next-intl`. **`messages/vi.json` và `messages/en.json` phải khớp key tuyệt đối** (hiện 2253 key mỗi bên).
+- Kiểm tra trước mỗi lần giao việc:
+```bash
+node -e "const vi=require('./messages/vi.json'),en=require('./messages/en.json');function f(o,p=''){let k=[];for(const x in o){const q=p?p+'.'+x:x;if(o[x]&&typeof o[x]==='object')k=k.concat(f(o[x],q));else k.push(q)}return k}const V=new Set(f(vi)),E=new Set(f(en));console.log('only vi:',[...V].filter(k=>!E.has(k)).length,'only en:',[...E].filter(k=>!V.has(k)).length)"
+```
+Kết quả phải là `only vi: 0 only en: 0`.
+- **Ngoại lệ đã thống nhất:** tiêu đề Notification hardcode tiếng Việt (vì `src/lib/reminders.ts` không có `getTranslations`). Đừng "sửa" chỗ này.
+
+### 4.3 Ngày tháng — chỗ dễ sai nhất
+Toàn app dùng quy ước **UTC midnight**: `dateOrNull()` parse `"YYYY-MM-DD"` → `new Date(...)` → UTC.
+Khi viết script nhập liệu, **phải** dựng ngày bằng `Date.UTC(y, m, d)`. Dùng `new Date(y, m, d)` sẽ lệch đúng 7 tiếng (múi giờ Asia/Saigon) → hiển thị lùi 1 ngày. *(Lỗi này đã xảy ra một lần khi nhập timeline KUN và đã sửa.)*
+
+### 4.4 UI
+- Bảng nhiều dòng: pattern lưới dày inline-edit, wrapper `overflow-x-auto overflow-y-auto max-h-[70vh]` + header `sticky top-0` (25 bảng đang theo pattern này).
+- Mobile: `sm:hidden` card song song với bảng desktop; bảng rộng thì cuộn ngang trong wrapper riêng, **body không bao giờ cuộn ngang**.
+- Dùng lại component có sẵn: `DateField` (nhập dd/mm/yyyy), `SearchableSelect`, `StaffAvatar`, `Badge`, `StatRatio`.
+- **Drawer/dialog `position: fixed` không được đặt bên trong phần tử có `backdrop-blur`/`transform`/`filter`** — sẽ bị nhốt trong khung cha (đã từng làm vỡ menu mobile toàn app).
+
+### 4.5 Migration
+Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Không reset DB** khi đã có dữ liệu thật; migration mới phải additive (cột nullable hoặc có default).
+
+---
+
+## 5. Bản đồ module
+
+| # | Module | Route | Trạng thái |
+|---|---|---|---|
+| ① | Khách hàng | `/clients` | Xong (có import Excel thật + báo cáo chăm sóc) |
+| ② | Bidding & Hợp đồng | `/bidding` | Xong (CO/CE builder, make-up, margin gate, duyệt) |
+| ③ | Quản lý dự án | `/projects/[id]` | Xong — 9 tab: Tổng quan, Timeline, ORDER, CO/CE, Planning, Vận hành, Sản xuất, Thu mua, Nghiệm thu |
+| ④ | Chi phí & Công nợ | `/finance` | Xong (tạm ứng, thanh toán NCC, công nợ, cashflow) |
+| ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) |
+| ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
+| ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
+| ⑧ | Kho | `/inventory` | Xong (ledger, chuyển kho 2 bước, xuất/trả event, CSV import) |
+| ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
+| ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) |
+| — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
+| — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) |
+| — | KB / Org chart | `/kb`, `/orgchart` | Xong |
+| — | Settings | `/settings` | Xong (~18 trang con) |
+
+**Quy mô:** 80 model Prisma · 33 migration · 47 file `src/lib` · 2253 key i18n × 2 ngôn ngữ · ~85 route.
+
+---
+
+## 6. Nghiệp vụ cốt lõi cần hiểu trước khi sửa
+
+### CO/CE (còn gọi CECO) — trái tim hệ thống
+- **CO** = chi phí nội bộ (giá vốn). **CE** = giá chào khách.
+- Cấu trúc: `CostSheet` → `CostSheetSection` (hạng mục, **lồng tối đa 4 cấp**) → `CostLine`.
+- `margin% = (CE − CO) / CE`, **ngưỡng tối thiểu 31%** (setting `bidding.min_margin_pct`). Dưới ngưỡng → bắt buộc nhập lý do override.
+- **"Chi hộ"** (`Section.isProxy`) = tiền chi hộ khách, **nằm hoàn toàn ngoài margin**, có phí dịch vụ riêng. Section con nằm dưới section Chi hộ tự kế thừa tính chất này.
+- **Thuế theo từng dòng:** `VAT` (khấu trừ, không cộng vào CO) · `TNCN` (÷0,9) · `TNDN` (÷0,8) · `OTHER` (nhập tay số tiền thuế, không gross-up %).
+- **Dòng âm tiền** được phép (đơn giá/số tiền cố định âm) — dùng cho khoản giảm trừ, thu hồi thanh lý.
+- Mỗi lần lưu tạo 1 `CostSheetRevision` bất biến (snapshot JSON) → tab "So sánh" diff từng dòng giữa 2 phiên bản.
+
+### Bất biến không được phá
+1. Margin gate 31% + override có lý do.
+2. Chi hộ ngoài margin.
+3. Mọi thứ mới phải cộng vào `coTotal` hoặc chỉ tác động lúc suy ra `ceTotal` — **không tạo hệ thống tổng tiền song song**.
+4. Chặn Finished nếu thiếu CECO Liquid/Invoice; chặn chuyển Processing nếu thiếu confirm email/PO/HĐ.
+
+### Từ vựng
+| Từ | Nghĩa |
+|---|---|
+| Nghiệm thu / Liquidation | Bàn giao & quyết toán cuối dự án |
+| Thực Chi | Chi phí thực tế đã chi |
+| Make-up | Suy CE từ CO bằng markup để đạt margin tối thiểu |
+| CTV | Cộng tác viên (nhân sự thuê ngoài chạy event) |
+| PIC | Người phụ trách |
+| Chi hộ | Chi hộ khách hàng, ngoài margin |
+
+---
+
+## 7. Quy trình verify BẮT BUỘC trước khi coi là xong
+
+```bash
+npx tsc --noEmit          # phải sạch
+npx eslint src --quiet    # phải sạch
+# i18n parity — xem lệnh ở mục 4.2, phải 0/0
+npx next build            # phải sạch, kiểm route list không mất route nào
+```
+
+Sau đó verify trên browser thật (dev server) với đúng nghiệp vụ vừa sửa. Với thay đổi liên quan tiền/công thức: kiểm chứng bằng số cụ thể, đối chiếu kỳ vọng — đừng chỉ xem "trang không lỗi".
+
+---
+
+## 8. Deploy
+
+Server công ty: `192.168.1.111` (LAN) — domain `app.tcmbtl.com`. User `tcm`, key `~/.ssh/tcm_deploy`. Chạy bằng **pm2**.
+
+Quy trình đã dùng: **backup DB production → đồng bộ code (tar over ssh) → `prisma migrate deploy` → `npm run build` → `pm2 restart`**.
+
+⚠️ **Chỉ deploy khi ở trong mạng LAN công ty.** Cổng 22 ở IP public (115.79.195.150) trả về host key **khác** với server đã biết → không phải máy chủ CRM, không được đẩy dữ liệu vào đó.
+
+- Fingerprint server thật (192.168.1.111, ED25519): `SHA256:EWU4YXJM5NoE01QTVwLnXV2ao1Q1TG7fwvabxf39CfU`
+- Luôn **backup DB production trước** mọi thao tác ghi đè.
+
+---
+
+## 9. Lịch sử thiết kế — đọc khi cần hiểu "vì sao lại làm thế này"
+
+`docs/PLAN-HISTORY.md` (~300KB) chứa toàn bộ blueprint + kế hoạch từng batch, kèm **lý do** của mỗi quyết định kiến trúc, các phương án đã cân nhắc và bị loại, ràng buộc nghiệp vụ đã chốt với BoD.
+
+Trước khi sửa một module lạ, tìm phần tương ứng trong file này — phần lớn câu hỏi "tại sao không làm cách đơn giản hơn?" đã có câu trả lời sẵn.
+
+---
+
+## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
+
+1. **RBAC chỉ mang tính danh nghĩa.** Đã có đăng nhập thật (mật khẩu scrypt + session cookie), nhưng **chưa chặn quyền theo vai trò** — ai đăng nhập cũng vào được mọi trang, kể cả lương/KPI. Đây là việc lớn còn lại.
+2. **Chat dùng polling ~4s**, chưa realtime (đủ cho nội bộ ~42 người).
+3. **KPI phase 1 zero-sum:** hệ số margin cố định 1.0 (floor=cap=1), margin chỉ hiển thị chứ chưa gắn tiền. BoD bật co giãn sau bằng Settings, không cần sửa code.
+4. **Lương theo VỊ TRÍ, không theo cá nhân** (vì chưa có RBAC che dữ liệu nhạy cảm). `positionTitle` là free-text khớp `Staff.title` — nợ: nên chuyển thành option_set + `Staff.titleId`.
+5. **Cost-per-task "thực tế" là PHÂN BỔ theo giờ, không phải tiền đã chi.** Đừng đọc thành chi phí thực.
+6. **Chưa có test tự động.** Verify hiện làm bằng tsc/eslint/build + browser thủ công.
+7. **CO/CE chỉ có CE tổng ở cấp bảng**, chưa có CE theo từng dòng (Phase 2 đã bàn: CE-per-line + gom N dòng CO → 1 dòng CE + make-up theo dòng + AI gợi ý markup — **chưa làm**).
+8. SQLite single-writer: giữ transaction ngắn, fan-out notification **sau** commit.
+
+---
+
+## 11. Trạng thái ngay tại thời điểm bàn giao
+
+**Vừa xong (đã verify sạch, chưa deploy):**
+- CO/CE hỗ trợ dòng âm tiền + thuế "Khác (nhập tay)" — migration `20260725010528_costline_custom_tax_amount`.
+
+**Dữ liệu thật đã nhập trong `prisma/dev.db` (chỉ có ở local, chưa lên production):**
+- CO/CE báo giá AMHL: T005 (Christmas Decor), T006 (Black Friday, có khối Chi hộ quà tặng)
+- CO/CE nghiệm thu KUN: T013 "Phase 1: 5 tỉnh" — 3 revision (HĐ → Nghiệm thu → CO thật), CO 5,39 tỷ
+- Master Timeline: T013 (5 tỉnh đầu, 64 dòng) và T025 "Phase 2: 5 tỉnh tiếp theo" (5 tỉnh cuối, 65 dòng)
+
+**Đang chờ:** deploy lên server (chờ vào văn phòng dùng LAN). Chủ dự án đã chọn phương án **đè `dev.db` lên production** — nhớ backup DB production trước và báo lại số bản ghi chênh lệch trước khi ghi đè.
+
+**Việc lớn còn lại theo thứ tự ưu tiên gợi ý:** RBAC thật → module ⑦ Lương → CO/CE Phase 2 (CE theo dòng).

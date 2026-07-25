@@ -1,1 +1,3 @@
 @AGENTS.md
+@CODING-RULES.md
+@HANDOVER.md

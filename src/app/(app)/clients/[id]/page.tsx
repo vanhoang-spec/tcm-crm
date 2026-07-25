@@ -9,6 +9,7 @@ import { formatDate, formatDateTime, formatNumber, pickLabel } from "@/lib/utils
 import type { Locale } from "@/i18n/locales";
 import { addCareNote, addContact, transferClientAction } from "../actions";
 import { MAX_CONTACTS } from "@/lib/validators/client";
+import { getMissingClientProfileFields } from "@/lib/client-profile";
 
 const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
   A1: "brand",
@@ -47,8 +48,10 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   });
   if (!client) notFound();
 
+  const missingFields = getMissingClientProfileFields(client);
+
   const [teams, auditEntries, t, tForm, locale] = await Promise.all([
-    prisma.team.findMany({ where: { NOT: { id: client.ownerTeamId } }, orderBy: { code: "asc" } }),
+    prisma.team.findMany({ where: client.ownerTeamId ? { NOT: { id: client.ownerTeamId } } : undefined, orderBy: { code: "asc" } }),
     prisma.auditLog.findMany({
       where: { entityType: "client", entityId: client.id },
       orderBy: { changedAt: "desc" },
@@ -72,6 +75,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </Link>
       </div>
 
+      {missingFields.length > 0 && (
+        <div className="rounded-xl border border-warning/30 bg-warning-bg px-4 py-3 text-sm text-warning">
+          <p className="font-medium">{t("profileIncompleteBanner")}</p>
+          <p className="mt-0.5 text-xs">
+            {missingFields.map((f) => t(`profileField.${f}`)).join(", ")} — {t("profileIncompleteHintDetail")}
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -80,15 +92,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             {client.isNew && <Badge tone="brand">{t("isNewBadge")}</Badge>}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t("brandAndTax", { brand: client.brand.name, taxCode: client.taxCode })}
+            {t("brandAndTax", { brand: client.brand.name, taxCode: client.taxCode ?? "—" })}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge tone={TEAM_TONE[client.ownerTeam.code] ?? "neutral"}>
-              {t("teamBadge", { code: client.ownerTeam.code })}
-            </Badge>
-            <Badge tone="neutral">{pickLabel(client.industry, locale)}</Badge>
+            {client.ownerTeam ? (
+              <Badge tone={TEAM_TONE[client.ownerTeam.code] ?? "neutral"}>
+                {t("teamBadge", { code: client.ownerTeam.code })}
+              </Badge>
+            ) : (
+              <Badge tone="neutral">{t("teamUnassignedBadge")}</Badge>
+            )}
+            {client.industry && <Badge tone="neutral">{pickLabel(client.industry, locale)}</Badge>}
             <Badge tone={STATUS_TONE[client.status.code] ?? "neutral"}>{pickLabel(client.status, locale)}</Badge>
-            <Badge tone="neutral">{pickLabel(client.classification, locale)}</Badge>
+            {client.classification && <Badge tone="neutral">{pickLabel(client.classification, locale)}</Badge>}
             <Badge tone="neutral">
               {t("paymentTermBadge", { days: formatNumber(client.paymentTermDays, locale) })}
             </Badge>
@@ -287,13 +303,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   );
 }
 
-function InfoRow({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof Phone }) {
+function InfoRow({ label, value, icon: Icon }: { label: string; value: string | null; icon?: typeof Phone }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="flex items-center gap-1 text-right font-medium text-foreground">
         {Icon && <Icon className="h-3 w-3 text-muted-foreground" />}
-        {value}
+        {value ?? "—"}
       </dd>
     </div>
   );

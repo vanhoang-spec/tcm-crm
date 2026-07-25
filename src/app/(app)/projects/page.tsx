@@ -134,9 +134,9 @@ export default async function ProjectsPage({
       </ul>
 
       <div className="hidden overflow-hidden rounded-xl border border-border bg-surface sm:block">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
+            <thead className="sticky top-0 z-10 border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">{t("colCode")}</th>
                 <th className="px-4 py-3">{t("colName")}</th>

@@ -4,7 +4,26 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDateTime, formatNumber, formatPercent } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { getBiddingReminders, getCareOverdueClients, getPendingCostSheetApprovals, getTimelineOverdueItems } from "@/lib/reminders";
+import {
+  getAcceptanceSignReminders,
+  getBiddingReminders,
+  getCareOverdueClients,
+  getPendingCostSheetApprovals,
+  getTimelineOverdueItems,
+  getCreativeOverdueTasks,
+  getDepartmentTaskOverdueTasks,
+  getInventoryReturnReminders,
+} from "@/lib/reminders";
+
+/** Route tab workspace dự án tương ứng mỗi bộ phận có DepartmentTask board. */
+const DEPARTMENT_TAB_SEG: Record<string, string> = {
+  PLANNING: "planning",
+  PCC: "purchasing",
+  OPE: "operations",
+  PRO: "production",
+};
+import { getArOverdueItems } from "@/lib/finance";
+import { getCurrentStaffId } from "@/lib/current-staff";
 import { markNotificationRead } from "./actions";
 
 const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
@@ -19,15 +38,27 @@ export default async function RemindersPage({
   searchParams: Promise<{ team?: string }>;
 }) {
   const { team } = await searchParams;
-  const [t, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, notifications] = await Promise.all([
+  const meId = await getCurrentStaffId();
+  const [t, tClients, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, notifications] = await Promise.all([
     getTranslations("reminders"),
+    getTranslations("clients.list"),
     getLocale() as Promise<Locale>,
     prisma.team.findMany({ orderBy: { code: "asc" } }),
     getCareOverdueClients(team),
     getBiddingReminders(team),
     getPendingCostSheetApprovals(team),
     getTimelineOverdueItems(team),
-    prisma.notification.findMany({ where: { isRead: false }, orderBy: { createdAt: "desc" } }),
+    getAcceptanceSignReminders(team),
+    getCreativeOverdueTasks(team),
+    getDepartmentTaskOverdueTasks(team),
+    getArOverdueItems(team),
+    getInventoryReturnReminders(team),
+    // Chỉ thông báo CỦA người đang đăng nhập (body có thể chứa preview chat/nội dung riêng tư).
+    // CHAT_MESSAGE có badge riêng trong module Chat — không lặp lại ở đây (khớp công thức chuông layout.tsx).
+    prisma.notification.findMany({
+      where: { isRead: false, recipientStaffId: meId ?? "", type: { not: "CHAT_MESSAGE" } },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   return (
@@ -68,7 +99,9 @@ export default async function RemindersPage({
                   {item.clientName}
                 </Link>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Badge tone={TEAM_TONE[item.teamCode] ?? "neutral"}>{item.teamCode}</Badge>
+                  <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "neutral"}>
+                    {item.teamCode ?? tClients("teamUnassigned")}
+                  </Badge>
                   {t("careItem", { days: formatNumber(item.daysSince, locale), threshold: formatNumber(item.thresholdDays, locale) })}
                 </div>
               </div>
@@ -156,6 +189,124 @@ export default async function RemindersPage({
             </li>
           ))}
           {timelineItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("timelineEmpty")}</li>}
+        </ul>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("creativeSection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {creativeItems.map((item) => (
+            <li key={item.taskId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <Link href="/creative" className="text-sm font-medium text-foreground hover:text-brand-600">
+                  {item.projectName}
+                </Link>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "warning"}>{item.teamCode ?? t("teamUnassigned")}</Badge>
+                  <span>{t("creativeItem", { title: item.title, days: formatNumber(item.daysOverdue, locale) })}</span>
+                </div>
+              </div>
+              <Link href="/creative" className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {t("goToCreative")}
+              </Link>
+            </li>
+          ))}
+          {creativeItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("creativeEmpty")}</li>}
+        </ul>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("deptTaskSection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {deptTaskItems.map((item) => {
+            const href = `/projects/${item.projectId}/${DEPARTMENT_TAB_SEG[item.department] ?? ""}`;
+            return (
+              <li key={item.taskId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <div>
+                  <Link href={href} className="text-sm font-medium text-foreground hover:text-brand-600">
+                    {item.projectName}
+                  </Link>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "warning"}>{item.teamCode ?? t("teamUnassigned")}</Badge>
+                    <span>{t("deptTaskItem", { department: item.department, title: item.title, days: formatNumber(item.daysOverdue, locale) })}</span>
+                  </div>
+                </div>
+                <Link href={href} className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                  {t("goToDeptTask")}
+                </Link>
+              </li>
+            );
+          })}
+          {deptTaskItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("deptTaskEmpty")}</li>}
+        </ul>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("acceptanceSection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {acceptanceItems.map((item) => (
+            <li key={item.projectId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <Link href={`/projects/${item.projectId}/liquidation`} className="text-sm font-medium text-foreground hover:text-brand-600">
+                  {item.projectName}
+                </Link>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "warning"}>{item.teamCode ?? t("teamUnassigned")}</Badge>
+                  <span>{t("acceptanceItem", { days: formatNumber(item.daysOverdue, locale) })}</span>
+                </div>
+              </div>
+              <Link href={`/projects/${item.projectId}/liquidation`} className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {t("goToProject")}
+              </Link>
+            </li>
+          ))}
+          {acceptanceItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("acceptanceEmpty")}</li>}
+        </ul>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("arSection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {arItems.map((item) => (
+            <li key={item.invoiceId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <Link href={`/finance/debt`} className="text-sm font-medium text-foreground hover:text-brand-600">
+                  {item.invoiceNo} · {item.clientName}
+                </Link>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "warning"}>{item.teamCode ?? t("teamUnassigned")}</Badge>
+                  <span>{t("arItem", { amount: formatNumber(item.outstanding, locale), days: formatNumber(item.daysOverdue, locale) })}</span>
+                </div>
+              </div>
+              <Link href={`/finance/debt`} className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {t("goToProject")}
+              </Link>
+            </li>
+          ))}
+          {arItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("arEmpty")}</li>}
+        </ul>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("inventorySection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {inventoryItems.map((item) => (
+            <li key={item.documentId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <Link href={`/inventory/documents/${item.documentId}`} className="text-sm font-medium text-foreground hover:text-brand-600">
+                  {item.documentCode} · {item.projectName}
+                </Link>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge tone={item.teamCode ? (TEAM_TONE[item.teamCode] ?? "neutral") : "warning"}>{item.teamCode ?? t("teamUnassigned")}</Badge>
+                  <span>{t("inventoryItem", { code: item.documentCode, project: item.projectCode, days: formatNumber(item.daysOverdue, locale) })}</span>
+                </div>
+              </div>
+              <Link href="/inventory" className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {t("goToInventory")}
+              </Link>
+            </li>
+          ))}
+          {inventoryItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("inventoryEmpty")}</li>}
         </ul>
       </section>
 

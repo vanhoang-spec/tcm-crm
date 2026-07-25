@@ -5,6 +5,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { formatDate, formatNumber, pickLabel, toNum } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
 import { COMPLEXITY_TONE, STATUS_TONE, TEAM_TONE } from "@/lib/bidding-ui";
@@ -102,6 +103,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
       id: tp.id,
       name: tp.name,
       sections: tp.sections.map((s) => ({
+        id: s.id,
+        parentId: null, // mẫu (template) luôn phẳng — N-cấp chỉ áp dụng cho CO/CE sống, xem cost-sheet-builder.tsx
         code: s.code,
         icon: s.icon ?? "",
         nameVi: s.nameVi,
@@ -119,6 +122,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           unitPrice: toNum(l.defaultUnitPrice),
           fixedAmount: l.fixedAmount != null ? toNum(l.fixedAmount) : null,
           percentVal: l.percentVal,
+          taxType: "VAT", // template không mang loại thuế — set khi dựng sheet thật
+          customTaxAmount: null,
           vendorId: "",
           isLocked: l.isLocked,
           maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
@@ -144,6 +149,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
         approvedAt: sheet.approvedAt ? formatDate(sheet.approvedAt) : null,
         overrideNote: sheet.marginOverrideNote,
         sections: sheet.sections.map((s) => ({
+          id: s.id,
+          parentId: s.parentSectionId,
           code: s.code,
           icon: s.icon ?? "",
           nameVi: s.nameVi,
@@ -161,6 +168,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
             unitPrice: toNum(l.unitPrice),
             fixedAmount: l.fixedAmount != null ? toNum(l.fixedAmount) : null,
             percentVal: l.percentVal,
+            taxType: l.taxType,
+            customTaxAmount: l.customTaxAmount != null ? toNum(l.customTaxAmount) : null,
             vendorId: l.vendorId ?? "",
             isLocked: l.isLocked,
             maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
@@ -247,10 +256,14 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
             <span>{t("clientLabel")}: {project.client.name}</span>
             {project.projectType && <span>· {pickLabel(project.projectType, locale)}</span>}
             {project.owner && <span>· {t("ownerLabel")}: {project.owner.fullName}</span>}
-            <a href={project.briefLinkUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-600 hover:underline">
-              <Link2 className="h-3 w-3" />
-              {t("briefLinkLabel")}
-            </a>
+            {project.briefLinkUrl ? (
+              <a href={project.briefLinkUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-600 hover:underline">
+                <Link2 className="h-3 w-3" />
+                {t("briefLinkLabel")}
+              </a>
+            ) : (
+              <span className="text-xs text-muted-foreground">{t("briefLinkMissing")}</span>
+            )}
           </div>
         </div>
         <LinkButton href={`/bidding/${project.id}/edit`} variant="secondary" size="sm">
@@ -263,7 +276,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
 
       <OrderPanel
         projectId={project.id}
-        briefLinkUrl={project.briefLinkUrl}
+        briefLinkUrl={project.briefLinkUrl ?? ""}
         orders={orderData}
         staff={activeStaff.map((s) => ({ id: s.id, label: s.fullName }))}
         accountName={accountName}
@@ -433,13 +446,13 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
                 <input name="contractNo" defaultValue={project.contract?.contractNo ?? ""} className={smallInput} />
               </Labeled>
               <Labeled label={tContract("contractDate")}>
-                <input name="contractDate" type="date" defaultValue={toDateInput(project.contract?.contractDate ?? null)} className={smallInput} />
+                <DateField name="contractDate" defaultValue={toDateInput(project.contract?.contractDate ?? null)} className={smallInput} />
               </Labeled>
               <Labeled label={tContract("poNo")}>
                 <input name="poNo" defaultValue={project.contract?.poNo ?? ""} className={smallInput} />
               </Labeled>
               <Labeled label={tContract("poDate")}>
-                <input name="poDate" type="date" defaultValue={toDateInput(project.contract?.poDate ?? null)} className={smallInput} />
+                <DateField name="poDate" defaultValue={toDateInput(project.contract?.poDate ?? null)} className={smallInput} />
               </Labeled>
               <Labeled label={tContract("paymentTerm")}>
                 <input name="paymentTermDays" type="number" defaultValue={project.contract?.paymentTermDays ?? project.client.paymentTermDays} className={smallInput} />

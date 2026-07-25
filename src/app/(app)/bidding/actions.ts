@@ -7,9 +7,12 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
-import { computeMarginPct, computeCostSheetTotals, generateProjectCode } from "@/lib/bidding";
+import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
 import { lockCreativeTasksForProject } from "@/lib/creative";
+import { lockDepartmentTasksForProject } from "@/lib/department-tasks";
+import { recomputeClientStatus } from "@/lib/client-status";
+import { getMissingClientProfileFields } from "@/lib/client-profile";
 import { getProjectIntakeSchema, PENDING_TEAM_ASSIGNMENT } from "@/lib/validators/project";
 import { costSheetPayloadSchema } from "@/lib/validators/costsheet";
 
@@ -249,11 +252,16 @@ export async function decideGoNogo(projectId: string, formData: FormData) {
     },
   });
   await audit(projectId, "goNogoStatus", before.goNogoStatus, decision, staffId, note || undefined);
-  if (decision === "NOGO") await lockCreativeTasksForProject(projectId); // dự án hủy → khóa task Creative
+  if (decision === "NOGO") {
+    await lockCreativeTasksForProject(projectId); // dự án hủy → khóa task Creative
+    await lockDepartmentTasksForProject(projectId); // + khóa task Planning/PCC/OPE/PRO
+  }
 
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/bidding");
   revalidatePath("/creative");
+  revalidatePath(`/projects/${projectId}`, "layout"); // board 4 bộ phận vừa bị khóa cascade
+  revalidatePath("/reminders");
 }
 
 // ─────────────────────────────────────────────────────────
@@ -290,11 +298,14 @@ export async function saveCostSheet(
   } catch {
     return { error: t("notFound") };
   }
-  // Tính lại toàn bộ ở server — không tin số từ client.
-  const sectionsForCalc = payload.sections.map((s) => ({
+  // Tính lại toàn bộ ở server — không tin số từ client. Cây section N-cấp (Mục→Nhóm→Sub-nhóm→...)
+  // được làm phẳng trước (flattenSectionTree) — isProxy kế thừa từ tổ tiên, xem lib/bidding.ts.
+  const sectionTree = payload.sections.map((s) => ({
+    key: s.key,
+    parentKey: s.parentKey ?? null,
     isProxy: s.isProxy,
-    proxyFeeType: s.proxyFeeType,
-    proxyFeeVal: s.proxyFeeVal,
+    proxyFeeType: s.proxyFeeType ?? null,
+    proxyFeeVal: s.proxyFeeVal ?? null,
     lines: payload.lines
       .filter((l) => l.sectionKey === s.key)
       .map((l) => ({
@@ -303,9 +314,11 @@ export async function saveCostSheet(
         unitPrice: l.unitPrice,
         fixedAmount: l.fixedAmount ?? null,
         percentVal: l.percentVal ?? null,
+        taxType: l.taxType,
+        customTaxAmount: l.customTaxAmount ?? null,
       })),
   }));
-  const totals = computeCostSheetTotals(sectionsForCalc, mgmtFeePct, contingencyPct);
+  const totals = computeCostSheetTotals(flattenSectionTree(sectionTree), mgmtFeePct, contingencyPct);
   const coTotal = totals.coTotal;
   const chiHo = totals.chiHo;
 
@@ -313,6 +326,38 @@ export async function saveCostSheet(
   const threshold = await getNumberSetting("bidding", "auto_approve_threshold", 100_000_000);
   const marginPct = computeMarginPct(ceTotal, coTotal);
   const staffId = await getCurrentStaffId();
+
+  // Snapshot bất biến cho CostSheetRevision (tracking version + diff từng dòng — xem lib/costsheet-diff.ts).
+  // amount đã gross-up thuế (computeLineAmount) — khớp với số lưu ở CostLine.amount.
+  const lineAmount = (l: (typeof payload.lines)[number]) =>
+    computeLineAmount(
+      { lineType: l.lineType, quantity: l.quantity, unitPrice: l.unitPrice, fixedAmount: l.fixedAmount ?? null, percentVal: l.percentVal ?? null, taxType: l.taxType, customTaxAmount: l.customTaxAmount ?? null },
+      totals.directCo,
+    );
+  const codeByKey = new Map(payload.sections.map((s) => [s.key, s.code]));
+  const snapshotJson = JSON.stringify({
+    sections: payload.sections.map((s) => ({
+      code: s.code,
+      nameVi: s.nameVi,
+      isProxy: s.isProxy,
+      parentCode: s.parentKey ? (codeByKey.get(s.parentKey) ?? null) : null,
+      lines: payload.lines
+        .filter((l) => l.sectionKey === s.key)
+        .map((l) => ({
+          itemName: l.itemName,
+          lineType: l.lineType,
+          quantity: l.quantity,
+          unit: l.unit || null,
+          unitPrice: l.unitPrice,
+          fixedAmount: l.fixedAmount ?? null,
+          percentVal: l.percentVal ?? null,
+          taxType: l.taxType,
+          customTaxAmount: l.customTaxAmount ?? null,
+          amount: lineAmount(l),
+        })),
+    })),
+    totals: { coTotal, ceTotal, chiHo, marginPct: Math.round(marginPct * 100) / 100 },
+  });
 
   // Cổng margin: dưới ngưỡng → bắt buộc override có lý do.
   let marginOverrideById: string | null = null;
@@ -363,6 +408,10 @@ export async function saveCostSheet(
       const created = await tx.costSheet.create({ data: { projectId, version: "CTRACT", ...sheetData } });
       sheetId = created.id;
     }
+    // 2 lượt vì section có thể lồng N-cấp (parentSectionId trỏ tới section KHÁC trong cùng payload):
+    // lượt 1 tạo hết section (parentSectionId=null tạm), lượt 2 mới cập nhật lại quan hệ cha-con
+    // — tránh phải sắp payload theo thứ tự tôpô cha-trước-con (không cần thiết, đơn giản hơn).
+    const idByKey = new Map<string, string>();
     for (const [si, section] of payload.sections.entries()) {
       const createdSection = await tx.costSheetSection.create({
         data: {
@@ -378,28 +427,39 @@ export async function saveCostSheet(
           proxyFeeVal: section.proxyFeeVal ?? null,
         },
       });
+      idByKey.set(section.key, createdSection.id);
+    }
+    for (const section of payload.sections) {
+      if (!section.parentKey) continue;
+      const parentId = idByKey.get(section.parentKey);
+      if (parentId) {
+        await tx.costSheetSection.update({ where: { id: idByKey.get(section.key)! }, data: { parentSectionId: parentId } });
+      }
+    }
+    for (const section of payload.sections) {
+      const sectionId = idByKey.get(section.key)!;
       const lines = payload.lines.filter((l) => l.sectionKey === section.key);
       if (lines.length > 0) {
         const percentBase = totals.directCo;
         await tx.costLine.createMany({
           data: lines.map((l, idx) => {
-            const amount =
-              l.lineType === "FIXED"
-                ? Math.round(l.fixedAmount ?? 0)
-                : l.lineType === "PERCENT_OF_TOTAL"
-                  ? Math.round(((l.percentVal ?? 0) / 100) * percentBase)
-                  : Math.round(l.quantity * l.unitPrice);
+            const amount = computeLineAmount(
+              { lineType: l.lineType, quantity: l.quantity, unitPrice: l.unitPrice, fixedAmount: l.fixedAmount ?? null, percentVal: l.percentVal ?? null, taxType: l.taxType, customTaxAmount: l.customTaxAmount ?? null },
+              percentBase,
+            );
             return {
               costSheetId: sheetId,
-              sectionId: createdSection.id,
+              sectionId,
               lineType: l.lineType,
               itemName: l.itemName,
               specs: l.specs || null,
               quantity: l.quantity,
               unit: l.unit || null,
-              unitPrice: BigInt(l.unitPrice),
-              fixedAmount: l.fixedAmount != null ? BigInt(l.fixedAmount) : null,
+              unitPrice: BigInt(Math.round(l.unitPrice)),
+              fixedAmount: l.fixedAmount != null ? BigInt(Math.round(l.fixedAmount)) : null,
               percentVal: l.percentVal ?? null,
+              taxType: l.taxType,
+              customTaxAmount: l.customTaxAmount != null ? BigInt(Math.round(l.customTaxAmount)) : null,
               amount: BigInt(amount),
               vendorId: l.vendorId || null,
               isLocked: l.isLocked,
@@ -420,6 +480,28 @@ export async function saveCostSheet(
         action: existing ? "UPDATE" : "CREATE",
         changedBy: staffId,
         reason: marginOverrideNote ?? undefined,
+      },
+    });
+
+    // Ghi 1 CostSheetRevision (snapshot bất biến) — revNo tăng dần; bản đầu tiên = baseline.
+    const lastRev = await tx.costSheetRevision.findFirst({
+      where: { costSheetId: sheetId },
+      orderBy: { revNo: "desc" },
+      select: { revNo: true },
+    });
+    const revNo = (lastRev?.revNo ?? 0) + 1;
+    await tx.costSheetRevision.create({
+      data: {
+        costSheetId: sheetId,
+        revNo,
+        isBaseline: revNo === 1,
+        ceTotal: BigInt(ceTotal),
+        coTotal: BigInt(coTotal),
+        chiHo: BigInt(chiHo),
+        marginPct: Math.round(marginPct * 100) / 100,
+        note: marginOverrideNote ?? null,
+        createdById: staffId,
+        snapshotJson,
       },
     });
   });
@@ -541,6 +623,10 @@ export async function saveContract(projectId: string, formData: FormData) {
   await prisma.auditLog.create({
     data: { entityType: "contract", entityId: projectId, field: "*", newValue: stringifyAudit(data), action: existing ? "UPDATE" : "CREATE", changedBy: staffId },
   });
+
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } });
+  if (project) await recomputeClientStatus(project.clientId, staffId);
+
   revalidatePath(`/bidding/${projectId}`);
 }
 
@@ -574,9 +660,12 @@ export async function markFailed(
   });
   await audit(projectId, "status", before?.status.code ?? null, "FAILED", staffId, failReasonNote || undefined);
   await lockCreativeTasksForProject(projectId); // thua thầu → khóa task Creative
+  await lockDepartmentTasksForProject(projectId); // + khóa task Planning/PCC/OPE/PRO
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/bidding");
   revalidatePath("/creative");
+  revalidatePath(`/projects/${projectId}`, "layout"); // board 4 bộ phận vừa bị khóa cascade
+  revalidatePath("/reminders");
   return {};
 }
 
@@ -592,9 +681,12 @@ export async function markClientCancel(projectId: string, _formData?: FormData) 
   await prisma.project.update({ where: { id: projectId }, data: { statusId: canceledId } });
   await audit(projectId, "status", before.status.code, "CANCELED", staffId, "client cancel");
   await lockCreativeTasksForProject(projectId); // KH hủy → khóa task Creative
+  await lockDepartmentTasksForProject(projectId); // + khóa task Planning/PCC/OPE/PRO
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/bidding");
   revalidatePath("/creative");
+  revalidatePath(`/projects/${projectId}`, "layout"); // board 4 bộ phận vừa bị khóa cascade
+  revalidatePath("/reminders");
 }
 
 /** FR-04: chỉ cho chuyển Processing khi có confirm email HOẶC PO HOẶC hợp đồng đã ký. */
@@ -606,19 +698,29 @@ export async function moveToProcessing(
   const t = await getTranslations("bidding.result");
   const staffId = await getCurrentStaffId();
   const [project, contract, processingId] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, include: { status: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, include: { status: true, client: true } }),
     prisma.contract.findUnique({ where: { projectId } }),
     getStatusId("PROCESSING"),
   ]);
   if (!project) return { error: "not found" };
+  // Chỉ chuyển Processing từ trạng thái bid-phase — không "hồi sinh" dự án đã THUA/HỦY/kết thúc dù có chứng từ.
+  if (!["BIDDING", "PENDING"].includes(project.status.code)) return { error: "invalid status" };
 
   const hasLegalDoc = !!(contract?.confirmEmailAt || contract?.poNo || contract?.signed);
   if (!hasLegalDoc) return { error: t("blockedFr04") };
+
+  // Chặn ký hợp đồng thật khi hồ sơ khách hàng còn thiếu (MST/địa chỉ/TK NH/ngành hàng/phân loại) —
+  // thường gặp với khách import từ danh sách cũ chưa được Account bổ sung đầy đủ (xem lib/client-profile.ts).
+  const missingFields = getMissingClientProfileFields(project.client);
+  if (missingFields.length > 0) {
+    return { error: t("blockedIncompleteProfile", { fields: missingFields.map((f) => t(`profileField.${f}`)).join(", ") }) };
+  }
 
   await prisma.project.update({ where: { id: projectId }, data: { statusId: processingId, processingAt: new Date() } });
   await audit(projectId, "status", project.status.code, "PROCESSING", staffId, "move to processing");
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/bidding");
+  revalidatePath("/reminders"); // vào Processing → xuất hiện trong nhắc việc thực thi
   return {};
 }
 
@@ -688,12 +790,15 @@ export async function moveToLiquidation(
     getStatusId("LIQUIDATION"),
   ]);
   if (!project) return { error: "not found" };
+  // Chỉ từ PROCESSING — không "hồi sinh" dự án đã THUA/HỦY (dù contract từng được xác nhận).
+  if (project.status.code !== "PROCESSING") return { error: "invalid status" };
   if (!contract?.accountantConfirmedAt) return { error: t("blockedNeedContractDone") };
 
   await prisma.project.update({ where: { id: projectId }, data: { statusId: liquidationId, liquidationAt: new Date() } });
   await audit(projectId, "status", project.status.code, "LIQUIDATION", staffId, "move to liquidation");
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/bidding");
+  revalidatePath("/reminders"); // đổi status ảnh hưởng getBiddingReminders/getTimelineOverdueItems
   return {};
 }
 
@@ -711,11 +816,15 @@ export async function markFinished(
     getStatusId("FINISHED"),
   ]);
   if (!project) return { error: "not found" };
+  // Chỉ từ LIQUIDATION — FINISHED sai đường sẽ mở lại grace 7 ngày cho task đã khóa.
+  if (project.status.code !== "LIQUIDATION") return { error: "invalid status" };
   if (!contract?.acceptanceDocsConfirmedAt) return { error: t("blockedNeedAcceptanceDocs") };
 
   await prisma.project.update({ where: { id: projectId }, data: { statusId: finishedId, finishedAt: new Date() } });
   await audit(projectId, "status", project.status.code, "FINISHED", staffId, "mark finished");
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/bidding");
+  revalidatePath("/creative"); // FINISHED mở cửa sổ grace 7 ngày cho task Creative — cập nhật đếm ngược/khóa
+  revalidatePath("/reminders"); // rơi khỏi getBiddingReminders/getTimelineOverdueItems
   return {};
 }

@@ -32,6 +32,9 @@ export default async function SettingsOptionsPage({ params }: { params: Promise<
     project_status: tIndex("projectStatusTitle"),
     timeline_status: tIndex("timelineStatusTitle"),
     creative_task_type: tIndex("creativeTaskTypeTitle"),
+    kb_category: tIndex("kbCategoryTitle"),
+    inventory_category: tIndex("inventoryCategoryTitle"),
+    leave_type: tIndex("leaveTypeTitle"),
   };
   const title = titleMap[setCode] ?? set.name;
 

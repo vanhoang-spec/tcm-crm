@@ -1,9 +1,13 @@
 import { prisma } from "./prisma";
-import { EXECUTION_STATUS_CODES } from "./projects";
+import { taskPhase, isTaskLocked, finishedGraceDaysLeft, FINISHED_GRACE_DAYS } from "./projects";
 
 // ─────────────────────────────────────────────────────────
 // Module Creative — hàm thuần + nghiệp vụ dùng chung (cost-per-task/lương ở đợt sau).
 // ─────────────────────────────────────────────────────────
+
+/** Khóa/phase task giờ project-generic ở src/lib/projects.ts (dùng chung với DepartmentTask) —
+ * re-export tại đây để KHÔNG đổi call site nào đang import từ "@/lib/creative". */
+export { taskPhase, isTaskLocked, finishedGraceDaysLeft, FINISHED_GRACE_DAYS };
 
 export const CREATIVE_TASK_STATUSES = [
   "UNASSIGNED",
@@ -15,48 +19,20 @@ export const CREATIVE_TASK_STATUSES = [
 ] as const;
 export type CreativeTaskStatus = (typeof CREATIVE_TASK_STATUSES)[number];
 
-/** Task "đang làm" = chưa trả và chưa khóa. */
-export const ACTIVE_TASK_STATUSES = ["UNASSIGNED", "ASSIGNED", "SUBMITTED", "REVISION"] as const;
-
-/** Số ngày Creative được giữ task để lưu về local server sau khi dự án FINISHED. */
-export const FINISHED_GRACE_DAYS = 7;
-
-/** Phase của task suy ra realtime từ trạng thái dự án. WORKING = đang thực thi; BIDDING = còn đấu thầu. */
-export function taskPhase(projectStatusCode: string): "BIDDING" | "WORKING" {
-  return (EXECUTION_STATUS_CODES as readonly string[]).includes(projectStatusCode) ? "WORKING" : "BIDDING";
-}
+/** Task "đang làm" = chưa trả và chưa khóa. Kiểu `CreativeTaskStatus[]` để chứng minh compile-time active ⊂ all. */
+export const ACTIVE_TASK_STATUSES: readonly CreativeTaskStatus[] = ["UNASSIGNED", "ASSIGNED", "SUBMITTED", "REVISION"];
 
 /**
- * Task có bị khóa cứng không (không cho sửa ở module Creative):
- * - Dự án CANCELED/FAILED → khóa ngay (cascade đã set task sang CANCELED).
- * - Dự án FINISHED → cho 7 ngày grace kể từ finishedAt để lưu về local server, sau đó khóa.
- */
-export function isTaskLocked(projectStatusCode: string, finishedAt: Date | null): boolean {
-  if (projectStatusCode === "CANCELED" || projectStatusCode === "FAILED") return true;
-  if (projectStatusCode === "FINISHED" && finishedAt) {
-    const graceEnd = finishedAt.getTime() + FINISHED_GRACE_DAYS * 24 * 60 * 60 * 1000;
-    return Date.now() > graceEnd;
-  }
-  return false;
-}
-
-/** Số ngày grace còn lại (dự án FINISHED) — null nếu không phải FINISHED hoặc đã hết grace (đã khóa). */
-export function finishedGraceDaysLeft(projectStatusCode: string, finishedAt: Date | null): number | null {
-  if (projectStatusCode !== "FINISHED" || !finishedAt) return null;
-  const end = finishedAt.getTime() + FINISHED_GRACE_DAYS * 24 * 60 * 60 * 1000;
-  const left = Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000));
-  return left > 0 ? left : null;
-}
-
-/**
- * Tự sinh CreativeTask từ checklist của 1 Order Creative. Idempotent theo (orderId, sourceItemLabel):
- * mỗi ProjectOrderCreativeItem chưa có task tương ứng thì tạo 1 task UNASSIGNED.
- * Gọi từ order-actions.createDepartmentOrder khi department = CREATIVE.
+ * Tự sinh CreativeTask từ 1 Order Creative. Idempotent theo (orderId, sourceItemLabel).
+ * Đọc từ 2 nguồn hội tụ vào cùng ProjectOrder:
+ *  - `creativeItems` (ProjectOrderCreativeItem): checklist Creative tick tay ở Bidding — sourceItemLabel = it.label.
+ *  - `items` (ProjectOrderItem): dòng tự gom từ Master Timeline — sourceItemLabel = "TL:{sourceTimelineItemId|id}".
+ * Gọi từ order-actions.createDepartmentOrder & project-orders.dispatchOrder khi department = CREATIVE.
  */
 export async function spawnTasksForCreativeOrder(orderId: string): Promise<void> {
   const order = await prisma.projectOrder.findUnique({
     where: { id: orderId },
-    include: { creativeItems: true, project: true },
+    include: { creativeItems: true, items: true, project: true },
   });
   if (!order || order.department !== "CREATIVE") return;
 
@@ -67,19 +43,40 @@ export async function spawnTasksForCreativeOrder(orderId: string): Promise<void>
   const already = new Set(existing.map((t) => t.sourceItemLabel));
   const orderedById = order.sentById ?? order.project.ownerId ?? null;
 
-  const toCreate = order.creativeItems
-    .filter((it) => !already.has(it.label))
-    .map((it) => ({
+  const fromChecklist = order.creativeItems.map((it) => ({
+    sourceItemLabel: it.label,
+    orderItemId: null as string | null,
+    title: it.detail?.trim() ? it.detail.trim() : `Creative: ${it.label}`,
+    detail: it.detail ?? null,
+  }));
+  const fromTimeline = order.items.map((it) => ({
+    sourceItemLabel: `TL:${it.sourceTimelineItemId ?? it.id}`,
+    orderItemId: it.id, // giữ FK để đẩy ProjectOrderItem.status → DONE khi task DELIVERED (tín hiệu về Timeline)
+    title: it.label,
+    detail: it.detail ?? null,
+  }));
+
+  const toCreate = [...fromChecklist, ...fromTimeline]
+    .filter((row) => !already.has(row.sourceItemLabel))
+    .map((row) => ({
       projectId: order.projectId,
       orderId: order.id,
+      orderItemId: row.orderItemId,
       orderedById,
-      sourceItemLabel: it.label,
-      title: it.detail?.trim() ? it.detail.trim() : `Creative: ${it.label}`,
-      detail: it.detail ?? null,
+      sourceItemLabel: row.sourceItemLabel,
+      title: row.title,
+      detail: row.detail,
       status: "UNASSIGNED",
     }));
 
-  if (toCreate.length > 0) await prisma.creativeTask.createMany({ data: toCreate });
+  if (toCreate.length > 0) {
+    try {
+      await prisma.creativeTask.createMany({ data: toCreate });
+    } catch (e) {
+      // P2002 = dispatch song song, bên kia đã tạo trước — backstop @@unique([orderId, sourceItemLabel]) hoạt động đúng, bỏ qua.
+      if (!(e instanceof Error && "code" in e && (e as { code?: string }).code === "P2002")) throw e;
+    }
+  }
 }
 
 /** Khóa mọi task chưa trả (≠ DELIVERED/CANCELED) của 1 dự án → CANCELED. Gọi khi dự án THUA/HỦY. */
@@ -93,6 +90,7 @@ export async function lockCreativeTasksForProject(projectId: string): Promise<vo
 export type CreativeDashboardStats = {
   totalActive: { bidding: number; working: number };
   projectsActive: { bidding: number; working: number };
+  staleLocked: number; // task còn trạng thái active nhưng dự án đã khóa (FINISHED hết grace) — KHÔNG tính vào "đang làm"
   byType: { labelVi: string; labelEn: string | null; count: number }[];
   byMember: {
     staffId: string;
@@ -107,7 +105,7 @@ export type CreativeDashboardStats = {
 
 /** Tổng hợp số liệu realtime cho Dashboard Creative (không cost — đợt sau). */
 export async function getCreativeDashboardStats(): Promise<CreativeDashboardStats> {
-  const [creativeStaff, activeTasks, deliveredTasks] = await Promise.all([
+  const [creativeStaff, activeTasksRaw, deliveredTasks] = await Promise.all([
     prisma.staff.findMany({ where: { department: { code: "CREATIVE" }, isActive: true }, orderBy: { fullName: "asc" } }),
     prisma.creativeTask.findMany({
       where: { status: { in: [...ACTIVE_TASK_STATUSES] } },
@@ -118,6 +116,11 @@ export async function getCreativeDashboardStats(): Promise<CreativeDashboardStat
       select: { assigneeId: true, hoursSpent: true, revisionCount: true },
     }),
   ]);
+
+  // Lọc bỏ task của dự án ĐÃ KHÓA (FINISHED hết grace) — không query được ở Prisma vì lock là phép tính
+  // thời gian trên finishedAt. Task còn "active" nhưng dự án đóng lâu rồi KHÔNG được tính vào "đang làm".
+  const activeTasks = activeTasksRaw.filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt));
+  const staleLocked = activeTasksRaw.length - activeTasks.length;
 
   const totalActive = { bidding: 0, working: 0 };
   const projectPhase = new Map<string, "BIDDING" | "WORKING">();
@@ -158,6 +161,7 @@ export async function getCreativeDashboardStats(): Promise<CreativeDashboardStat
   return {
     totalActive,
     projectsActive,
+    staleLocked,
     byType: Array.from(typeCount.values()).sort((a, b) => b.count - a.count),
     byMember,
   };

@@ -16,7 +16,10 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
   if (!client) notFound();
 
   const [teams, industrySet, statusSet, classificationSet, staff, brands, t, locale] = await Promise.all([
-    prisma.team.findMany({ where: { OR: [{ isActive: true }, { id: client.ownerTeamId }] }, orderBy: { code: "asc" } }),
+    prisma.team.findMany({
+      where: { OR: [{ isActive: true }, ...(client.ownerTeamId ? [{ id: client.ownerTeamId }] : [])] },
+      orderBy: { code: "asc" },
+    }),
     prisma.optionSet.findUnique({
       where: { code: "industry" },
       include: { items: { where: { isActive: true }, orderBy: { sort: "asc" } } },
@@ -63,19 +66,19 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
           defaultValues={{
             code: client.code,
             name: client.name,
-            taxCode: client.taxCode,
+            taxCode: client.taxCode ?? undefined,
             brandName: client.brand.name,
-            industryId: client.industryId,
+            industryId: client.industryId ?? undefined,
             statusId: client.statusId,
-            classificationId: client.classificationId,
-            ownerTeamId: client.ownerTeamId,
+            classificationId: client.classificationId ?? undefined,
+            ownerTeamId: client.ownerTeamId ?? undefined,
             introducerId: client.introducerId ?? OTHER_INTRODUCER,
             isNew: client.isNew,
             paymentTermDays: client.paymentTermDays,
-            address: client.address,
-            phone: client.phone,
-            email: client.email,
-            bankAccount: client.bankAccount,
+            address: client.address ?? undefined,
+            phone: client.phone ?? undefined,
+            email: client.email ?? undefined,
+            bankAccount: client.bankAccount ?? undefined,
             note: client.note ?? undefined,
           }}
           submitLabel={t("submit")}

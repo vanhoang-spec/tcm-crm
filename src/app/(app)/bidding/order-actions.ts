@@ -5,12 +5,22 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { ORDER_DEPARTMENT_LABELS } from "@/lib/bidding";
 import { spawnTasksForCreativeOrder } from "@/lib/creative";
+import { spawnPlanningJobForOrder } from "@/lib/planning";
+import { spawnTasksForDepartmentOrder, isDepartmentTaskDepartment } from "@/lib/department-tasks";
 
 function toNullable(v: string) {
   return v.trim() === "" ? null : v.trim();
 }
 
 const CREATIVE_OUTPUT_LABELS = ["KEY_VISUAL", "DESIGN_2D", "DESIGN_3D", "SET_DESIGN", "VIDEO", "OTHER"] as const;
+
+/** Route tab workspace dự án tương ứng mỗi bộ phận có DepartmentTask board — dùng để revalidatePath đúng chỗ. */
+const DEPARTMENT_TAB_SEG: Record<string, string> = {
+  PLANNING: "planning",
+  PCC: "purchasing",
+  OPE: "operations",
+  PRO: "production",
+};
 
 /** Đặt lịch họp Brainstorm — mời nhiều người, gửi notification NGAY, không có bước Accept. */
 export async function createBrainstormOrder(projectId: string, formData: FormData) {
@@ -96,6 +106,9 @@ export async function createDepartmentOrder(projectId: string, department: strin
     status: "SENT",
     acceptedAt: null,
     acceptedById: null,
+    // Timeline mong muốn có thể vừa được dời — reset cờ để checkOrderDeadlineReminders nhắc lại
+    // theo hạn MỚI (nếu không, order đã nhắc 1 lần sẽ không bao giờ được nhắc nữa).
+    deadlineReminderSentAt: null,
   };
 
   const orderId = await prisma.$transaction(async (tx) => {
@@ -117,6 +130,10 @@ export async function createDepartmentOrder(projectId: string, department: strin
 
   // Order Creative → tự sinh CreativeTask từ checklist (idempotent) cho module Creative.
   if (isCreative) await spawnTasksForCreativeOrder(orderId);
+  // Order Planning → tự sinh PlanningJob (idempotent theo orderId) cho tab Planning trong workspace dự án.
+  if (department === "PLANNING") await spawnPlanningJobForOrder(orderId);
+  // Order PLANNING/PCC/OPE/PRO → tự sinh DepartmentTask (board "Task từ timeline"/task nội bộ bộ phận).
+  if (isDepartmentTaskDepartment(department)) await spawnTasksForDepartmentOrder(orderId);
 
   const recipients = await prisma.staff.findMany({ where: { department: { code: department }, isActive: true } });
   if (recipients.length > 0) {
@@ -134,6 +151,7 @@ export async function createDepartmentOrder(projectId: string, department: strin
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/reminders");
   if (isCreative) revalidatePath("/creative");
+  if (isDepartmentTaskDepartment(department)) revalidatePath(`/projects/${projectId}/${DEPARTMENT_TAB_SEG[department]}`);
 }
 
 /** Phòng ban bấm "Chấp nhận" — xác nhận đã nhận task và sẽ trả output đúng timeline. */

@@ -2,9 +2,9 @@ import { Palette, Briefcase } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
-import { formatNumber, formatPercent, pickLabel } from "@/lib/utils";
+import { formatNumber, formatDecimal, formatPercent, pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { getCreativeDashboardStats, isTaskLocked, taskPhase, finishedGraceDaysLeft } from "@/lib/creative";
+import { getCreativeDashboardStats, isTaskLocked, taskPhase, finishedGraceDaysLeft, type CreativeTaskStatus } from "@/lib/creative";
 import { TaskBoard, type TaskData } from "./task-board";
 
 export default async function CreativePage() {
@@ -42,7 +42,7 @@ export default async function CreativePage() {
       id: task.id,
       title: task.title,
       detail: task.detail,
-      status: task.status,
+      status: task.status as CreativeTaskStatus, // cột DB là String; danh sách trạng thái chuẩn ở CREATIVE_TASK_STATUSES
       projectId: task.projectId,
       projectCode: task.project.code,
       projectName: task.project.name,
@@ -67,7 +67,10 @@ export default async function CreativePage() {
 
   const staffOptions = creativeStaff.map((s) => ({ id: s.id, label: s.fullName }));
   const taskTypeOptions = (taskTypeSet?.items ?? []).map((it) => ({ id: it.id, label: pickLabel(it, locale) }));
-  const projectOptions = projects.map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` }));
+  // Chỉ cho tạo task lẻ ở dự án CHƯA khóa (loại FAILED/CANCELED ở DB + FINISHED-hết-grace ở JS vì lock là phép tính thời gian).
+  const projectOptions = projects
+    .filter((p) => !isTaskLocked(p.status.code, p.finishedAt))
+    .map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` }));
   const teamOptions = teams.map((tm) => ({ id: tm.code, label: tm.code }));
   const ordererOptions = Array.from(
     new Map(tasks.filter((t) => t.orderedBy).map((t) => [t.orderedBy!.id, t.orderedBy!.fullName])).entries(),
@@ -102,6 +105,12 @@ export default async function CreativePage() {
         />
       </div>
 
+      {stats.staleLocked > 0 && (
+        <p className="rounded-lg border border-warning/30 bg-warning-bg px-3 py-2 text-xs text-warning">
+          {t("dashboard.staleLocked", { count: formatNumber(stats.staleLocked, locale) })}
+        </p>
+      )}
+
       {/* By type */}
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("dashboard.byTypeTitle")}</h2>
@@ -118,9 +127,9 @@ export default async function CreativePage() {
       {/* Per member */}
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("dashboard.perMemberTitle")}</h2>
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3 overflow-x-auto overflow-y-auto max-h-[70vh]">
           <table className="w-full min-w-[520px] text-sm">
-            <thead className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+            <thead className="sticky top-0 z-10 border-b border-border bg-surface text-left text-xs font-medium text-muted-foreground">
               <tr>
                 <th className="py-2 pr-3">{t("dashboard.colMember")}</th>
                 <th className="py-2 pr-3">{t("dashboard.colActive")}</th>
@@ -139,7 +148,7 @@ export default async function CreativePage() {
                     <span className="text-success">{formatNumber(m.activeWorking, locale)}</span>
                   </td>
                   <td className="py-2 pr-3 text-muted-foreground">{formatNumber(m.delivered, locale)}</td>
-                  <td className="py-2 pr-3 text-muted-foreground">{m.avgHours != null ? `${formatPercent(m.avgHours, locale)}h` : "—"}</td>
+                  <td className="py-2 pr-3 text-muted-foreground">{m.avgHours != null ? `${formatDecimal(m.avgHours, locale)}h` : "—"}</td>
                   <td className="py-2 pr-3 text-muted-foreground">{m.firstTimeRate != null ? `${formatPercent(m.firstTimeRate, locale)}%` : "—"}</td>
                 </tr>
               ))}

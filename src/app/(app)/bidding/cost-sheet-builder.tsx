@@ -4,9 +4,21 @@ import { useActionState, useMemo, useState } from "react";
 import { Plus, Trash2, Wand2, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn, formatNumber, formatPercent } from "@/lib/utils";
-import { computeMarginPct, computeMakeupCe, computeCostSheetTotals, LINE_TYPES, type LineType } from "@/lib/bidding";
+import {
+  computeMarginPct,
+  computeMakeupCe,
+  computeCostSheetTotals,
+  flattenSectionTree,
+  taxGrossUp,
+  LINE_TYPES,
+  TAX_TYPES,
+  MAX_SECTION_DEPTH,
+  type LineType,
+  type TaxType,
+} from "@/lib/bidding";
 import { SECTION_COLOR_TONE } from "@/lib/bidding-ui";
 import { Badge } from "@/components/ui/badge";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { Locale } from "@/i18n/locales";
 import { saveCostSheet, type ProjectFormState } from "./actions";
 
@@ -19,6 +31,8 @@ export type LineData = {
   unitPrice: number;
   fixedAmount: number | null;
   percentVal: number | null;
+  taxType: string;
+  customTaxAmount: number | null; // chỉ dùng khi taxType="OTHER" — số tiền thuế nhập tay
   vendorId: string;
   isLocked: boolean;
   maxMarkupPct: string; // "" = không giới hạn
@@ -26,6 +40,8 @@ export type LineData = {
 };
 
 export type SectionData = {
+  id: string | null; // DB id (null = section mới, chưa lưu) — dùng để dựng lại quan hệ cha-con khi hydrate
+  parentId: string | null; // trỏ tới SectionData.id của section cha (N-cấp, xem lib/bidding.ts flattenSectionTree)
   code: string;
   icon: string;
   nameVi: string;
@@ -54,7 +70,7 @@ export type CostSheetData = {
 export type TemplateOption = { id: string; name: string; sections: SectionData[] };
 
 type Line = LineData & { key: string; sectionKey: string };
-type Section = Omit<SectionData, "lines"> & { key: string };
+type Section = Omit<SectionData, "lines"> & { key: string; parentKey: string | null };
 
 let uid = 0;
 function nextKey(prefix: string) {
@@ -74,6 +90,8 @@ function blankLine(sectionKey: string): Line {
     unitPrice: 0,
     fixedAmount: null,
     percentVal: null,
+    taxType: "VAT",
+    customTaxAmount: null,
     vendorId: "",
     isLocked: false,
     maxMarkupPct: "",
@@ -81,9 +99,13 @@ function blankLine(sectionKey: string): Line {
   };
 }
 
-function blankSection(isProxy = false): Section {
+/** parentKey=null → mục gốc. Mục Chi hộ (isProxy) luôn ở gốc — không truyền parentKey cho isProxy=true. */
+function blankSection(isProxy = false, parentKey: string | null = null): Section {
   return {
     key: nextKey("s"),
+    parentKey: isProxy ? null : parentKey,
+    id: null,
+    parentId: null,
     code: isProxy ? "PROXY" : "SECTION",
     icon: isProxy ? "🤝" : "📦",
     nameVi: "",
@@ -95,15 +117,55 @@ function blankSection(isProxy = false): Section {
   };
 }
 
+/** 2 lượt: (1) sinh key mới cho mọi section + map id(DB)→key, (2) resolve parentKey qua map đó —
+ * không cần payload sắp theo thứ tự cha-trước-con. */
 function hydrate(sections: SectionData[]): { sections: Section[]; lines: Line[] } {
-  const outSections: Section[] = [];
+  const keys = sections.map(() => nextKey("s"));
+  const idToKey = new Map<string, string>();
+  sections.forEach((s, i) => {
+    if (s.id) idToKey.set(s.id, keys[i]);
+  });
+  const outSections: Section[] = sections.map((s, i) => ({
+    ...s,
+    key: keys[i],
+    parentKey: s.parentId ? (idToKey.get(s.parentId) ?? null) : null,
+  }));
   const outLines: Line[] = [];
-  for (const s of sections) {
-    const sKey = nextKey("s");
-    outSections.push({ ...s, key: sKey });
-    for (const l of s.lines) outLines.push({ ...l, key: nextKey("l"), sectionKey: sKey });
-  }
+  sections.forEach((s, i) => {
+    for (const l of s.lines) outLines.push({ ...l, key: nextKey("l"), sectionKey: keys[i] });
+  });
   return { sections: outSections, lines: outLines };
+}
+
+/** Tất cả section con/cháu/... của `key` (dùng để cascade-xóa cả nhánh). */
+function descendantKeys(key: string, sections: Section[]): Set<string> {
+  const out = new Set<string>();
+  let frontier = [key];
+  while (frontier.length > 0) {
+    const children = sections.filter((s) => s.parentKey && frontier.includes(s.parentKey)).map((s) => s.key);
+    for (const c of children) out.add(c);
+    frontier = children;
+  }
+  return out;
+}
+
+/** Section tự đánh dấu Chi hộ HOẶC nằm dưới 1 tổ tiên Chi hộ (kế thừa) — dùng loại khỏi make-up. */
+function effectiveProxyKeys(sections: Section[]): Set<string> {
+  const byKey = new Map(sections.map((s) => [s.key, s]));
+  const out = new Set<string>();
+  for (const s of sections) {
+    let cur: Section | undefined = s;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur.key)) {
+      if (cur.isProxy) {
+        out.add(s.key);
+        break;
+      }
+      seen.add(cur.key);
+      cur = cur.parentKey ? byKey.get(cur.parentKey) : undefined;
+    }
+  }
+  return out;
 }
 
 export function CostSheetBuilder({
@@ -146,14 +208,18 @@ export function CostSheetBuilder({
   const totals = useMemo(
     () =>
       computeCostSheetTotals(
-        sections.map((s) => ({
-          isProxy: s.isProxy,
-          proxyFeeType: s.proxyFeeType,
-          proxyFeeVal: s.proxyFeeVal,
-          lines: lines
-            .filter((l) => l.sectionKey === s.key)
-            .map((l) => ({ lineType: l.lineType, quantity: l.quantity, unitPrice: l.unitPrice, fixedAmount: l.fixedAmount, percentVal: l.percentVal })),
-        })),
+        flattenSectionTree(
+          sections.map((s) => ({
+            key: s.key,
+            parentKey: s.parentKey,
+            isProxy: s.isProxy,
+            proxyFeeType: s.proxyFeeType,
+            proxyFeeVal: s.proxyFeeVal,
+            lines: lines
+              .filter((l) => l.sectionKey === s.key)
+              .map((l) => ({ lineType: l.lineType, quantity: l.quantity, unitPrice: l.unitPrice, fixedAmount: l.fixedAmount, percentVal: l.percentVal, taxType: l.taxType, customTaxAmount: l.customTaxAmount })),
+          })),
+        ),
         mgmtFeePct,
         contingencyPct,
       ),
@@ -165,12 +231,14 @@ export function CostSheetBuilder({
   function updateSection(key: string, patch: Partial<Section>) {
     setSections((ss) => ss.map((s) => (s.key === key ? { ...s, ...patch } : s)));
   }
-  function addSection(isProxy = false) {
-    setSections((ss) => [...ss, blankSection(isProxy)]);
+  function addSection(isProxy = false, parentKey: string | null = null) {
+    setSections((ss) => [...ss, blankSection(isProxy, parentKey)]);
   }
+  /** Xóa cả nhánh (section + mọi section con/cháu + toàn bộ dòng bên trong). */
   function removeSection(key: string) {
-    setSections((ss) => ss.filter((s) => s.key !== key));
-    setLines((ls) => ls.filter((l) => l.sectionKey !== key));
+    const toRemove = new Set([key, ...descendantKeys(key, sections)]);
+    setSections((ss) => ss.filter((s) => !toRemove.has(s.key)));
+    setLines((ls) => ls.filter((l) => !toRemove.has(l.sectionKey)));
   }
   function updateLine(key: string, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -189,9 +257,11 @@ export function CostSheetBuilder({
     setLines(h.lines);
   }
   function runMakeup() {
-    // Markup-eligible: QTY_PRICE/FIXED, không thuộc hạng mục Chi hộ. FIXED coi qty=1×fixedAmount.
+    // Markup-eligible: QTY_PRICE/FIXED, không thuộc hạng mục Chi hộ (kể cả nằm dưới 1 tổ tiên Chi hộ).
+    // FIXED coi qty=1×fixedAmount.
+    const proxyKeys = effectiveProxyKeys(sections);
     const eligible = sections
-      .filter((s) => !s.isProxy)
+      .filter((s) => !proxyKeys.has(s.key))
       .flatMap((s) => lines.filter((l) => l.sectionKey === s.key))
       .filter((l) => l.lineType !== "PERCENT_OF_TOTAL")
       .map((l) => ({
@@ -199,6 +269,8 @@ export function CostSheetBuilder({
         unitPrice: l.lineType === "FIXED" ? (l.fixedAmount ?? 0) : l.unitPrice,
         isLocked: l.isLocked,
         maxMarkupPct: l.maxMarkupPct === "" ? null : Number(l.maxMarkupPct),
+        taxType: l.taxType,
+        customTaxAmount: l.customTaxAmount,
       }));
     const res = computeMakeupCe(eligible, minMarginPct);
     setCeTotal(res.suggestedCe);
@@ -255,15 +327,17 @@ export function CostSheetBuilder({
         </button>
       )}
 
-      {/* Sections */}
+      {/* Sections — cây N-cấp (Mục→Nhóm→Sub-nhóm→...), tối đa {MAX_SECTION_DEPTH} cấp */}
       <div className="space-y-3">
         {sections
-          .filter((s) => !s.isProxy)
+          .filter((s) => !s.isProxy && !s.parentKey)
           .map((s) => (
             <SectionCard
               key={s.key}
               section={s}
-              lines={lines.filter((l) => l.sectionKey === s.key)}
+              depth={1}
+              allSections={sections}
+              allLines={lines}
               vendors={vendors}
               locale={locale}
               t={t}
@@ -272,13 +346,14 @@ export function CostSheetBuilder({
               setCollapsedState={setCollapsed}
               updateSection={updateSection}
               removeSection={removeSection}
+              addSection={addSection}
               updateLine={updateLine}
               addLine={addLine}
               removeLine={removeLine}
             />
           ))}
       </div>
-      <button type="button" onClick={() => addSection(false)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
+      <button type="button" onClick={() => addSection(false, null)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
         <Plus className="h-3.5 w-3.5" />
         {t("addSection")}
       </button>
@@ -295,7 +370,6 @@ export function CostSheetBuilder({
               vendors={vendors}
               locale={locale}
               t={t}
-              percentBase={0}
               updateSection={updateSection}
               removeSection={removeSection}
               updateLine={updateLine}
@@ -376,21 +450,35 @@ export function CostSheetBuilder({
 
 type SectionCardProps = {
   section: Section;
-  lines: Line[];
+  depth: number;
+  allSections: Section[];
+  allLines: Line[];
   vendors: { id: string; label: string }[];
   locale: Locale;
   t: (key: string, values?: Record<string, string | number>) => string;
   percentBase: number;
   updateSection: (key: string, patch: Partial<Section>) => void;
   removeSection: (key: string) => void;
+  addSection: (isProxy?: boolean, parentKey?: string | null) => void;
   updateLine: (key: string, patch: Partial<Line>) => void;
   addLine: (sectionKey: string) => void;
   removeLine: (key: string) => void;
 };
 
+/** Tổng tiền cả nhánh (dòng trực tiếp của section + đệ quy toàn bộ section con/cháu). */
+function subtreeAmount(sectionKey: string, allSections: Section[], allLines: Line[], percentBase: number): number {
+  const own = allLines.filter((l) => l.sectionKey === sectionKey).reduce((sum, l) => sum + lineAmount(l, percentBase), 0);
+  const childrenTotal = allSections
+    .filter((s) => s.parentKey === sectionKey)
+    .reduce((sum, c) => sum + subtreeAmount(c.key, allSections, allLines, percentBase), 0);
+  return own + childrenTotal;
+}
+
 function SectionCard({
   section,
-  lines,
+  depth,
+  allSections,
+  allLines,
   vendors,
   locale,
   t,
@@ -399,15 +487,19 @@ function SectionCard({
   setCollapsedState,
   updateSection,
   removeSection,
+  addSection,
   updateLine,
   addLine,
   removeLine,
 }: SectionCardProps & { collapsedState: Record<string, boolean>; setCollapsedState: (fn: (s: Record<string, boolean>) => Record<string, boolean>) => void }) {
   const isCollapsed = !!collapsedState[section.key];
-  const subtotal = lines.reduce((sum, l) => sum + lineAmount(l, percentBase), 0);
+  const ownLines = allLines.filter((l) => l.sectionKey === section.key);
+  const children = allSections.filter((s) => s.parentKey === section.key);
+  // Badge = tổng cả nhánh (dòng trực tiếp + mọi mục con/cháu) — đầu mục thấy ngay tổng toàn nhóm.
+  const subtotal = subtreeAmount(section.key, allSections, allLines, percentBase);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
+    <div className="overflow-hidden rounded-xl border border-border" style={{ marginLeft: depth > 1 ? 16 : 0 }}>
       <div className="flex items-center gap-2 bg-surface-2 px-3 py-2">
         <button type="button" onClick={() => setCollapsedState((s) => ({ ...s, [section.key]: !s[section.key] }))} className="text-muted-foreground">
           {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -426,11 +518,44 @@ function SectionCard({
       </div>
       {!isCollapsed && (
         <>
-          <LinesTable lines={lines} vendors={vendors} locale={locale} t={t} percentBase={percentBase} updateLine={updateLine} removeLine={removeLine} />
-          <button type="button" onClick={() => addLine(section.key)} className="flex w-full items-center gap-1.5 border-t border-dashed border-border px-3 py-2 text-xs font-medium text-brand-600 hover:bg-surface-2">
-            <Plus className="h-3.5 w-3.5" />
-            {t("addLine")}
-          </button>
+          <LinesTable lines={ownLines} vendors={vendors} locale={locale} t={t} percentBase={percentBase} updateLine={updateLine} removeLine={removeLine} />
+          <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-border px-3 py-2">
+            <button type="button" onClick={() => addLine(section.key)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
+              <Plus className="h-3.5 w-3.5" />
+              {t("addLine")}
+            </button>
+            {depth < MAX_SECTION_DEPTH && (
+              <button type="button" onClick={() => addSection(false, section.key)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
+                <Plus className="h-3.5 w-3.5" />
+                {t("addSubsection")}
+              </button>
+            )}
+          </div>
+          {children.length > 0 && (
+            <div className="space-y-2 border-t border-dashed border-border bg-surface/60 p-2">
+              {children.map((c) => (
+                <SectionCard
+                  key={c.key}
+                  section={c}
+                  depth={depth + 1}
+                  allSections={allSections}
+                  allLines={allLines}
+                  vendors={vendors}
+                  locale={locale}
+                  t={t}
+                  percentBase={percentBase}
+                  collapsedState={collapsedState}
+                  setCollapsedState={setCollapsedState}
+                  updateSection={updateSection}
+                  removeSection={removeSection}
+                  addSection={addSection}
+                  updateLine={updateLine}
+                  addLine={addLine}
+                  removeLine={removeLine}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -448,7 +573,18 @@ function ProxySectionCard({
   updateLine,
   addLine,
   removeLine,
-}: SectionCardProps) {
+}: {
+  section: Section;
+  lines: Line[];
+  vendors: { id: string; label: string }[];
+  locale: Locale;
+  t: (key: string, values?: Record<string, string | number>) => string;
+  updateSection: (key: string, patch: Partial<Section>) => void;
+  removeSection: (key: string) => void;
+  updateLine: (key: string, patch: Partial<Line>) => void;
+  addLine: (sectionKey: string) => void;
+  removeLine: (key: string) => void;
+}) {
   const subtotal = lines.reduce((sum, l) => sum + lineAmount(l, 0), 0);
   const feeAmt = section.proxyFeeType === "FIXED" ? (section.proxyFeeVal ?? 0) : Math.round((subtotal * (section.proxyFeeVal ?? 0)) / 100);
 
@@ -511,15 +647,16 @@ function LinesTable({
   hidePercent?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
       <table className="w-full min-w-[820px] text-xs">
-        <thead className="bg-surface text-left text-muted-foreground">
+        <thead className="sticky top-0 z-10 bg-surface text-left text-muted-foreground">
           <tr>
             <th className="px-2 py-2">{t("colType")}</th>
             <th className="px-2 py-2">{t("colItem")}</th>
             <th className="px-2 py-2">{t("colQty")}</th>
             <th className="px-2 py-2">{t("colUnit")}</th>
             <th className="px-2 py-2 text-right">{t("colUnitPrice")}</th>
+            <th className="px-2 py-2">{t("colTax")}</th>
             <th className="px-2 py-2 text-right">{t("colAmount")}</th>
             <th className="px-2 py-2">{t("colVendor")}</th>
             <th className="px-2 py-2 text-center">{t("colLock")}</th>
@@ -535,7 +672,7 @@ function LinesTable({
           })}
           {lines.length === 0 && (
             <tr>
-              <td colSpan={10} className="px-2 py-4 text-center text-muted-foreground">{t("none")}</td>
+              <td colSpan={11} className="px-2 py-4 text-center text-muted-foreground">{t("none")}</td>
             </tr>
           )}
         </tbody>
@@ -607,14 +744,39 @@ function LineRow({
           </td>
         </>
       )}
+      <td className="px-1 py-1">
+        {l.lineType === "PERCENT_OF_TOTAL" ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <select value={l.taxType} onChange={(e) => updateLine(l.key, { taxType: e.target.value })} className={cn(cellInput, "min-w-[92px]")}>
+              {TAX_TYPES.map((tx) => (
+                <option key={tx} value={tx}>
+                  {t(taxTypeLabelKey(tx))}
+                </option>
+              ))}
+            </select>
+            {l.taxType === "OTHER" && (
+              <input
+                type="number"
+                step="any"
+                placeholder={t("customTaxAmountPlaceholder")}
+                value={l.customTaxAmount ?? 0}
+                onChange={(e) => updateLine(l.key, { customTaxAmount: Number(e.target.value) || 0 })}
+                className={cn(cellInput, "min-w-[92px] text-right")}
+              />
+            )}
+          </div>
+        )}
+      </td>
       <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{formatNumber(amount, locale)}</td>
       <td className="px-1 py-1">
-        <select value={l.vendorId} onChange={(e) => updateLine(l.key, { vendorId: e.target.value })} className={cn(cellInput, "min-w-[90px]")}>
-          <option value="">—</option>
-          {vendors.map((v) => (
-            <option key={v.id} value={v.id}>{v.label}</option>
-          ))}
-        </select>
+        <SearchableSelect
+          value={l.vendorId}
+          onChange={(v) => updateLine(l.key, { vendorId: v })}
+          options={vendors.map((v) => ({ value: v.id, label: v.label }))}
+          className="min-w-[110px]"
+        />
       </td>
       <td className="px-1 py-1 text-center">
         <input type="checkbox" checked={l.isLocked} onChange={(e) => updateLine(l.key, { isLocked: e.target.checked })} />
@@ -651,15 +813,28 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function lineAmount(l: LineData, percentBase: number): number {
-  if (l.lineType === "FIXED") return Math.round(l.fixedAmount ?? 0);
+  // Gross-up thuế theo taxType (khớp computeLineAmount ở server). PERCENT_OF_TOTAL không gross-up.
+  // OTHER: cộng thẳng customTaxAmount (nhập tay), không nhân hệ số gross-up %.
+  if (l.lineType === "FIXED") {
+    const base = l.fixedAmount ?? 0;
+    return l.taxType === "OTHER" ? Math.round(base + (l.customTaxAmount ?? 0)) : Math.round(base * taxGrossUp(l.taxType));
+  }
   if (l.lineType === "PERCENT_OF_TOTAL") return Math.round(((l.percentVal ?? 0) / 100) * percentBase);
-  return Math.round(l.quantity * l.unitPrice);
+  const base = l.quantity * l.unitPrice;
+  return l.taxType === "OTHER" ? Math.round(base + (l.customTaxAmount ?? 0)) : Math.round(base * taxGrossUp(l.taxType));
 }
 
 function lineTypeLabelKey(lt: LineType): string {
   if (lt === "FIXED") return "lineTypeFixed";
   if (lt === "PERCENT_OF_TOTAL") return "lineTypePercent";
   return "lineTypeQtyPrice";
+}
+
+function taxTypeLabelKey(tx: TaxType): string {
+  if (tx === "TNCN") return "taxTncn";
+  if (tx === "TNDN") return "taxTndn";
+  if (tx === "OTHER") return "taxOther";
+  return "taxVat";
 }
 
 const cellInput = "h-8 w-full rounded border border-border-strong bg-surface px-1.5 text-xs outline-none focus:border-brand-400";

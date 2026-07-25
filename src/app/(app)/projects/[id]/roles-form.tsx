@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { assignProjectRoles } from "../actions";
 
 type Opt = { id: string; label: string };
@@ -18,32 +19,21 @@ export function RolesForm({
   leaderId: string | null;
 }) {
   const t = useTranslations("projects.detail");
-  const input =
-    "h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
+  const options = accountStaff.map((s) => ({ value: s.id, label: s.label }));
 
   return (
     <form action={assignProjectRoles.bind(null, projectId)} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
       <label className="text-xs font-medium text-foreground">
         {t("ownerLabel")}
-        <select name="ownerId" defaultValue={ownerId ?? ""} className={input + " mt-1"}>
-          <option value="">{t("selectOwner")}</option>
-          {accountStaff.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <div className="mt-1">
+          <SearchableSelect name="ownerId" defaultValue={ownerId ?? ""} placeholder={t("selectOwner")} options={options} />
+        </div>
       </label>
       <label className="text-xs font-medium text-foreground">
         {t("leaderLabel")}
-        <select name="leaderId" defaultValue={leaderId ?? ""} className={input + " mt-1"}>
-          <option value="">{t("selectLeader")}</option>
-          {accountStaff.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <div className="mt-1">
+          <SearchableSelect name="leaderId" defaultValue={leaderId ?? ""} placeholder={t("selectLeader")} options={options} />
+        </div>
       </label>
       <div className="sm:col-span-2">
         <button type="submit" className="h-9 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600">

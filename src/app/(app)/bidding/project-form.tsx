@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { PENDING_TEAM_ASSIGNMENT } from "@/lib/validators/project";
 import type { ProjectFormState } from "./actions";
@@ -61,12 +62,13 @@ export function ProjectForm({
         </Field>
 
         <Field label={t("client")} error={state.fieldErrors?.clientId} required>
-          <select name="clientId" defaultValue={defaultValues?.clientId} className={inputClass(!!state.fieldErrors?.clientId)}>
-            <option value="">{t("selectClient")}</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>{c.label}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            name="clientId"
+            defaultValue={defaultValues?.clientId}
+            placeholder={t("selectClient")}
+            hasError={!!state.fieldErrors?.clientId}
+            options={clients.map((c) => ({ value: c.id, label: c.label }))}
+          />
         </Field>
 
         <Field label={t("ownerTeam")} error={state.fieldErrors?.ownerTeamId} required>
@@ -80,12 +82,12 @@ export function ProjectForm({
         </Field>
 
         <Field label={t("owner")} error={state.fieldErrors?.ownerId}>
-          <select name="ownerId" defaultValue={defaultValues?.ownerId ?? ""} className={inputClass(false)}>
-            <option value="">{t("selectOwner")}</option>
-            {staff.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            name="ownerId"
+            defaultValue={defaultValues?.ownerId ?? ""}
+            placeholder={t("selectOwner")}
+            options={staff.map((s) => ({ value: s.id, label: s.label }))}
+          />
         </Field>
 
         <Field label={t("briefLink")} error={state.fieldErrors?.briefLinkUrl} required className="sm:col-span-2">

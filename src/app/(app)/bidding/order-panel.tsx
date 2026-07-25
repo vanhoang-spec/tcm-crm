@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import { DateField } from "@/components/ui/date-field";
 import { formatDateTime } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { acceptOrder, createBrainstormOrder, createDepartmentOrder, submitOrderResult } from "./order-actions";
@@ -217,7 +218,7 @@ function DepartmentForm({
         </Field>
       )}
       <Field label={t("desiredTimeline")}>
-        <input name="desiredTimeline" type="date" defaultValue={suggestedTimeline} className={inputClass} />
+        <DateField name="desiredTimeline" defaultValue={suggestedTimeline} className={inputClass} />
       </Field>
       <button type="submit" className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-medium text-white hover:bg-brand-600">
         {t("submit")}

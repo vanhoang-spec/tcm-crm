@@ -33,6 +33,10 @@
   --danger: #dc2626;
   --danger-bg: #fef2f2;
 
+  /* Trao đổi (chat) — tím, tách biệt hẳn khỏi brand xanh dương để nhận ra ngay trong sidebar */
+  --accent-chat: #7c3aed;
+  --accent-chat-bg: #f3e8ff;
+
   --radius: 10px;
 }
 
@@ -64,6 +68,9 @@
   --color-danger: var(--danger);
   --color-danger-bg: var(--danger-bg);
 
+  --color-accent-chat: var(--accent-chat);
+  --color-accent-chat-bg: var(--accent-chat-bg);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -89,6 +96,9 @@
     --brand-50: #061d40;
     --brand-100: #0a3269;
     --brand-950: #eef6ff;
+
+    --accent-chat: #a78bfa;
+    --accent-chat-bg: #2e1a5c;
   }
 }
 
@@ -105,6 +115,9 @@
   --warning-bg: #2c2109;
   --danger-bg: #2c1112;
 
+  --accent-chat: #a78bfa;
+  --accent-chat-bg: #2e1a5c;
+
   --brand-50: #061d40;
   --brand-100: #0a3269;
   --brand-950: #eef6ff;
@@ -118,4 +131,23 @@ body {
 
 * {
   border-color: var(--border);
+}
+
+/* In sơ đồ tổ chức (/orgchart) — ẩn toàn bộ app chrome, chỉ giữ lại khung sơ đồ. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #org-chart-print-area,
+  #org-chart-print-area * {
+    visibility: visible;
+  }
+  #org-chart-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    padding: 0 !important;
+  }
 }

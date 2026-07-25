@@ -4,8 +4,11 @@ import { useMemo, useState } from "react";
 import { Lock, CheckCircle2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
+import { DateField } from "@/components/ui/date-field";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
+import type { CreativeTaskStatus } from "@/lib/creative";
 import {
   assignCreativeTask,
   submitCreativeTask,
@@ -19,7 +22,7 @@ export type TaskData = {
   id: string;
   title: string;
   detail: string | null;
-  status: string;
+  status: CreativeTaskStatus;
   projectId: string;
   projectCode: string;
   projectName: string;
@@ -94,35 +97,41 @@ export function TaskBoard({
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
-        <select value={fProject} onChange={(e) => setFProject(e.target.value)} className={input}>
-          <option value="">{t("board.allProjects")}</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.label}</option>
-          ))}
-        </select>
-        <select value={fAssignee} onChange={(e) => setFAssignee(e.target.value)} className={input}>
-          <option value="">{t("board.allAssignees")}</option>
-          {creativeStaff.map((s) => (
-            <option key={s.id} value={s.id}>{s.label}</option>
-          ))}
-        </select>
-        <select value={fPhase} onChange={(e) => setFPhase(e.target.value)} className={input}>
+        <SearchableSelect
+          value={fProject}
+          onChange={setFProject}
+          placeholder={t("board.allProjects")}
+          allowClear
+          className="w-44"
+          options={projects.map((p) => ({ value: p.id, label: p.label }))}
+        />
+        <SearchableSelect
+          value={fAssignee}
+          onChange={setFAssignee}
+          placeholder={t("board.allAssignees")}
+          allowClear
+          className="w-44"
+          options={creativeStaff.map((s) => ({ value: s.id, label: s.label }))}
+        />
+        <select aria-label={t("board.filterPhase")} value={fPhase} onChange={(e) => setFPhase(e.target.value)} className={input}>
           <option value="">{t("board.allPhases")}</option>
           <option value="BIDDING">{t("phaseBIDDING")}</option>
           <option value="WORKING">{t("phaseWORKING")}</option>
         </select>
-        <select value={fTeam} onChange={(e) => setFTeam(e.target.value)} className={input}>
+        <select aria-label={t("board.filterTeam")} value={fTeam} onChange={(e) => setFTeam(e.target.value)} className={input}>
           <option value="">{t("board.allTeams")}</option>
           {teams.map((tm) => (
             <option key={tm.id} value={tm.id}>{tm.label}</option>
           ))}
         </select>
-        <select value={fOrderer} onChange={(e) => setFOrderer(e.target.value)} className={input}>
-          <option value="">{t("board.allOrderers")}</option>
-          {orderers.map((o) => (
-            <option key={o.id} value={o.id}>{o.label}</option>
-          ))}
-        </select>
+        <SearchableSelect
+          value={fOrderer}
+          onChange={setFOrderer}
+          placeholder={t("board.allOrderers")}
+          allowClear
+          className="w-44"
+          options={orderers.map((o) => ({ value: o.id, label: o.label }))}
+        />
       </div>
 
       {STATUS_ORDER.map((status) => {
@@ -147,12 +156,13 @@ export function TaskBoard({
       <details className="rounded-lg border border-dashed border-border-strong p-3">
         <summary className="cursor-pointer text-xs font-medium text-brand-600">{t("task.createTitle")}</summary>
         <form action={createCreativeTask} className="mt-2 flex flex-wrap items-end gap-2">
-          <select name="projectId" className={input + " min-w-[160px]"} required>
-            <option value="">{t("task.selectProject")}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            name="projectId"
+            required
+            placeholder={t("task.selectProject")}
+            className="min-w-[160px]"
+            options={projects.map((p) => ({ value: p.id, label: p.label }))}
+          />
           <select name="taskTypeId" className={input}>
             <option value="">{t("task.selectTaskType")}</option>
             {taskTypes.map((tt) => (
@@ -213,35 +223,38 @@ function TaskCard({
 
           {/* UNASSIGNED → assign form */}
           {task.status === "UNASSIGNED" && (
-            <form action={assignCreativeTask.bind(null, task.id)} className="mt-2 space-y-2 border-t border-border pt-2">
-              <div className="flex flex-wrap items-end gap-2">
-                <select name="assigneeId" className={input + " min-w-[150px]"} required defaultValue="">
-                  <option value="">{t("task.selectAssignee")}</option>
-                  {creativeStaff.map((s) => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-                <select name="taskTypeId" className={input} defaultValue={task.taskTypeId ?? ""}>
-                  <option value="">{t("task.selectTaskType")}</option>
-                  {taskTypes.map((tt) => (
-                    <option key={tt.id} value={tt.id}>{tt.label}</option>
-                  ))}
-                </select>
-                <input name="deadline" type="date" className={input} defaultValue={toDateInput(task.deadline)} />
-              </div>
-              <label className="flex items-center gap-2 text-xs text-foreground">
-                <input type="checkbox" name="cdApprovalNotRequired" className="h-4 w-4 rounded border-border-strong" />
-                {t("task.cdNoApproval")}
-              </label>
+            <div className="mt-2 space-y-2 border-t border-border pt-2">
+              {/* Nút Xóa là form riêng → tách khỏi form assign (không lồng form), nối lại bằng thuộc tính form=. */}
+              <form id={`assign-${task.id}`} action={assignCreativeTask.bind(null, task.id)} className="space-y-2">
+                <div className="flex flex-wrap items-end gap-2">
+                  <SearchableSelect
+                    name="assigneeId"
+                    required
+                    defaultValue=""
+                    placeholder={t("task.selectAssignee")}
+                    className="min-w-[150px]"
+                    options={creativeStaff.map((s) => ({ value: s.id, label: s.label }))}
+                  />
+                  <select name="taskTypeId" className={input} defaultValue={task.taskTypeId ?? ""}>
+                    <option value="">{t("task.selectTaskType")}</option>
+                    {taskTypes.map((tt) => (
+                      <option key={tt.id} value={tt.id}>{tt.label}</option>
+                    ))}
+                  </select>
+                  <DateField name="deadline" className={input} defaultValue={toDateInput(task.deadline)} />
+                </div>
+                <label className="flex items-center gap-2 text-xs text-foreground">
+                  <input type="checkbox" name="cdApprovalNotRequired" className="h-4 w-4 rounded border-border-strong" />
+                  {t("task.cdNoApproval")}
+                </label>
+              </form>
               <div className="flex items-center gap-2">
-                <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
+                <button type="submit" form={`assign-${task.id}`} className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
                   {t("task.assign")}
                 </button>
-                <span className="inline-block">
-                  <FormButton action={deleteCreativeTask.bind(null, task.id)} label={t("task.delete")} danger />
-                </span>
+                <FormButton action={deleteCreativeTask.bind(null, task.id)} label={t("task.delete")} danger />
               </div>
-            </form>
+            </div>
           )}
 
           {/* ASSIGNED / REVISION → submit form */}

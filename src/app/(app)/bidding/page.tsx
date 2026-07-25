@@ -23,7 +23,9 @@ export default async function BiddingListPage({
     prisma.project.findMany({
       where: {
         ownerTeamId: teamRecord?.id,
-        status: status ? { code: status } : undefined,
+        // Hỗ trợ nhiều code cách nhau bằng dấu phẩy (vd "BIDDING,PENDING" từ card dashboard) —
+        // số trên card phải khớp đúng số dòng sau khi bấm drill-down.
+        status: status ? { code: { in: status.split(",") } } : undefined,
         ...(q ? { OR: [{ name: { contains: q } }, { code: { contains: q } }] } : {}),
       },
       include: { client: true, ownerTeam: true, owner: true, projectType: true, complexity: true, status: true },
@@ -147,9 +149,9 @@ export default async function BiddingListPage({
       </ul>
 
       <div className="hidden overflow-hidden rounded-xl border border-border bg-surface sm:block">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
         <table className="w-full min-w-[640px] text-sm">
-          <thead className="border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
             <tr>
               <th className="px-4 py-3">{t("colCode")}</th>
               <th className="px-4 py-3">{t("colName")}</th>

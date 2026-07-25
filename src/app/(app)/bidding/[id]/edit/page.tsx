@@ -51,7 +51,7 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
             clientId: project.clientId,
             ownerTeamId: project.ownerTeamId ?? PENDING_TEAM_ASSIGNMENT,
             ownerId: project.ownerId ?? "",
-            briefLinkUrl: project.briefLinkUrl,
+            briefLinkUrl: project.briefLinkUrl ?? "",
             projectTypeId: project.projectTypeId ?? "",
             complexityId: project.complexityId,
             budget: project.budget != null ? toNum(project.budget) : undefined,

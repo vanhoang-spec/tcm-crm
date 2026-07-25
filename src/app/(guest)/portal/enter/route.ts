@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashGuestToken, buildGuestCookie } from "@/lib/guest-session";
 
+export const runtime = "nodejs"; // dùng crypto (hashGuestToken) — nhất quán với 10 route handler còn lại
+
 /**
  * Magic-link entry: verify token thô → set cookie phiên guest → redirect /portal.
  * Cookie được gắn TRỰC TIẾP lên response redirect (cách chắc chắn trong Route Handler).

@@ -17,13 +17,34 @@ export type ProjectStatusCode = (typeof PROJECT_STATUS_CODES)[number];
 export const LINE_TYPES = ["QTY_PRICE", "FIXED", "PERCENT_OF_TOTAL"] as const;
 export type LineType = (typeof LINE_TYPES)[number];
 
-/** 5 phòng ban nhận Order (department code → tên hiển thị trong notification, luôn tiếng Việt). */
+/**
+ * Loại thuế trên MỖI dòng chi phí — quyết định gross-up lên CO:
+ *  - VAT   : VAT đầu vào được khấu trừ → KHÔNG cộng vào CO (giữ số trước thuế). Hệ số 1.
+ *  - TNCN  : thuê CTV ngoài, thuế TNCN 10% trên số net → gross-up = số / (1 − 10%) = / 0,9.
+ *  - TNDN  : item thiếu chứng từ, chịu TNDN 20% → gross-up = số / (1 − 20%) = / 0,8.
+ *  - OTHER : loại thuế/phụ thu khác không khớp 2 công thức trên (vd phụ thu thẳng %, hoặc số đã
+ *            chốt sẵn từ nguồn ngoài) — KHÔNG tự gross-up, cộng thẳng `customTaxAmount` (nhập tay)
+ *            vào base của dòng. Xem computeAmount/computeLineAmount.
+ * (Mức 10%/20% là mức luật, để hằng số; nếu luật đổi chuyển sang Settings sau — thay đúng chỗ này.)
+ */
+export const TAX_TYPES = ["VAT", "TNCN", "TNDN", "OTHER"] as const;
+export type TaxType = (typeof TAX_TYPES)[number];
+export const TAX_GROSSUP: Record<string, number> = { VAT: 1, TNCN: 1 / 0.9, TNDN: 1 / 0.8 };
+/** Hệ số gross-up thuế của 1 dòng (mặc định VAT = 1 nếu thiếu/không hợp lệ; OTHER không dùng hệ số này). */
+export function taxGrossUp(taxType: string | null | undefined): number {
+  return TAX_GROSSUP[taxType ?? "VAT"] ?? 1;
+}
+
+/** Phòng ban nhận Order (department code → tên hiển thị trong notification, luôn tiếng Việt).
+ *  5 phòng ở Bidding + HR/IT bổ sung cho ORDER tự sinh từ Master Timeline (dự án lớn). */
 export const ORDER_DEPARTMENT_LABELS: Record<string, string> = {
   PLANNING: "Planning",
   CREATIVE: "Creative",
   PCC: "Purchasing",
   OPE: "Operation",
   PRO: "Production",
+  HR: "HR",
+  IT: "IT",
 };
 
 export type CostLineInput = {
@@ -31,14 +52,24 @@ export type CostLineInput = {
   unitPrice: number;
   isLocked: boolean;
   maxMarkupPct: number | null;
+  taxType?: string;
+  customTaxAmount?: number | null;
 };
 
-export function computeAmount(quantity: number, unitPrice: number): number {
-  return Math.round(quantity * unitPrice);
+/**
+ * Số tiền 1 dòng QTY_PRICE. taxType=OTHER: base + customTaxAmount (nhập tay, không gross-up %).
+ * Còn lại: base × hệ số gross-up (VAT/TNCN/TNDN). Base có thể âm (dòng giảm tiền/khoản trừ).
+ */
+export function computeAmount(quantity: number, unitPrice: number, taxType?: string, customTaxAmount?: number | null): number {
+  const base = quantity * unitPrice;
+  if (taxType === "OTHER") return Math.round(base + (customTaxAmount ?? 0));
+  return Math.round(base * taxGrossUp(taxType));
 }
 
-export function computeCoTotal(lines: { quantity: number; unitPrice: number }[]): number {
-  return lines.reduce((sum, l) => sum + computeAmount(l.quantity, l.unitPrice), 0);
+export function computeCoTotal(
+  lines: { quantity: number; unitPrice: number; taxType?: string; customTaxAmount?: number | null }[],
+): number {
+  return lines.reduce((sum, l) => sum + computeAmount(l.quantity, l.unitPrice, l.taxType, l.customTaxAmount), 0);
 }
 
 /** margin = (CE − CO) / CE. Chi hộ tách riêng, KHÔNG tính vào đây. Trả về % (0-100). */
@@ -68,7 +99,7 @@ export function computeMakeupCe(
 
   const lockedCo = lines
     .filter((l) => l.isLocked)
-    .reduce((s, l) => s + computeAmount(l.quantity, l.unitPrice), 0);
+    .reduce((s, l) => s + computeAmount(l.quantity, l.unitPrice, l.taxType, l.customTaxAmount), 0);
   const markupableCo = coTotal - lockedCo;
   if (markupableCo <= 0) return { suggestedCe: coTotal, reachedTarget: false };
 
@@ -77,7 +108,7 @@ export function computeMakeupCe(
   let ce = lockedCo;
   for (const l of lines) {
     if (l.isLocked) continue;
-    const co = computeAmount(l.quantity, l.unitPrice);
+    const co = computeAmount(l.quantity, l.unitPrice, l.taxType, l.customTaxAmount);
     const cap = l.maxMarkupPct != null ? l.maxMarkupPct / 100 : Infinity;
     const applied = Math.min(uniformMarkup, cap);
     ce += co * (1 + applied);
@@ -96,13 +127,23 @@ export type CostLineCalcInput = {
   unitPrice: number;
   fixedAmount: number | null;
   percentVal: number | null;
+  taxType?: string;
+  customTaxAmount?: number | null;
 };
 
-/** Số tiền 1 dòng — percentBase dùng cho dòng PERCENT_OF_TOTAL (= directCo, tính trước, không đệ quy). */
+/**
+ * Số tiền 1 dòng (CO, đã gross-up thuế) — percentBase dùng cho dòng PERCENT_OF_TOTAL (= directCo).
+ * QTY_PRICE/FIXED gross-up theo taxType (OTHER: cộng thẳng customTaxAmount, không gross-up %);
+ * PERCENT_OF_TOTAL là dòng suy ra (dự phòng/…) → không gross-up, không nhận customTaxAmount.
+ */
 export function computeLineAmount(line: CostLineCalcInput, percentBase: number): number {
-  if (line.lineType === "FIXED") return Math.round(line.fixedAmount ?? 0);
+  if (line.lineType === "FIXED") {
+    const base = line.fixedAmount ?? 0;
+    if (line.taxType === "OTHER") return Math.round(base + (line.customTaxAmount ?? 0));
+    return Math.round(base * taxGrossUp(line.taxType));
+  }
   if (line.lineType === "PERCENT_OF_TOTAL") return Math.round(((line.percentVal ?? 0) / 100) * percentBase);
-  return computeAmount(line.quantity, line.unitPrice); // QTY_PRICE (default)
+  return computeAmount(line.quantity, line.unitPrice, line.taxType, line.customTaxAmount); // QTY_PRICE (default)
 }
 
 export type SectionCalcInput = {
@@ -111,6 +152,60 @@ export type SectionCalcInput = {
   proxyFeeVal?: number | null;
   lines: CostLineCalcInput[];
 };
+
+/** Nút cây hạng mục N-cấp (Mục → Nhóm → Sub-nhóm → ...) — dùng để làm phẳng trước khi tính tổng. */
+export type SectionTreeNode = {
+  key: string;
+  parentKey: string | null;
+  isProxy: boolean;
+  proxyFeeType: string | null;
+  proxyFeeVal: number | null;
+  lines: CostLineCalcInput[];
+};
+
+export const MAX_SECTION_DEPTH = 4;
+
+/** Cấp (1-based) của 1 node trong cây, tính từ số tổ tiên. Trả -1 nếu phát hiện vòng lặp (an toàn, không loop vô hạn). */
+export function sectionDepth(key: string, byKey: Map<string, SectionTreeNode>): number {
+  let depth = 1;
+  let cur = byKey.get(key);
+  const seen = new Set<string>([key]);
+  while (cur?.parentKey) {
+    if (seen.has(cur.parentKey)) return -1; // vòng lặp
+    seen.add(cur.parentKey);
+    cur = byKey.get(cur.parentKey);
+    depth++;
+    if (depth > 100) return -1; // chặn an toàn, không phải giới hạn nghiệp vụ
+  }
+  return depth;
+}
+
+/**
+ * Làm phẳng cây section N-cấp thành danh sách "logical sections" cho computeCostSheetTotals —
+ * mỗi node giữ nguyên dòng chi phí TRỰC TIẾP của nó (không gồm dòng của node con); isProxy được
+ * SUY RA (kế thừa) từ tổ tiên gần nhất có isProxy=true, để cả nhánh con nằm dưới 1 mục Chi hộ đều
+ * gộp đúng vào Chi hộ dù bản thân node đó không tự đánh dấu. Chỉ node TỰ đánh dấu isProxy mới mang
+ * proxyFeeType/proxyFeeVal — các node con kế thừa chỉ để gộp subtotal, không nhân đôi phí dịch vụ.
+ */
+export function flattenSectionTree(nodes: SectionTreeNode[]): SectionCalcInput[] {
+  const byKey = new Map(nodes.map((n) => [n.key, n]));
+  function effectiveIsProxy(n: SectionTreeNode): boolean {
+    let cur: SectionTreeNode | undefined = n;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur.key)) {
+      if (cur.isProxy) return true;
+      seen.add(cur.key);
+      cur = cur.parentKey ? byKey.get(cur.parentKey) : undefined;
+    }
+    return false;
+  }
+  return nodes.map((n) => ({
+    isProxy: effectiveIsProxy(n),
+    proxyFeeType: n.isProxy ? n.proxyFeeType : null,
+    proxyFeeVal: n.isProxy ? n.proxyFeeVal : null,
+    lines: n.lines,
+  }));
+}
 
 export type CostSheetTotals = {
   directCo: number;
@@ -160,7 +255,9 @@ export function computeCostSheetTotals(
     .flatMap((s) => s.lines)
     .filter((l) => l.lineType !== "PERCENT_OF_TOTAL")
     .reduce((sum, l) => sum + computeLineAmount(l, 0), 0);
-  const proxySection = proxySections[0];
+  // Ưu tiên node TỰ đánh dấu isProxy (mang phí dịch vụ thật) — quan trọng khi cây bị làm phẳng
+  // (flattenSectionTree), lúc đó node con kế thừa isProxy nhưng proxyFeeType=null, không được chọn nhầm.
+  const proxySection = proxySections.find((s) => s.proxyFeeType != null) ?? proxySections[0];
   const proxyFeeAmt = !proxySection
     ? 0
     : proxySection.proxyFeeType === "FIXED"

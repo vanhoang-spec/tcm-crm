@@ -30,9 +30,9 @@ export default async function CostsheetTemplatesPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-surface">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
         <table className="w-full min-w-[560px] text-sm">
-          <thead className="border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-surface-2 text-left text-xs font-medium text-muted-foreground">
             <tr>
               <th className="px-4 py-3">{t("colName")}</th>
               <th className="px-4 py-3">{t("colProjectType")}</th>

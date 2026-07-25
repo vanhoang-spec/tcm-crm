@@ -6,6 +6,18 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
 import { hashGuestToken } from "@/lib/guest-session";
+import { syncTimelineOrders, dispatchOrder } from "@/lib/project-orders";
+import { spawnTasksForCreativeOrder } from "@/lib/creative";
+import { spawnTasksForDepartmentOrder, isDepartmentTaskDepartment } from "@/lib/department-tasks";
+import { cancelTasksForOrderItems, syncTasksWithOrderItem } from "@/lib/projects";
+
+/** Route tab workspace dự án tương ứng mỗi bộ phận có DepartmentTask board. */
+const DEPARTMENT_TAB_SEG: Record<string, string> = {
+  PLANNING: "planning",
+  PCC: "purchasing",
+  OPE: "operations",
+  PRO: "production",
+};
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -17,6 +29,20 @@ function nullable(v: FormDataEntryValue | null): string | null {
 function dateOrNull(v: FormDataEntryValue | null): Date | null {
   const s = str(v);
   return s === "" ? null : new Date(s);
+}
+function numOrNull(v: FormDataEntryValue | null): number | null {
+  const s = str(v);
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Revalidate mọi sub-route của 1 dự án (workspace nhiều tab, gồm cả 4 board bộ phận). */
+function revalidateProject(projectId: string) {
+  for (const seg of ["", "/timeline", "/orders", "/co-ce", "/planning", "/operations", "/production", "/purchasing", "/liquidation"]) {
+    revalidatePath(`/projects/${projectId}${seg}`);
+  }
+  revalidatePath("/reminders");
 }
 
 async function audit(entityType: string, entityId: string, action: string, payload: unknown) {
@@ -67,12 +93,17 @@ export async function createTimelineItem(projectId: string, formData: FormData) 
       startDate: dateOrNull(formData.get("startDate")),
       endDate: dateOrNull(formData.get("endDate")),
       ownerStaffId: nullable(formData.get("ownerStaffId")),
+      secondaryOwnerStaffId: nullable(formData.get("secondaryOwnerStaffId")),
       departmentCode: nullable(formData.get("departmentCode")),
+      accountableParty: nullable(formData.get("accountableParty")),
+      quantity: numOrNull(formData.get("quantity")),
+      unit: nullable(formData.get("unit")),
       statusId: nullable(formData.get("statusId")),
       sort: count,
     },
   });
-  revalidatePath(`/projects/${projectId}`);
+  await syncTimelineOrders(projectId);
+  revalidateProject(projectId);
 }
 
 export async function updateTimelineItem(projectId: string, itemId: string, formData: FormData) {
@@ -87,7 +118,11 @@ export async function updateTimelineItem(projectId: string, itemId: string, form
       startDate: dateOrNull(formData.get("startDate")),
       endDate: dateOrNull(formData.get("endDate")),
       ownerStaffId: nullable(formData.get("ownerStaffId")),
+      secondaryOwnerStaffId: nullable(formData.get("secondaryOwnerStaffId")),
       departmentCode: nullable(formData.get("departmentCode")),
+      accountableParty: nullable(formData.get("accountableParty")),
+      quantity: numOrNull(formData.get("quantity")),
+      unit: nullable(formData.get("unit")),
       statusId: nullable(formData.get("statusId")),
       isShared,
       clientEditable,
@@ -98,12 +133,38 @@ export async function updateTimelineItem(projectId: string, itemId: string, form
       ...(isShared ? {} : { externalPublished: false }),
     },
   });
-  revalidatePath(`/projects/${projectId}`);
+  await syncTimelineOrders(projectId);
+  revalidateProject(projectId);
 }
 
 export async function deleteTimelineItem(projectId: string, itemId: string) {
+  // Dọn TRƯỚC khi xóa: FK ProjectOrderItem.sourceTimelineItemId là SetNull — nếu xóa timeline item
+  // trước, dòng order mất liên kết nguồn nên syncTimelineOrders không nhận ra là stale nữa
+  // (bị coi như dòng thêm tay, giữ lại vĩnh viễn) và task đã sinh thành zombie.
+  // Gom CẢ HẬU DUỆ (xóa Phase → DB cascade xóa item con, bỏ qua cleanup app nếu chỉ xét chính nó).
+  const ids = [itemId];
+  let frontier = [itemId];
+  while (frontier.length > 0) {
+    const children = await prisma.timelineItem.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    });
+    frontier = children.map((c) => c.id);
+    ids.push(...frontier);
+  }
+  const orderItems = await prisma.projectOrderItem.findMany({
+    where: { sourceTimelineItemId: { in: ids } },
+    select: { id: true },
+  });
+  if (orderItems.length > 0) {
+    const ids = orderItems.map((r) => r.id);
+    await cancelTasksForOrderItems(ids);
+    await prisma.projectOrderItem.deleteMany({ where: { id: { in: ids } } });
+  }
   await prisma.timelineItem.delete({ where: { id: itemId } });
-  revalidatePath(`/projects/${projectId}`);
+  await syncTimelineOrders(projectId);
+  revalidateProject(projectId);
+  revalidatePath("/creative");
 }
 
 /** Đổi thứ tự trong cùng 1 cấp (cùng parentId) — swap sort với item liền kề. */
@@ -122,7 +183,7 @@ export async function moveTimelineItem(projectId: string, itemId: string, direct
     prisma.timelineItem.update({ where: { id: item.id }, data: { sort: other.sort } }),
     prisma.timelineItem.update({ where: { id: other.id }, data: { sort: item.sort } }),
   ]);
-  revalidatePath(`/projects/${projectId}`);
+  revalidateProject(projectId);
 }
 
 /** Owner duyệt & lộ 1 item ra khách (chỉ khi đã isShared). */
@@ -131,13 +192,180 @@ export async function publishTimelineItem(projectId: string, itemId: string) {
   if (!item || !item.isShared) return;
   await prisma.timelineItem.update({ where: { id: itemId }, data: { externalPublished: true } });
   await audit("timeline_item", itemId, "PUBLISH", { externalPublished: true });
-  revalidatePath(`/projects/${projectId}`);
+  revalidateProject(projectId);
 }
 
 export async function unpublishTimelineItem(projectId: string, itemId: string) {
   await prisma.timelineItem.update({ where: { id: itemId }, data: { externalPublished: false } });
   await audit("timeline_item", itemId, "UNPUBLISH", { externalPublished: false });
-  revalidatePath(`/projects/${projectId}`);
+  revalidateProject(projectId);
+}
+
+// ── Áp dụng mẫu Master Timeline: vật hóa template (Section→Item→Sub-task) thành TimelineItem ──
+export async function applyTimelineTemplate(projectId: string, formData: FormData) {
+  const templateId = str(formData.get("templateId"));
+  if (!templateId) return;
+  const template = await prisma.timelineTemplate.findUnique({
+    where: { id: templateId },
+    include: { sections: { orderBy: { sort: "asc" }, include: { items: { orderBy: { sort: "asc" } } } } },
+  });
+  if (!template) return;
+
+  // Nối tiếp sort sau các Phase hiện có.
+  const existingPhases = await prisma.timelineItem.count({ where: { projectId, parentId: null } });
+  let phaseSort = existingPhases;
+
+  for (const section of template.sections) {
+    const phase = await prisma.timelineItem.create({
+      data: { projectId, title: section.nameVi, departmentCode: null, sort: phaseSort++ },
+    });
+    // Item cấp 1 (parentLabel rỗng) tạo trước để lấy id cho sub-task.
+    const topItems = section.items.filter((it) => !it.parentLabel);
+    const itemIdByTitle = new Map<string, string>();
+    let itemSort = 0;
+    for (const it of topItems) {
+      const created = await prisma.timelineItem.create({
+        data: {
+          projectId,
+          parentId: phase.id,
+          title: it.title,
+          departmentCode: it.defaultDepartmentCode,
+          unit: it.defaultUnit,
+          quantity: it.defaultQty,
+          templateItemId: it.id,
+          sort: itemSort++,
+        },
+      });
+      itemIdByTitle.set(it.title, created.id);
+    }
+    // Sub-task (parentLabel khớp title Item cha).
+    const subItems = section.items.filter((it) => it.parentLabel);
+    const subSortByParent = new Map<string, number>();
+    for (const it of subItems) {
+      const parentId = itemIdByTitle.get(it.parentLabel!);
+      if (!parentId) continue;
+      const s = subSortByParent.get(parentId) ?? 0;
+      subSortByParent.set(parentId, s + 1);
+      await prisma.timelineItem.create({
+        data: {
+          projectId,
+          parentId,
+          title: it.title,
+          departmentCode: it.defaultDepartmentCode,
+          unit: it.defaultUnit,
+          quantity: it.defaultQty,
+          templateItemId: it.id,
+          sort: s,
+        },
+      });
+    }
+  }
+  await audit("project", projectId, "APPLY_TIMELINE_TEMPLATE", { templateId, name: template.name });
+  revalidateProject(projectId);
+}
+
+// ── Ma trận nhân sự (KUN) ──
+export async function addStaffingCell(projectId: string, formData: FormData) {
+  const roleLabel = str(formData.get("roleLabel"));
+  const zoneLabel = str(formData.get("zoneLabel"));
+  const headcount = numOrNull(formData.get("headcount")) ?? 0;
+  if (!roleLabel || !zoneLabel) return;
+  const count = await prisma.projectStaffing.count({ where: { projectId } });
+  await prisma.projectStaffing.create({
+    data: { projectId, roleLabel, zoneLabel, headcount: Math.round(headcount), sort: count },
+  });
+  revalidateProject(projectId);
+}
+
+export async function updateStaffingCell(projectId: string, cellId: string, formData: FormData) {
+  const headcount = numOrNull(formData.get("headcount")) ?? 0;
+  await prisma.projectStaffing.update({ where: { id: cellId }, data: { headcount: Math.round(headcount) } });
+  revalidateProject(projectId);
+}
+
+export async function removeStaffingCell(projectId: string, cellId: string) {
+  await prisma.projectStaffing.delete({ where: { id: cellId } });
+  revalidateProject(projectId);
+}
+
+// ── ORDER tự sinh từ Timeline: sync / dispatch / sửa dòng ──
+export async function syncProjectOrders(projectId: string) {
+  await syncTimelineOrders(projectId);
+  revalidateProject(projectId);
+}
+
+export async function dispatchProjectOrder(projectId: string, orderId: string) {
+  const staffId = await getCurrentStaffId();
+  const { department } = await dispatchOrder(orderId, staffId);
+  revalidateProject(projectId);
+  // Order Creative sinh CreativeTask → refresh board /creative đúng như nhánh /bidding (order-actions.ts).
+  if (department === "CREATIVE") revalidatePath("/creative");
+  if (department && isDepartmentTaskDepartment(department)) revalidatePath(`/projects/${projectId}/${DEPARTMENT_TAB_SEG[department]}`);
+}
+
+export async function updateProjectOrderItem(projectId: string, itemId: string, formData: FormData) {
+  const updated = await prisma.projectOrderItem.update({
+    where: { id: itemId },
+    data: {
+      label: str(formData.get("label")) || undefined,
+      detail: nullable(formData.get("detail")),
+      desiredReceiptAt: dateOrNull(formData.get("desiredReceiptAt")),
+    },
+    include: { order: { select: { department: true, isDraft: true } } },
+  });
+  // Order đã gửi → task đã sinh từ dòng này phải nhận nội dung mới (title/detail; deadline chỉ khi
+  // task còn UNASSIGNED — lead đã giao thì deadline do lead đặt, không ghi đè).
+  if (!updated.order.isDraft) {
+    await syncTasksWithOrderItem({
+      id: updated.id,
+      label: updated.label,
+      detail: updated.detail,
+      desiredReceiptAt: updated.desiredReceiptAt,
+    });
+    if (updated.order.department === "CREATIVE") revalidatePath("/creative");
+  }
+  revalidateProject(projectId);
+}
+
+export async function addProjectOrderItem(projectId: string, orderId: string, formData: FormData) {
+  const label = str(formData.get("label"));
+  if (!label) return;
+  const count = await prisma.projectOrderItem.count({ where: { orderId } });
+  await prisma.projectOrderItem.create({
+    data: {
+      orderId,
+      label,
+      detail: nullable(formData.get("detail")),
+      desiredReceiptAt: dateOrNull(formData.get("desiredReceiptAt")),
+      sort: count,
+    },
+  });
+  // Nếu thêm dòng vào Order ĐÃ gửi (dispatch) → spawn task cho dòng mới (idempotent theo sourceKey/sourceItemLabel),
+  // nếu không dòng thêm sau khi gửi sẽ không bao giờ thành task.
+  const order = await prisma.projectOrder.findUnique({ where: { id: orderId }, select: { department: true, isDraft: true } });
+  if (order && !order.isDraft) {
+    if (order.department === "CREATIVE") {
+      await spawnTasksForCreativeOrder(orderId);
+      revalidatePath("/creative");
+    } else if (isDepartmentTaskDepartment(order.department)) {
+      await spawnTasksForDepartmentOrder(orderId);
+      revalidatePath(`/projects/${projectId}/${DEPARTMENT_TAB_SEG[order.department]}`);
+    }
+  }
+  revalidateProject(projectId);
+}
+
+export async function removeProjectOrderItem(projectId: string, itemId: string) {
+  // Dọn task đã sinh TRƯỚC khi xóa dòng (FK SetNull — xóa trước sẽ để lại task zombie active).
+  const item = await prisma.projectOrderItem.findUnique({
+    where: { id: itemId },
+    include: { order: { select: { department: true } } },
+  });
+  if (!item) return;
+  await cancelTasksForOrderItems([itemId]);
+  await prisma.projectOrderItem.delete({ where: { id: itemId } });
+  revalidateProject(projectId);
+  if (item.order.department === "CREATIVE") revalidatePath("/creative");
 }
 
 // ── Guest invite (magic-link) ──
@@ -169,4 +397,72 @@ export async function revokeGuestInvite(projectId: string, inviteId: string) {
   await prisma.guestInvite.update({ where: { id: inviteId }, data: { revokedAt: new Date() } });
   await audit("guest_invite", inviteId, "REVOKE", { revokedAt: new Date().toISOString() });
   revalidatePath(`/projects/${projectId}`);
+}
+
+// ── CO/CE → Nghiệm thu (tab Liquidation) ──
+
+/**
+ * Project Leader/Owner bấm "Chuyển sang Nghiệm thu": trỏ CostSheet tới bản snapshot (revision) mới
+ * nhất hiện tại. Không đổi trạng thái dự án (state machine PROCESSING→LIQUIDATION vẫn do kế toán
+ * xác nhận riêng ở /bidding). Nếu sau đó CO/CE còn sửa tiếp, tab Nghiệm thu vẫn hiện bản đã chuyển
+ * cho tới khi bấm nút này lại — cho phép "sửa lần cuối trước khi khách ký" mà không ảnh hưởng ngay.
+ */
+export async function sendCostSheetToLiquidation(projectId: string) {
+  const sheet = await prisma.costSheet.findFirst({
+    where: { projectId, version: "CTRACT" },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!sheet) return;
+  const latestRev = await prisma.costSheetRevision.findFirst({
+    where: { costSheetId: sheet.id },
+    orderBy: { revNo: "desc" },
+  });
+  if (!latestRev) return;
+
+  const staffId = await getCurrentStaffId();
+  await prisma.costSheet.update({
+    where: { id: sheet.id },
+    data: { sentToLiquidationRevisionId: latestRev.id, sentToLiquidationAt: new Date(), sentToLiquidationById: staffId },
+  });
+  await audit("cost_sheet", sheet.id, "SEND_TO_LIQUIDATION", { revNo: latestRev.revNo });
+  revalidateProject(projectId);
+}
+
+/** Project Leader/Owner tick "Khách hàng xác nhận nghiệm thu" sau khi khách đã ký. */
+export async function confirmClientAcceptance(projectId: string) {
+  const staffId = await getCurrentStaffId();
+  await prisma.contract.upsert({
+    where: { projectId },
+    update: { clientAcceptanceConfirmedAt: new Date(), clientAcceptanceConfirmedById: staffId },
+    create: { projectId, clientAcceptanceConfirmedAt: new Date(), clientAcceptanceConfirmedById: staffId },
+  });
+  await audit("contract", projectId, "CLIENT_ACCEPTANCE_CONFIRMED", { confirmedAt: new Date().toISOString() });
+  revalidateProject(projectId);
+}
+
+/** Đặt/sửa mốc "Ngày dự kiến khách hàng ký nghiệm thu" — cũng là mốc trigger reminder hệ thống. */
+export async function setExpectedAcceptanceSignDate(projectId: string, formData: FormData) {
+  const date = dateOrNull(formData.get("expectedAcceptanceSignDate"));
+  await prisma.contract.upsert({
+    where: { projectId },
+    // Đổi mốc → reset cờ đã nhắc để reminder tính lại theo mốc mới.
+    update: { expectedAcceptanceSignDate: date, acceptanceReminderSentAt: null },
+    create: { projectId, expectedAcceptanceSignDate: date },
+  });
+  await audit("contract", projectId, "SET_EXPECTED_ACCEPTANCE_SIGN_DATE", { date: date?.toISOString() ?? null });
+  revalidateProject(projectId);
+}
+
+/** Kế toán điền Số hóa đơn / Ngày hóa đơn sau khi xuất hóa đơn cho dự án. */
+export async function saveInvoiceInfo(projectId: string, formData: FormData) {
+  const invoiceNo = nullable(formData.get("invoiceNo"));
+  const invoiceDate = dateOrNull(formData.get("invoiceDate"));
+  const staffId = await getCurrentStaffId();
+  await prisma.contract.upsert({
+    where: { projectId },
+    update: { invoiceNo, invoiceDate, invoiceById: staffId },
+    create: { projectId, invoiceNo, invoiceDate, invoiceById: staffId },
+  });
+  await audit("contract", projectId, "SAVE_INVOICE_INFO", { invoiceNo, invoiceDate: invoiceDate?.toISOString() ?? null });
+  revalidateProject(projectId);
 }

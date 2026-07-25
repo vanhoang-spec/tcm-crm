@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { MAX_CONTACTS, OTHER_INTRODUCER } from "@/lib/validators/client";
 import type { ClientFormState } from "./actions";
@@ -177,19 +178,16 @@ export function ClientForm({
         )}
 
         <Field label={t("introducer")} error={state.fieldErrors?.introducerId} required>
-          <select
+          <SearchableSelect
             name="introducerId"
             defaultValue={defaultValues?.introducerId ?? ""}
-            className={inputClass(!!state.fieldErrors?.introducerId)}
-          >
-            <option value="">{t("selectIntroducer")}</option>
-            {introducers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-            <option value={OTHER_INTRODUCER}>{t("introducerOther")}</option>
-          </select>
+            placeholder={t("selectIntroducer")}
+            hasError={!!state.fieldErrors?.introducerId}
+            options={[
+              ...introducers.map((s) => ({ value: s.id, label: s.label })),
+              { value: OTHER_INTRODUCER, label: t("introducerOther") },
+            ]}
+          />
         </Field>
 
         <Field label={t("paymentTerm")} error={state.fieldErrors?.paymentTermDays} required>

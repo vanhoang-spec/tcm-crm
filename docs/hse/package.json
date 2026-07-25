@@ -1,0 +1,19 @@
+{
+  "name": "tcm-hse-manual",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TCM Health, Safety & Environment (HS&E) Manual generator — bilingual Word + PDF. Isolated from the CRM app.",
+  "scripts": {
+    "build:docx": "node build-docx.mjs",
+    "build:html": "node build-html.mjs",
+    "build:pdf": "node build-pdf.mjs",
+    "build": "node build-docx.mjs && node build-html.mjs && node build-pdf.mjs"
+  },
+  "dependencies": {
+    "docx": "^9.7.1"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.43.1"
+  }
+}

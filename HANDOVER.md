@@ -191,10 +191,19 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
 
-1. **RBAC chỉ mang tính danh nghĩa.** Đã có đăng nhập thật (mật khẩu scrypt + session cookie), nhưng **chưa chặn quyền theo vai trò** — ai đăng nhập cũng vào được mọi trang, kể cả lương/KPI. Đây là việc lớn còn lại.
+1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
+   - **Danh mục 89 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+   - **248 điểm chặn**: 177 server action + 64 page + 7 route API. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
+   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 89 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
+   - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
+   - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
+   - ⚠ **Không gate bằng `layout.tsx`**: layout không re-render khi điều hướng phía client và không chặn được server action — xem `node_modules/next/dist/docs/01-app/02-guides/authentication.md` dòng 1350 và 1446. Ẩn mục khỏi menu chỉ là trang trí.
+   - ⚠ **BẪY DEPLOY**: `prisma migrate deploy` chỉ tạo bảng `role_permission` **rỗng** → mọi role trừ ADMIN mất sạch quyền. Quy trình mục 8 **không có bước seed**. Nếu deploy code lên DB production đang chạy thì **bắt buộc chạy `npm run db:seed` sau `migrate deploy`** (seed chỉ điền cho role chưa có grant nào, không đè chỉnh sửa tay). Nếu đè `dev.db` lên production thì grant đi kèm sẵn, không cần làm gì.
+   - Grant mặc định do seed dựng = **đúng quyền mọi người có trước khi bật ma trận** (1205 dòng / 20 role), cố tình không siết sẵn — chính sách thật do BGĐ tick trong ma trận.
+   - Chưa làm: `payroll.manage` chưa gắn chỗ nào (module ⑦ chưa có). Quyền theo **nhóm role**, chưa có ngoại lệ theo từng người.
 2. **Chat dùng polling ~4s**, chưa realtime (đủ cho nội bộ ~42 người).
 3. **KPI phase 1 zero-sum:** hệ số margin cố định 1.0 (floor=cap=1), margin chỉ hiển thị chứ chưa gắn tiền. BoD bật co giãn sau bằng Settings, không cần sửa code.
-4. **Lương theo VỊ TRÍ, không theo cá nhân** (vì chưa có RBAC che dữ liệu nhạy cảm). `positionTitle` là free-text khớp `Staff.title` — nợ: nên chuyển thành option_set + `Staff.titleId`.
+4. **Lương theo VỊ TRÍ, không theo cá nhân.** (Lý do cũ "chưa có RBAC" nay đã hết — `/creative/cost` được gác bằng quyền `creative.cost.view`; giữ theo vị trí là lựa chọn nghiệp vụ.) `positionTitle` là free-text khớp `Staff.title` — nợ: nên chuyển thành option_set + `Staff.titleId`.
 5. **Cost-per-task "thực tế" là PHÂN BỔ theo giờ, không phải tiền đã chi.** Đừng đọc thành chi phí thực.
 6. **Chưa có test tự động.** Verify hiện làm bằng tsc/eslint/build + browser thủ công.
 7. **CO/CE chỉ có CE tổng ở cấp bảng**, chưa có CE theo từng dòng (Phase 2 đã bàn: CE-per-line + gom N dòng CO → 1 dòng CE + make-up theo dòng + AI gợi ý markup — **chưa làm**).

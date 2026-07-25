@@ -6,8 +6,10 @@ import { prisma } from "@/lib/prisma";
 import { formatNumber, formatDecimal } from "@/lib/utils";
 import { getKpiReport, kpiCurrentPeriod, kpiShiftPeriod, criteriaForPool, type KpiWarning } from "@/lib/kpi";
 import { ScoreMatrixForm, ClosePeriodControls, type MatrixCriterion, type MatrixMember } from "./score-matrix-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function KpiPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
+  await requirePermission("kpi.view");
   const { period } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("kpi"), getLocale() as Promise<Locale>]);
   const periodCode = period || kpiCurrentPeriod(new Date());

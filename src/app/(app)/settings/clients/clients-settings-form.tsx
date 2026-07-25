@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveClientsSettings, type ClientsSettingsState } from "./actions";
 
@@ -14,12 +15,12 @@ export function ClientsSettingsForm({ activeDays, inactiveDays }: { activeDays: 
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("activeInterval")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("activeIntervalHint")}</p>
-          <input name="activeDays" type="number" min={1} defaultValue={activeDays} className={input} />
+          <NumberField name="activeDays" defaultValue={activeDays} className={input} />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("inactiveInterval")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("inactiveIntervalHint")}</p>
-          <input name="inactiveDays" type="number" min={1} defaultValue={inactiveDays} className={input} />
+          <NumberField name="inactiveDays" defaultValue={inactiveDays} className={input} />
         </div>
       </div>
       <div className="flex items-center gap-3 border-t border-border pt-4">

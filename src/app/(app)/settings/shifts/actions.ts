@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type ShiftFormState = { error?: string; success?: boolean };
 
@@ -30,6 +31,7 @@ function parseShiftForm(formData: FormData) {
 }
 
 export async function createShift(_prev: ShiftFormState, formData: FormData): Promise<ShiftFormState> {
+  await requirePermission("settings.timekeeping.manage");
   const t = await getTranslations("settings.shifts");
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const { name, startTime, endTime, hours, valid } = parseShiftForm(formData);
@@ -50,6 +52,7 @@ export async function createShift(_prev: ShiftFormState, formData: FormData): Pr
 }
 
 export async function updateShift(shiftId: string, _prev: ShiftFormState, formData: FormData): Promise<ShiftFormState> {
+  await requirePermission("settings.timekeeping.manage");
   const t = await getTranslations("settings.shifts");
   const { name, startTime, endTime, hours, valid } = parseShiftForm(formData);
   const isActive = formData.get("isActive") === "on";

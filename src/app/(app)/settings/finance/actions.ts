@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type FinanceSettingsState = { error?: string; success?: boolean };
 
@@ -19,6 +20,7 @@ export async function saveFinanceSettings(
   _prev: FinanceSettingsState,
   formData: FormData,
 ): Promise<FinanceSettingsState> {
+  await requirePermission("settings.finance.manage");
   const t = await getTranslations("settings.finance");
   const maxCount = Number(formData.get("maxCount") ?? NaN);
   const maxAmount = Number(formData.get("maxAmount") ?? NaN);

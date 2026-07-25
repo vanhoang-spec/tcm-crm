@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { Trash2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatNumber } from "@/lib/utils";
@@ -89,7 +90,7 @@ export function SectionEditor({
               <option value="PCT">{t("proxyFeePct")}</option>
               <option value="FIXED">{t("proxyFeeFixed")}</option>
             </select>
-            <input name="proxyFeeVal" type="number" step="any" defaultValue={section.proxyFeeVal ?? 0} placeholder={t("proxyFeeVal")} className={inputClass} />
+            <NumberField decimals={2} name="proxyFeeVal" defaultValue={section.proxyFeeVal ?? 0} placeholder={t("proxyFeeVal")} className={inputClass} />
           </>
         )}
         <div className="sm:col-span-5">
@@ -172,22 +173,22 @@ function LineFields({
       </select>
       {lineType === "QTY_PRICE" && (
         <>
-          <input name="defaultQty" type="number" step="any" defaultValue={initial?.defaultQty ?? 1} placeholder={t("lineDefaultQty")} className={cn2()} />
+          <NumberField decimals={2} name="defaultQty" defaultValue={initial?.defaultQty ?? 1} placeholder={t("lineDefaultQty")} className={cn2()} />
           <input name="defaultUnit" defaultValue={initial?.defaultUnit} placeholder={t("lineDefaultUnit")} className={cn2()} />
-          <input name="defaultUnitPrice" type="number" step="any" defaultValue={initial?.defaultUnitPrice ?? 0} placeholder={t("lineDefaultUnitPrice")} className={cn2()} />
+          <NumberField name="defaultUnitPrice" defaultValue={initial?.defaultUnitPrice ?? 0} placeholder={t("lineDefaultUnitPrice")} className={cn2()} />
         </>
       )}
       {lineType === "FIXED" && (
-        <input name="fixedAmount" type="number" step="any" defaultValue={initial?.fixedAmount ?? 0} placeholder={t("lineFixedAmount")} className={cn2()} />
+        <NumberField name="fixedAmount" defaultValue={initial?.fixedAmount ?? 0} placeholder={t("lineFixedAmount")} className={cn2()} />
       )}
       {lineType === "PERCENT_OF_TOTAL" && (
-        <input name="percentVal" type="number" step="any" defaultValue={initial?.percentVal ?? 0} placeholder={t("linePercentVal")} className={cn2()} />
+        <NumberField decimals={2} name="percentVal" defaultValue={initial?.percentVal ?? 0} placeholder={t("linePercentVal")} className={cn2()} />
       )}
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <input type="checkbox" name="isLocked" defaultChecked={initial?.isLocked} className="h-3.5 w-3.5 rounded border-border-strong" />
         {t("lineLocked")}
       </label>
-      <input name="maxMarkupPct" type="number" step="any" defaultValue={initial?.maxMarkupPct ?? ""} placeholder={t("lineMaxMarkup")} className={cn2()} />
+      <NumberField name="maxMarkupPct" defaultValue={initial?.maxMarkupPct ?? ""} placeholder={t("lineMaxMarkup")} className={cn2()} />
       <div className="flex items-center gap-2 sm:col-span-3">
         <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">{submitLabel}</button>
         {deleteAction && (

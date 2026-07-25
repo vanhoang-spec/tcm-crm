@@ -6,8 +6,10 @@ import { formatNumber, formatDecimal, formatPercent, pickLabel } from "@/lib/uti
 import type { Locale } from "@/i18n/locales";
 import { getCreativeDashboardStats, isTaskLocked, taskPhase, finishedGraceDaysLeft, type CreativeTaskStatus } from "@/lib/creative";
 import { TaskBoard, type TaskData } from "./task-board";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function CreativePage() {
+  await requirePermission("creative.view");
   const [t, locale, stats, tasks, creativeStaff, taskTypeSet, projects, teams] = await Promise.all([
     getTranslations("creative"),
     getLocale() as Promise<Locale>,

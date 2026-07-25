@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveKpiCriterion, toggleKpiCriterion, type KpiSettingsState } from "./actions";
 
@@ -43,8 +44,8 @@ export function CriterionRow({ criterion }: { criterion: CriterionData }) {
           </option>
         ))}
       </select>
-      <input name="weight" type="number" min={0.1} step={0.1} defaultValue={criterion.weight} className={input} aria-label={t("colWeight")} />
-      <input name="scaleMax" type="number" min={1} step={1} defaultValue={criterion.scaleMax} className={input} aria-label={t("colScale")} />
+      <NumberField decimals={2} name="weight" defaultValue={criterion.weight} className={input} aria-label={t("colWeight")} />
+      <NumberField name="scaleMax" defaultValue={criterion.scaleMax} className={input} aria-label={t("colScale")} />
       <div className="flex items-center gap-1.5">
         <button type="submit" disabled={pending} className="h-8 rounded-lg border border-border-strong px-2.5 text-xs font-medium text-foreground hover:bg-surface-2 disabled:opacity-50">
           {pending ? "..." : tCommon("save")}
@@ -79,8 +80,8 @@ export function CriterionCreateForm() {
           </option>
         ))}
       </select>
-      <input name="weight" type="number" min={0.1} step={0.1} defaultValue={1} className={input} aria-label={t("colWeight")} />
-      <input name="scaleMax" type="number" min={1} step={1} defaultValue={5} className={input} aria-label={t("colScale")} />
+      <NumberField decimals={2} name="weight" defaultValue={1} className={input} aria-label={t("colWeight")} />
+      <NumberField name="scaleMax" defaultValue={5} className={input} aria-label={t("colScale")} />
       <div className="flex items-center gap-1.5">
         <button type="submit" disabled={pending} className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50">
           {pending ? "..." : t("addCriterion")}

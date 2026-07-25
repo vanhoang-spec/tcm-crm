@@ -8,8 +8,10 @@ import type { Locale } from "@/i18n/locales";
 import { ClientForm } from "../../client-form";
 import { updateClient } from "../../actions";
 import { OTHER_INTRODUCER } from "@/lib/validators/client";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("clients.view");
   const { id } = await params;
 
   const client = await prisma.client.findUnique({ where: { id }, include: { brand: true } });

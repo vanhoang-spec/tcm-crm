@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveFinanceSettings, type FinanceSettingsState } from "./actions";
 
@@ -28,12 +29,12 @@ export function FinanceSettingsForm({
           <div>
             <label className="mb-1 block text-xs font-medium text-foreground">{t("maxCount")}</label>
             <p className="mb-1 text-xs text-muted-foreground">{t("maxCountHint")}</p>
-            <input name="maxCount" type="number" min={1} defaultValue={maxCount} className={input} />
+            <NumberField name="maxCount" defaultValue={maxCount} className={input} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-foreground">{t("maxAmount")}</label>
             <p className="mb-1 text-xs text-muted-foreground">{t("maxAmountHint")}</p>
-            <input name="maxAmount" type="number" step={1000000} min={0} defaultValue={maxAmount} className={input} />
+            <NumberField name="maxAmount" defaultValue={maxAmount} className={input} />
           </div>
         </div>
       </div>
@@ -45,12 +46,12 @@ export function FinanceSettingsForm({
           <div>
             <label className="mb-1 block text-xs font-medium text-foreground">{t("weeklyBuckets")}</label>
             <p className="mb-1 text-xs text-muted-foreground">{t("weeklyBucketsHint")}</p>
-            <input name="weeklyBuckets" type="number" min={0} max={12} defaultValue={weeklyBuckets} className={input} />
+            <NumberField name="weeklyBuckets" defaultValue={weeklyBuckets} className={input} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-foreground">{t("monthlyBuckets")}</label>
             <p className="mb-1 text-xs text-muted-foreground">{t("monthlyBucketsHint")}</p>
-            <input name="monthlyBuckets" type="number" min={0} max={12} defaultValue={monthlyBuckets} className={input} />
+            <NumberField name="monthlyBuckets" defaultValue={monthlyBuckets} className={input} />
           </div>
         </div>
       </div>

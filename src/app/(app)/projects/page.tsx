@@ -7,12 +7,14 @@ import { pickLabel, cn } from "@/lib/utils";
 import { STATUS_TONE, TEAM_TONE } from "@/lib/bidding-ui";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function ProjectsPage({
   searchParams,
 }: {
   searchParams: Promise<{ team?: string; status?: string; q?: string }>;
 }) {
+  await requirePermission("projects.view");
   const { team, status, q } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("projects.list"), getLocale() as Promise<Locale>]);
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type CommunicationSettingsState = { error?: string; success?: boolean };
 
@@ -19,6 +20,7 @@ export async function saveCommunicationSettings(
   _prev: CommunicationSettingsState,
   formData: FormData,
 ): Promise<CommunicationSettingsState> {
+  await requirePermission("settings.communication.manage");
   const t = await getTranslations("settings.communication");
   const superAdminTitles = String(formData.get("superAdminTitles") ?? "").trim();
   const pollSeconds = Number(formData.get("pollSeconds") ?? NaN);

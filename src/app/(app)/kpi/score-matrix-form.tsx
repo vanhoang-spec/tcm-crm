@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useTransition } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveKpiScores, closeKpiPeriod, reopenKpiPeriod, type KpiActionState } from "./actions";
 
@@ -57,12 +58,8 @@ export function ScoreMatrixForm({
                   const auto = m.auto[c.id];
                   return (
                     <td key={c.id} className="px-1 py-1 text-center">
-                      <input
+                      <NumberField decimals={2}
                         name={`score_${m.staffId}_${c.id}`}
-                        type="number"
-                        min={0}
-                        max={c.scaleMax}
-                        step={0.5}
                         defaultValue={saved ?? auto ?? ""}
                         placeholder={auto != null ? String(auto) : ""}
                         disabled={closed}

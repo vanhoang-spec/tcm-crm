@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { updateCommissionScheme, type SettingsFormState } from "./actions";
 
@@ -21,11 +22,8 @@ export function CommissionForm({
             {t("baseLabel")} <span className="text-danger">*</span>
           </label>
           <p className="mb-1 text-xs text-muted-foreground">{t("baseHint")}</p>
-          <input
+          <NumberField
             name="baseCommissionAmount"
-            type="number"
-            min={0}
-            step={1000}
             defaultValue={defaultValues.baseCommissionAmount}
             className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />
@@ -35,11 +33,8 @@ export function CommissionForm({
             {t("contractLabel")} <span className="text-danger">*</span>
           </label>
           <p className="mb-1 text-xs text-muted-foreground">{t("contractHint")}</p>
-          <input
+          <NumberField
             name="contractCommissionAmount"
-            type="number"
-            min={0}
-            step={1000}
             defaultValue={defaultValues.contractCommissionAmount}
             className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />

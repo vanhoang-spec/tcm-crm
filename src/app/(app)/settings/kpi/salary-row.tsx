@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useTransition } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveKpiPositionSalary, copyKpiSalariesFromPeriod, type KpiSettingsState } from "./actions";
 
@@ -28,11 +29,8 @@ export function KpiSalaryRow({
     <form action={formAction} className="grid grid-cols-1 items-center gap-2 rounded-lg border border-border p-3 sm:grid-cols-[110px_150px_1fr_1fr_auto]">
       <span className="text-xs font-medium text-muted-foreground">{departmentCode}</span>
       <span className="text-sm font-medium text-foreground">{positionTitle}</span>
-      <input
+      <NumberField
         name="monthlySalary"
-        type="number"
-        min={0}
-        step={500000}
         defaultValue={monthlySalary ?? ""}
         placeholder={t("colSalaryInput")}
         className={input + " w-full"}

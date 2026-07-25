@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -191,11 +192,8 @@ export function ClientForm({
         </Field>
 
         <Field label={t("paymentTerm")} error={state.fieldErrors?.paymentTermDays} required>
-          <input
+          <NumberField
             name="paymentTermDays"
-            type="number"
-            min={0}
-            max={365}
             defaultValue={defaultValues?.paymentTermDays ?? 90}
             className={inputClass(!!state.fieldErrors?.paymentTermDays)}
           />

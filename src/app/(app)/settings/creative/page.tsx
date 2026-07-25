@@ -7,12 +7,14 @@ import { CycleForm } from "./cycle-form";
 import { SalaryRow } from "./salary-row";
 import { RatioMatrixForm } from "./ratio-matrix-form";
 import { DeleteOrphanButton } from "./delete-orphan-button";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsCreativePage({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;
 }) {
+  await requirePermission("settings.creative.manage");
   const { period } = await searchParams;
   const [t, tIndex, cycle] = await Promise.all([
     getTranslations("settings.creative"),

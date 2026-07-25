@@ -18,6 +18,7 @@ export function Header({
   currentStaffId = null,
   canImpersonate = false,
   impersonating = false,
+  permissions = [],
 }: {
   reminderCount?: number;
   actAsStaff?: ActAsStaff[];
@@ -25,6 +26,8 @@ export function Header({
   /** Chỉ ADMIN mới được đổi sang xem với tư cách người khác. */
   canImpersonate?: boolean;
   impersonating?: boolean;
+  /** Quyền của người ĐANG THAO TÁC (đã tính act-as) — quyết định menu mobile hiện mục nào. */
+  permissions?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const t = useTranslations("common");
@@ -98,7 +101,7 @@ export function Header({
             >
               <X className="h-5 w-5" />
             </button>
-            <SidebarContent onNavigate={() => setOpen(false)} />
+            <SidebarContent onNavigate={() => setOpen(false)} permissions={permissions} />
           </div>
         </div>
       )}

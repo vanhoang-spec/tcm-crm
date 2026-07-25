@@ -6,8 +6,10 @@ import { getKpiParams, kpiCurrentPeriod, kpiShiftPeriod, KPI_DEPT_CODES } from "
 import { ParamsForm } from "./params-form";
 import { CriterionRow, CriterionCreateForm } from "./criterion-row";
 import { KpiSalaryRow, CopySalariesButton } from "./salary-row";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsKpiPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
+  await requirePermission("settings.kpi.manage");
   const { period } = await searchParams;
   const [t, tIndex, params] = await Promise.all([getTranslations("settings.kpi"), getTranslations("settings.index"), getKpiParams()]);
   const periodCode = period || kpiCurrentPeriod(new Date());

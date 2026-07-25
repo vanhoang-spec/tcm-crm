@@ -5,8 +5,10 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { OptionItemList } from "./option-item-list";
 import { OptionItemCreateForm } from "./option-item-create-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsOptionsPage({ params }: { params: Promise<{ setCode: string }> }) {
+  await requirePermission("settings.options.manage");
   const { setCode } = await params;
 
   const set = await prisma.optionSet.findUnique({

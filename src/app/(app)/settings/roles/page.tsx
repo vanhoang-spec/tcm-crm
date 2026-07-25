@@ -3,6 +3,9 @@ import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { updateStaffRole } from "./actions";
+import { requirePermission } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
+import { PermissionMatrix } from "./permission-matrix";
 
 const ROLE_GROUP_ORDER = [
   "ADMIN",
@@ -21,7 +24,10 @@ const ROLE_GROUP_ORDER = [
 const select =
   "h-9 min-w-[220px] rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
-export default async function SettingsRolesPage() {
+export default async function SettingsRolesPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  await requirePermission("settings.roles.manage");
+  const { tab } = await searchParams;
+  const isMatrix = tab === "matrix";
   const [t, roles, staff] = await Promise.all([
     getTranslations("settings.roles"),
     prisma.role.findMany({ where: { isActive: true }, orderBy: { sort: "asc" }, include: { parent: true } }),
@@ -48,8 +54,13 @@ export default async function SettingsRolesPage() {
   }
   const groupOrder = [...ROLE_GROUP_ORDER, "UNASSIGNED"];
 
+  const tabBase = "border-b-2 px-1 pb-2 text-sm font-medium transition-colors";
+  const tabOn = "border-brand-500 text-foreground";
+  const tabOff = "border-transparent text-muted-foreground hover:text-foreground";
+
   return (
-    <div className="max-w-4xl space-y-6">
+    // Tab Ma trận rộng ~20 cột nên không giới hạn max-w như tab gán role.
+    <div className={isMatrix ? "space-y-6" : "max-w-4xl space-y-6"}>
       <div>
         <Link href="/settings" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -59,7 +70,19 @@ export default async function SettingsRolesPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
-      {groupOrder.map((group) => {
+      {/* Tab đi qua URL (?tab=matrix) — server component, không cần state phía client. */}
+      <div className="flex gap-5 border-b border-border">
+        <Link href="/settings/roles" className={cn(tabBase, isMatrix ? tabOff : tabOn)}>
+          {t("tabAssign")}
+        </Link>
+        <Link href="/settings/roles?tab=matrix" className={cn(tabBase, isMatrix ? tabOn : tabOff)}>
+          {t("tabMatrix")}
+        </Link>
+      </div>
+
+      {isMatrix && <PermissionMatrix />}
+
+      {!isMatrix && groupOrder.map((group) => {
         const rows = staffByGroup.get(group);
         if (!rows || rows.length === 0) return null;
         return (
@@ -117,6 +140,7 @@ export default async function SettingsRolesPage() {
       })}
 
       {/* Danh mục role (phân cấp) — tham chiếu */}
+      {!isMatrix && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("catalogTitle")}</h2>
         <p className="mt-1 text-xs text-muted-foreground">{t("catalogHint")}</p>
@@ -141,6 +165,7 @@ export default async function SettingsRolesPage() {
           })}
         </div>
       </section>
+      )}
     </div>
   );
 }

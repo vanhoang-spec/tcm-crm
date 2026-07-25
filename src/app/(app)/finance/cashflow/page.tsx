@@ -3,8 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn, formatDate, formatDateTime, formatNumber } from "@/lib/utils";
 import { getCashflowForecast } from "@/lib/cashflow";
 import type { Locale } from "@/i18n/locales";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function CashflowPage() {
+  await requirePermission("finance.view");
   const [t, locale, forecast] = await Promise.all([
     getTranslations("finance.cashflow"),
     getLocale() as Promise<Locale>,

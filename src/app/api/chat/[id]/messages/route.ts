@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { hasPermission } from "@/lib/permissions";
 import { getMembership, isSuperAdmin, groupReactions, buildPollView } from "@/lib/chat";
 
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id: conversationId } = await ctx.params;
   const meId = await getCurrentStaffId();
   if (!meId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await hasPermission("chat.use"))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const membership = await getMembership(conversationId, meId);
   if (!membership && !(await isSuperAdmin(meId))) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { Lock, CheckCircle2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
@@ -263,7 +264,7 @@ function TaskCard({
               <input name="deliverableLinkUrl" type="url" placeholder={t("task.deliverableLink")} className={input + " min-w-[200px] flex-1"} required />
               <label className="text-xs text-muted-foreground">
                 {t("task.hours")}
-                <input name="hoursSpent" type="number" step="0.25" min="0.25" placeholder="0.25" className={input + " ml-1 w-20"} required />
+                <NumberField decimals={2} name="hoursSpent" placeholder="0.25" className={input + " ml-1 w-20"} required />
               </label>
               <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
                 {t("task.submitResult")}

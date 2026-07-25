@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { hasPermission } from "@/lib/permissions";
 import { getMembership, isSuperAdmin } from "@/lib/chat";
 import { readChatAttachment } from "@/lib/chat-storage";
 
@@ -16,6 +17,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const { id: messageId } = await ctx.params;
   const meId = await getCurrentStaffId();
   if (!meId) return new NextResponse(null, { status: 401 });
+  if (!(await hasPermission("chat.use"))) return new NextResponse(null, { status: 403 });
 
   const message = await prisma.message.findUnique({
     where: { id: messageId },

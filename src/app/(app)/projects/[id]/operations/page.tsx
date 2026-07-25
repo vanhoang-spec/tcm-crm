@@ -5,8 +5,10 @@ import { toNum } from "@/lib/utils";
 import { getDepartmentTasks, getDepartmentStaffOptions, toDepartmentTaskBoardData } from "@/lib/department-tasks";
 import { DepartmentTaskBoard } from "../department-task-board";
 import { OperationsPanel, type CtvBatchData } from "./operations-grid";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function ProjectOperationsPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("projects.view");
   const { id } = await params;
 
   const project = await prisma.project.findUnique({ where: { id }, include: { status: true } });

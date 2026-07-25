@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { isPlanningJobLocked, isValidHours } from "@/lib/planning";
 import { ORDER_DEPARTMENT_LABELS } from "@/lib/bidding";
+import { requirePermission } from "@/lib/permissions";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -45,6 +46,7 @@ function done(projectId: string) {
  * xong khác — tóm gọn flow khi cùng 1 người làm hết) — chọn người + timeline expect nhận lại kết quả.
  */
 export async function assignPlanningStage(jobId: string, stageId: string, formData: FormData) {
+  await requirePermission("projects.planning.manage");
   const job = await loadUnlockedJob(jobId);
   if (!job) return;
   const assigneeId = nullable(formData.get("assigneeId"));
@@ -76,6 +78,7 @@ export async function assignPlanningStage(jobId: string, stageId: string, formDa
 
 /** Nhân sự hoàn thành khâu RESEARCH/DESIGN_BRIEF — nhập link kết quả + số giờ (bội 0.25). */
 export async function completePlanningStage(jobId: string, stageId: string, formData: FormData) {
+  await requirePermission("projects.planning.manage");
   const job = await loadUnlockedJob(jobId);
   if (!job) return;
   const stage = job.stages.find((s) => s.id === stageId);
@@ -103,6 +106,7 @@ export async function completePlanningStage(jobId: string, stageId: string, form
 
 /** Nhân sự nộp 1 version Proposal (link + giờ) — chỉ khi chưa có version nào đang chờ review. */
 export async function submitProposalVersion(jobId: string, formData: FormData) {
+  await requirePermission("projects.proposal.submit");
   const job = await prisma.planningJob.findUnique({
     where: { id: jobId },
     include: { project: { include: { status: true } }, stages: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
@@ -150,6 +154,7 @@ export async function submitProposalVersion(jobId: string, formData: FormData) {
 
 /** Manager yêu cầu sửa lại 1 version — bắt buộc feedback, mở đường cho version kế tiếp. */
 export async function requestProposalRevision(versionId: string, formData: FormData) {
+  await requirePermission("projects.proposal.approve");
   const version = await prisma.planningProposalVersion.findUnique({
     where: { id: versionId },
     include: { job: { include: { project: { include: { status: true } }, stages: true } } },
@@ -184,6 +189,7 @@ export async function requestProposalRevision(versionId: string, formData: FormD
  * (mirror submitOrderResult — cùng field resultLinkUrl/resultSentAt/resultSentById + status DONE) + notify.
  */
 export async function confirmFinalProposal(versionId: string) {
+  await requirePermission("projects.proposal.approve");
   const version = await prisma.planningProposalVersion.findUnique({
     where: { id: versionId },
     include: { job: { include: { project: { include: { status: true } }, order: true, stages: true } } },

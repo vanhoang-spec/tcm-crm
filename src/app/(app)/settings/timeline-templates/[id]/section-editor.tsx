@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { NumberField } from "@/components/ui/number-field";
 import {
   updateTimelineSection,
   deleteTimelineSection,
@@ -107,11 +108,11 @@ export function TimelineSectionEditor({
             </label>
             <label className="text-[11px] text-muted-foreground">
               {t("itemDuration")}
-              <input name="defaultDurationDays" type="number" defaultValue={it.defaultDurationDays ?? ""} className={input + " w-16"} />
+              <NumberField name="defaultDurationDays" defaultValue={it.defaultDurationDays ?? ""} className={input + " w-16"} />
             </label>
             <label className="text-[11px] text-muted-foreground">
               {t("itemQty")}
-              <input name="defaultQty" type="number" step="any" defaultValue={it.defaultQty ?? ""} className={input + " w-16"} />
+              <NumberField decimals={2} name="defaultQty" defaultValue={it.defaultQty ?? ""} className={input + " w-16"} />
             </label>
             <label className="text-[11px] text-muted-foreground">
               {t("itemUnit")}
@@ -142,8 +143,8 @@ export function TimelineSectionEditor({
                 <option key={d.code} value={d.code}>{d.code}</option>
               ))}
             </select>
-            <input name="defaultDurationDays" type="number" placeholder={t("itemDuration")} className={input + " w-20"} />
-            <input name="defaultQty" type="number" step="any" placeholder={t("itemQty")} className={input + " w-16"} />
+            <NumberField name="defaultDurationDays" placeholder={t("itemDuration")} className={input + " w-20"} />
+            <NumberField decimals={2} name="defaultQty" placeholder={t("itemQty")} className={input + " w-16"} />
             <input name="defaultUnit" placeholder={t("itemUnit")} className={input + " w-16"} />
             <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
               {t("addItem")}

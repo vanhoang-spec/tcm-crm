@@ -8,8 +8,10 @@ import type { Locale } from "@/i18n/locales";
 import { TemplateInfoForm } from "./template-info-form";
 import { SectionEditor } from "./section-editor";
 import { SectionCreateForm } from "./section-create-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function CostsheetTemplateEditPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("settings.templates.manage");
   const { id } = await params;
 
   const template = await prisma.costsheetTemplate.findUnique({

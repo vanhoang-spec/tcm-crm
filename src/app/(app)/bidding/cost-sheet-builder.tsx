@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { Plus, Trash2, Wand2, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn, formatNumber, formatPercent } from "@/lib/utils";
+import { NumberField } from "@/components/ui/number-field";
 import {
   computeMarginPct,
   computeMakeupCe,
@@ -23,6 +24,13 @@ import type { Locale } from "@/i18n/locales";
 import { saveCostSheet, type ProjectFormState } from "./actions";
 
 export type LineData = {
+  /**
+   * Khoá BỀN của dòng — module ④ (Chi phí & Công nợ) khoá tạm ứng/thanh toán vào đây.
+   * Builder chỉ MANG THEO, không tự sinh: dòng mới để "" và server sinh khi lưu
+   * (`crypto.randomUUID` phía trình duyệt chỉ có trong secure context, mà production chạy HTTP).
+   * Gửi lại y nguyên ở mọi lần lưu — đổi giá trị này là mất dấu tiền đã ứng của dòng.
+   */
+  stableKey: string;
   itemName: string;
   specs: string;
   lineType: string;
@@ -48,6 +56,8 @@ export type SectionData = {
   nameEn: string;
   colorSlot: string;
   isProxy: boolean;
+  /** Phòng ban phụ trách (Department.code) — quyết định prefix mã của mọi dòng trong hạng mục. */
+  departmentCode: string;
   proxyFeeType: string | null;
   proxyFeeVal: number | null;
   lines: LineData[];
@@ -82,6 +92,7 @@ function blankLine(sectionKey: string): Line {
   return {
     key: nextKey("l"),
     sectionKey,
+    stableKey: "", // rỗng = dòng mới, server sinh khoá lúc lưu
     itemName: "",
     specs: "",
     lineType: "QTY_PRICE",
@@ -112,6 +123,7 @@ function blankSection(isProxy = false, parentKey: string | null = null): Section
     nameEn: "",
     colorSlot: "neutral",
     isProxy,
+    departmentCode: "",
     proxyFeeType: isProxy ? "PCT" : null,
     proxyFeeVal: isProxy ? 0 : null,
   };
@@ -175,6 +187,7 @@ export function CostSheetBuilder({
   matchingTemplates,
   allTemplates,
   vendors,
+  departments,
 }: {
   projectId: string;
   minMarginPct: number;
@@ -182,6 +195,8 @@ export function CostSheetBuilder({
   matchingTemplates: TemplateOption[];
   allTemplates: TemplateOption[];
   vendors: { id: string; label: string }[];
+  /** Phòng ban có prefix mã chi phí — nguồn cho ô chọn ở đầu mỗi hạng mục. */
+  departments: { code: string; name: string; costPrefix: string }[];
 }) {
   const t = useTranslations("bidding.costsheet");
   const tCommon = useTranslations("common");
@@ -332,7 +347,7 @@ export function CostSheetBuilder({
         {sections
           .filter((s) => !s.isProxy && !s.parentKey)
           .map((s) => (
-            <SectionCard
+            <SectionCard departments={departments}
               key={s.key}
               section={s}
               depth={1}
@@ -392,7 +407,7 @@ export function CostSheetBuilder({
         <PctField label={t("discountPct")} hint={t("discountPctHint")} value={discountPct} onChange={setDiscountPct} />
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">VAT (%)</label>
-          <input type="number" step="any" value={vatPct} onChange={(e) => setVatPct(Number(e.target.value) || 0)} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm tabular-nums" />
+          <NumberField decimals={2} value={vatPct} onChange={setVatPct} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
         </div>
       </div>
 
@@ -401,7 +416,7 @@ export function CostSheetBuilder({
         <Stat label={t("coTotal")} value={formatNumber(totals.coTotal, locale)} />
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("ceTotal")}</label>
-          <input name="ceTotal" type="number" step="any" value={ceTotal} onChange={(e) => setCeTotal(Number(e.target.value) || 0)} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm tabular-nums" />
+          <NumberField name="ceTotal" value={ceTotal} onChange={setCeTotal} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
         </div>
         <Stat label={t("chiHo")} value={formatNumber(totals.chiHo, locale)} />
         <div>
@@ -454,6 +469,7 @@ type SectionCardProps = {
   allSections: Section[];
   allLines: Line[];
   vendors: { id: string; label: string }[];
+  departments: { code: string; name: string; costPrefix: string }[];
   locale: Locale;
   t: (key: string, values?: Record<string, string | number>) => string;
   percentBase: number;
@@ -480,6 +496,7 @@ function SectionCard({
   allSections,
   allLines,
   vendors,
+  departments,
   locale,
   t,
   percentBase,
@@ -511,6 +528,22 @@ function SectionCard({
           placeholder={t("sectionNameVi")}
           className="h-8 flex-1 rounded border border-transparent bg-transparent px-1 text-sm font-medium hover:border-border-strong"
         />
+        {/* Phòng ban phụ trách — quyết định prefix mã của MỌI dòng trong hạng mục (ACC-001…).
+            Mã do server đánh lúc lưu; đây chỉ chọn phòng. */}
+        <select
+          value={section.departmentCode}
+          onChange={(e) => updateSection(section.key, { departmentCode: e.target.value })}
+          title={t("sectionDepartmentHint")}
+          aria-label={t("sectionDepartment")}
+          className="h-8 rounded border border-transparent bg-transparent px-1 text-xs text-muted-foreground hover:border-border-strong"
+        >
+          <option value="">{t("sectionDepartmentNone")}</option>
+          {departments.map((d) => (
+            <option key={d.code} value={d.code}>
+              {d.costPrefix} — {d.name}
+            </option>
+          ))}
+        </select>
         <Badge tone={SECTION_COLOR_TONE[section.colorSlot] ?? "neutral"}>{formatNumber(subtotal, locale)}</Badge>
         <button type="button" onClick={() => removeSection(section.key)} className="text-danger hover:text-danger/80">
           <Trash2 className="h-3.5 w-3.5" />
@@ -534,7 +567,7 @@ function SectionCard({
           {children.length > 0 && (
             <div className="space-y-2 border-t border-dashed border-border bg-surface/60 p-2">
               {children.map((c) => (
-                <SectionCard
+                <SectionCard departments={departments}
                   key={c.key}
                   section={c}
                   depth={depth + 1}
@@ -613,12 +646,11 @@ function ProxySectionCard({
         </label>
         <label className="flex items-center gap-1.5">
           {t("proxyFeeVal")}:
-          <input
-            type="number"
-            step="any"
+          <NumberField
+            decimals={2}
             value={section.proxyFeeVal ?? 0}
-            onChange={(e) => updateSection(section.key, { proxyFeeVal: Number(e.target.value) || 0 })}
-            className="h-7 w-24 rounded border border-border-strong bg-surface px-1.5 tabular-nums"
+            onChange={(v) => updateSection(section.key, { proxyFeeVal: v })}
+            className="h-7 w-24 rounded border border-border-strong bg-surface px-1.5"
           />
         </label>
         <span className="font-medium text-foreground">= {formatNumber(feeAmt, locale)}</span>
@@ -720,27 +752,27 @@ function LineRow({
       {l.lineType === "QTY_PRICE" ? (
         <>
           <td className="px-1 py-1">
-            <input type="number" step="any" value={l.quantity} onChange={(e) => updateLine(l.key, { quantity: Number(e.target.value) || 0 })} className={cn(cellInput, "w-16")} />
+            <NumberField decimals={2} value={l.quantity} onChange={(v) => updateLine(l.key, { quantity: v })} className={cn(cellInput, "w-16")} />
           </td>
           <td className="px-1 py-1">
             <input value={l.unit} onChange={(e) => updateLine(l.key, { unit: e.target.value })} className={cn(cellInput, "w-16")} />
           </td>
           <td className="px-1 py-1">
-            <input type="number" step="any" value={l.unitPrice} onChange={(e) => updateLine(l.key, { unitPrice: Number(e.target.value) || 0 })} className={cn(cellInput, "w-28 text-right")} />
+            <NumberField value={l.unitPrice} onChange={(v) => updateLine(l.key, { unitPrice: v })} className={cn(cellInput, "w-28 text-right")} />
           </td>
         </>
       ) : l.lineType === "FIXED" ? (
         <>
           <td className="px-1 py-1 text-center text-muted-foreground" colSpan={2}>—</td>
           <td className="px-1 py-1">
-            <input type="number" step="any" value={l.fixedAmount ?? 0} onChange={(e) => updateLine(l.key, { fixedAmount: Number(e.target.value) || 0 })} className={cn(cellInput, "w-28 text-right")} />
+            <NumberField value={l.fixedAmount ?? 0} onChange={(v) => updateLine(l.key, { fixedAmount: v })} className={cn(cellInput, "w-28 text-right")} />
           </td>
         </>
       ) : (
         <>
           <td className="px-1 py-1 text-center text-muted-foreground" colSpan={2}>—</td>
           <td className="px-1 py-1">
-            <input type="number" step="any" value={l.percentVal ?? 0} onChange={(e) => updateLine(l.key, { percentVal: Number(e.target.value) || 0 })} className={cn(cellInput, "w-20 text-right")} />
+            <NumberField decimals={2} value={l.percentVal ?? 0} onChange={(v) => updateLine(l.key, { percentVal: v })} className={cn(cellInput, "w-20 text-right")} />
           </td>
         </>
       )}
@@ -757,12 +789,10 @@ function LineRow({
               ))}
             </select>
             {l.taxType === "OTHER" && (
-              <input
-                type="number"
-                step="any"
+              <NumberField
                 placeholder={t("customTaxAmountPlaceholder")}
                 value={l.customTaxAmount ?? 0}
-                onChange={(e) => updateLine(l.key, { customTaxAmount: Number(e.target.value) || 0 })}
+                onChange={(v) => updateLine(l.key, { customTaxAmount: v })}
                 className={cn(cellInput, "min-w-[92px] text-right")}
               />
             )}
@@ -797,7 +827,7 @@ function PctField({ label, hint, value, onChange }: { label: string; hint: strin
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-foreground">{label}</label>
-      <input type="number" step="any" value={value} onChange={(e) => onChange(Number(e.target.value) || 0)} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm tabular-nums" />
+      <NumberField decimals={2} value={value} onChange={onChange} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
       <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
     </div>
   );

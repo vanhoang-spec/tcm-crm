@@ -10,6 +10,7 @@ import { computeMarginPct } from "@/lib/bidding";
 import { STATUS_TONE } from "@/lib/bidding-ui";
 import type { Locale } from "@/i18n/locales";
 import { confirmClientAcceptance, setExpectedAcceptanceSignDate, saveInvoiceInfo } from "../../actions";
+import { requirePermission } from "@/lib/permissions";
 
 function toDateInput(d: Date | null): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
@@ -19,6 +20,7 @@ const smallInput =
   "h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 export default async function ProjectLiquidationPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("projects.view");
   const { id } = await params;
 
   const [t, locale, project] = await Promise.all([

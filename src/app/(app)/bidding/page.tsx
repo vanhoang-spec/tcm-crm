@@ -7,12 +7,14 @@ import { LinkButton } from "@/components/ui/button";
 import { pickLabel, cn } from "@/lib/utils";
 import { COMPLEXITY_TONE, STATUS_TONE, TEAM_TONE } from "@/lib/bidding-ui";
 import type { Locale } from "@/i18n/locales";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function BiddingListPage({
   searchParams,
 }: {
   searchParams: Promise<{ team?: string; status?: string; q?: string }>;
 }) {
+  await requirePermission("bidding.view");
   const { team, status, q } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("bidding.list"), getLocale() as Promise<Locale>]);
 

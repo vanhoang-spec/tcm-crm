@@ -5,8 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { checkPasswordAge } from "@/lib/password";
 import { StaffCreateForm } from "./staff-create-form";
 import { StaffRow } from "./staff-row";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsStaffPage() {
+  await requirePermission("settings.staff.manage");
   const tAuth = await getTranslations("auth.admin");
   const [staff, departments, teams, t] = await Promise.all([
     prisma.staff.findMany({

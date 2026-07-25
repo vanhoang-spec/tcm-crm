@@ -4,8 +4,10 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { TeamRow } from "./team-row";
 import { TeamCreateForm } from "./team-create-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsTeamsPage() {
+  await requirePermission("settings.teams.manage");
   const [teams, t] = await Promise.all([
     prisma.team.findMany({ orderBy: { code: "asc" } }),
     getTranslations("settings.teams"),

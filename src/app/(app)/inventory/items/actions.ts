@@ -8,6 +8,7 @@ import { getCurrentStaffId } from "@/lib/current-staff";
 import { saveChatAttachment } from "@/lib/chat-storage";
 import { partItemCode, nextDocCode, creditBalance } from "@/lib/inventory";
 import { parseInventoryCsv, type CsvRowError } from "@/lib/inventory-csv";
+import { requirePermission } from "@/lib/permissions";
 
 export type ItemFormState = { error?: string; success?: boolean };
 export type ImportFormState = {
@@ -33,6 +34,7 @@ function revalidate() {
 }
 
 export async function createItem(_prev: ItemFormState, formData: FormData): Promise<ItemFormState> {
+  await requirePermission("inventory.item.manage");
   const t = await getTranslations("inventory.items");
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const name = String(formData.get("name") ?? "").trim();
@@ -73,6 +75,7 @@ export async function createItem(_prev: ItemFormState, formData: FormData): Prom
 }
 
 export async function updateItem(itemId: string, _prev: ItemFormState, formData: FormData): Promise<ItemFormState> {
+  await requirePermission("inventory.item.manage");
   const t = await getTranslations("inventory.items");
   const name = String(formData.get("name") ?? "").trim();
   const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
@@ -115,6 +118,7 @@ export async function updateItem(itemId: string, _prev: ItemFormState, formData:
 }
 
 export async function importItemsCsv(_prev: ImportFormState, formData: FormData): Promise<ImportFormState> {
+  await requirePermission("inventory.import_csv");
   const t = await getTranslations("inventory.items");
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0 || file.size > MAX_CSV_BYTES) return { error: t("errorInvalid") };

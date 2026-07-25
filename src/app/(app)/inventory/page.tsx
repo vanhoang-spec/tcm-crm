@@ -7,12 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { pickLabel, formatNumber } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { getStockOverview, getProjectHoldings, getInTransitQuantities } from "@/lib/inventory";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function InventoryStockPage({
   searchParams,
 }: {
   searchParams: Promise<{ wh?: string; cat?: string; q?: string }>;
 }) {
+  await requirePermission("inventory.view");
   const { wh, cat, q } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("inventory.stock"), getLocale() as Promise<Locale>]);
 

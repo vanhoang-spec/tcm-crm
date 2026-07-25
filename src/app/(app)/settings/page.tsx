@@ -32,8 +32,10 @@ import {
   Award,
 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsPage() {
+  await requirePermission("settings.view");
   const t = await getTranslations("settings.index");
 
   const sections = [

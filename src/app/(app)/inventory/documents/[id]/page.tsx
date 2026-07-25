@@ -7,10 +7,12 @@ import { formatDate, formatNumber } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { ReceiveForm } from "../receive-form";
 import { ExpectedReturnForm } from "../expected-return-form";
+import { requirePermission } from "@/lib/permissions";
 
 const STATUS_TONE = { PENDING: "warning", COMPLETED: "success", CANCELED: "danger" } as const;
 
 export default async function StockDocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("inventory.view");
   const { id } = await params;
   const [t, locale] = await Promise.all([getTranslations("inventory.documents"), getLocale() as Promise<Locale>]);
 

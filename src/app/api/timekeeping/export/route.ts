@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { hasPermission } from "@/lib/permissions";
 import { getMonthlyTimesheet, monthRange, dateKey, addDays } from "@/lib/timekeeping";
 
 export const runtime = "nodejs";
@@ -19,6 +20,7 @@ const LEAVE_CELL: Record<string, string> = { ANNUAL: "P", SICK: "Ô", UNPAID: "K
 export async function GET(req: NextRequest) {
   const staffId = await getCurrentStaffId();
   if (!staffId) return new NextResponse("Unauthorized", { status: 401 });
+  if (!(await hasPermission("staff.view"))) return new NextResponse("Forbidden", { status: 403 });
 
   const ym = req.nextUrl.searchParams.get("month") ?? "";
   const range = monthRange(ym);

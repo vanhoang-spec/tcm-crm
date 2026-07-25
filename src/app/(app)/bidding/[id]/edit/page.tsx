@@ -8,8 +8,10 @@ import type { Locale } from "@/i18n/locales";
 import { ProjectForm } from "../../project-form";
 import { updateProject } from "../../actions";
 import { PENDING_TEAM_ASSIGNMENT } from "@/lib/validators/project";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("bidding.view");
   const { id } = await params;
   const project = await prisma.project.findUnique({ where: { id } });
   if (!project) notFound();

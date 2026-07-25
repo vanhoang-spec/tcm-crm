@@ -7,6 +7,7 @@ import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
 import { saveKbFile, deleteKbFile, KB_MIME_TYPES, MAX_KB_FILE_BYTES } from "@/lib/kb-storage";
 import { kbDocumentSchema } from "@/lib/validators/kb";
+import { requirePermission } from "@/lib/permissions";
 
 export type KbActionState = { error?: string; success?: boolean };
 
@@ -22,6 +23,7 @@ async function audit(entityType: string, entityId: string, action: string, paylo
  * File không đi qua zod cùng payload JSON như các form khác trong app).
  */
 export async function createKbDocument(_prevState: KbActionState, formData: FormData): Promise<KbActionState> {
+  await requirePermission("kb.manage");
   const t = await getTranslations("kb.form");
 
   const parsed = kbDocumentSchema.safeParse({
@@ -81,6 +83,7 @@ export async function createKbDocument(_prevState: KbActionState, formData: Form
 }
 
 export async function deleteKbDocument(docId: string): Promise<KbActionState> {
+  await requirePermission("kb.manage");
   const doc = await prisma.kbDocument.findUnique({ where: { id: docId } });
   if (!doc) return { error: "NOT_FOUND" };
 

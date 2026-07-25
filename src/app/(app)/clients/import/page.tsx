@@ -2,8 +2,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { ImportClientForm } from "./import-client-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function ClientsImportPage() {
+  await requirePermission("clients.view");
   const t = await getTranslations("clients.import");
 
   return (

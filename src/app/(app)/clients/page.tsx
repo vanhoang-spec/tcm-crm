@@ -9,6 +9,7 @@ import type { Locale } from "@/i18n/locales";
 import { isClientProfileComplete } from "@/lib/client-profile";
 import { TeamFilterTabs } from "./team-filter-tabs";
 import { ConcentrationBanner } from "./concentration-banner";
+import { requirePermission } from "@/lib/permissions";
 
 const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
   A1: "brand",
@@ -27,6 +28,7 @@ export default async function ClientsPage({
 }: {
   searchParams: Promise<{ team?: string; status?: string; q?: string }>;
 }) {
+  await requirePermission("clients.view");
   const { team, status, q } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("clients.list"), getLocale() as Promise<Locale>]);
 

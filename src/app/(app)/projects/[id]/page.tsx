@@ -5,8 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { RolesForm } from "./roles-form";
 import { TeamManager, type MemberData } from "./team-manager";
 import { GuestInviteManager, type InviteData } from "./guest-invite-manager";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("projects.view");
   const { id } = await params;
 
   const project = await prisma.project.findUnique({

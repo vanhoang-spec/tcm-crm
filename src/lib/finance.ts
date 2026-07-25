@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { getNumberSetting } from "./settings";
+import { computeLineNetAmount } from "./bidding";
 
 // ─────────────────────────────────────────────────────────
 // Module ④ Chi phí & Công nợ — helpers thuần + đồng bộ CO
@@ -10,9 +11,19 @@ export const ADVANCE_TYPES = ["VENDOR", "STAFF"] as const;
 /** Tạm ứng "đang giữ" (chưa hoàn ứng, chưa hủy) — dùng cho hạn mức NV + tổng đã ứng của dòng. */
 export const OUTSTANDING_ADVANCE_STATUSES = ["REQUESTED", "DISBURSED"] as const;
 
-/** lineKey ổn định khớp costsheet-diff (CostLine.id bị tạo lại mỗi lần lưu CO/CE). */
-export function financeLineKey(sectionCode: string, itemName: string): string {
-  return `${sectionCode}‖${itemName}`;
+/**
+ * Khoá liên kết dòng CO/CE ↔ module ④ = `CostLine.stableKey`.
+ *
+ * TRƯỚC ĐÂY là `sectionCode‖itemName`. Phải đổi vì builder gán mã cứng "SECTION" cho mọi hạng
+ * mục và không cho sửa, nên hai dòng trùng tên ở hai hạng mục khác nhau (vd "Nhân công" ở cả
+ * Mặt bằng lẫn Vận hành) bị gộp thành MỘT dòng chi phí với số tiền cộng dồn — tạm ứng khi đó
+ * kiểm hạn mức trên số gộp và bảng chi phí thiếu hẳn một dòng.
+ *
+ * `stableKey` do builder sinh một lần và đi theo payload qua mọi lần lưu, nên mã hiển thị
+ * (`itemCode`) được tự do đánh lại số khi thêm/xoá dòng mà không làm đứt liên kết tiền.
+ */
+export function financeLineKey(stableKey: string): string {
+  return stableKey;
 }
 
 /**
@@ -39,29 +50,51 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
 
   const revNo = sheet.revisions[0]?.revNo ?? 0;
 
-  // Gom các dòng CO nội bộ (non-proxy) theo lineKey. Trùng key → cộng dồn amount (an toàn với itemName trùng).
-  const liveLines = new Map<string, { sectionCode: string; sectionName: string; itemName: string; specs: string | null; amount: bigint; vendorId: string | null; sort: number }>();
+  // Mỗi dòng CO nội bộ (non-proxy) = MỘT dòng chi phí, khoá theo stableKey nên không còn gộp
+  // nhầm hai dòng trùng tên ở hai hạng mục khác nhau. Dòng chưa có stableKey (dữ liệu trước khi
+  // có trường này) bị BỎ QUA thay vì gộp bừa — đã backfill toàn bộ nên trên thực tế không xảy ra.
+  const liveLines = new Map<string, { itemCode: string | null; sectionCode: string; sectionName: string; itemName: string; specs: string | null; amount: bigint; netAmount: bigint; vendorId: string | null; sort: number }>();
   let sortCounter = 0;
+  let skippedNoKey = 0;
   for (const s of sheet.sections) {
     if (s.isProxy) continue;
     for (const l of s.lines) {
-      const key = financeLineKey(s.code, l.itemName);
-      const existing = liveLines.get(key);
-      if (existing) {
-        existing.amount += l.amount;
-      } else {
-        liveLines.set(key, {
-          sectionCode: s.code,
-          sectionName: s.nameVi,
-          itemName: l.itemName,
-          specs: l.specs,
-          amount: l.amount,
-          vendorId: l.vendorId,
-          sort: sortCounter++,
-        });
+      if (!l.stableKey) {
+        skippedNoKey++;
+        continue;
       }
+      liveLines.set(financeLineKey(l.stableKey), {
+        itemCode: l.itemCode,
+        sectionCode: s.code,
+        sectionName: s.nameVi,
+        itemName: l.itemName,
+        specs: l.specs,
+        amount: l.amount,
+        // PERCENT_OF_TOTAL là dòng suy ra, không gross-up → net chính bằng amount đã lưu; khỏi
+        // phải tính lại directCo ở đây (và khỏi rủi ro lệch làm tròn so với lúc lưu CO/CE).
+        netAmount:
+          l.lineType === "PERCENT_OF_TOTAL"
+            ? l.amount
+            : BigInt(
+                computeLineNetAmount(
+                  {
+                    lineType: l.lineType,
+                    quantity: l.quantity,
+                    unitPrice: Number(l.unitPrice),
+                    fixedAmount: l.fixedAmount == null ? null : Number(l.fixedAmount),
+                    percentVal: l.percentVal,
+                    taxType: l.taxType,
+                    customTaxAmount: l.customTaxAmount == null ? null : Number(l.customTaxAmount),
+                  },
+                  0,
+                ),
+              ),
+        vendorId: l.vendorId,
+        sort: sortCounter++,
+      });
     }
   }
+  if (skippedNoKey > 0) console.warn(`[finance] ${skippedNoKey} dòng CO/CE chưa có stableKey — bỏ qua khi đồng bộ.`);
 
   const existingRows = await prisma.financeCostLine.findMany({ where: { projectId } });
   const existingByKey = new Map(existingRows.map((r) => [r.lineKey, r]));
@@ -74,11 +107,13 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
       await prisma.financeCostLine.update({
         where: { id: row.id },
         data: {
+          itemCode: live.itemCode,
           sectionCode: live.sectionCode,
           sectionName: live.sectionName,
           itemName: live.itemName,
           specs: live.specs,
           amount: live.amount,
+          netAmount: live.netAmount,
           vendorId: live.vendorId,
           sort: live.sort,
           sourceRevNo: revNo,
@@ -91,11 +126,13 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
         data: {
           projectId,
           lineKey: key,
+          itemCode: live.itemCode,
           sectionCode: live.sectionCode,
           sectionName: live.sectionName,
           itemName: live.itemName,
           specs: live.specs,
           amount: live.amount,
+          netAmount: live.netAmount,
           vendorId: live.vendorId,
           sort: live.sort,
           sourceRevNo: revNo,
@@ -117,13 +154,40 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
   return { added, updated, staled, revNo };
 }
 
-/** Tổng đã tạm ứng của 1 dòng (các bản ghi chưa hủy) — dùng để tính "còn lại" và chặn vượt giá trị dòng. */
-export async function lineAdvancedTotal(financeCostLineId: string): Promise<number> {
-  const agg = await prisma.advance.aggregate({
-    where: { financeCostLineId, status: { not: "CANCELED" } },
-    _sum: { amount: true },
-  });
-  return Number(agg._sum.amount ?? BigInt(0));
+export type LineDisbursement = {
+  /** Tạm ứng chưa huỷ — GỘP cả 2 loại: ứng cho NV giữ tiền (STAFF) và ứng chuyển thẳng NCC (VENDOR). */
+  advanced: number;
+  /** Thanh toán NCC đã lập cho dòng này (mọi trạng thái trừ huỷ). */
+  paid: number;
+  /** Tổng đã chi ra = advanced + paid. */
+  disbursed: number;
+  /** Trần = số THỰC TRẢ của dòng (đã bóc gross-up thuế). */
+  netAmount: number;
+  /** Còn được chi thêm. Âm = đã lỡ chi vượt (dữ liệu cũ trước khi có trần này). */
+  remaining: number;
+};
+
+/**
+ * Tổng đã chi ra của 1 dòng và phần còn lại được chi.
+ *
+ * TRẦN LÀ `netAmount`, KHÔNG phải `amount`: `amount` đã gross-up thuế TNCN (÷0,9) / TNDN (÷0,8),
+ * mà phần gross-up là thuế công ty nộp hộ chứ không trao cho NCC hay nhân viên. Lấy `amount`
+ * làm trần cho chi vượt đúng bằng phần thuế — đo trên T013 là 70.250.002đ.
+ *
+ * Đếm CẢ tạm ứng LẪN thanh toán NCC: cùng một dòng chi phí có thể vừa ứng trước vừa thanh toán,
+ * tính riêng từng loại sẽ cho chi tổng cộng gấp đôi giá trị dòng.
+ */
+export async function lineDisbursement(financeCostLineId: string): Promise<LineDisbursement> {
+  const [line, advAgg, payAgg] = await Promise.all([
+    prisma.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true } }),
+    prisma.advance.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
+    prisma.vendorPayment.aggregate({ where: { financeCostLineId }, _sum: { amount: true } }),
+  ]);
+  const advanced = Number(advAgg._sum.amount ?? BigInt(0));
+  const paid = Number(payAgg._sum.amount ?? BigInt(0));
+  const netAmount = Number(line?.netAmount ?? BigInt(0));
+  const disbursed = advanced + paid;
+  return { advanced, paid, disbursed, netAmount, remaining: netAmount - disbursed };
 }
 
 export type StaffAdvanceQuota = {

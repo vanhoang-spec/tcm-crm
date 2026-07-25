@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveBiddingSettings, type BiddingSettingsState } from "./actions";
 
@@ -26,20 +27,18 @@ export function BiddingSettingsForm({
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("minMargin")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("minMarginHint")}</p>
-          <input name="minMargin" type="number" step="any" min={0} defaultValue={minMargin} className={input} />
+          <NumberField decimals={2} name="minMargin" defaultValue={minMargin} className={input} />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("threshold")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("thresholdHint")}</p>
-          <input name="threshold" type="number" step={1000} min={0} defaultValue={threshold} className={input} />
+          <NumberField name="threshold" defaultValue={threshold} className={input} />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("processingReminder")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("processingReminderHint")}</p>
-          <input
+          <NumberField
             name="processingReminderDays"
-            type="number"
-            min={1}
             defaultValue={processingReminderDays}
             className={input}
           />
@@ -47,10 +46,8 @@ export function BiddingSettingsForm({
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("liquidationReminder")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("liquidationReminderHint")}</p>
-          <input
+          <NumberField
             name="liquidationReminderDays"
-            type="number"
-            min={1}
             defaultValue={liquidationReminderDays}
             className={input}
           />
@@ -58,7 +55,7 @@ export function BiddingSettingsForm({
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground">{t("orderResponseDays")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("orderResponseDaysHint")}</p>
-          <input name="orderResponseDays" type="number" min={1} defaultValue={orderResponseDays} className={input} />
+          <NumberField name="orderResponseDays" defaultValue={orderResponseDays} className={input} />
         </div>
       </div>
       <div className="flex items-center gap-3 border-t border-border pt-4">

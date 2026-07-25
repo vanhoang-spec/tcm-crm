@@ -11,6 +11,7 @@ import {
   type ClientImportWarning,
   type ImportProjectStatus,
 } from "@/lib/clients-import";
+import { requirePermission } from "@/lib/permissions";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB — file thật ~30KB, dư sức chứa vài năm cập nhật thêm
 const IMPORT_FISCAL_YEAR = 2026; // toàn bộ dữ liệu nguồn là "tính đến tháng 7/2026" — không có ngày ký hợp đồng thật để suy fiscalYear khác
@@ -51,6 +52,7 @@ async function readUploadedFile(formData: FormData): Promise<{ buffer: Buffer; e
  * và validate, KHÔNG ghi DB — để người duyệt xem đúng dữ liệu trước khi bấm xác nhận thật.
  */
 export async function importClientsFromExcel(_prev: ImportState, formData: FormData): Promise<ImportState> {
+  await requirePermission("clients.import");
   const { buffer, error } = await readUploadedFile(formData);
   if (error) return { error };
 

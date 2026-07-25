@@ -7,12 +7,14 @@ import type { Locale } from "@/i18n/locales";
 import { getCurrentStaff } from "@/lib/current-staff";
 import { addDays, dateKey, getMyWeek, getTimekeepingSettings, getWeekSchedule, parseDateKey, weekDays, weekStartOf } from "@/lib/timekeeping";
 import { ScheduleGrid, type GridAssignment, type GridDay } from "./schedule-grid";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function StaffSchedulePage({
   searchParams,
 }: {
   searchParams: Promise<{ dept?: string; week?: string }>;
 }) {
+  await requirePermission("staff.view");
   const { dept, week: weekParam } = await searchParams;
   const [t, locale, me, settings] = await Promise.all([
     getTranslations("staff.schedule"),

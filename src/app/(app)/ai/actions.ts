@@ -1,6 +1,7 @@
 "use server";
 
 import { getTranslations } from "next-intl/server";
+import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { getAiVisibility } from "@/lib/permissions";
 import { AiError, aiChat, isAiConfigured } from "@/lib/ai/deepseek";
@@ -16,6 +17,7 @@ import {
 import { buildBoardReportInput, buildBrainstormInput, buildCanvaBriefInput, buildContentWriterInput, buildCostSheetSnapshot } from "@/lib/ai/context";
 import { saveProjectFilesFromFormData } from "@/lib/ai/attachments";
 import { buildIndustryQuery, isWebSearchConfigured, searchWeb } from "@/lib/ai/websearch";
+import { requirePermission } from "@/lib/permissions";
 
 /**
  * Server action cho các tính năng AI. Mọi action đều:
@@ -61,6 +63,7 @@ async function guard(): Promise<string | null> {
 // ───────────────────────── 1. Phân tích CO/CE ─────────────────────────
 
 export async function analyzeCostSheet(projectId: string, _prev: AiState, _formData: FormData): Promise<AiState> {
+  await requirePermission("ai.costsheet");
   const blocked = await guard();
   if (blocked) return { error: blocked };
 
@@ -83,6 +86,7 @@ export async function analyzeCostSheet(projectId: string, _prev: AiState, _formD
 // ───────────────────────── 2. Brainstorm ý tưởng ─────────────────────────
 
 export async function brainstormIdeas(_prev: AiState, formData: FormData): Promise<AiState> {
+  await requirePermission("ai.brainstorm");
   const blocked = await guard();
   if (blocked) return { error: blocked };
 
@@ -112,6 +116,7 @@ export async function brainstormIdeas(_prev: AiState, formData: FormData): Promi
 // ───────────────────────── 2b. Viết bài / Content ─────────────────────────
 
 export async function writeContent(_prev: AiState, formData: FormData): Promise<AiState> {
+  await requirePermission("ai.content");
   const blocked = await guard();
   if (blocked) return { error: blocked };
 
@@ -140,6 +145,7 @@ export async function writeContent(_prev: AiState, formData: FormData): Promise<
 // ───────────────────────── 3. Brief thiết kế cho Canva ─────────────────────────
 
 export async function generateCanvaBrief(_prev: AiState, formData: FormData): Promise<AiState> {
+  await requirePermission("ai.canva");
   const blocked = await guard();
   if (blocked) return { error: blocked };
 
@@ -170,6 +176,7 @@ export async function generateCanvaBrief(_prev: AiState, formData: FormData): Pr
 // ───────────────────────── 4. Báo cáo BGĐ ─────────────────────────
 
 export async function generateBoardReport(_prev: AiState, _formData: FormData): Promise<AiState> {
+  await requirePermission("ai.board_report");
   const blocked = await guard();
   if (blocked) return { error: blocked };
 
@@ -190,6 +197,7 @@ export async function generateBoardReport(_prev: AiState, _formData: FormData): 
 // ───────────────────────── 5. Xu hướng ngành ─────────────────────────
 
 export async function askIndustryTrend(_prev: AiState, formData: FormData): Promise<AiState> {
+  await requirePermission("ai.trend");
   const blocked = await guard();
   if (blocked) return { error: blocked };
 
@@ -218,4 +226,34 @@ export async function askIndustryTrend(_prev: AiState, formData: FormData): Prom
   } catch (e) {
     return { error: await toMessage(e) };
   }
+}
+
+// ─────────────────────────────────────────────────────────
+// Panel AI nổi — nạp đúng thứ trang /ai đang nạp phía server.
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Quyền + danh sách dự án cho panel AI.
+ *
+ * KHÔNG gác bằng một mã quyền đơn lẻ: panel gom 6 công cụ, mỗi công cụ một quyền riêng và
+ * chính các action chạy AI đã tự requirePermission("ai.*"). Ở đây chỉ trả về quyền CỦA CHÍNH
+ * người gọi; ai không có công cụ nào thì không nhận được danh sách dự án.
+ */
+export async function loadAiPanel(): Promise<{ vis: Awaited<ReturnType<typeof getAiVisibility>>; options: { id: string; label: string }[]; configured: boolean; webSearchOn: boolean }> {
+  const vis = await getAiVisibility();
+  const anyTool = vis.canBrainstorm || vis.canContent || vis.canCanva || vis.canCostSheet || vis.canBoardReport || vis.canTrend;
+  if (!anyTool) return { vis, options: [], configured: isAiConfigured(), webSearchOn: false };
+
+  const projects = await prisma.project.findMany({
+    where: { status: { code: { notIn: ["FAILED", "CANCELED"] } } },
+    select: { id: true, code: true, name: true },
+    orderBy: { code: "desc" },
+    take: 200,
+  });
+  return {
+    vis,
+    options: projects.map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` })),
+    configured: isAiConfigured(),
+    webSearchOn: isWebSearchConfigured(),
+  };
 }

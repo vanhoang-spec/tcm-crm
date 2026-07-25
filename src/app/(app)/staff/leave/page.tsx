@@ -3,8 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDecimal } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { getLeaveBalances, getTimekeepingSettings } from "@/lib/timekeeping";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function LeavePage() {
+  await requirePermission("staff.view");
   const [t, locale, settings] = await Promise.all([
     getTranslations("staff.leave"),
     getLocale() as Promise<Locale>,

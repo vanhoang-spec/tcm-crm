@@ -10,6 +10,7 @@ import { syncTimelineOrders, dispatchOrder } from "@/lib/project-orders";
 import { spawnTasksForCreativeOrder } from "@/lib/creative";
 import { spawnTasksForDepartmentOrder, isDepartmentTaskDepartment } from "@/lib/department-tasks";
 import { cancelTasksForOrderItems, syncTasksWithOrderItem } from "@/lib/projects";
+import { requirePermission } from "@/lib/permissions";
 
 /** Route tab workspace dự án tương ứng mỗi bộ phận có DepartmentTask board. */
 const DEPARTMENT_TAB_SEG: Record<string, string> = {
@@ -54,6 +55,7 @@ async function audit(entityType: string, entityId: string, action: string, paylo
 
 // ── Phân vai: Owner + Leader ──
 export async function assignProjectRoles(projectId: string, formData: FormData) {
+  await requirePermission("projects.team.manage");
   const ownerId = nullable(formData.get("ownerId"));
   const leaderId = nullable(formData.get("leaderId"));
   await prisma.project.update({ where: { id: projectId }, data: { ownerId, leaderId } });
@@ -63,6 +65,7 @@ export async function assignProjectRoles(projectId: string, formData: FormData) 
 
 // ── Project Team ──
 export async function addProjectMember(projectId: string, formData: FormData) {
+  await requirePermission("projects.team.manage");
   const staffId = str(formData.get("staffId"));
   const roleInProject = str(formData.get("roleInProject")) || "CORE";
   if (!staffId) return;
@@ -75,12 +78,14 @@ export async function addProjectMember(projectId: string, formData: FormData) {
 }
 
 export async function removeProjectMember(projectId: string, memberId: string) {
+  await requirePermission("projects.team.manage");
   await prisma.projectMember.delete({ where: { id: memberId } });
   revalidatePath(`/projects/${projectId}`);
 }
 
 // ── Master Timeline (Internal) ──
 export async function createTimelineItem(projectId: string, formData: FormData) {
+  await requirePermission("projects.timeline.edit");
   const title = str(formData.get("title"));
   if (!title) return;
   const parentId = nullable(formData.get("parentId"));
@@ -107,6 +112,7 @@ export async function createTimelineItem(projectId: string, formData: FormData) 
 }
 
 export async function updateTimelineItem(projectId: string, itemId: string, formData: FormData) {
+  await requirePermission("projects.timeline.edit");
   const title = str(formData.get("title"));
   if (!title) return;
   const isShared = formData.get("isShared") === "on";
@@ -138,6 +144,7 @@ export async function updateTimelineItem(projectId: string, itemId: string, form
 }
 
 export async function deleteTimelineItem(projectId: string, itemId: string) {
+  await requirePermission("projects.timeline.edit");
   // Dọn TRƯỚC khi xóa: FK ProjectOrderItem.sourceTimelineItemId là SetNull — nếu xóa timeline item
   // trước, dòng order mất liên kết nguồn nên syncTimelineOrders không nhận ra là stale nữa
   // (bị coi như dòng thêm tay, giữ lại vĩnh viễn) và task đã sinh thành zombie.
@@ -169,6 +176,7 @@ export async function deleteTimelineItem(projectId: string, itemId: string) {
 
 /** Đổi thứ tự trong cùng 1 cấp (cùng parentId) — swap sort với item liền kề. */
 export async function moveTimelineItem(projectId: string, itemId: string, direction: "up" | "down") {
+  await requirePermission("projects.timeline.edit");
   const item = await prisma.timelineItem.findUnique({ where: { id: itemId } });
   if (!item) return;
   const siblings = await prisma.timelineItem.findMany({
@@ -188,6 +196,7 @@ export async function moveTimelineItem(projectId: string, itemId: string, direct
 
 /** Owner duyệt & lộ 1 item ra khách (chỉ khi đã isShared). */
 export async function publishTimelineItem(projectId: string, itemId: string) {
+  await requirePermission("projects.timeline.publish");
   const item = await prisma.timelineItem.findUnique({ where: { id: itemId } });
   if (!item || !item.isShared) return;
   await prisma.timelineItem.update({ where: { id: itemId }, data: { externalPublished: true } });
@@ -196,6 +205,7 @@ export async function publishTimelineItem(projectId: string, itemId: string) {
 }
 
 export async function unpublishTimelineItem(projectId: string, itemId: string) {
+  await requirePermission("projects.timeline.publish");
   await prisma.timelineItem.update({ where: { id: itemId }, data: { externalPublished: false } });
   await audit("timeline_item", itemId, "UNPUBLISH", { externalPublished: false });
   revalidateProject(projectId);
@@ -203,6 +213,7 @@ export async function unpublishTimelineItem(projectId: string, itemId: string) {
 
 // ── Áp dụng mẫu Master Timeline: vật hóa template (Section→Item→Sub-task) thành TimelineItem ──
 export async function applyTimelineTemplate(projectId: string, formData: FormData) {
+  await requirePermission("projects.timeline.edit");
   const templateId = str(formData.get("templateId"));
   if (!templateId) return;
   const template = await prisma.timelineTemplate.findUnique({
@@ -266,6 +277,7 @@ export async function applyTimelineTemplate(projectId: string, formData: FormDat
 
 // ── Ma trận nhân sự (KUN) ──
 export async function addStaffingCell(projectId: string, formData: FormData) {
+  await requirePermission("projects.staffing.edit");
   const roleLabel = str(formData.get("roleLabel"));
   const zoneLabel = str(formData.get("zoneLabel"));
   const headcount = numOrNull(formData.get("headcount")) ?? 0;
@@ -278,23 +290,27 @@ export async function addStaffingCell(projectId: string, formData: FormData) {
 }
 
 export async function updateStaffingCell(projectId: string, cellId: string, formData: FormData) {
+  await requirePermission("projects.staffing.edit");
   const headcount = numOrNull(formData.get("headcount")) ?? 0;
   await prisma.projectStaffing.update({ where: { id: cellId }, data: { headcount: Math.round(headcount) } });
   revalidateProject(projectId);
 }
 
 export async function removeStaffingCell(projectId: string, cellId: string) {
+  await requirePermission("projects.staffing.edit");
   await prisma.projectStaffing.delete({ where: { id: cellId } });
   revalidateProject(projectId);
 }
 
 // ── ORDER tự sinh từ Timeline: sync / dispatch / sửa dòng ──
 export async function syncProjectOrders(projectId: string) {
+  await requirePermission("projects.order.manage");
   await syncTimelineOrders(projectId);
   revalidateProject(projectId);
 }
 
 export async function dispatchProjectOrder(projectId: string, orderId: string) {
+  await requirePermission("projects.order.dispatch");
   const staffId = await getCurrentStaffId();
   const { department } = await dispatchOrder(orderId, staffId);
   revalidateProject(projectId);
@@ -304,6 +320,7 @@ export async function dispatchProjectOrder(projectId: string, orderId: string) {
 }
 
 export async function updateProjectOrderItem(projectId: string, itemId: string, formData: FormData) {
+  await requirePermission("projects.order.manage");
   const updated = await prisma.projectOrderItem.update({
     where: { id: itemId },
     data: {
@@ -328,6 +345,7 @@ export async function updateProjectOrderItem(projectId: string, itemId: string, 
 }
 
 export async function addProjectOrderItem(projectId: string, orderId: string, formData: FormData) {
+  await requirePermission("projects.order.manage");
   const label = str(formData.get("label"));
   if (!label) return;
   const count = await prisma.projectOrderItem.count({ where: { orderId } });
@@ -356,6 +374,7 @@ export async function addProjectOrderItem(projectId: string, orderId: string, fo
 }
 
 export async function removeProjectOrderItem(projectId: string, itemId: string) {
+  await requirePermission("projects.order.manage");
   // Dọn task đã sinh TRƯỚC khi xóa dòng (FK SetNull — xóa trước sẽ để lại task zombie active).
   const item = await prisma.projectOrderItem.findUnique({
     where: { id: itemId },
@@ -377,6 +396,7 @@ export async function createGuestInvite(
   _prev: GuestInviteState,
   formData: FormData,
 ): Promise<GuestInviteState> {
+  await requirePermission("projects.guest.manage");
   const name = str(formData.get("name"));
   const email = str(formData.get("email"));
   if (!name || !email) return { error: "required" };
@@ -394,6 +414,7 @@ export async function createGuestInvite(
 }
 
 export async function revokeGuestInvite(projectId: string, inviteId: string) {
+  await requirePermission("projects.guest.manage");
   await prisma.guestInvite.update({ where: { id: inviteId }, data: { revokedAt: new Date() } });
   await audit("guest_invite", inviteId, "REVOKE", { revokedAt: new Date().toISOString() });
   revalidatePath(`/projects/${projectId}`);
@@ -408,6 +429,7 @@ export async function revokeGuestInvite(projectId: string, inviteId: string) {
  * cho tới khi bấm nút này lại — cho phép "sửa lần cuối trước khi khách ký" mà không ảnh hưởng ngay.
  */
 export async function sendCostSheetToLiquidation(projectId: string) {
+  await requirePermission("projects.liquidation.send");
   const sheet = await prisma.costSheet.findFirst({
     where: { projectId, version: "CTRACT" },
     orderBy: { createdAt: "desc" },
@@ -430,6 +452,7 @@ export async function sendCostSheetToLiquidation(projectId: string) {
 
 /** Project Leader/Owner tick "Khách hàng xác nhận nghiệm thu" sau khi khách đã ký. */
 export async function confirmClientAcceptance(projectId: string) {
+  await requirePermission("projects.acceptance.confirm");
   const staffId = await getCurrentStaffId();
   await prisma.contract.upsert({
     where: { projectId },
@@ -442,6 +465,7 @@ export async function confirmClientAcceptance(projectId: string) {
 
 /** Đặt/sửa mốc "Ngày dự kiến khách hàng ký nghiệm thu" — cũng là mốc trigger reminder hệ thống. */
 export async function setExpectedAcceptanceSignDate(projectId: string, formData: FormData) {
+  await requirePermission("projects.acceptance.confirm");
   const date = dateOrNull(formData.get("expectedAcceptanceSignDate"));
   await prisma.contract.upsert({
     where: { projectId },
@@ -455,6 +479,7 @@ export async function setExpectedAcceptanceSignDate(projectId: string, formData:
 
 /** Kế toán điền Số hóa đơn / Ngày hóa đơn sau khi xuất hóa đơn cho dự án. */
 export async function saveInvoiceInfo(projectId: string, formData: FormData) {
+  await requirePermission("projects.invoice.edit");
   const invoiceNo = nullable(formData.get("invoiceNo"));
   const invoiceDate = dateOrNull(formData.get("invoiceDate"));
   const staffId = await getCurrentStaffId();

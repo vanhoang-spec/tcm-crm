@@ -6,8 +6,10 @@ import { pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { ProjectForm } from "../project-form";
 import { createProject } from "../actions";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function NewProjectPage() {
+  await requirePermission("bidding.view");
   const [clients, teams, staff, typeSet, complexitySet, channelSet, t, locale] = await Promise.all([
     prisma.client.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.team.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),

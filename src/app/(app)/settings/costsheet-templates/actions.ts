@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type TemplateFormState = { error?: string; fieldErrors?: Record<string, string> };
 
@@ -22,6 +23,7 @@ async function audit(entityType: string, entityId: string, action: string, reaso
 // ─────────────────────────────────────────────────────────
 
 export async function createTemplate(_prev: TemplateFormState, formData: FormData): Promise<TemplateFormState> {
+  await requirePermission("settings.templates.manage");
   const t = await getTranslations("settings.costsheetTemplates");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { fieldErrors: { name: t("errorNameRequired") } };
@@ -40,6 +42,7 @@ export async function createTemplate(_prev: TemplateFormState, formData: FormDat
 }
 
 export async function updateTemplate(templateId: string, _prev: TemplateFormState, formData: FormData): Promise<TemplateFormState> {
+  await requirePermission("settings.templates.manage");
   const t = await getTranslations("settings.costsheetTemplates");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { fieldErrors: { name: t("errorNameRequired") } };
@@ -65,6 +68,7 @@ export async function updateTemplate(templateId: string, _prev: TemplateFormStat
 // ─────────────────────────────────────────────────────────
 
 export async function createSection(templateId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const nameVi = String(formData.get("nameVi") ?? "").trim();
   if (!nameVi) return;
 
@@ -89,6 +93,7 @@ export async function createSection(templateId: string, formData: FormData) {
 }
 
 export async function updateSection(templateId: string, sectionId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const nameVi = String(formData.get("nameVi") ?? "").trim();
   if (!nameVi) return;
   const isProxy = formData.get("isProxy") === "on";
@@ -111,12 +116,14 @@ export async function updateSection(templateId: string, sectionId: string, formD
 }
 
 export async function deleteSection(templateId: string, sectionId: string) {
+  await requirePermission("settings.templates.manage");
   await prisma.costsheetTemplateSection.delete({ where: { id: sectionId } });
   await audit("costsheet_template_section", sectionId, "DELETE");
   revalidatePath(`/settings/costsheet-templates/${templateId}`);
 }
 
 export async function moveSection(templateId: string, sectionId: string, direction: "up" | "down") {
+  await requirePermission("settings.templates.manage");
   const sections = await prisma.costsheetTemplateSection.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
   const idx = sections.findIndex((s) => s.id === sectionId);
   const swapWith = direction === "up" ? idx - 1 : idx + 1;
@@ -134,6 +141,7 @@ export async function moveSection(templateId: string, sectionId: string, directi
 // ─────────────────────────────────────────────────────────
 
 export async function createLine(templateId: string, sectionId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const itemName = String(formData.get("itemName") ?? "").trim();
   if (!itemName) return;
 
@@ -160,6 +168,7 @@ export async function createLine(templateId: string, sectionId: string, formData
 }
 
 export async function updateLine(templateId: string, lineId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const itemName = String(formData.get("itemName") ?? "").trim();
   if (!itemName) return;
   const lineType = String(formData.get("lineType") ?? "QTY_PRICE");
@@ -183,6 +192,7 @@ export async function updateLine(templateId: string, lineId: string, formData: F
 }
 
 export async function deleteLine(templateId: string, lineId: string) {
+  await requirePermission("settings.templates.manage");
   await prisma.costsheetTemplateLine.delete({ where: { id: lineId } });
   revalidatePath(`/settings/costsheet-templates/${templateId}`);
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type SettingsFormState = { error?: string; success?: boolean };
 
@@ -11,6 +12,7 @@ export async function updateCommissionScheme(
   _prevState: SettingsFormState,
   formData: FormData,
 ): Promise<SettingsFormState> {
+  await requirePermission("settings.commission.manage");
   const t = await getTranslations("settings.commission");
   const baseCommissionAmount = Number(formData.get("baseCommissionAmount") ?? 0);
   const contractCommissionAmount = Number(formData.get("contractCommissionAmount") ?? 0);

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type ClientsSettingsState = { error?: string; success?: boolean };
 
@@ -19,6 +20,7 @@ export async function saveClientsSettings(
   _prev: ClientsSettingsState,
   formData: FormData,
 ): Promise<ClientsSettingsState> {
+  await requirePermission("settings.clients.manage");
   const t = await getTranslations("settings.clients");
   const activeDays = Number(formData.get("activeDays") ?? NaN);
   const inactiveDays = Number(formData.get("inactiveDays") ?? NaN);

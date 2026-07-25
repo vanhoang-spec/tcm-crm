@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { KPI_DEPT_CODES } from "@/lib/kpi";
+import { requirePermission } from "@/lib/permissions";
 
 export type KpiSettingsState = { error?: string; success?: boolean };
 
@@ -29,6 +30,7 @@ async function audit(entityType: string, entityId: string, field: string, oldVal
 
 /** Lưu 7 tham số quỹ 75/25. Đổi tham số KHÔNG ảnh hưởng kỳ đã chốt (đọc từ snapshot). */
 export async function saveKpiParams(_prev: KpiSettingsState, formData: FormData): Promise<KpiSettingsState> {
+  await requirePermission("settings.kpi.manage");
   const t = await getTranslations("settings.kpi");
   const fields: { key: string; min: number; max: number }[] = [
     { key: "pool_percent", min: 0, max: 100 },
@@ -54,6 +56,7 @@ export async function saveKpiParams(_prev: KpiSettingsState, formData: FormData)
 
 /** Tạo/sửa tiêu chí. id rỗng = tạo mới (code phải unique). KHÔNG hard-delete — chỉ toggle isActive. */
 export async function saveKpiCriterion(id: string | null, _prev: KpiSettingsState, formData: FormData): Promise<KpiSettingsState> {
+  await requirePermission("settings.kpi.manage");
   const t = await getTranslations("settings.kpi");
   const nameVi = String(formData.get("nameVi") ?? "").trim();
   const nameEn = String(formData.get("nameEn") ?? "").trim();
@@ -95,6 +98,7 @@ export async function saveKpiCriterion(id: string | null, _prev: KpiSettingsStat
 
 /** Bật/tắt tiêu chí (thay cho xóa — giữ lịch sử điểm). */
 export async function toggleKpiCriterion(id: string): Promise<void> {
+  await requirePermission("settings.kpi.manage");
   const c = await prisma.kpiCriterion.findUnique({ where: { id } });
   if (!c) return;
   await prisma.kpiCriterion.update({ where: { id }, data: { isActive: !c.isActive } });
@@ -111,6 +115,7 @@ export async function saveKpiPositionSalary(
   _prev: KpiSettingsState,
   formData: FormData,
 ): Promise<KpiSettingsState> {
+  await requirePermission("settings.kpi.manage");
   const t = await getTranslations("settings.kpi");
   const monthlySalary = Number(formData.get("monthlySalary") ?? NaN);
   const note = String(formData.get("note") ?? "").trim();
@@ -132,6 +137,7 @@ export async function saveKpiPositionSalary(
 
 /** Chép toàn bộ dòng lương từ kỳ trước sang kỳ hiện tại (chỉ điền chỗ trống, không ghi đè). */
 export async function copyKpiSalariesFromPeriod(fromPeriod: string, toPeriod: string): Promise<void> {
+  await requirePermission("settings.kpi.manage");
   const rows = await prisma.positionSalary.findMany({ where: { periodCode: fromPeriod } });
   for (const r of rows) {
     await prisma.positionSalary.upsert({

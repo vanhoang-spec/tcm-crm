@@ -1,4 +1,5 @@
 import { getLocale, getTranslations } from "next-intl/server";
+import { NumberField } from "@/components/ui/number-field";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/ui/date-field";
@@ -7,10 +8,13 @@ import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
 import { createVendorPayment, markVendorPaymentPaid } from "../actions";
+import { VendorPaymentLinePicker, type PickerLine } from "./line-picker";
+import { requirePermission } from "@/lib/permissions";
 
 const input = "h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 export default async function VendorPaymentsPage() {
+  await requirePermission("finance.view");
   const [t, tc, locale, payments, vendors, projects] = await Promise.all([
     getTranslations("finance.vendorPayments"),
     getTranslations("finance.common"),
@@ -19,6 +23,28 @@ export default async function VendorPaymentsPage() {
     prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { status: { code: { in: [...EXECUTION_STATUS_CODES] } } }, orderBy: { updatedAt: "desc" } }),
   ]);
+
+  // Dòng chi phí còn hạn mức — nguồn cho ô "gắn vào dòng" của phiếu chi. Bỏ dòng stale (dòng
+  // CO/CE đã đổi tên/xoá) và dòng đã chi hết: chọn vào chỉ để bị server chặn.
+  const rawLines = await prisma.financeCostLine.findMany({
+    where: { isStale: false, project: { status: { code: { in: [...EXECUTION_STATUS_CODES] } } } },
+    orderBy: [{ projectId: "asc" }, { sort: "asc" }],
+    include: {
+      advances: { where: { status: { not: "CANCELED" } }, select: { amount: true } },
+      vendorPayments: { select: { amount: true } },
+    },
+  });
+  const pickerLines: PickerLine[] = rawLines.map((l) => ({
+    id: l.id,
+    projectId: l.projectId,
+    itemCode: l.itemCode,
+    itemName: l.itemName,
+    sectionName: l.sectionName,
+    remaining:
+      toNum(l.netAmount) -
+      l.advances.reduce((s, a) => s + toNum(a.amount), 0) -
+      l.vendorPayments.reduce((s, p) => s + toNum(p.amount), 0),
+  }));
 
   const totalScheduled = payments.filter((p) => p.status === "SCHEDULED").reduce((s, p) => s + toNum(p.amount), 0);
   const totalPaid = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + toNum(p.amount), 0);
@@ -54,17 +80,13 @@ export default async function VendorPaymentsPage() {
               options={vendors.map((v) => ({ value: v.id, label: v.name }))}
             />
           </label>
-          <label className="text-xs text-muted-foreground">
-            {tc("projectLabel")}
-            <SearchableSelect
-              name="projectId"
-              placeholder="—"
-              options={projects.map((p) => ({ value: p.id, label: p.code }))}
-            />
-          </label>
+          <VendorPaymentLinePicker
+            projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+            lines={pickerLines}
+          />
           <label className="text-xs text-muted-foreground">
             {tc("amount")}
-            <input name="amount" type="number" step="any" min={1} className={input} />
+            <NumberField name="amount" className={input} />
           </label>
           <label className="text-xs text-muted-foreground">
             {t("dueDate")}

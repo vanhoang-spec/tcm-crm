@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId, isAdminStaff } from "@/lib/current-staff";
 import { createPasswordResetToken, RESET_TOKEN_TTL_MIN } from "@/lib/auth-session";
 import { isMailConfigured, resetPasswordUrl, sendPasswordResetEmail } from "@/lib/mailer";
+import { requirePermission } from "@/lib/permissions";
 
 export type StaffFormState = {
   error?: string;
@@ -49,6 +50,7 @@ function parseFirstWorkDate(input: string): Date | null {
 
 /** Tạo nhân sự mới — bắt buộc ngày sinh + ngày đi làm đầu tiên (cả 2 DD/MM/YYYY, có thể khác nhau và khác ngày tạo tài khoản). */
 export async function createStaff(_prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
+  await requirePermission("settings.staff.manage");
   const t = await getTranslations("settings.staff");
   const fullName = String(formData.get("fullName") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -104,6 +106,7 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
  * Chỉ ADMIN được gọi (chốt ở đây, không tin UI).
  */
 export async function adminResetPassword(staffId: string, _prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
+  await requirePermission("settings.staff.manage");
   const t = await getTranslations("settings.staff");
   const actingStaffId = await getCurrentStaffId();
   if (!actingStaffId || !(await isAdminStaff(actingStaffId))) return { error: t("errorRequired") };
@@ -136,6 +139,7 @@ export async function adminResetPassword(staffId: string, _prev: StaffFormState,
 
 /** Gỡ khoá tài khoản bị chặn do nhập sai mật khẩu quá nhiều lần. */
 export async function unlockStaffAccount(staffId: string, _prev: StaffFormState, _formData: FormData): Promise<StaffFormState> {
+  await requirePermission("settings.staff.manage");
   const t = await getTranslations("settings.staff");
   const actingStaffId = await getCurrentStaffId();
   if (!actingStaffId || !(await isAdminStaff(actingStaffId))) return { error: t("errorRequired") };
@@ -168,6 +172,7 @@ async function isLastActiveAdmin(targetStaffId: string): Promise<boolean> {
 
 /** Bật/tắt hoạt động 1 nhân sự — chặn tự-deactivate và chặn deactivate ADMIN cuối cùng còn hoạt động. */
 export async function updateStaffStatus(staffId: string, _prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
+  await requirePermission("settings.staff.manage");
   const t = await getTranslations("settings.staff");
   const isActive = formData.get("isActive") === "on";
   const actingStaffId = await getCurrentStaffId();
@@ -191,6 +196,7 @@ export async function updateStaffStatus(staffId: string, _prev: StaffFormState, 
  * AuditLog.changedBy KHÔNG có FK (String trần) — cố ý để lại tham chiếu "mồ côi", giữ nguyên lịch sử.
  */
 export async function deleteStaff(staffId: string, _prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
+  await requirePermission("settings.staff.manage");
   const t = await getTranslations("settings.staff");
   const confirmName = String(formData.get("confirmName") ?? "").trim();
   const actingStaffId = await getCurrentStaffId();

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type BiddingSettingsState = { error?: string; success?: boolean };
 
@@ -19,6 +20,7 @@ export async function saveBiddingSettings(
   _prev: BiddingSettingsState,
   formData: FormData,
 ): Promise<BiddingSettingsState> {
+  await requirePermission("settings.bidding.manage");
   const t = await getTranslations("settings.bidding");
   const minMargin = Number(formData.get("minMargin") ?? NaN);
   const threshold = Number(formData.get("threshold") ?? NaN);

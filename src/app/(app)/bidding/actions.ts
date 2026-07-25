@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -7,14 +8,16 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
-import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode } from "@/lib/bidding";
+import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, DEFAULT_COST_PREFIX } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
+import { syncFinanceCostLines } from "@/lib/finance";
 import { lockCreativeTasksForProject } from "@/lib/creative";
 import { lockDepartmentTasksForProject } from "@/lib/department-tasks";
 import { recomputeClientStatus } from "@/lib/client-status";
 import { getMissingClientProfileFields } from "@/lib/client-profile";
 import { getProjectIntakeSchema, PENDING_TEAM_ASSIGNMENT } from "@/lib/validators/project";
 import { costSheetPayloadSchema } from "@/lib/validators/costsheet";
+import { requirePermission, hasPermission } from "@/lib/permissions";
 
 export type ProjectFormState = { error?: string; fieldErrors?: Record<string, string> };
 
@@ -59,6 +62,7 @@ async function notifyTeamAssignmentNeeded(projectId: string, projectCode: string
 // ─────────────────────────────────────────────────────────
 
 export async function createProject(_prev: ProjectFormState, formData: FormData): Promise<ProjectFormState> {
+  await requirePermission("bidding.project.manage");
   const t = await getTranslations("bidding.validation");
   const parsed = getProjectIntakeSchema(t).safeParse({
     name: String(formData.get("name") ?? ""),
@@ -138,6 +142,7 @@ export async function updateProject(
   _prev: ProjectFormState,
   formData: FormData,
 ): Promise<ProjectFormState> {
+  await requirePermission("bidding.project.manage");
   const t = await getTranslations("bidding.validation");
   const parsed = getProjectIntakeSchema(t).safeParse({
     name: String(formData.get("name") ?? ""),
@@ -196,6 +201,7 @@ export async function updateProject(
 
 /** BGĐ chọn team Account phụ trách cho dự án đang "Đợi BGĐ giao team Account". */
 export async function assignProjectTeam(projectId: string, formData: FormData) {
+  await requirePermission("bidding.project.manage");
   const teamId = String(formData.get("teamId") ?? "").trim();
   if (!teamId) return;
   const staffId = await getCurrentStaffId();
@@ -230,6 +236,7 @@ export async function assignProjectTeam(projectId: string, formData: FormData) {
 // ─────────────────────────────────────────────────────────
 
 export async function decideGoNogo(projectId: string, formData: FormData) {
+  await requirePermission("bidding.gonogo");
   const decision = String(formData.get("decision") ?? ""); // GO | NOGO
   const note = String(formData.get("note") ?? "").trim();
   if (decision !== "GO" && decision !== "NOGO") return;
@@ -273,6 +280,7 @@ export async function saveCostSheet(
   _prev: ProjectFormState,
   formData: FormData,
 ): Promise<ProjectFormState> {
+  await requirePermission("bidding.costsheet.edit");
   const t = await getTranslations("bidding.validation");
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return { error: t("notFound") };
@@ -322,6 +330,17 @@ export async function saveCostSheet(
   const coTotal = totals.coTotal;
   const chiHo = totals.chiHo;
 
+  // Prefix mã lấy từ phòng ban (Department.costPrefix, sửa được ở /settings/teams) — tra 1 lần
+  // cho cả bảng rồi ánh xạ về từng section.
+  const deptPrefixRows = await prisma.department.findMany({
+    where: { costPrefix: { not: null } },
+    select: { code: true, costPrefix: true },
+  });
+  const prefixByDept = new Map(deptPrefixRows.map((d) => [d.code, d.costPrefix!]));
+  const prefixBySectionKey = new Map(
+    payload.sections.map((s) => [s.key, (s.departmentCode && prefixByDept.get(s.departmentCode)) || DEFAULT_COST_PREFIX]),
+  );
+
   const minMargin = await getNumberSetting("bidding", "min_margin_pct", 31);
   const threshold = await getNumberSetting("bidding", "auto_approve_threshold", 100_000_000);
   const marginPct = computeMarginPct(ceTotal, coTotal);
@@ -359,10 +378,15 @@ export async function saveCostSheet(
     totals: { coTotal, ceTotal, chiHo, marginPct: Math.round(marginPct * 100) / 100 },
   });
 
-  // Cổng margin: dưới ngưỡng → bắt buộc override có lý do.
+  // Cổng margin: dưới ngưỡng → bắt buộc override có lý do VÀ phải có quyền riêng.
+  // Quyền tách khỏi bidding.costsheet.edit: sửa bảng giá là việc thường ngày của Account, còn
+  // hạ margin dưới ngưỡng công ty là quyết định thương mại — không mặc nhiên đi kèm.
   let marginOverrideById: string | null = null;
   let marginOverrideNote: string | null = null;
   if (marginPct < minMargin) {
+    if (!(await hasPermission("bidding.margin_override"))) {
+      return { fieldErrors: { overrideNote: t("overrideNotAllowed") } };
+    }
     if (!overrideNote) return { fieldErrors: { overrideNote: t("overrideNoteRequired") } };
     marginOverrideById = staffId;
     marginOverrideNote = overrideNote;
@@ -423,6 +447,7 @@ export async function saveCostSheet(
           colorSlot: section.colorSlot || null,
           sort: si,
           isProxy: section.isProxy,
+          departmentCode: section.departmentCode || null,
           proxyFeeType: section.proxyFeeType ?? null,
           proxyFeeVal: section.proxyFeeVal ?? null,
         },
@@ -436,6 +461,12 @@ export async function saveCostSheet(
         await tx.costSheetSection.update({ where: { id: idByKey.get(section.key)! }, data: { parentSectionId: parentId } });
       }
     }
+    // Mã hiển thị {prefix phòng ban}-{số} — SERVER tự đánh, không nhận từ client (giá trị suy ra).
+    // Đánh trên TOÀN BỘ dòng của bảng theo đúng thứ tự payload để số chạy liên tục theo prefix,
+    // rồi mới tra ngược khi ghi từng section.
+    const itemCodeByLineIndex = assignItemCodes(payload.lines, prefixBySectionKey);
+    const codeOfLine = new Map(payload.lines.map((l, i) => [l, itemCodeByLineIndex[i]]));
+
     for (const section of payload.sections) {
       const sectionId = idByKey.get(section.key)!;
       const lines = payload.lines.filter((l) => l.sectionKey === section.key);
@@ -450,6 +481,11 @@ export async function saveCostSheet(
             return {
               costSheetId: sheetId,
               sectionId,
+              // Khoá BỀN: giữ nguyên giá trị client gửi lên (dòng đã tồn tại), chỉ sinh mới khi
+              // thiếu (dòng mới thêm, hoặc payload cũ trước khi có trường này). Đây là thứ giữ
+              // liên kết tạm ứng/thanh toán sống sót qua mỗi lần xoá-tạo-lại của saveCostSheet.
+              stableKey: l.stableKey || randomUUID(),
+              itemCode: codeOfLine.get(l) ?? null,
               lineType: l.lineType,
               itemName: l.itemName,
               specs: l.specs || null,
@@ -506,13 +542,26 @@ export async function saveCostSheet(
     });
   });
 
+  // Đồng bộ ngay xuống module ④ (Chi phí & Công nợ). CO/CE chỉ đổi được qua đúng action này nên
+  // "sync khi có thay đổi" là đủ và chính xác tuyệt đối — không cần quét định kỳ toàn hệ thống.
+  //
+  // NGOÀI transaction và nuốt lỗi CÓ CHỦ Ý: bảng CO/CE đã lưu xong, không được để lỗi đồng bộ làm
+  // hỏng cả thao tác lưu. Nếu sync hỏng thì trang Chi phí vẫn còn nút "Làm mới" và banner lệch rev.
+  try {
+    await syncFinanceCostLines(projectId);
+  } catch (e) {
+    console.error("[bidding] đồng bộ dòng chi phí thất bại sau khi lưu CO/CE:", e);
+  }
+
   revalidatePath(`/bidding/${projectId}`);
+  revalidatePath("/finance");
   revalidatePath("/reminders");
   return {};
 }
 
 /** CEO duyệt cost_sheet (đường escalate — khi không auto-approve). */
 export async function approveCostSheet(projectId: string, costSheetId: string, _formData?: FormData) {
+  await requirePermission("bidding.costsheet.approve");
   const staffId = await getCurrentStaffId();
   await prisma.costSheet.update({
     where: { id: costSheetId },
@@ -532,6 +581,7 @@ export async function rejectCostSheet(
   _prev: ProjectFormState,
   formData: FormData,
 ): Promise<ProjectFormState> {
+  await requirePermission("bidding.costsheet.approve");
   const t = await getTranslations("bidding.costsheet");
   const note = String(formData.get("rejectNote") ?? "").trim();
   if (!note) return { fieldErrors: { rejectNote: t("rejectNoteRequired") } };
@@ -572,6 +622,7 @@ export async function rejectCostSheet(
 // ─────────────────────────────────────────────────────────
 
 export async function addBiddingRound(projectId: string, formData: FormData) {
+  await requirePermission("bidding.costsheet.edit");
   const clientFeedback = String(formData.get("clientFeedback") ?? "").trim();
   const revisedCeRaw = String(formData.get("revisedCe") ?? "").trim();
   const outcome = String(formData.get("outcome") ?? "ongoing");
@@ -598,6 +649,7 @@ export async function addBiddingRound(projectId: string, formData: FormData) {
 // ─────────────────────────────────────────────────────────
 
 export async function saveContract(projectId: string, formData: FormData) {
+  await requirePermission("bidding.contract.manage");
   const staffId = await getCurrentStaffId();
   const data = {
     contractNo: toNullable(String(formData.get("contractNo") ?? "")),
@@ -639,6 +691,7 @@ export async function markFailed(
   _prev: ProjectFormState,
   formData: FormData,
 ): Promise<ProjectFormState> {
+  await requirePermission("bidding.status.change");
   const t = await getTranslations("bidding.validation");
   const failReasonId = String(formData.get("failReasonId") ?? "").trim();
   const failReasonNote = String(formData.get("failReasonNote") ?? "").trim();
@@ -671,6 +724,7 @@ export async function markFailed(
 
 /** "KH hủy" — khách chủ động hủy, khác với thua thầu (không cần lý do từ danh mục fail_reason). */
 export async function markClientCancel(projectId: string, _formData?: FormData) {
+  await requirePermission("bidding.status.change");
   const staffId = await getCurrentStaffId();
   const [before, canceledId] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, include: { status: true } }),
@@ -695,6 +749,7 @@ export async function moveToProcessing(
   _prev?: ProjectFormState,
   _formData?: FormData,
 ): Promise<ProjectFormState> {
+  await requirePermission("bidding.status.change");
   const t = await getTranslations("bidding.result");
   const staffId = await getCurrentStaffId();
   const [project, contract, processingId] = await Promise.all([
@@ -730,6 +785,7 @@ export async function moveToProcessing(
 
 /** Kế toán xác nhận "Hợp đồng đã xong" — dừng nhắc việc Processing. */
 export async function confirmContractDone(projectId: string) {
+  await requirePermission("bidding.contract.manage");
   const staffId = await getCurrentStaffId();
   const contract = await prisma.contract.findUnique({ where: { projectId } });
   if (!contract) return;
@@ -754,6 +810,7 @@ export async function confirmContractDone(projectId: string) {
 
 /** Kế toán xác nhận "Đã nhận đủ hồ sơ nghiệm thu" — dừng nhắc việc Liquidation. */
 export async function confirmAcceptanceDocs(projectId: string) {
+  await requirePermission("bidding.status.change");
   const staffId = await getCurrentStaffId();
   const contract = await prisma.contract.findUnique({ where: { projectId } });
   if (!contract) return;
@@ -782,6 +839,7 @@ export async function moveToLiquidation(
   _prev?: ProjectFormState,
   _formData?: FormData,
 ): Promise<ProjectFormState> {
+  await requirePermission("bidding.status.change");
   const t = await getTranslations("bidding.result");
   const staffId = await getCurrentStaffId();
   const [project, contract, liquidationId] = await Promise.all([
@@ -808,6 +866,7 @@ export async function markFinished(
   _prev?: ProjectFormState,
   _formData?: FormData,
 ): Promise<ProjectFormState> {
+  await requirePermission("bidding.status.change");
   const t = await getTranslations("bidding.result");
   const staffId = await getCurrentStaffId();
   const [project, contract, finishedId] = await Promise.all([

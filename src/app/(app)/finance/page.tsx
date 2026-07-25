@@ -9,8 +9,10 @@ import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
 import { refreshFinanceCostLines } from "./actions";
 import { AdvanceBoard, type LineData } from "./advance-board";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function FinanceAdvancesPage({ searchParams }: { searchParams: Promise<{ project?: string }> }) {
+  await requirePermission("finance.view");
   const { project: projectParam } = await searchParams;
   const [t, locale, projects, maxCount, maxAmount] = await Promise.all([
     getTranslations("finance.advances"),
@@ -43,13 +45,15 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
 
   let lineData: LineData[] = [];
   let lastRevNo = 0;
+  let currentRevNo = 0;
   if (projectId) {
-    const [lines, vendors, staff] = await Promise.all([
+    const [lines, vendors, staff, currentRev] = await Promise.all([
       prisma.financeCostLine.findMany({
         where: { projectId },
         orderBy: [{ isStale: "asc" }, { sort: "asc" }],
         include: {
           vendor: true,
+          vendorPayments: { select: { amount: true } },
           advances: {
             orderBy: { installmentNo: "asc" },
             include: { recipientVendor: true, recipientStaff: true, requestedBy: true, disbursedBy: true, settledBy: true },
@@ -58,20 +62,33 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
       }),
       prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
       prisma.staff.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
+      // revNo HIỆN TẠI của CO/CE — để so với sourceRevNo và cảnh báo khi dữ liệu đã cũ.
+      prisma.costSheetRevision.findFirst({
+        where: { costSheet: { projectId, version: "CTRACT" } },
+        orderBy: { revNo: "desc" },
+        select: { revNo: true },
+      }),
     ]);
     lastRevNo = lines.reduce((mx, l) => Math.max(mx, l.sourceRevNo), 0);
+    currentRevNo = currentRev?.revNo ?? 0;
     const vendorOpts = vendors.map((v) => ({ id: v.id, label: v.name }));
     const staffOpts = staff.map((s) => ({ id: s.id, label: s.fullName }));
     lineData = lines.map((l) => {
       const advanced = l.advances.filter((a) => a.status !== "CANCELED").reduce((s, a) => s + toNum(a.amount), 0);
+      const paid = l.vendorPayments.reduce((s, p) => s + toNum(p.amount), 0);
       const amount = toNum(l.amount);
+      // TRẦN là netAmount (đã bóc gross-up thuế), và trừ CẢ tạm ứng lẫn thanh toán NCC.
+      const netAmount = toNum(l.netAmount);
       return {
         id: l.id,
         sectionName: l.sectionName,
         itemName: l.itemName,
         amount,
+        netAmount,
+        itemCode: l.itemCode,
         advanced,
-        remaining: amount - advanced,
+        paid,
+        remaining: netAmount - advanced - paid,
         isStale: l.isStale,
         vendorId: l.vendorId,
         vendorLabel: l.vendor?.name ?? null,
@@ -162,6 +179,14 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
               </div>
             );
           })()}
+          {/* Dữ liệu đã cũ: CO/CE đã sang revision mới hơn lần đồng bộ gần nhất. Nay CO/CE tự đồng bộ
+              khi lưu, nên banner này chỉ xuất hiện khi lần sync đó thất bại — vẫn phải có, vì số
+              tiền cũ nghĩa là TRẦN CHI sai: CO/CE giảm thì cho chi vượt, tăng thì chặn nhầm. */}
+          {currentRevNo > lastRevNo && lineData.length > 0 && (
+            <div className="mb-3 rounded-lg border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger">
+              {t("outdatedWarning", { synced: lastRevNo, current: currentRevNo })}
+            </div>
+          )}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">{t("refreshedInfo", { rev: lastRevNo, updated: lineData.length, added: 0, staled: lineData.filter((l) => l.isStale).length })}</span>
             <form action={refreshFinanceCostLines.bind(null, projectId)}>

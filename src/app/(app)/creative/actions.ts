@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { isTaskLocked } from "@/lib/creative";
+import { requirePermission } from "@/lib/permissions";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -47,6 +48,7 @@ async function markOrderItemDone(orderItemId: string | null) {
 
 /** CD giao task cho 1 nhân sự — chọn loại task + tick "CD không cần duyệt" + deadline. */
 export async function assignCreativeTask(taskId: string, formData: FormData) {
+  await requirePermission("creative.task.assign");
   const task = await loadUnlocked(taskId);
   if (!task) return;
   const assigneeId = nullable(formData.get("assigneeId"));
@@ -72,6 +74,7 @@ export async function assignCreativeTask(taskId: string, formData: FormData) {
 
 /** Nhân sự bấm GỬI — nhập link thành phẩm + số giờ (bội số 0.25). Định tuyến theo cờ CD-không-cần-duyệt. */
 export async function submitCreativeTask(taskId: string, formData: FormData) {
+  await requirePermission("creative.task.submit");
   const task = await loadUnlocked(taskId);
   if (!task) return;
   const link = str(formData.get("deliverableLinkUrl"));
@@ -103,6 +106,7 @@ export async function submitCreativeTask(taskId: string, formData: FormData) {
 
 /** CD duyệt task SUBMITTED → trả thành phẩm cho người ORDER. */
 export async function approveCreativeTask(taskId: string) {
+  await requirePermission("creative.task.approve");
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "SUBMITTED") return;
   const staffId = await getCurrentStaffId();
@@ -117,6 +121,7 @@ export async function approveCreativeTask(taskId: string) {
 
 /** CD trả lại task để sửa → REVISION, tăng revisionCount, báo nhân sự. */
 export async function rejectCreativeTask(taskId: string, formData: FormData) {
+  await requirePermission("creative.task.approve");
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "SUBMITTED") return;
   const staffId = await getCurrentStaffId();
@@ -131,6 +136,7 @@ export async function rejectCreativeTask(taskId: string, formData: FormData) {
 
 /** CD tạo task lẻ (ngoài checklist) — chọn dự án + loại task + tên. */
 export async function createCreativeTask(formData: FormData) {
+  await requirePermission("creative.task.manage");
   const projectId = nullable(formData.get("projectId"));
   const title = str(formData.get("title"));
   if (!projectId || !title) return;
@@ -152,6 +158,7 @@ export async function createCreativeTask(formData: FormData) {
 
 /** Xóa task chưa giao (và dự án chưa bị khóa). */
 export async function deleteCreativeTask(taskId: string) {
+  await requirePermission("creative.task.manage");
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "UNASSIGNED") return;
   await prisma.creativeTask.delete({ where: { id: taskId } });

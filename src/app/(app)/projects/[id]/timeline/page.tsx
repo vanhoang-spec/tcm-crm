@@ -6,11 +6,13 @@ import type { Locale } from "@/i18n/locales";
 import { TimelineEditor, type TimelineItemData } from "../timeline-editor";
 import { TemplatePicker } from "./template-picker";
 import { StaffingMatrix, type StaffingCell } from "./staffing-matrix";
+import { requirePermission } from "@/lib/permissions";
 
 const GANTT_COLS = ["pic2", "accountable", "duration", "deadline", "status"];
 const CHECKLIST_COLS = ["pic2", "qty", "unit", "deadline", "status"];
 
 export default async function ProjectTimelinePage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("projects.view");
   const { id } = await params;
 
   const project = await prisma.project.findUnique({ where: { id }, select: { id: true, projectTypeId: true } });

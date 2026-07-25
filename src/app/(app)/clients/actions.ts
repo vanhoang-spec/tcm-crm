@@ -11,6 +11,7 @@ import {
   MAX_CONTACTS,
   OTHER_INTRODUCER,
 } from "@/lib/validators/client";
+import { requirePermission } from "@/lib/permissions";
 
 function toNullable(v: string | undefined) {
   return v && v.trim() !== "" ? v : null;
@@ -83,6 +84,7 @@ async function resolvePotentialStatusId() {
 }
 
 export async function createClient(_prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
+  await requirePermission("clients.manage");
   const tContact = await getTranslations("validation.contact");
   const parsed = await parseClientForm(formData);
   const contactsParsed = getContactListSchema(tContact).safeParse(parseContactsFromFormData(formData));
@@ -162,6 +164,7 @@ export async function updateClient(
   _prevState: ClientFormState,
   formData: FormData,
 ): Promise<ClientFormState> {
+  await requirePermission("clients.manage");
   const tClient = await getTranslations("validation.client");
   const parsed = await parseClientForm(formData);
   if (!parsed.success) {
@@ -228,6 +231,7 @@ export async function updateClient(
 }
 
 export async function transferClient(clientId: string, toTeamId: string, reason: string) {
+  await requirePermission("clients.transfer");
   const staffId = await getCurrentStaffId();
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
 
@@ -269,6 +273,7 @@ export async function transferClient(clientId: string, toTeamId: string, reason:
 }
 
 export async function addCareNote(clientId: string, formData: FormData) {
+  await requirePermission("clients.care");
   const note = String(formData.get("note") ?? "").trim();
   if (!note) return;
 
@@ -282,6 +287,7 @@ export async function addCareNote(clientId: string, formData: FormData) {
 }
 
 export async function addContact(clientId: string, formData: FormData) {
+  await requirePermission("clients.manage");
   const name = String(formData.get("name") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
@@ -304,6 +310,7 @@ export async function addContact(clientId: string, formData: FormData) {
 }
 
 export async function transferClientAction(clientId: string, formData: FormData) {
+  await requirePermission("clients.transfer");
   const toTeamId = String(formData.get("toTeamId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!toTeamId || !reason) return;

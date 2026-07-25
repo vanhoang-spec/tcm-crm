@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { cancelTransfer, confirmTransferReceive, type DocFormState } from "./actions";
 
@@ -33,13 +34,10 @@ export function ReceiveForm({
                 {l.unit ? ` ${l.unit}` : ""}
               </p>
             </div>
-            <input
-              type="number"
+            <NumberField
               inputMode="numeric"
               name={`received_${l.id}`}
               defaultValue={l.quantity}
-              min={0}
-              max={l.quantity}
               aria-label={t("colQtyReceived")}
               className="h-11 w-24 rounded-lg border border-border-strong bg-surface text-center text-base font-semibold"
             />

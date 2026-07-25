@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { createSection } from "../actions";
 
@@ -34,7 +35,7 @@ export function SectionCreateForm({ templateId }: { templateId: string }) {
               <option value="PCT">{t("proxyFeePct")}</option>
               <option value="FIXED">{t("proxyFeeFixed")}</option>
             </select>
-            <input name="proxyFeeVal" type="number" step="any" placeholder={t("proxyFeeVal")} className={inputClass} />
+            <NumberField decimals={2} name="proxyFeeVal" placeholder={t("proxyFeeVal")} className={inputClass} />
           </>
         )}
         <div className="sm:col-span-2">

@@ -4,8 +4,10 @@ import { getTranslations } from "next-intl/server";
 import { getNumberSetting, getStringSetting } from "@/lib/settings";
 import { SUPER_ADMIN_TITLES_DEFAULT } from "@/lib/chat";
 import { CommunicationSettingsForm } from "./communication-settings-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsCommunicationPage() {
+  await requirePermission("settings.communication.manage");
   const [t, tIndex, superAdminTitles, pollSeconds] = await Promise.all([
     getTranslations("settings.communication"),
     getTranslations("settings.index"),

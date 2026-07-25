@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { hasPermission } from "@/lib/permissions";
 import { readChatAttachment } from "@/lib/chat-storage";
 import { zipCtvDocs } from "@/lib/ctv";
 
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const meId = await getCurrentStaffId();
   if (!meId) return new NextResponse(null, { status: 401 });
+  if (!(await hasPermission("projects.ctv.manage"))) return new NextResponse(null, { status: 403 });
 
   const isSource = req.nextUrl.searchParams.get("type") === "source";
   const isZip = req.nextUrl.searchParams.get("zip") === "1";

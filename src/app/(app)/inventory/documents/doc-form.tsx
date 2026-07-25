@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { Minus, Plus, X } from "lucide-react";
 import { DateField } from "@/components/ui/date-field";
@@ -204,11 +205,9 @@ export function DocForm({
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <NumberField
                   value={l.quantity}
-                  onChange={(e) => setQty(l.itemId, Number(e.target.value))}
+                  onChange={(v) => setQty(l.itemId, v)}
                   aria-label={t("qty")}
                   className="h-11 w-20 rounded-lg border border-border-strong bg-surface text-center text-base font-semibold"
                 />

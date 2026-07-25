@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { NumberField } from "@/components/ui/number-field";
 import { addStaffingCell, updateStaffingCell, removeStaffingCell } from "../../actions";
 
 export type StaffingCell = { id: string; roleLabel: string; zoneLabel: string; headcount: number };
@@ -65,7 +66,7 @@ export function StaffingMatrix({ projectId, cells }: { projectId: string; cells:
                 {c.roleLabel} · {c.zoneLabel}
               </span>
               <form action={updateStaffingCell.bind(null, projectId, c.id)} className="flex items-center gap-1">
-                <input name="headcount" type="number" min="0" defaultValue={c.headcount} className={input + " w-20"} />
+                <NumberField name="headcount" defaultValue={c.headcount} className={input + " w-20"} />
                 <button type="submit" className="h-8 rounded-lg border border-border-strong px-2 text-xs text-foreground hover:bg-surface-2">
                   {t("saveStaffing")}
                 </button>
@@ -94,7 +95,7 @@ export function StaffingMatrix({ projectId, cells }: { projectId: string; cells:
           </label>
           <label className="text-xs text-muted-foreground">
             {t("staffingHeadcount")}
-            <input name="headcount" type="number" min="0" defaultValue={0} className={input + " w-20"} />
+            <NumberField name="headcount" defaultValue={0} className={input + " w-20"} />
           </label>
           <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
             {t("addStaffingCell")}

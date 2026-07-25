@@ -3,8 +3,10 @@ import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { CommissionForm } from "./commission-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsCommissionPage() {
+  await requirePermission("settings.commission.manage");
   const [scheme, t] = await Promise.all([
     prisma.commissionScheme.findUnique({ where: { code: "default" } }),
     getTranslations("settings.commission"),

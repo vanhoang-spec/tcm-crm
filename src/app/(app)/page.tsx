@@ -5,6 +5,7 @@ import type { Locale } from "@/i18n/locales";
 import { StatRatio, StatValue } from "@/components/ui/stat-ratio";
 import { getDashboardScope } from "@/lib/permissions";
 import { getBusinessVolume, getBusinessVolumeAllTeams, getCashflowMtd, getDeptTaskRatios, type BusinessVolume, type DeptTaskRatio } from "@/lib/dashboard";
+import { requirePermission } from "@/lib/permissions";
 
 const DEPT_LABEL_KEY: Record<string, string> = {
   ACCOUNT: "deptAccount",
@@ -19,6 +20,7 @@ const DEPT_LABEL_KEY: Record<string, string> = {
 const NON_ACCOUNT_DEPTS = ["CREATIVE", "PLANNING", "OPE", "PRO", "PCC"];
 
 export default async function DashboardPage() {
+  await requirePermission("dashboard.view");
   const [t, locale] = await Promise.all([getTranslations("dashboard"), getLocale() as Promise<Locale>]);
   const scope = await getDashboardScope();
   const now = new Date();

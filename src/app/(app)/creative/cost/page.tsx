@@ -10,12 +10,14 @@ import {
   type CostWarning,
 } from "@/lib/creative-cost";
 import { CopyPreviousPeriodButton } from "./copy-previous-period-button";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function CreativeCostPage({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;
 }) {
+  await requirePermission("creative.cost.view");
   const { period } = await searchParams;
   const [t, locale, cycle] = await Promise.all([
     getTranslations("creative.cost"),

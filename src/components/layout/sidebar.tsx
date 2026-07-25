@@ -74,26 +74,33 @@ function NavLink({ item, onNavigate }: { item: (typeof NAV_ITEMS)[number]; onNav
   );
 }
 
-export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+// permissions mặc định rỗng = fail-closed: thiếu prop thì ẩn mục có gắn quyền, không lộ.
+export function SidebarContent({ onNavigate, permissions = [] }: { onNavigate?: () => void; permissions?: string[] }) {
+  const allowed = new Set(permissions);
+  const can = (item: { permission?: string }) => !item.permission || allowed.has(item.permission);
+  const items = NAV_ITEMS.filter(can);
+  const showSettings = can(SETTINGS_ITEM);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center border-b border-border px-4">
         <Logo />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <NavLink key={item.href} item={item} onNavigate={onNavigate} />
         ))}
       </nav>
-      <div className="border-t border-border px-3 py-3">
-        <NavLink item={SETTINGS_ITEM} onNavigate={onNavigate} />
-      </div>
+      {showSettings && (
+        <div className="border-t border-border px-3 py-3">
+          <NavLink item={SETTINGS_ITEM} onNavigate={onNavigate} />
+        </div>
+      )}
     </div>
   );
 }
 
 /** Sidebar desktop — chiều rộng kéo giãn được (200–420px), lưu localStorage, đọc lại lúc mount. */
-export function Sidebar() {
+export function Sidebar({ permissions = [] }: { permissions?: string[] }) {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [ready, setReady] = useState(false);
   const draggingRef = useRef(false);
@@ -150,7 +157,7 @@ export function Sidebar() {
       style={{ width, transition: ready ? undefined : "none" }}
     >
       <div className="relative h-full">
-        <SidebarContent />
+        <SidebarContent permissions={permissions} />
         {/* Tay kéo giãn — bấm-kéo để đổi chiều rộng, double-click để về mặc định */}
         <div
           role="separator"

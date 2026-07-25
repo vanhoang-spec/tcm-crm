@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type SettingsFormState = { error?: string };
 
@@ -12,6 +13,7 @@ export async function createOptionItem(
   _prevState: SettingsFormState,
   formData: FormData,
 ): Promise<SettingsFormState> {
+  await requirePermission("settings.options.manage");
   const t = await getTranslations("settings.options");
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const labelVi = String(formData.get("labelVi") ?? "").trim();
@@ -51,6 +53,7 @@ export async function updateOptionItem(
   _prevState: SettingsFormState,
   formData: FormData,
 ): Promise<SettingsFormState> {
+  await requirePermission("settings.options.manage");
   const t = await getTranslations("settings.options");
   const labelVi = String(formData.get("labelVi") ?? "").trim();
   const labelEn = String(formData.get("labelEn") ?? "").trim();
@@ -91,6 +94,7 @@ export async function updateOptionItem(
 
 /** Kéo-thả đổi thứ tự danh mục — ghi lại `sort` theo đúng thứ tự mảng id truyền vào (0-indexed). */
 export async function reorderOptionItems(setCode: string, orderedIds: string[]) {
+  await requirePermission("settings.options.manage");
   const set = await prisma.optionSet.findUnique({ where: { code: setCode } });
   if (!set) return;
 

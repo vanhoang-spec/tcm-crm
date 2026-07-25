@@ -5,7 +5,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
-import { syncFinanceCostLines, lineAdvancedTotal, getStaffAdvanceQuota } from "@/lib/finance";
+import { syncFinanceCostLines, lineDisbursement, getStaffAdvanceQuota } from "@/lib/finance";
+import { requirePermission } from "@/lib/permissions";
 
 export type FinanceFormState = { error?: string; success?: boolean; notice?: boolean };
 
@@ -48,6 +49,7 @@ async function notifyFinanceDept(type: string, title: string, body: string | nul
 // ── Tạm ứng ──
 
 export async function refreshFinanceCostLines(projectId: string) {
+  await requirePermission("finance.costlines.refresh");
   await syncFinanceCostLines(projectId);
   await audit("finance_cost_line", projectId, "REFRESH", {});
   revalidatePath("/finance");
@@ -58,6 +60,7 @@ export async function requestAdvance(
   _prev: FinanceFormState,
   formData: FormData,
 ): Promise<FinanceFormState> {
+  await requirePermission("finance.advance.request");
   const t = await getTranslations("finance.advances");
   const line = await prisma.financeCostLine.findUnique({ where: { id: financeCostLineId }, include: { project: true } });
   if (!line) return { error: t("errRequired") };
@@ -75,11 +78,12 @@ export async function requestAdvance(
     return { error: t("errRequired") };
   }
 
-  // Chặn vượt giá trị dòng (tổng tạm ứng chưa hủy + lần mới ≤ line.amount) — check ngoài để trả lỗi thân thiện.
-  const advanced = await lineAdvancedTotal(financeCostLineId);
-  const remaining = Number(line.amount) - advanced;
-  if (Number(amount) > remaining) {
-    return { error: t("errExceedLine", { remaining }) };
+  // Chặn vượt giá trị dòng — check ngoài để trả lỗi thân thiện (check quyết định nằm trong transaction).
+  // TRẦN = netAmount (số THỰC TRẢ, đã bóc gross-up thuế), và tính CẢ thanh toán NCC lẫn cả 2 loại
+  // tạm ứng: cùng một dòng vừa ứng vừa thanh toán mà đếm riêng thì chi được gấp đôi giá trị dòng.
+  const disb = await lineDisbursement(financeCostLineId);
+  if (Number(amount) > disb.remaining) {
+    return { error: t("errExceedLine", { remaining: disb.remaining }) };
   }
 
   // Chặn hạn mức NV (loại STAFF, check chéo dự án).
@@ -95,11 +99,12 @@ export async function requestAdvance(
     // Check QUYẾT ĐỊNH nằm TRONG transaction: 2 đề nghị gửi song song trên cùng dòng (hoặc cùng NV)
     // không thể cùng đọc số dư cũ rồi cùng lách qua — check ngoài chỉ là pre-check UX.
     created = await prisma.$transaction(async (tx) => {
-      const agg = await tx.advance.aggregate({
-        where: { financeCostLineId, status: { not: "CANCELED" } },
-        _sum: { amount: true },
-      });
-      if (Number(amount) > Number(line.amount) - Number(agg._sum.amount ?? 0)) throw new Error("EXCEED_LINE");
+      const [agg, payAgg] = await Promise.all([
+        tx.advance.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
+        tx.vendorPayment.aggregate({ where: { financeCostLineId }, _sum: { amount: true } }),
+      ]);
+      const already = Number(agg._sum.amount ?? 0) + Number(payAgg._sum.amount ?? 0);
+      if (Number(amount) > Number(line.netAmount) - already) throw new Error("EXCEED_LINE");
       if (quota && recipientStaffId) {
         const open = await tx.advance.findMany({
           where: { advanceType: "STAFF", recipientStaffId, status: { in: ["REQUESTED", "DISBURSED"] } },
@@ -130,7 +135,7 @@ export async function requestAdvance(
     });
   } catch (e) {
     const code = e instanceof Error ? e.message : "";
-    if (code === "EXCEED_LINE") return { error: t("errExceedLine", { remaining }) };
+    if (code === "EXCEED_LINE") return { error: t("errExceedLine", { remaining: disb.remaining }) };
     if (code === "QUOTA_COUNT" && quota) return { error: t("errBlockedCount", { count: quota.openCount, max: quota.maxCount }) };
     if (code === "QUOTA_AMOUNT" && quota) return { error: t("errBlockedAmount", { amount: quota.outstandingAmount, max: quota.maxAmount }) };
     throw e;
@@ -142,6 +147,7 @@ export async function requestAdvance(
 }
 
 export async function confirmAdvanceDisbursed(advanceId: string) {
+  await requirePermission("finance.advance.approve");
   const staffId = await getCurrentStaffId();
   const adv = await prisma.advance.findUnique({ where: { id: advanceId }, include: { project: true } });
   if (!adv || adv.status !== "REQUESTED") return;
@@ -156,6 +162,7 @@ export async function confirmAdvanceDisbursed(advanceId: string) {
 }
 
 export async function settleAdvance(advanceId: string, formData: FormData) {
+  await requirePermission("finance.advance.approve");
   const staffId = await getCurrentStaffId();
   const adv = await prisma.advance.findUnique({ where: { id: advanceId } });
   if (!adv || adv.status !== "DISBURSED") return;
@@ -168,6 +175,7 @@ export async function settleAdvance(advanceId: string, formData: FormData) {
 }
 
 export async function cancelAdvance(advanceId: string) {
+  await requirePermission("finance.advance.approve");
   const adv = await prisma.advance.findUnique({ where: { id: advanceId } });
   if (!adv || adv.status !== "REQUESTED") return;
   await prisma.advance.update({ where: { id: advanceId }, data: { status: "CANCELED" } });
@@ -178,25 +186,66 @@ export async function cancelAdvance(advanceId: string) {
 // ── Thanh toán NCC ──
 
 export async function createVendorPayment(formData: FormData) {
+  await requirePermission("finance.vendor_payment.manage");
   const vendorId = nullable(formData.get("vendorId"));
   const amount = bigIntOrZero(formData.get("amount"));
   if (!vendorId || amount <= BigInt(0)) return;
+  const financeCostLineId = nullable(formData.get("financeCostLineId"));
   const staffId = await getCurrentStaffId();
-  await prisma.vendorPayment.create({
-    data: {
-      vendorId,
-      projectId: nullable(formData.get("projectId")),
-      amount,
-      dueDate: dateOrNull(formData.get("dueDate")),
-      invoiceNo: nullable(formData.get("invoiceNo")),
-      note: nullable(formData.get("note")),
-      createdById: staffId,
-    },
-  });
+
+  // Gắn vào dòng chi phí thì phải chịu CHUNG trần với tạm ứng — nếu không, cùng một dòng có thể
+  // vừa ứng đủ 100% vừa thanh toán đủ 100%, chi gấp đôi giá trị. Trần là netAmount (đã bóc
+  // gross-up thuế). Check nằm TRONG transaction để 2 phiếu gửi song song không cùng lách qua.
+  if (financeCostLineId) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const line = await tx.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true, projectId: true } });
+        if (!line) throw new Error("LINE_NOT_FOUND");
+        const [advAgg, payAgg] = await Promise.all([
+          tx.advance.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
+          tx.vendorPayment.aggregate({ where: { financeCostLineId }, _sum: { amount: true } }),
+        ]);
+        const already = Number(advAgg._sum.amount ?? 0) + Number(payAgg._sum.amount ?? 0);
+        if (Number(amount) > Number(line.netAmount) - already) throw new Error("EXCEED_LINE");
+        await tx.vendorPayment.create({
+          data: {
+            vendorId,
+            // Dòng chi phí đã buộc vào 1 dự án — lấy luôn projectId của nó, không tin ô chọn ở form.
+            projectId: line.projectId,
+            financeCostLineId,
+            amount,
+            dueDate: dateOrNull(formData.get("dueDate")),
+            invoiceNo: nullable(formData.get("invoiceNo")),
+            note: nullable(formData.get("note")),
+            createdById: staffId,
+          },
+        });
+      });
+    } catch (e) {
+      const code = e instanceof Error ? e.message : "";
+      if (code === "EXCEED_LINE" || code === "LINE_NOT_FOUND") return;
+      throw e;
+    }
+  } else {
+    // Khoản chi cấp dự án, không gắn dòng nào — giữ nguyên hành vi cũ, không có trần theo dòng.
+    await prisma.vendorPayment.create({
+      data: {
+        vendorId,
+        projectId: nullable(formData.get("projectId")),
+        amount,
+        dueDate: dateOrNull(formData.get("dueDate")),
+        invoiceNo: nullable(formData.get("invoiceNo")),
+        note: nullable(formData.get("note")),
+        createdById: staffId,
+      },
+    });
+  }
   revalidatePath("/finance/vendor-payments");
+  revalidatePath("/finance");
 }
 
 export async function markVendorPaymentPaid(id: string) {
+  await requirePermission("finance.vendor_payment.pay");
   // updateMany + guard SCHEDULED: bấm 2 lần / 2 người cùng bấm không ghi đè paidDate lần đầu.
   await prisma.vendorPayment.updateMany({
     where: { id, status: "SCHEDULED" },
@@ -208,6 +257,7 @@ export async function markVendorPaymentPaid(id: string) {
 // ── Công nợ ──
 
 export async function createClientInvoice(formData: FormData) {
+  await requirePermission("finance.invoice.manage");
   const projectId = nullable(formData.get("projectId"));
   const invoiceNo = nullable(formData.get("invoiceNo"));
   const amount = bigIntOrZero(formData.get("amount"));
@@ -232,6 +282,7 @@ export async function createClientInvoice(formData: FormData) {
 }
 
 export async function recordClientPayment(invoiceId: string, formData: FormData) {
+  await requirePermission("finance.payment.record");
   const amount = bigIntOrZero(formData.get("amount"));
   if (amount <= BigInt(0)) return;
   // Không cho ghi nhận vượt số còn lại của hóa đơn — trả dư làm outstanding âm và khoản đó

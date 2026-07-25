@@ -3,8 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { KbPanel } from "./kb-panel";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function KbPage() {
+  await requirePermission("kb.view");
   const [t, locale] = await Promise.all([getTranslations("kb"), getLocale() as Promise<Locale>]);
 
   const categorySet = await prisma.optionSet.findUnique({

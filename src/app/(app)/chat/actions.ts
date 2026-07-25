@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { buildConversationView, type ConversationView } from "./conversation-data";
+import type { ChatListItem, ChatStaff } from "./types";
 import {
   getOrCreateDirectConversation,
   getMembership,
@@ -16,6 +18,8 @@ import {
   validateMentionIds,
   previewText,
   listConversationsForForward,
+  listConversationsForStaff,
+  isSuperAdmin,
   TCM_FAMILY_GROUP_NAME,
   type ForwardTarget,
 } from "@/lib/chat";
@@ -31,6 +35,7 @@ import {
 } from "@/lib/chat-storage";
 import { formatDuration } from "@/lib/utils";
 import { fetchLinkPreview } from "@/lib/link-preview";
+import { requirePermission } from "@/lib/permissions";
 
 export type SendState = { error?: string; ok?: number };
 
@@ -41,6 +46,7 @@ function revalidateConv(conversationId: string) {
 
 /** Bắt đầu (hoặc mở lại) chat 1-1 rồi điều hướng vào hội thoại. */
 export async function startDirectChat(formData: FormData) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   const otherId = String(formData.get("staffId") ?? "");
   if (!meId || !otherId || otherId === meId) return;
@@ -53,6 +59,7 @@ export async function startDirectChat(formData: FormData) {
 
 /** Tạo nhóm mới; người tạo là ADMIN. Sinh system message GROUP_CREATED + MEMBER_ADDED. */
 export async function createGroup(formData: FormData) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const name = String(formData.get("name") ?? "").trim();
@@ -76,6 +83,7 @@ export async function createGroup(formData: FormData) {
 
 /** Gửi tin nhắn (TEXT hoặc LINK) + mentions + fan-out notification. */
 export async function sendMessage(conversationId: string, _prev: SendState, formData: FormData): Promise<SendState> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -205,6 +213,7 @@ export async function sendMessage(conversationId: string, _prev: SendState, form
  * cũng dùng cùng quy tắc cho luồng auto-join).
  */
 export async function addMembers(conversationId: string, formData: FormData) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   await assertMember(conversationId, meId);
@@ -228,6 +237,7 @@ export async function addMembers(conversationId: string, formData: FormData) {
 
 /** Bổ nhiệm member thành admin (chỉ admin). */
 export async function promoteToAdmin(conversationId: string, staffId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   await assertAdmin(conversationId, meId);
@@ -241,6 +251,7 @@ export async function promoteToAdmin(conversationId: string, staffId: string) {
 
 /** Đổi tên nhóm (chỉ admin). */
 export async function renameGroup(conversationId: string, formData: FormData) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   await assertAdmin(conversationId, meId);
@@ -253,6 +264,7 @@ export async function renameGroup(conversationId: string, formData: FormData) {
 
 /** Rời nhóm (self). Nếu admin cuối rời mà còn member → tự bổ nhiệm member join sớm nhất làm admin. */
 export async function leaveConversation(conversationId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const me = await getMembership(conversationId, meId);
@@ -294,6 +306,7 @@ export type DisbandState = { error?: string };
  * ensureTcmFamilyMembership, tin chúc mừng tự động — lib/occasions.ts).
  */
 export async function disbandGroup(conversationId: string): Promise<DisbandState> {
+  await requirePermission("chat.moderate");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -315,6 +328,7 @@ export type DissolveDirectState = { error?: string };
  * tin nhắn cho CẢ 2 người, giống hệt disbandGroup.
  */
 export async function dissolveDirectConversation(conversationId: string): Promise<DissolveDirectState> {
+  await requirePermission("chat.moderate");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -333,6 +347,7 @@ export async function dissolveDirectConversation(conversationId: string): Promis
  * đều phải có mặt — ensureTcmFamilyMembership sẽ tự thêm lại vào lần "act as" kế tiếp, gây nhiễu).
  */
 export async function removeMember(conversationId: string, staffId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId || staffId === meId) return;
   await assertAdmin(conversationId, meId);
@@ -349,6 +364,7 @@ export async function removeMember(conversationId: string, staffId: string) {
 
 /** Đổi avatar nhóm (chỉ admin) — lưu qua chat-storage như các đính kèm khác. */
 export async function updateGroupAvatar(conversationId: string, formData: FormData): Promise<{ error?: string }> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -370,6 +386,7 @@ export async function updateGroupAvatar(conversationId: string, formData: FormDa
 
 /** Ghim/bỏ ghim hội thoại lên đầu danh sách CỦA RIÊNG người đang thao tác (không ảnh hưởng người khác). */
 export async function toggleConversationPin(conversationId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const m = await getMembership(conversationId, meId);
@@ -383,6 +400,7 @@ export async function toggleConversationPin(conversationId: string) {
 
 /** Bật/tắt thông báo cho chính mình trong hội thoại. */
 export async function toggleMute(conversationId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const m = await getMembership(conversationId, meId);
@@ -396,6 +414,7 @@ export async function toggleMute(conversationId: string) {
 
 /** Đánh dấu đã đọc (dùng khi mở hoặc khi poll nhận tin mới). */
 export async function markRead(conversationId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   await markConversationRead(conversationId, meId);
@@ -407,6 +426,7 @@ export async function markRead(conversationId: string) {
  * emoji đang chọn = gỡ. Gọi trực tiếp từ client component (không phải form action).
  */
 export async function toggleReaction(messageId: string, emoji: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const message = await prisma.message.findUnique({ where: { id: messageId }, select: { conversationId: true } });
@@ -432,6 +452,7 @@ export type EditState = { error?: string; ok?: number };
 
 /** Sửa nội dung tin nhắn — chỉ sender, chỉ khi còn TEXT và chưa bị xóa. Đánh dấu editedAt. */
 export async function editMessage(messageId: string, body: string): Promise<EditState> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -449,6 +470,7 @@ export async function editMessage(messageId: string, body: string): Promise<Edit
 
 /** "Delete for me" — chỉ ẩn tin nhắn khỏi chính người xóa (mọi thành viên, kể cả tin của người khác). */
 export async function deleteMessageForMe(messageId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const message = await prisma.message.findUnique({ where: { id: messageId }, select: { conversationId: true } });
@@ -468,6 +490,7 @@ export async function deleteMessageForMe(messageId: string) {
  * (tránh vỡ chuỗi reply/pin trỏ tới nó). Dọn kèm file đính kèm trên disk + gỡ pin + reaction.
  */
 export async function deleteMessageForEveryone(messageId: string) {
+  await requirePermission("chat.moderate");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const message = await prisma.message.findUnique({ where: { id: messageId } });
@@ -510,6 +533,7 @@ export type PinState = { error?: string; ok?: number };
 
 /** Ghim tin nhắn lên đầu hội thoại — tối đa 3 tin/hội thoại tại 1 thời điểm. Bất kỳ thành viên. */
 export async function pinMessage(conversationId: string, messageId: string): Promise<PinState> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -532,6 +556,7 @@ export async function pinMessage(conversationId: string, messageId: string): Pro
 
 /** Gỡ ghim — bất kỳ thành viên. */
 export async function unpinMessage(conversationId: string, messageId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   await assertMember(conversationId, meId);
@@ -545,6 +570,7 @@ const REMINDER_AUDIENCES = ["ME", "GROUP"];
 
 /** Tạo nhắc hẹn — đăng ngay 1 message type=REMINDER làm thông báo lịch; "đến hẹn" xử lý ở lib/chat-reminders.ts. */
 export async function createReminder(conversationId: string, _prev: ReminderState, formData: FormData): Promise<ReminderState> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -586,6 +612,7 @@ export type PollState = { error?: string; ok?: number };
 
 /** Tạo bình chọn — ≥2 phương án bắt buộc lúc tạo; các setting theo yêu cầu (allowMultiple/anonymous/hideResultsUntilVoted/allowAddOptions/closesAt). */
 export async function createPoll(conversationId: string, _prev: PollState, formData: FormData): Promise<PollState> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -643,6 +670,7 @@ export async function createPoll(conversationId: string, _prev: PollState, formD
 
 /** Vote/gỡ vote 1 phương án — single-choice thì vote mới tự thay vote cũ (allowMultiple=false). */
 export async function votePollOption(pollOptionId: string) {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return;
   const option = await prisma.pollOption.findUnique({
@@ -670,6 +698,7 @@ export type AddPollOptionState = { error?: string };
 
 /** Thêm phương án mới vào poll đang mở — chỉ khi poll bật allowAddOptions và chưa đóng. */
 export async function addPollOption(pollId: string, text: string): Promise<AddPollOptionState> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -691,6 +720,7 @@ export async function addPollOption(pollId: string, text: string): Promise<AddPo
 
 /** Danh sách hội thoại của tôi cho picker "Chuyển tiếp" (gọi trực tiếp từ client component). */
 export async function getForwardTargets(): Promise<ForwardTarget[]> {
+  await requirePermission("chat.use");
   const meId = await getCurrentStaffId();
   if (!meId) return [];
   return listConversationsForForward(meId);
@@ -704,6 +734,7 @@ export type ForwardState = { error?: string; ok?: number };
  * Người chuyển tiếp phải là thành viên CẢ 2 bên (thấy được tin gốc + gửi được ở đích).
  */
 export async function forwardMessage(messageId: string, targetConversationId: string): Promise<ForwardState> {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!meId) return { error: t("errNotMember") };
@@ -759,4 +790,47 @@ export async function forwardMessage(messageId: string, targetConversationId: st
 
   revalidateConv(targetConversationId);
   return { ok: Date.now() };
+}
+
+// ─────────────────────────────────────────────────────────
+// Hộp chat nổi — nạp dữ liệu theo yêu cầu thay vì qua điều hướng.
+// Dùng CHUNG buildConversationView với trang /chat/[id] để hai đường không lệch nhau.
+// ─────────────────────────────────────────────────────────
+
+/** Danh sách hội thoại + nhân sự cho bảng chọn của dock. */
+export async function loadChatDock(): Promise<{ list: ChatListItem[]; staff: ChatStaff[]; superAdmin: boolean }> {
+  await requirePermission("chat.use");
+  const meId = await getCurrentStaffId();
+  if (!meId) return { list: [], staff: [], superAdmin: false };
+
+  const [items, superAdmin, staffRows] = await Promise.all([
+    listConversationsForStaff(meId),
+    isSuperAdmin(meId),
+    prisma.staff.findMany({ where: { isActive: true }, select: { id: true, fullName: true, title: true }, orderBy: { fullName: "asc" } }),
+  ]);
+
+  return {
+    list: items.map((i) => ({
+      id: i.id,
+      type: i.type,
+      title: i.title,
+      avatarKey: i.avatarKey,
+      lastBody: i.lastBody,
+      lastAt: i.lastAt?.toISOString() ?? null,
+      lastIsSystem: i.lastIsSystem,
+      unread: i.unread,
+      muted: i.muted,
+      memberCount: i.memberCount,
+      pinned: i.pinned,
+    })),
+    staff: staffRows.filter((s) => s.id !== meId).map((s) => ({ id: s.id, fullName: s.fullName, title: s.title })),
+    superAdmin,
+  };
+}
+
+/** Toàn bộ dữ liệu một hội thoại cho hộp nổi. null = không tồn tại hoặc không được xem. */
+export async function loadChatPanel(conversationId: string): Promise<ConversationView | null> {
+  await requirePermission("chat.use");
+  const meId = await getCurrentStaffId();
+  return buildConversationView(conversationId, meId);
 }

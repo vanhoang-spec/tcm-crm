@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type TimekeepingSettingsState = { error?: string; success?: boolean };
 
@@ -19,6 +20,7 @@ export async function saveTimekeepingSettings(
   _prev: TimekeepingSettingsState,
   formData: FormData
 ): Promise<TimekeepingSettingsState> {
+  await requirePermission("settings.timekeeping.manage");
   const t = await getTranslations("settings.timekeeping");
   const weekHours = Number(formData.get("standardWeekHours"));
   const leaveDays = Number(formData.get("annualLeaveDays"));

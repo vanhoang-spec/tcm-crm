@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { createHash } from "crypto";
 import { TCM_FAMILY_GROUP_NAME } from "../src/lib/chat";
+import { PERMISSION_CODES } from "../src/lib/permission-catalog";
 import { currentPeriodCode } from "../src/lib/creative-cost";
 
 const prisma = new PrismaClient();
@@ -31,20 +32,28 @@ async function main() {
   ]);
 
   // ── Departments ──
+  // costPrefix = tiền tố sinh mã dòng chi phí CO/CE (ACC-001, OPE-002…). Chỉ đặt cho phòng thực
+  // sự nhận chi phí trực tiếp; FIN/HR/IT/CEO để null. Admin sửa được ở /settings/teams.
   const departments = [
-    { code: "ACCOUNT", name: "Account" },
-    { code: "PLANNING", name: "Planning" },
-    { code: "CREATIVE", name: "Creative / Thiết kế" },
-    { code: "OPE", name: "Operation" },
-    { code: "PRO", name: "Production" },
-    { code: "PCC", name: "Purchasing" },
+    { code: "ACCOUNT", name: "Account", costPrefix: "ACC" },
+    { code: "PLANNING", name: "Planning", costPrefix: "PLA" },
+    { code: "CREATIVE", name: "Creative / Thiết kế", costPrefix: "CRE" },
+    { code: "OPE", name: "Operation", costPrefix: "OPE" },
+    { code: "PRO", name: "Production", costPrefix: "PRO" },
+    { code: "PCC", name: "Purchasing", costPrefix: "PUR" },
     { code: "FIN", name: "Kế toán / Tài chính" },
     { code: "HR", name: "HR" },
     { code: "IT", name: "IT / Hệ thống" },
     { code: "CEO", name: "Ban điều hành" },
   ];
   for (const d of departments) {
-    await prisma.department.upsert({ where: { code: d.code }, update: {}, create: d });
+    // update chỉ điền costPrefix khi còn trống — re-seed không đè prefix admin đã sửa tay.
+    const existing = await prisma.department.findUnique({ where: { code: d.code }, select: { costPrefix: true } });
+    await prisma.department.upsert({
+      where: { code: d.code },
+      update: existing?.costPrefix == null && d.costPrefix ? { costPrefix: d.costPrefix } : {},
+      create: d,
+    });
   }
   // ── Nhân sự thật (42 người, Danh sach NS.xlsx — cập nhật 2026-07-22) ──
   // Thay toàn bộ khối "Staff (PIC mẫu)" demo cũ. Giữ nguyên tên biến cũ (ceo/thao/yen/...) làm alias
@@ -1939,6 +1948,52 @@ async function main() {
       where: { email: row.email, roleId: null },
       data: { roleId: roleByCode[roleCode].id },
     });
+  }
+
+  // ── Vòng 4: ma trận phân quyền (RolePermission) ──
+  // Grant mặc định = ĐÚNG quyền mọi người đang có TRƯỚC khi bật ma trận, để bật lên không ai mất
+  // việc đột ngột; BGĐ siết dần ở /settings/roles tab "Ma trận quyền". Danh mục mã quyền nằm ở
+  // src/lib/permission-catalog.ts (code, KHÔNG phải DB — xem doc-comment file đó).
+  // CHỈ seed cho role CHƯA có grant nào — re-seed KHÔNG ghi đè chỉnh sửa tay của admin (như Vòng 3).
+  //
+  // Trước khi có ma trận, ba cơ chế quyết định ai thấy gì. Ba khối dưới đây tái hiện đúng chúng:
+  //   (1) requireAdmin()      → /kpi và /settings chỉ ADMIN
+  //   (2) getDashboardScope() → cashflow + xem-mọi-team chỉ phòng CEO hoặc title CFO
+  //   (3) getAiVisibility()   → từng tính năng AI theo phòng ban, riêng 4 người có all-access
+  const isRestricted = (code: string) =>
+    code.startsWith("kpi.") || // (1)
+    code.startsWith("settings.") || // (1)
+    code.startsWith("payroll.") || // module chưa làm — chưa ai có
+    code === "system.impersonate" || // chỉ ADMIN
+    code === "dashboard.cashflow" || // (2)
+    code === "dashboard.all_teams" || // (2)
+    code.startsWith("ai."); // (3)
+
+  const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
+  const EXEC_EXTRA = ["dashboard.cashflow", "dashboard.all_teams", "ai.board_report", "ai.trend"];
+
+  /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
+  const extraByGroup: Record<string, string[]> = {
+    BOD: EXEC_EXTRA,
+    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend"],
+    CREATIVE: ["ai.brainstorm"],
+    PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
+    HR: ["ai.brainstorm", "ai.content"],
+    FINANCE: ["ai.costsheet"],
+  };
+  /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
+  const extraByRole: Record<string, string[]> = {
+    CFO: EXEC_EXTRA, // Phạm Thu Huyền — exec trong cả (2) và (3)
+    PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
+  };
+
+  const baseGrantCodes = PERMISSION_CODES.filter((c) => !isRestricted(c));
+  for (const r of roleSeeds) {
+    if (r.code === "ADMIN") continue; // ADMIN là sàn cứng trong code — không cần (và không nên) có dòng grant
+    const roleId = roleByCode[r.code].id;
+    if ((await prisma.rolePermission.count({ where: { roleId } })) > 0) continue; // đã cấu hình tay → không đụng
+    const codes = new Set([...baseGrantCodes, ...(extraByGroup[r.groupCode] ?? []), ...(extraByRole[r.code] ?? [])]);
+    await prisma.rolePermission.createMany({ data: [...codes].map((permissionCode) => ({ roleId, permissionCode })) });
   }
 
   // ── Module ⑥ KPI — tiêu chí đánh giá + lương vị trí + điểm mẫu ──

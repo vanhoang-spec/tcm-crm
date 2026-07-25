@@ -10,6 +10,7 @@ import { parseCtvExcel, fillCtvDocx } from "@/lib/ctv";
 import { ctvRowSchema } from "@/lib/validators/ctv";
 import fs from "fs/promises";
 import path from "path";
+import { requirePermission } from "@/lib/permissions";
 
 export type CtvActionState = { error?: string; success?: boolean; count?: number };
 
@@ -120,6 +121,7 @@ function revalidateOperations(projectId: string) {
 }
 
 export async function createCtvBatch(projectId: string, formData: FormData): Promise<CtvActionState> {
+  await requirePermission("projects.ctv.manage");
   const meId = await getCurrentStaffId();
   const batch = await prisma.ctvBatch.create({
     data: { projectId, name: nullable(formData.get("name")), createdById: meId },
@@ -130,6 +132,7 @@ export async function createCtvBatch(projectId: string, formData: FormData): Pro
 }
 
 export async function deleteCtvBatch(batchId: string): Promise<CtvActionState> {
+  await requirePermission("projects.ctv.manage");
   const batch = await prisma.ctvBatch.findUnique({ where: { id: batchId }, select: { projectId: true } });
   if (!batch) return { error: "NOT_FOUND" };
   await prisma.ctvBatch.delete({ where: { id: batchId } });
@@ -139,6 +142,7 @@ export async function deleteCtvBatch(batchId: string): Promise<CtvActionState> {
 }
 
 export async function saveCtvBatchHeader(batchId: string, formData: FormData): Promise<CtvActionState> {
+  await requirePermission("projects.ctv.manage");
   const batch = await prisma.ctvBatch.findUnique({ where: { id: batchId }, select: { projectId: true } });
   if (!batch) return { error: "NOT_FOUND" };
   await prisma.ctvBatch.update({
@@ -161,6 +165,7 @@ export async function saveCtvBatchHeader(batchId: string, formData: FormData): P
  * pattern saveCostSheet). Không đụng batch khác. Cũng lưu lại file gốc (sourceFileKey) để tải lại.
  */
 export async function importCtvExcel(batchId: string, formData: FormData): Promise<CtvImportState> {
+  await requirePermission("projects.ctv.manage");
   const t = await getTranslations("projects.operations");
   const batch = await prisma.ctvBatch.findUnique({ where: { id: batchId }, select: { projectId: true } });
   if (!batch) return { error: "NOT_FOUND" };
@@ -277,6 +282,7 @@ function rowDataFromPayload(r: ReturnType<typeof ctvRowSchema.parse>) {
  * batch, không làm mất generatedFileKey/generatedAt của dòng đã tạo biên bản trước đó).
  */
 export async function createCtvRow(batchId: string, formData: FormData): Promise<CtvRowActionState> {
+  await requirePermission("projects.ctv.manage");
   const batch = await prisma.ctvBatch.findUnique({ where: { id: batchId }, select: { projectId: true } });
   if (!batch) return { error: "NOT_FOUND" };
 
@@ -295,6 +301,7 @@ export async function createCtvRow(batchId: string, formData: FormData): Promise
 
 /** Sửa 1 dòng đã có sẵn — CHỈ update field nhập tay, không đụng generatedFileKey/generatedAt. */
 export async function updateCtvRow(rowId: string, formData: FormData): Promise<CtvRowActionState> {
+  await requirePermission("projects.ctv.manage");
   const existing = await prisma.ctvContract.findUnique({ where: { id: rowId }, select: { batch: { select: { projectId: true } } } });
   if (!existing) return { error: "NOT_FOUND" };
 
@@ -312,6 +319,7 @@ export async function updateCtvRow(rowId: string, formData: FormData): Promise<C
 }
 
 export async function deleteCtvRow(rowId: string): Promise<CtvActionState> {
+  await requirePermission("projects.ctv.manage");
   const existing = await prisma.ctvContract.findUnique({ where: { id: rowId }, select: { batch: { select: { projectId: true } } } });
   if (!existing) return { error: "NOT_FOUND" };
   await prisma.ctvContract.delete({ where: { id: rowId } });
@@ -325,6 +333,7 @@ export async function deleteCtvRow(rowId: string): Promise<CtvActionState> {
  * generatedFileKey/generatedAt. Ghi đè file cũ nếu đã generate trước đó (không giữ lịch sử phiên bản).
  */
 export async function generateCtvContracts(batchId: string): Promise<CtvGenerateState> {
+  await requirePermission("projects.ctv.contract");
   const batch = await prisma.ctvBatch.findUnique({
     where: { id: batchId },
     include: { rows: true, project: { select: { id: true, code: true } } },

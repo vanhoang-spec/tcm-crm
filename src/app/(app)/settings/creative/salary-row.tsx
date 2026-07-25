@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveSalaryBudget, type CreativeSettingsState } from "./actions";
 
@@ -30,12 +31,10 @@ export function SalaryRow({
     >
       <span className="text-sm font-medium text-foreground">{positionTitle}</span>
       <div>
-        <input name="monthlySalary" type="number" min={0} step={100000} defaultValue={monthlySalary} placeholder={t("monthlySalary")} className={input + " w-full"} />
+        <NumberField name="monthlySalary" defaultValue={monthlySalary} placeholder={t("monthlySalary")} className={input + " w-full"} />
       </div>
-      <input
+      <NumberField
         name="headcountOverride"
-        type="number"
-        min={0}
         defaultValue={headcountOverride ?? ""}
         placeholder={t("headcountLive")}
         className={input}

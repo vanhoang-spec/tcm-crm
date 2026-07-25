@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type TimelineTemplateFormState = { error?: string; fieldErrors?: Record<string, string> };
 
@@ -28,6 +29,7 @@ export async function createTimelineTemplate(
   _prev: TimelineTemplateFormState,
   formData: FormData,
 ): Promise<TimelineTemplateFormState> {
+  await requirePermission("settings.templates.manage");
   const t = await getTranslations("settings.timelineTemplates");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { fieldErrors: { name: t("errorNameRequired") } };
@@ -49,6 +51,7 @@ export async function updateTimelineTemplate(
   _prev: TimelineTemplateFormState,
   formData: FormData,
 ): Promise<TimelineTemplateFormState> {
+  await requirePermission("settings.templates.manage");
   const t = await getTranslations("settings.timelineTemplates");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { fieldErrors: { name: t("errorNameRequired") } };
@@ -72,6 +75,7 @@ export async function updateTimelineTemplate(
 
 // ── Section ──
 export async function createTimelineSection(templateId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const nameVi = String(formData.get("nameVi") ?? "").trim();
   if (!nameVi) return;
   const count = await prisma.timelineTemplateSection.count({ where: { templateId } });
@@ -88,6 +92,7 @@ export async function createTimelineSection(templateId: string, formData: FormDa
 }
 
 export async function updateTimelineSection(templateId: string, sectionId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const nameVi = String(formData.get("nameVi") ?? "").trim();
   if (!nameVi) return;
   await prisma.timelineTemplateSection.update({
@@ -102,11 +107,13 @@ export async function updateTimelineSection(templateId: string, sectionId: strin
 }
 
 export async function deleteTimelineSection(templateId: string, sectionId: string) {
+  await requirePermission("settings.templates.manage");
   await prisma.timelineTemplateSection.delete({ where: { id: sectionId } });
   revalidatePath(`/settings/timeline-templates/${templateId}`);
 }
 
 export async function moveTimelineSection(templateId: string, sectionId: string, direction: "up" | "down") {
+  await requirePermission("settings.templates.manage");
   const sections = await prisma.timelineTemplateSection.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
   const idx = sections.findIndex((s) => s.id === sectionId);
   const swapWith = direction === "up" ? idx - 1 : idx + 1;
@@ -120,6 +127,7 @@ export async function moveTimelineSection(templateId: string, sectionId: string,
 
 // ── Item ──
 export async function createTimelineTemplateItem(templateId: string, sectionId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
   const count = await prisma.timelineTemplateItem.count({ where: { sectionId } });
@@ -139,6 +147,7 @@ export async function createTimelineTemplateItem(templateId: string, sectionId: 
 }
 
 export async function updateTimelineTemplateItem(templateId: string, itemId: string, formData: FormData) {
+  await requirePermission("settings.templates.manage");
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
   await prisma.timelineTemplateItem.update({
@@ -156,6 +165,7 @@ export async function updateTimelineTemplateItem(templateId: string, itemId: str
 }
 
 export async function deleteTimelineTemplateItem(templateId: string, itemId: string) {
+  await requirePermission("settings.templates.manage");
   await prisma.timelineTemplateItem.delete({ where: { id: itemId } });
   revalidatePath(`/settings/timeline-templates/${templateId}`);
 }

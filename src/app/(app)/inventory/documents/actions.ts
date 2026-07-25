@@ -16,6 +16,7 @@ import {
   nextDocCode,
   type DocType,
 } from "@/lib/inventory";
+import { requirePermission } from "@/lib/permissions";
 
 export type DocFormState = { error?: string; success?: boolean };
 
@@ -142,15 +143,18 @@ async function createInboundDoc(type: DocType, _prev: DocFormState, formData: Fo
 }
 
 export async function createImportDoc(prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.doc.create");
   return createInboundDoc("IMPORT", prev, formData);
 }
 export async function createAdjustDoc(prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.doc.create");
   return createInboundDoc("ADJUST", prev, formData);
 }
 
 // ── CHUYỂN KHO — 2 bước: PENDING (trừ nguồn) → nhận/hủy ──
 
 export async function createTransferDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.transfer.create");
   const t = await getTranslations("inventory.documents");
   const fromWarehouseId = String(formData.get("fromWarehouseId") ?? "");
   const toWarehouseId = String(formData.get("toWarehouseId") ?? "");
@@ -197,6 +201,7 @@ export async function createTransferDoc(_prev: DocFormState, formData: FormData)
 }
 
 export async function confirmTransferReceive(docId: string, _prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.transfer.confirm");
   const t = await getTranslations("inventory.documents");
   const doc = await prisma.stockDocument.findUnique({ where: { id: docId }, include: { lines: true } });
   if (!doc || doc.type !== "TRANSFER" || !doc.toWarehouseId) return { error: t("errorInvalid") };
@@ -232,6 +237,7 @@ export async function confirmTransferReceive(docId: string, _prev: DocFormState,
 }
 
 export async function cancelTransfer(docId: string, _prev: DocFormState, _formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.transfer.cancel");
   const t = await getTranslations("inventory.documents");
   const doc = await prisma.stockDocument.findUnique({ where: { id: docId }, include: { lines: true } });
   if (!doc || doc.type !== "TRANSFER" || !doc.fromWarehouseId) return { error: t("errorInvalid") };
@@ -255,6 +261,7 @@ export async function cancelTransfer(docId: string, _prev: DocFormState, _formDa
 // ── XUẤT EVENT / TRẢ VỀ — 1 bước, gắn dự án ──────────────
 
 export async function createIssueDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.doc.create");
   const t = await getTranslations("inventory.documents");
   const fromWarehouseId = String(formData.get("fromWarehouseId") ?? "");
   const projectId = String(formData.get("projectId") ?? "");
@@ -312,6 +319,7 @@ export async function createIssueDoc(_prev: DocFormState, formData: FormData): P
 }
 
 export async function createReturnDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.doc.create");
   const t = await getTranslations("inventory.documents");
   const toWarehouseId = String(formData.get("toWarehouseId") ?? "");
   const projectId = String(formData.get("projectId") ?? "");
@@ -356,6 +364,7 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
 
 /** Field duy nhất sửa được sau COMPLETED (trên phiếu ISSUE) — reset cờ nhắc để nhắc lại theo hạn mới. */
 export async function updateExpectedReturn(docId: string, _prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.doc.create");
   const t = await getTranslations("inventory.documents");
   const raw = String(formData.get("expectedReturnAt") ?? "").trim();
   const d = raw ? new Date(raw) : null;

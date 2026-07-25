@@ -1,4 +1,5 @@
 import { getLocale, getTranslations } from "next-intl/server";
+import { NumberField } from "@/components/ui/number-field";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/ui/date-field";
@@ -7,6 +8,7 @@ import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
 import { createClientInvoice, recordClientPayment } from "../actions";
+import { requirePermission } from "@/lib/permissions";
 
 const input = "h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
@@ -23,6 +25,7 @@ function agingBucket(dueDate: Date | null, invoiceDate: Date, now: Date): Bucket
 }
 
 export default async function DebtPage() {
+  await requirePermission("finance.view");
   const now = new Date();
   const [t, tc, locale, invoices, projects] = await Promise.all([
     getTranslations("finance.debt"),
@@ -95,7 +98,7 @@ export default async function DebtPage() {
           </label>
           <label className="text-xs text-muted-foreground">
             {t("amount")}
-            <input name="amount" type="number" step="any" min={1} required className={input} />
+            <NumberField name="amount" required className={input} />
           </label>
           <label className="text-xs text-muted-foreground">
             {t("invoiceDate")}
@@ -137,7 +140,7 @@ export default async function DebtPage() {
               <form action={recordClientPayment.bind(null, inv.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
                 <label className="text-xs text-muted-foreground">
                   {t("paymentAmount")}
-                  <input name="amount" type="number" step="any" min={1} className={input + " w-40"} />
+                  <NumberField name="amount" className={input + " w-40"} />
                 </label>
                 <label className="text-xs text-muted-foreground">
                   {t("paidDate")}

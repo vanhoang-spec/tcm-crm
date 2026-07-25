@@ -3,8 +3,10 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { ORDER_DEPARTMENT_LABELS } from "@/lib/bidding";
 import { OrderReview, type OrderData } from "./order-review";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function ProjectOrdersPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("projects.view");
   const { id } = await params;
 
   const project = await prisma.project.findUnique({ where: { id }, select: { id: true } });

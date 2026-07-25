@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { ChevronDown, ChevronRight, Eye, EyeOff, Trash2, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { DateField } from "@/components/ui/date-field";
@@ -291,7 +292,7 @@ function ItemRow({
       {/* Qty / Unit (checklist) */}
       {showQty && (
         <div className={cellBase}>
-          <input form={formId} name="quantity" type="number" step="any" defaultValue={item.quantity ?? ""} onChange={onChange} className={cn(cellInput, "tabular-nums")} />
+          <NumberField decimals={2} form={formId} name="quantity" defaultValue={item.quantity ?? ""} onChange={onChange} className={cn(cellInput, "tabular-nums")} />
         </div>
       )}
       {showUnit && (
@@ -360,7 +361,7 @@ function ItemRow({
             {!showQty && (
               <label className="text-xs text-muted-foreground">
                 {t("quantity")}
-                <input form={formId} name="quantity" type="number" step="any" defaultValue={item.quantity ?? ""} onChange={onChange} className={drawerInput} />
+                <NumberField decimals={2} form={formId} name="quantity" defaultValue={item.quantity ?? ""} onChange={onChange} className={drawerInput} />
               </label>
             )}
             {!showUnit && (

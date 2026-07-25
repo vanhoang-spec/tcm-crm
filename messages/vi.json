@@ -703,7 +703,7 @@
     "roles": {
       "backToSettings": "Quay lại Thiết lập",
       "title": "Bảng phân quyền",
-      "subtitle": "Gán role theo sơ đồ tổ chức cho từng nhân sự — nominal, chưa gate tính năng (app chưa có đăng nhập thật).",
+      "subtitle": "Gán role cho nhân sự ở tab đầu; cấu hình nhóm role đó được làm gì ở tab Ma trận quyền.",
       "colStaff": "Nhân sự",
       "colDepartment": "Phòng ban",
       "colTitle": "Chức danh",
@@ -725,7 +725,16 @@
       "groupUNASSIGNED": "Chưa gán role",
       "catalogTitle": "Danh mục role (phân cấp)",
       "catalogHint": "Sơ đồ Director/Manager → Staff theo 10 nhóm — dùng làm lựa chọn gán ở bảng trên.",
-      "parentLabel": "Cấp trên"
+      "parentLabel": "Cấp trên",
+      "tabAssign": "Gán nhóm phân quyền",
+      "tabMatrix": "Ma trận quyền",
+      "matrixTitle": "Ma trận quyền theo nhóm",
+      "matrixHint": "Tick = nhóm role đó được làm việc tương ứng. Bỏ tick là chặn thật ở cả trang lẫn server action, không chỉ ẩn nút.",
+      "colPermission": "Quyền",
+      "adminAllAccess": "Toàn quyền",
+      "adminAllAccessHint": "Nhóm Quản trị luôn có đủ quyền — cố ý cố định trong code để không ai tự khoá mình ra khỏi chính trang này.",
+      "sensitiveLegend": "Quyền nhạy cảm (tiền, duyệt, dữ liệu nhân sự)",
+      "saveMatrix": "Lưu ma trận"
     },
     "kpi": {
       "title": "Cài đặt KPI",
@@ -980,7 +989,10 @@
       "save": "Lưu CO/CE",
       "submitApprove": "Lưu & trình duyệt",
       "autoApproved": "Đủ điều kiện auto-approve (dưới ngưỡng & đạt margin)",
-      "sectionNameVi": "Tên hạng mục"
+      "sectionNameVi": "Tên hạng mục",
+      "sectionDepartment": "Phòng ban phụ trách",
+      "sectionDepartmentNone": "— Chưa gán phòng —",
+      "sectionDepartmentHint": "Quyết định tiền tố mã của mọi dòng trong hạng mục (VD: OPE-001). Mã do hệ thống tự đánh khi lưu."
     },
     "rounds": {
       "title": "Vòng deal giá",
@@ -1055,7 +1067,8 @@
       "marginBlocked": "Margin dưới {pct}% — cần CEO override kèm lý do.",
       "overrideNoteRequired": "Bắt buộc ghi lý do khi override margin.",
       "goNogoRequired": "Cần quyết định Go/No-Go (GO) trước khi dựng CO/CE.",
-      "notFound": "Không tìm thấy dự án."
+      "notFound": "Không tìm thấy dự án.",
+      "overrideNotAllowed": "Bạn không có quyền hạ margin xuống dưới ngưỡng tối thiểu. Liên hệ người có quyền duyệt."
     }
   },
   "reminders": {
@@ -1687,7 +1700,11 @@
       "errExceedLine": "Tổng tạm ứng vượt giá trị dòng (còn lại {remaining}).",
       "errBlockedCount": "Vượt số lần tạm ứng cho phép của NV này ({count}/{max}) — vui lòng hoàn ứng đợt cũ trước.",
       "errBlockedAmount": "Vượt tổng tạm ứng đang giữ của NV này ({amount}/{max}) — vui lòng hoàn ứng đợt cũ trước.",
-      "errRequired": "Vui lòng nhập đủ số tiền + người nhận + thông tin chuyển khoản."
+      "errRequired": "Vui lòng nhập đủ số tiền + người nhận + thông tin chuyển khoản.",
+      "colNetAmount": "Thực trả",
+      "colPaid": "Đã trả NCC",
+      "netVsCoHint": "Số thực trả (trần chi). CO đã gross-up thuế: {co}đ — phần chênh là thuế công ty nộp hộ, không trao cho ai.",
+      "outdatedWarning": "Dữ liệu chi phí đang lấy từ bản CO/CE cũ (rev {synced}), trong khi CO/CE đã sang rev {current}. Số tiền từng dòng — và trần chi dựa trên đó — có thể sai. Bấm \"Làm mới\" để đồng bộ lại."
     },
     "vendorPayments": {
       "title": "Thanh toán cho Nhà cung cấp",
@@ -1704,7 +1721,13 @@
       "totalScheduled": "Chưa trả",
       "totalPaid": "Đã trả",
       "empty": "Chưa có phiếu chi nào.",
-      "filterAll": "Tất cả"
+      "filterAll": "Tất cả",
+      "costLine": "Gắn vào dòng chi phí",
+      "costLinePlaceholder": "— Không gắn dòng —",
+      "costLineNone": "Dự án này không còn dòng nào chưa chi hết",
+      "costLinePickProject": "Chọn dự án trước",
+      "costLineRemaining": "còn {amount}đ",
+      "costLineHint": "Gắn dòng thì khoản chi này chịu chung trần với tạm ứng của dòng đó. Bỏ trống = khoản chi cấp dự án, không có trần theo dòng."
     },
     "debt": {
       "title": "Công nợ khách hàng (AR)",
@@ -2483,5 +2506,25 @@
       "EXEC_ONLY": "Chỉ Ban Giám đốc và CFO xem được báo cáo này.",
       "NOT_ALLOWED": "Công cụ này không dành cho phòng ban của bạn."
     }
+  },
+  "dock": {
+    "openChat": "Mở hộp trao đổi",
+    "openAi": "Mở trợ lý AI",
+    "pickConversation": "Chọn cuộc trò chuyện",
+    "minimize": "Thu nhỏ",
+    "close": "Đóng",
+    "loading": "Đang tải…",
+    "noConversation": "Chưa có cuộc trò chuyện nào",
+    "chatUnavailable": "Không mở được cuộc trò chuyện này.",
+    "aiTitle": "Trợ lý AI",
+    "aiPickTool": "Chọn công cụ",
+    "noAiTools": "Bạn chưa được cấp công cụ AI nào.",
+    "aiTool_brainstorm": "Ý tưởng & concept",
+    "aiTool_content": "Viết bài",
+    "aiTool_canva": "Brief thiết kế",
+    "aiTool_costsheet": "Rà soát CO/CE",
+    "aiTool_board": "Báo cáo BGĐ",
+    "aiTool_trend": "Xu hướng ngành",
+    "resize": "Kéo để đổi kích thước"
   }
 }

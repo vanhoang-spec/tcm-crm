@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveRatioMatrix, type CreativeSettingsState } from "./actions";
 
@@ -41,11 +42,8 @@ export function RatioMatrixForm({
                 </td>
                 {taskTypes.map((tt) => (
                   <td key={tt.id} className="py-1.5 pr-2">
-                    <input
-                      type="number"
+                    <NumberField decimals={2}
                       name={`ratio_${i}_${tt.id}`}
-                      min={0}
-                      max={100}
                       defaultValue={ratioByKey[`${title}|${tt.id}`] ?? 0}
                       className="h-8 w-16 rounded-lg border border-border-strong bg-surface px-1.5 text-center text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                     />

@@ -5,8 +5,10 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { isSuperAdmin } from "@/lib/chat";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function AllGroupsPage() {
+  await requirePermission("chat.use");
   const t = await getTranslations("chat");
   const meId = await getCurrentStaffId();
   if (!(await isSuperAdmin(meId))) notFound();

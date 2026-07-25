@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 
 export type WarehouseFormState = { error?: string; success?: boolean };
 
@@ -20,6 +21,7 @@ function revalidate() {
 }
 
 export async function createWarehouse(_prev: WarehouseFormState, formData: FormData): Promise<WarehouseFormState> {
+  await requirePermission("settings.warehouses.manage");
   const t = await getTranslations("settings.warehouses");
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const name = String(formData.get("name") ?? "").trim();
@@ -42,6 +44,7 @@ export async function createWarehouse(_prev: WarehouseFormState, formData: FormD
 }
 
 export async function updateWarehouse(warehouseId: string, _prev: WarehouseFormState, formData: FormData): Promise<WarehouseFormState> {
+  await requirePermission("settings.warehouses.manage");
   const t = await getTranslations("settings.warehouses");
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim() || null;

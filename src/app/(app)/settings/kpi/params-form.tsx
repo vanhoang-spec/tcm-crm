@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveKpiParams, type KpiSettingsState } from "./actions";
 import type { KpiParams } from "@/lib/kpi";
@@ -28,7 +29,7 @@ export function ParamsForm({ params }: { params: KpiParams }) {
         {fields.map((f) => (
           <label key={f.key} className="block">
             <span className="text-xs font-medium text-muted-foreground">{f.label}</span>
-            <input name={f.key} type="number" step={f.step} defaultValue={f.value} className={input + " mt-1"} />
+            <NumberField decimals={2} name={f.key} defaultValue={f.value} className={input + " mt-1"} />
             {f.hint && <span className="mt-1 block text-[11px] text-muted-foreground">{f.hint}</span>}
           </label>
         ))}

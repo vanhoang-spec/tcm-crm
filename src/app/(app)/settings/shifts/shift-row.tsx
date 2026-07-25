@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { updateShift, createShift, type ShiftFormState } from "./actions";
 
@@ -25,7 +26,7 @@ export function ShiftRow({
       <input name="name" defaultValue={shift.name} placeholder={t("formName")} className={input} />
       <input name="startTime" defaultValue={shift.startTime} placeholder="08:00" aria-label={t("formStart")} className={input + " font-mono"} />
       <input name="endTime" defaultValue={shift.endTime} placeholder="12:00" aria-label={t("formEnd")} className={input + " font-mono"} />
-      <input name="hours" type="number" step="0.5" min="0.5" defaultValue={shift.hours} aria-label={t("formHours")} className={input} />
+      <NumberField decimals={2} name="hours" defaultValue={shift.hours} aria-label={t("formHours")} className={input} />
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <input type="checkbox" name="isActive" defaultChecked={shift.isActive} className="h-3.5 w-3.5 rounded border-border-strong" />
         {t("active")}
@@ -57,7 +58,7 @@ export function ShiftCreateForm() {
         <input name="name" placeholder={t("formName")} className={input} required />
         <input name="startTime" placeholder="08:00" aria-label={t("formStart")} className={input + " font-mono"} required />
         <input name="endTime" placeholder="12:00" aria-label={t("formEnd")} className={input + " font-mono"} required />
-        <input name="hours" type="number" step="0.5" min="0.5" defaultValue={4} aria-label={t("formHours")} className={input} />
+        <NumberField decimals={2} name="hours" defaultValue={4} aria-label={t("formHours")} className={input} />
         <button
           type="submit"
           disabled={pending}

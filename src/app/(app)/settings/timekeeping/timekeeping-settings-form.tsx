@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveTimekeepingSettings, type TimekeepingSettingsState } from "./actions";
 
@@ -23,12 +24,12 @@ export function TimekeepingSettingsForm({
     <form action={formAction} className="space-y-4 rounded-xl border border-border bg-surface p-4">
       <label className="block space-y-1 text-sm font-medium text-foreground">
         {t("weekHours")}
-        <input name="standardWeekHours" type="number" min={1} max={168} defaultValue={standardWeekHours} className={input} />
+        <NumberField name="standardWeekHours" defaultValue={standardWeekHours} className={input} />
         <span className="block text-xs font-normal text-muted-foreground">{t("weekHoursHint")}</span>
       </label>
       <label className="block space-y-1 text-sm font-medium text-foreground">
         {t("annualLeaveDays")}
-        <input name="annualLeaveDays" type="number" min={0} max={60} defaultValue={annualLeaveDays} className={input} />
+        <NumberField name="annualLeaveDays" defaultValue={annualLeaveDays} className={input} />
         <span className="block text-xs font-normal text-muted-foreground">{t("annualLeaveDaysHint")}</span>
       </label>
       <label className="block space-y-1 text-sm font-medium text-foreground">

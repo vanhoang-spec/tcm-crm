@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { addDays, parseDateKey, weekStartOf } from "@/lib/timekeeping";
 import { formatDate } from "@/lib/utils";
+import { requirePermission } from "@/lib/permissions";
 
 export type ScheduleActionState = { error?: string; success?: boolean; notified?: number };
 
@@ -33,6 +34,7 @@ export async function toggleAssignment(
   dateISO: string,
   shiftId: string
 ): Promise<ScheduleActionState> {
+  await requirePermission("staff.timesheet.edit");
   const t = await getTranslations("staff.schedule");
   const weekStartRaw = parseDateKey(weekStartISO);
   const date = parseDateKey(dateISO);
@@ -72,6 +74,7 @@ export async function setAssignmentLeave(
   leaveTypeId: string | null,
   note: string
 ): Promise<ScheduleActionState> {
+  await requirePermission("staff.timesheet.edit");
   const t = await getTranslations("staff.schedule");
   const assignment = await prisma.shiftAssignment.findUnique({ where: { id: assignmentId }, select: { weekId: true } });
   if (!assignment) return { error: t("errorInvalid") };
@@ -93,6 +96,7 @@ export async function setAssignmentLeave(
 
 /** Confirm tuần → notify từng NV có ca (lần đầu SCHEDULE_CONFIRMED, các lần sau SCHEDULE_UPDATED). */
 export async function confirmWeek(weekId: string): Promise<ScheduleActionState> {
+  await requirePermission("staff.week.confirm");
   const t = await getTranslations("staff.schedule");
   const week = await prisma.scheduleWeek.findUnique({
     where: { id: weekId },

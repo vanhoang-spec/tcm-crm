@@ -6,8 +6,10 @@ import { pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { ClientForm } from "../client-form";
 import { createClient } from "../actions";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function NewClientPage() {
+  await requirePermission("clients.view");
   const [teams, industrySet, statusSet, classificationSet, staff, brands, t, locale] = await Promise.all([
     prisma.team.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
     prisma.optionSet.findUnique({

@@ -32,7 +32,7 @@ import {
   User,
   type LucideIcon,
 } from "lucide-react";
-import { cn, initials, formatDuration } from "@/lib/utils";
+import { cn, initials, formatDuration, formatTime, formatDateTime } from "@/lib/utils";
 import type { ChatMessage, ChatStaff, ChatReadState, ChatMessageReactionGroup, ChatPinnedMessage, ChatPoll } from "./types";
 import {
   sendMessage,
@@ -60,8 +60,8 @@ const MAX_MEDIA_MB = 10; // hình/video/file — khớp src/lib/chat-storage.ts
 
 type ForwardTarget = { id: string; type: string; title: string };
 
-function fmtTime(iso: string, locale: string) {
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+function fmtTime(iso: string) {
+  return formatTime(iso);
 }
 
 /** Nhãn preview ngắn gọn cho quote reply (composer + trong bong bóng tin nhắn). */
@@ -514,7 +514,7 @@ export function ChatConversation({
                   )}
                 </div>
                 <div className={cn("mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground", mine ? "justify-end" : "justify-start pl-1")}>
-                  <span>{fmtTime(m.createdAt, locale)}</span>
+                  <span>{fmtTime(m.createdAt)}</span>
                   {m.editedAt && !m.deletedForEveryone && <span className="italic">{t("editedLabel")}</span>}
                   {m.pinned && <Pin className="h-3 w-3 flex-none text-brand-500" aria-label={t("pinned")} />}
                   {mine && (
@@ -1096,7 +1096,7 @@ function ReminderCard({
   t: ReturnType<typeof useTranslations>;
   locale: string;
 }) {
-  const dt = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(reminder.remindAt));
+  const dt = formatDateTime(reminder.remindAt);
   const recurrenceLabel =
     reminder.recurrence === "DAILY" ? t("recurrenceDaily") :
     reminder.recurrence === "WEEKLY" ? t("recurrenceWeekly") :
@@ -1173,7 +1173,7 @@ function PollCard({
         ) : (
           poll.closesAt && (
             <span>
-              {t("pollClosesAt", { date: new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(poll.closesAt)) })}
+              {t("pollClosesAt", { date: formatDateTime(poll.closesAt) })}
             </span>
           )
         )}

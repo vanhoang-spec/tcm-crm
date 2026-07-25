@@ -5,8 +5,10 @@ import { pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { ItemForm, type CategoryOption } from "./item-form";
 import { ImportForm } from "./import-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function InventoryItemsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  await requirePermission("inventory.view");
   const { q } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("inventory.items"), getLocale() as Promise<Locale>]);
 

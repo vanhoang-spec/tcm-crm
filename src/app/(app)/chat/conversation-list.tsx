@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { Search, BellOff, Users, User, Pin } from "lucide-react";
-import { cn, initials, groupAvatarUrl } from "@/lib/utils";
+import { cn, initials, groupAvatarUrl, formatTime, formatDate } from "@/lib/utils";
 import type { ChatListItem, ChatStaff } from "./types";
 import { NewChatDialog } from "./new-chat-dialog";
 import { toggleConversationPin } from "./actions";
@@ -15,7 +15,8 @@ function shortTime(iso: string | null, locale: string): string {
   const d = new Date(iso);
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "2-digit", month: "2-digit" }).format(d);
+  // Trong ngày → chỉ giờ; khác ngày → DD/MM/YYYY (một chuẩn ngày duy nhất toàn app).
+  return sameDay ? formatTime(d) : formatDate(d);
 }
 
 export function ConversationList({ list, staff, superAdmin }: { list: ChatListItem[]; staff: ChatStaff[]; superAdmin: boolean }) {

@@ -3,8 +3,10 @@ import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getNumberSetting } from "@/lib/settings";
 import { ClientsSettingsForm } from "./clients-settings-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsClientsPage() {
+  await requirePermission("settings.clients.manage");
   const [t, activeDays, inactiveDays] = await Promise.all([
     getTranslations("settings.clients"),
     getNumberSetting("clients", "care_interval_active_days", 60),

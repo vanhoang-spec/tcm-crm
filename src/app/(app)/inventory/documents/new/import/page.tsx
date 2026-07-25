@@ -1,8 +1,10 @@
 import { getTranslations } from "next-intl/server";
 import { DocForm } from "../../doc-form";
 import { loadDocFormData } from "../load";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function NewImportPage() {
+  await requirePermission("inventory.view");
   const t = await getTranslations("inventory.documents");
   const { warehouseOptions, pickerItems } = await loadDocFormData();
   return (

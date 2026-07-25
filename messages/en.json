@@ -703,7 +703,7 @@
     "roles": {
       "backToSettings": "Back to Settings",
       "title": "Roles & Permissions",
-      "subtitle": "Assign an org-chart role to each staff member — nominal, doesn't gate any feature yet (the app has no real login).",
+      "subtitle": "Assign roles to staff in the first tab; configure what each role group may do in the Permission matrix tab.",
       "colStaff": "Staff",
       "colDepartment": "Department",
       "colTitle": "Title",
@@ -725,7 +725,16 @@
       "groupUNASSIGNED": "No role assigned",
       "catalogTitle": "Role catalog (hierarchy)",
       "catalogHint": "Director/Manager → Staff hierarchy across 10 groups — used as the assignment options above.",
-      "parentLabel": "Reports to"
+      "parentLabel": "Reports to",
+      "tabAssign": "Role assignment",
+      "tabMatrix": "Permission matrix",
+      "matrixTitle": "Permissions by role group",
+      "matrixHint": "Checked = that role group may perform the action. Unchecking blocks it for real, on both the page and the server action — not just hiding a button.",
+      "colPermission": "Permission",
+      "adminAllAccess": "Full access",
+      "adminAllAccessHint": "The Admin group always holds every permission — hard-wired in code so nobody can lock themselves out of this page.",
+      "sensitiveLegend": "Sensitive permission (money, approvals, HR data)",
+      "saveMatrix": "Save matrix"
     },
     "kpi": {
       "title": "KPI Settings",
@@ -980,7 +989,10 @@
       "save": "Save CO/CE",
       "submitApprove": "Save & submit",
       "autoApproved": "Eligible for auto-approve (below threshold & margin OK)",
-      "sectionNameVi": "Section name"
+      "sectionNameVi": "Section name",
+      "sectionDepartment": "Owning department",
+      "sectionDepartmentNone": "— No department —",
+      "sectionDepartmentHint": "Sets the code prefix for every line in this section (e.g. OPE-001). Codes are auto-assigned on save."
     },
     "rounds": {
       "title": "Deal rounds",
@@ -1055,7 +1067,8 @@
       "marginBlocked": "Margin below {pct}% — needs CEO override with a reason.",
       "overrideNoteRequired": "A reason is required when overriding margin.",
       "goNogoRequired": "A Go/No-Go (GO) decision is required before building CO/CE.",
-      "notFound": "Project not found."
+      "notFound": "Project not found.",
+      "overrideNotAllowed": "You do not have permission to set margin below the minimum floor. Contact an authorised approver."
     }
   },
   "reminders": {
@@ -1687,7 +1700,11 @@
       "errExceedLine": "Total advances exceed line value (remaining {remaining}).",
       "errBlockedCount": "Exceeds allowed advance count for this staff ({count}/{max}) — settle old advances first.",
       "errBlockedAmount": "Exceeds outstanding advance total for this staff ({amount}/{max}) — settle old advances first.",
-      "errRequired": "Please enter amount + recipient + bank transfer info."
+      "errRequired": "Please enter amount + recipient + bank transfer info.",
+      "colNetAmount": "Net payable",
+      "colPaid": "Paid to vendor",
+      "netVsCoHint": "Net payable (spending cap). CO after tax gross-up: {co}đ — the difference is tax the company remits, not paid to anyone.",
+      "outdatedWarning": "Cost lines came from an older cost sheet (rev {synced}) while the sheet is now at rev {current}. Per-line amounts — and the spending caps based on them — may be wrong. Click \"Refresh\" to re-sync."
     },
     "vendorPayments": {
       "title": "Vendor payments",
@@ -1704,7 +1721,13 @@
       "totalScheduled": "Unpaid",
       "totalPaid": "Paid",
       "empty": "No payment vouchers yet.",
-      "filterAll": "All"
+      "filterAll": "All",
+      "costLine": "Link to cost line",
+      "costLinePlaceholder": "— No cost line —",
+      "costLineNone": "No line with remaining budget in this project",
+      "costLinePickProject": "Pick a project first",
+      "costLineRemaining": "{amount}đ left",
+      "costLineHint": "Linking a line makes this payment share that line spending cap with its advances. Leave blank for a project-level payment with no per-line cap."
     },
     "debt": {
       "title": "Client receivables (AR)",
@@ -2483,5 +2506,25 @@
       "EXEC_ONLY": "Only the board and CFO can view this report.",
       "NOT_ALLOWED": "This tool isn't available for your department."
     }
+  },
+  "dock": {
+    "openChat": "Open chat box",
+    "openAi": "Open AI assistant",
+    "pickConversation": "Pick a conversation",
+    "minimize": "Minimize",
+    "close": "Close",
+    "loading": "Loading…",
+    "noConversation": "No conversations yet",
+    "chatUnavailable": "This conversation cannot be opened.",
+    "aiTitle": "AI assistant",
+    "aiPickTool": "Pick a tool",
+    "noAiTools": "You have no AI tools granted.",
+    "aiTool_brainstorm": "Ideas & concept",
+    "aiTool_content": "Content writing",
+    "aiTool_canva": "Design brief",
+    "aiTool_costsheet": "Cost sheet review",
+    "aiTool_board": "Board report",
+    "aiTool_trend": "Industry trends",
+    "resize": "Drag to resize"
   }
 }

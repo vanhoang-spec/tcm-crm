@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { DOC_TYPES } from "@/lib/inventory";
+import { requirePermission } from "@/lib/permissions";
 
 const STATUS_TONE = { PENDING: "warning", COMPLETED: "success", CANCELED: "danger" } as const;
 
@@ -12,6 +13,7 @@ export default async function InventoryDocumentsPage({
 }: {
   searchParams: Promise<{ type?: string; status?: string; project?: string }>;
 }) {
+  await requirePermission("inventory.view");
   const { type, status, project } = await searchParams;
   const t = await getTranslations("inventory.documents");
 

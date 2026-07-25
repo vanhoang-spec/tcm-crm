@@ -268,6 +268,47 @@ export function computeCostSheetTotals(
   return { directCo, percentLinesTotal, adjustedCoSubtotal, mgmtFeeAmt, contingencyAmt, coTotal, proxySubtotal, proxyFeeAmt, chiHo };
 }
 
+/**
+ * SỐ TIỀN THỰC TRẢ của 1 dòng — trần cho mọi khoản chi ra (thanh toán NCC + cả 2 loại tạm ứng).
+ *
+ * KHÁC `computeLineAmount`: hàm kia trả CO đã gross-up thuế, tức số ghi nhận GIÁ VỐN. Phần
+ * gross-up (TNCN ÷0,9 · TNDN ÷0,8 · OTHER cộng customTaxAmount) là thuế công ty nộp hộ, KHÔNG
+ * phải tiền trao cho NCC/nhân viên. Lấy CO làm trần chi sẽ cho chi vượt đúng bằng phần thuế đó
+ * — trên T013 là 70.250.002đ (32 dòng TNCN).
+ *
+ * VAT giữ nguyên: VAT đầu vào được khấu trừ nên CO đã là số trước thuế, không có gì để bóc.
+ * PERCENT_OF_TOTAL là dòng suy ra, không gross-up → net = chính nó.
+ */
+export function computeLineNetAmount(line: CostLineCalcInput, percentBase: number): number {
+  if (line.lineType === "FIXED") return Math.round(line.fixedAmount ?? 0);
+  if (line.lineType === "PERCENT_OF_TOTAL") return Math.round(((line.percentVal ?? 0) / 100) * percentBase);
+  return Math.round(line.quantity * line.unitPrice);
+}
+
+/** Prefix dùng khi hạng mục chưa gán phòng ban, hoặc phòng đó không có costPrefix. */
+export const DEFAULT_COST_PREFIX = "GEN";
+
+/**
+ * Đánh mã hiển thị cho từng dòng chi phí: `{prefix phòng ban}-{số thứ tự 3 chữ số}`.
+ *
+ * Số chạy RIÊNG theo từng prefix, theo đúng thứ tự dòng truyền vào (ACC-001, ACC-002, OPE-001…).
+ * Thêm/xoá dòng là cả bảng đánh lại số — CHẤP NHẬN ĐƯỢC vì mã này thuần hiển thị; liên kết
+ * tạm ứng/thanh toán của module ④ khoá vào `CostLine.stableKey`, không dùng mã này.
+ * (Nếu có ngày nào đó khoá vào mã này thì mọi lần xoá dòng sẽ làm tiền treo sai chỗ.)
+ */
+export function assignItemCodes(
+  lines: { sectionKey: string }[],
+  prefixBySectionKey: Map<string, string>,
+): string[] {
+  const seq = new Map<string, number>();
+  return lines.map((l) => {
+    const prefix = prefixBySectionKey.get(l.sectionKey) || DEFAULT_COST_PREFIX;
+    const n = (seq.get(prefix) ?? 0) + 1;
+    seq.set(prefix, n);
+    return `${prefix}-${String(n).padStart(3, "0")}`;
+  });
+}
+
 /** Gợi ý CE từ CO (chỉ để prefill, không ép buộc) = CO × (1+VAT%) × (1−chiết khấu%). */
 export function suggestCeFromCo(coTotal: number, vatPct: number, discountPct: number): number {
   return Math.round(coTotal * (1 + vatPct / 100) * (1 - discountPct / 100));

@@ -3,8 +3,10 @@ import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getNumberSetting } from "@/lib/settings";
 import { FinanceSettingsForm } from "./finance-settings-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsFinancePage() {
+  await requirePermission("settings.finance.manage");
   const [t, tIndex, maxCount, maxAmount, weeklyBuckets, monthlyBuckets] = await Promise.all([
     getTranslations("settings.finance"),
     getTranslations("settings.index"),

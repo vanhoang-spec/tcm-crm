@@ -39,6 +39,9 @@ model Department {
   name        String
   leadStaffId String? // trưởng bộ phận — người xếp lịch ca cho NV trong bộ phận (module ⑤)
   isActive    Boolean @default(true)
+  /// Tiền tố 3 ký tự sinh mã dòng chi phí CO/CE: ACC-001, OPE-002… (module ④ theo dõi thanh toán
+  /// từng dòng). Sửa ở /settings/teams. Null = phòng không nhận chi phí trực tiếp.
+  costPrefix  String?
 
   lead          Staff?         @relation("DepartmentLead", fields: [leadStaffId], references: [id])
   staff         Staff[]
@@ -60,11 +63,28 @@ model Role {
   sort         Int     @default(0)
   isActive     Boolean @default(true)
 
-  parent   Role?   @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
-  children Role[]  @relation("RoleHierarchy")
-  staff    Staff[]
+  parent      Role?            @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  children    Role[]           @relation("RoleHierarchy")
+  staff       Staff[]
+  permissions RolePermission[]
 
   @@map("role")
+}
+
+/// Quyền được cấp cho một nhóm role. CÓ DÒNG = được phép, KHÔNG CÓ DÒNG = cấm.
+/// permissionCode khớp PERMISSIONS[].code trong src/lib/permission-catalog.ts (danh mục nằm ở
+/// code vì mỗi mã phải có một chỗ requirePermission() tương ứng — xem doc-comment file đó).
+/// Sửa trong /settings/roles tab "Ma trận quyền".
+model RolePermission {
+  id             String @id @default(cuid())
+  roleId         String
+  permissionCode String
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionCode])
+  @@index([roleId])
+  @@map("role_permission")
 }
 
 model Staff {
@@ -880,6 +900,10 @@ model CostSheetSection {
   colorSlot      String?
   sort           Int     @default(0)
   isProxy        Boolean @default(false)
+  /// Phòng ban phụ trách hạng mục (Department.code) — quyết định prefix mã của MỌI dòng bên trong.
+  /// Dòng thừa kế từ hạng mục, không gắn phòng riêng từng dòng (đã chốt: 217 dòng của T013 mà
+  /// chọn tay từng dòng là không khả thi). Null = chưa gán, mã dòng rơi về prefix chung.
+  departmentCode String?
   proxyFeeType   String? // PCT | FIXED
   proxyFeeVal    Float?
   parentSectionId String? // N-cấp (Mục→Nhóm→Sub-nhóm→...) — chỉ áp dụng nhánh THƯỜNG; mục Chi hộ (isProxy) luôn ở gốc (parentSectionId null), xem lib/bidding.ts flattenSectionTree.
@@ -896,6 +920,14 @@ model CostLine {
   id           String  @id @default(cuid())
   costSheetId  String
   sectionId    String
+  /// Định danh BỀN của dòng, do builder sinh một lần và đi theo payload qua MỌI lần lưu.
+  /// Cần vì saveCostSheet xoá-tạo-lại toàn bộ section/line nên `id` đổi sau mỗi lần lưu, không
+  /// dùng làm khoá liên kết được. Module ④ (FinanceCostLine.lineKey) khoá vào ĐÂY — nhờ vậy mã
+  /// hiển thị `itemCode` được tự do đánh lại số mà không làm đứt liên kết tạm ứng/thanh toán.
+  /// ĐỪNG đổi giá trị này khi sửa dòng; đổi = mất dấu tiền đã ứng.
+  stableKey    String?
+  /// Mã hiển thị `{prefix phòng ban}-{số thứ tự}` — CHỈ để đọc, hệ thống tự đánh lại khi thêm/xoá.
+  itemCode     String?
   lineType     String  @default("QTY_PRICE") // QTY_PRICE | FIXED | PERCENT_OF_TOTAL
   itemName     String
   specs        String?
@@ -1298,12 +1330,21 @@ model CreativeAllocationRatio {
 model FinanceCostLine {
   id          String   @id @default(cuid())
   projectId   String
-  lineKey     String // sectionCode‖itemName (khớp costsheet-diff)
+  /// = CostLine.stableKey. TRƯỚC ĐÂY là `sectionCode‖itemName` — đổi vì mã hạng mục do builder
+  /// gán cứng "SECTION" cho mọi hạng mục, khiến 2 dòng trùng tên ở 2 hạng mục khác nhau bị gộp
+  /// làm một khi sang module ④ (tiền của 2 khoản chi cộng dồn vào 1 dòng).
+  lineKey     String
+  /// Mã hiển thị chép từ CostLine.itemCode (ACC-001…) — chỉ để đọc, KHÔNG dùng làm khoá.
+  itemCode    String?
   sectionCode String
   sectionName String
   itemName    String
   specs       String?
-  amount      BigInt   @default(0) // chi phí nội bộ của dòng (đồng bộ từ CostLine.amount)
+  amount      BigInt   @default(0) // chi phí nội bộ của dòng, ĐÃ gross-up thuế (đồng bộ từ CostLine.amount)
+  /// Số tiền THỰC TRẢ ra ngoài (trước gross-up TNCN/TNDN, chưa cộng customTaxAmount) — TRẦN cho
+  /// tổng mọi khoản chi của dòng: thanh toán NCC + tạm ứng NV + tạm ứng chuyển thẳng NCC.
+  /// Không dùng `amount` làm trần: phần gross-up là thuế công ty nộp hộ, không trao cho ai.
+  netAmount   BigInt   @default(0)
   vendorId    String?
   sourceRevNo Int      @default(0) // revNo của CostSheetRevision đã đồng bộ gần nhất
   sort        Int      @default(0)
@@ -1314,6 +1355,7 @@ model FinanceCostLine {
   project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   vendor   Vendor?   @relation(fields: [vendorId], references: [id])
   advances Advance[]
+  vendorPayments VendorPayment[]
 
   @@unique([projectId, lineKey])
   @@index([projectId])
@@ -1361,6 +1403,9 @@ model VendorPayment {
   id          String    @id @default(cuid())
   vendorId    String
   projectId   String?
+  /// Dòng chi phí CO/CE mà khoản chi này thuộc về — nguồn để tính "còn lại chưa thanh toán" cho
+  /// TỪNG dòng item cost. Nullable: khoản chi cấp dự án không gắn dòng nào vẫn hợp lệ.
+  financeCostLineId String?
   amount      BigInt
   dueDate     DateTime?
   paidDate    DateTime?
@@ -1374,6 +1419,9 @@ model VendorPayment {
   vendor    Vendor   @relation(fields: [vendorId], references: [id])
   project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy Staff?   @relation("VendorPaymentCreatedBy", fields: [createdById], references: [id])
+  // SetNull chứ không Cascade: dòng CO/CE biến mất (đổi tên/xoá ở bản mới) KHÔNG được làm mất
+  // chứng từ đã chi — khoản chi vẫn còn, chỉ mất liên kết dòng.
+  financeCostLine FinanceCostLine? @relation(fields: [financeCostLineId], references: [id], onDelete: SetNull)
 
   @@index([vendorId, status])
   @@map("vendor_payment")

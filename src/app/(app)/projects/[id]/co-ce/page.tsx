@@ -11,8 +11,10 @@ import { CostSheetBuilder, type CostSheetData, type TemplateOption } from "../..
 import { ApproveCostSheetActions } from "../../../bidding/approve-costsheet-actions";
 import { sendCostSheetToLiquidation } from "../../actions";
 import { RevisionCompare, type RevisionData } from "./revision-compare";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function ProjectCoCePage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("projects.view");
   const { id } = await params;
 
   const project = await prisma.project.findUnique({
@@ -21,7 +23,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
   });
   if (!project) notFound();
 
-  const [t, locale, minMargin, sheet, matchingTemplatesRaw, allTemplatesRaw, vendors] = await Promise.all([
+  const [t, locale, minMargin, sheet, matchingTemplatesRaw, allTemplatesRaw, costDepartments, vendors] = await Promise.all([
     getTranslations("projects.coce"),
     getLocale() as Promise<Locale>,
     getNumberSetting("bidding", "min_margin_pct", 31),
@@ -47,6 +49,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
       where: { isActive: true },
       include: { sections: { orderBy: { sort: "asc" }, include: { lines: { orderBy: { sort: "asc" } } } } },
     }),
+    prisma.department.findMany({ where: { costPrefix: { not: null }, isActive: true }, select: { code: true, name: true, costPrefix: true }, orderBy: { code: "asc" } }),
     prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
   ]);
 
@@ -57,6 +60,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
       sections: tp.sections.map((s) => ({
         id: s.id,
         parentId: null, // mẫu (template) luôn phẳng — N-cấp chỉ áp dụng cho CO/CE sống, xem cost-sheet-builder.tsx
+        departmentCode: "", // mẫu không mang phòng ban — người dùng chọn sau khi dựng sheet
         code: s.code,
         icon: s.icon ?? "",
         nameVi: s.nameVi,
@@ -66,6 +70,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
         proxyFeeType: s.proxyFeeType,
         proxyFeeVal: s.proxyFeeVal,
         lines: s.lines.map((l) => ({
+          stableKey: "", // dòng dựng từ mẫu là dòng mới — server sinh khoá lúc lưu
           itemName: l.itemName,
           specs: l.defaultSpecs ?? "",
           lineType: l.lineType,
@@ -108,9 +113,11 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
           nameEn: s.nameEn ?? "",
           colorSlot: s.colorSlot ?? "neutral",
           isProxy: s.isProxy,
+          departmentCode: s.departmentCode ?? "",
           proxyFeeType: s.proxyFeeType,
           proxyFeeVal: s.proxyFeeVal,
           lines: s.lines.map((l) => ({
+            stableKey: l.stableKey ?? "",
             itemName: l.itemName,
             specs: l.specs ?? "",
             lineType: l.lineType,
@@ -178,6 +185,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
               <p className="text-sm text-muted-foreground">{t("goNogoBlocked")}</p>
             ) : (
               <CostSheetBuilder
+                departments={costDepartments.map((d) => ({ code: d.code, name: d.name, costPrefix: d.costPrefix! }))}
                 projectId={id}
                 minMarginPct={minMargin}
                 data={sheetData}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { hasPermission } from "@/lib/permissions";
 import { readKbFile } from "@/lib/kb-storage";
 
 export const runtime = "nodejs";
@@ -21,6 +22,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const meId = await getCurrentStaffId();
   if (!meId) return new NextResponse(null, { status: 401 });
+  if (!(await hasPermission("kb.view"))) return new NextResponse(null, { status: 403 });
 
   const doc = await prisma.kbDocument.findUnique({
     where: { id },

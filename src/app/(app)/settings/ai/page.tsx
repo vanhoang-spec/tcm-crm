@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { isAiConfigured } from "@/lib/ai/deepseek";
 import { isWebSearchConfigured } from "@/lib/ai/websearch";
+import { requirePermission } from "@/lib/permissions";
 
 /**
  * Trang trạng thái trợ lý AI.
@@ -12,6 +13,7 @@ import { isWebSearchConfigured } from "@/lib/ai/websearch";
  * app chưa có phân quyền thật. Đổi key = sửa .env + khởi động lại CRM.
  */
 export default async function SettingsAiPage() {
+  await requirePermission("settings.ai.manage");
   const [t, tIdx] = await Promise.all([getTranslations("ai"), getTranslations("settings.index")]);
   const configured = isAiConfigured();
   const searchOn = isWebSearchConfigured();

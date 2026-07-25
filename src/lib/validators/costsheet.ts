@@ -7,6 +7,12 @@ import { LINE_TYPES, TAX_TYPES, MAX_SECTION_DEPTH } from "@/lib/bidding";
  */
 export const costLineSchema = z.object({
   sectionKey: z.string().min(1),
+  /**
+   * Định danh BỀN của dòng — builder sinh 1 lần rồi gửi lại y nguyên ở mọi lần lưu.
+   * Module ④ khoá tạm ứng/thanh toán vào đây. Optional để tương thích payload cũ; server tự
+   * sinh khi thiếu (xem saveCostSheet).
+   */
+  stableKey: z.string().trim().optional().default(""),
   lineType: z.enum(LINE_TYPES).default("QTY_PRICE"),
   itemName: z.string().trim().min(1),
   specs: z.string().trim().optional().default(""),
@@ -37,6 +43,8 @@ export const costSectionSchema = z.object({
   nameEn: z.string().trim().optional().default(""),
   colorSlot: z.string().trim().optional().default("neutral"),
   isProxy: z.boolean().default(false),
+  /** Phòng ban phụ trách — quyết định prefix mã của mọi dòng trong hạng mục. */
+  departmentCode: z.string().trim().optional().default(""),
   proxyFeeType: z.enum(["PCT", "FIXED"]).nullable().optional(),
   proxyFeeVal: z.coerce.number().min(0).nullable().optional(),
 });
@@ -48,6 +56,24 @@ export const costSheetPayloadSchema = z
   })
   .superRefine((payload, ctx) => {
     const byKey = new Map(payload.sections.map((s) => [s.key, s]));
+
+    // Chi hộ chỉ nhận QTY_PRICE/FIXED. Dòng PERCENT_OF_TOTAL nằm trong Chi hộ sẽ KHÔNG được
+    // cộng vào đâu cả — computeCostSheetTotals loại nó khỏi proxySubtotal, còn directCo/
+    // percentLinesTotal chỉ quét hạng mục thường → tiền biến mất im lặng trong khi dòng vẫn có
+    // amount và vẫn hiện trên bảng. UI đã ẩn lựa chọn này trong khối Chi hộ (hidePercent ở
+    // cost-sheet-builder), nhưng đó là chặn phía client; chốt lại ở đây theo đúng quy ước
+    // "không tin số từ client" (HANDOVER mục 4.1).
+    for (const l of payload.lines) {
+      if (l.lineType !== "PERCENT_OF_TOTAL") continue;
+      if (byKey.get(l.sectionKey)?.isProxy) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["lines"],
+          message: `Dòng "${l.itemName}" thuộc hạng mục Chi hộ nên không được dùng loại % trên tổng.`,
+        });
+      }
+    }
+
     for (const s of payload.sections) {
       // Chi hộ luôn ở gốc — không lồng dưới section khác.
       if (s.isProxy && s.parentKey) {

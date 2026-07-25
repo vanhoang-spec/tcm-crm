@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/layout/sidebar";
+import { FloatingDock } from "@/components/layout/floating-dock";
 import { Header } from "@/components/layout/header";
 import { prisma } from "@/lib/prisma";
 import {
@@ -15,6 +16,7 @@ import {
 import { getArOverdueItems } from "@/lib/finance";
 import { redirect } from "next/navigation";
 import { getCurrentStaffId, getSessionContext } from "@/lib/current-staff";
+import { getMyPermissions } from "@/lib/permissions";
 import { needsPasswordChange } from "@/lib/auth";
 import { checkSpecialOccasions } from "@/lib/occasions";
 import { checkChatReminders } from "@/lib/chat-reminders";
@@ -40,6 +42,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // currentStaffId lấy TRƯỚC vì badge chuông phải đếm notification CỦA RIÊNG người đang đăng nhập —
   // đếm toàn hệ thống sẽ lộ số thông báo của người khác và cho phép "đọc hộ" (xem markNotificationRead).
   const currentStaffId = await getCurrentStaffId();
+  // Khác session.isAdmin (người đăng nhập thật, dùng cho quyền mạo danh): tập quyền này theo NGƯỜI
+  // ĐANG THAO TÁC, nên admin đang "act as" nhân viên thường sẽ thấy đúng menu của nhân viên đó.
+  // Set không serialize được sang client component → truyền mảng.
+  const navPermissions = [...(await getMyPermissions())];
   const [careItems, biddingItems, pendingApprovals, timelineItems, arItems, unreadNotifications, staffRows] =
     await Promise.all([
       getCareOverdueClients(),
@@ -74,7 +80,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar permissions={navPermissions} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           reminderCount={reminderCount}
@@ -82,9 +88,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           currentStaffId={currentStaffId}
           canImpersonate={session.isAdmin}
           impersonating={session.impersonating}
+          permissions={navPermissions}
         />
         <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
       </div>
+
+      {/* Hộp chat / AI nổi — ĐẶT Ở ĐÂY, ngoài <header> (header có backdrop-blur → containing block,
+          sẽ nhốt mọi position:fixed bên trong; xem HANDOVER mục 4.4). State của dock sống trong
+          layout nên giữ nguyên khi điều hướng client giữa các module — chính là mục đích tính năng. */}
+      <FloatingDock
+        canChat={navPermissions.includes("chat.use")}
+        canAi={navPermissions.some((p) => p.startsWith("ai."))}
+      />
     </div>
   );
 }

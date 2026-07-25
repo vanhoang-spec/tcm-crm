@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { NumberField } from "@/components/ui/number-field";
 import { Lock, CheckCircle2, Circle, ExternalLink } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -17,6 +18,7 @@ import {
   requestProposalRevision,
   confirmFinalProposal,
 } from "./actions";
+import { requirePermission } from "@/lib/permissions";
 
 const input =
   "h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
@@ -26,6 +28,7 @@ function toDateInput(d: Date | null): string {
 }
 
 export default async function ProjectPlanningPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("projects.view");
   const { id } = await params;
 
   const [t, tTasks, locale, job, planningStaff, planningDept, project, deptTasks, deptStaffOptions] = await Promise.all([
@@ -254,7 +257,7 @@ export default async function ProjectPlanningPage({ params }: { params: Promise<
                   <input name="resultLinkUrl" type="url" placeholder={t("resultLinkLabel")} className={input + " min-w-[220px] flex-1"} required />
                   <label className="text-xs text-muted-foreground">
                     {t("hoursLabel")}
-                    <input name="hoursSpent" type="number" step="0.25" min="0.25" placeholder="0.25" className={input + " ml-1 w-20"} />
+                    <NumberField decimals={2} name="hoursSpent" placeholder="0.25" className={input + " ml-1 w-20"} />
                   </label>
                   <button type="submit" className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
                     {t("submitVersion")}
@@ -360,7 +363,7 @@ function StageCard({
           <input name="resultLinkUrl" type="url" placeholder={t("resultLinkLabel")} className="h-9 min-w-[200px] flex-1 rounded-lg border border-border-strong bg-surface px-2.5 text-sm" required />
           <label className="text-xs text-muted-foreground">
             {t("hoursLabel")}
-            <input name="hoursSpent" type="number" step="0.25" min="0.25" placeholder="0.25" className="ml-1 h-9 w-20 rounded-lg border border-border-strong bg-surface px-2.5 text-sm" required />
+            <NumberField decimals={2} name="hoursSpent" placeholder="0.25" className="ml-1 h-9 w-20 rounded-lg border border-border-strong bg-surface px-2.5 text-sm" required />
           </label>
           <button type="submit" className="h-9 rounded-lg bg-success px-3 text-xs font-medium text-white hover:bg-success/90">
             {t("submitResult")}

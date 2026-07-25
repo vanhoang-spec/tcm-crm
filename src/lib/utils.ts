@@ -6,20 +6,34 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// ─────────────────────────────────────────────────────────
+// ĐỊNH DẠNG SỐ — MỘT chuẩn duy nhất cho cả app, KHÔNG đổi theo ngôn ngữ hiển thị.
+//
+// Nghìn ngăn bằng ".", thập phân bằng "," (kiểu vi-VN) kể cả khi đang xem tiếng Anh. Cố ý: đây là
+// hệ thống nội bộ của một công ty Việt Nam, mọi người đọc cùng một con số trên cùng màn hình —
+// để en-US ra "1,000,000" thì cùng một bảng, hai người mở hai ngôn ngữ sẽ đọc ra hai kiểu.
+// Ô NHẬP LIỆU cũng theo đúng chuẩn này, xem components/ui/number-field.tsx.
+// ─────────────────────────────────────────────────────────
+
+/** Locale số dùng chung — cố định, không phụ thuộc ngôn ngữ giao diện. */
+const NUMBER_LOCALE = "vi-VN";
+
 /**
- * Định dạng số theo ngôn ngữ — dùng cho MỌI số hiển thị trong app (tiền, số lượng, ngày công...).
- * vi: 1.000.000 · en: 1,000,000 — luôn số nguyên, KHÔNG thêm hậu tố (VND/đồng/đ).
+ * Số nguyên có ngăn cách nghìn: 1.000.000. Dùng cho TIỀN và mọi số đếm được.
+ * KHÔNG thêm hậu tố (VND/đồng/đ) — caller tự thêm.
+ * Tham số `locale` giữ lại để không phải sửa ~200 chỗ gọi; chuẩn số nay không phụ thuộc nó.
  */
-export function formatNumber(value: number | bigint, locale: Locale) {
-  return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-    maximumFractionDigits: 0,
-  }).format(Number(value));
+export function formatNumber(value: number | bigint, _locale?: Locale) {
+  return new Intl.NumberFormat(NUMBER_LOCALE, { maximumFractionDigits: 0 }).format(Number(value));
 }
 
-/** Định dạng số thập phân theo locale (vi dùng ",", en dùng ".") — KHÔNG kèm đơn vị. Dùng cho giờ, tỉ số... */
-export function formatDecimal(value: number, locale: Locale, digits: number = 1) {
-  return new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
-    minimumFractionDigits: digits,
+/**
+ * Số có phần thập phân: 11,25. Dùng cho SỐ LƯỢNG (m², ngày công), giờ, tỉ số, %.
+ * Cắt số 0 thừa ở đuôi — 12,50 hiển thị "12,5", 12,00 hiển thị "12".
+ */
+export function formatDecimal(value: number, _locale?: Locale, digits: number = 1) {
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
+    minimumFractionDigits: 0,
     maximumFractionDigits: digits,
   }).format(value);
 }
@@ -32,25 +46,45 @@ export function formatPercent(value: number, locale: Locale, digits: number = 1)
   return formatDecimal(value, locale, digits);
 }
 
+// ─────────────────────────────────────────────────────────
+// ĐỊNH DẠNG NGÀY — MỘT chuẩn duy nhất: DD/MM/YYYY, KHÔNG đổi theo ngôn ngữ hiển thị.
+//
+// Trước đây các hàm có giờ/phút chạy theo locale, nên xem bằng tiếng Anh sẽ ra MM/DD/YYYY —
+// cùng một ngày, hai người đọc lệch nhau (07/05 là 7/5 hay 5/7?). Nay khoá cứng vi-VN.
+// Năm để 4 số: hợp đồng và nghiệm thu trải nhiều năm, "26" dễ đọc nhầm khi tra lại hồ sơ cũ.
+// Ô NHẬP ngày dùng components/ui/date-field.tsx — mask dd/mm/yyyy, cũng không phụ thuộc locale.
+// ─────────────────────────────────────────────────────────
+
+/** Locale ngày dùng chung — cố định, không phụ thuộc ngôn ngữ giao diện. */
+const DATE_LOCALE = "vi-VN";
+
+/** Ngày: 25/07/2026. */
 export function formatDate(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("vi-VN", {
+  return new Intl.DateTimeFormat(DATE_LOCALE, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   }).format(d);
 }
 
-/** Ngày + giờ (dùng cho log chăm sóc khách, audit chi tiết...) — theo locale hiển thị. */
-export function formatDateTime(date: Date | string, locale: Locale) {
+/** Ngày + giờ: 25/07/2026 14:30 (log chăm sóc khách, audit, chat...). */
+export function formatDateTime(date: Date | string, _locale?: Locale) {
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
+  return new Intl.DateTimeFormat(DATE_LOCALE, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   }).format(d);
+}
+
+/** Chỉ giờ: 14:30 (bong bóng chat, dòng thời gian trong ngày). */
+export function formatTime(date: Date | string) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat(DATE_LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 }
 
 /** Chọn nhãn theo locale cho OptionItem (labelVi/labelEn) — rơi về tiếng Việt nếu chưa dịch. */

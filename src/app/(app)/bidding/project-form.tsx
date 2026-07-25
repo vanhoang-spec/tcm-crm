@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -138,7 +139,7 @@ export function ProjectForm({
         </Field>
 
         <Field label={t("budget")} error={state.fieldErrors?.budget} hint={t("budgetHint")}>
-          <input name="budget" type="number" min={0} step={1000} defaultValue={defaultValues?.budget} className={inputClass(false)} />
+          <NumberField name="budget" defaultValue={defaultValues?.budget} className={inputClass(false)} />
         </Field>
 
         <Field label={t("channel")} error={state.fieldErrors?.channelId}>

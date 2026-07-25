@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn, formatDateTime, formatNumber } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { getCareOverdueClients } from "@/lib/reminders";
+import { requirePermission } from "@/lib/permissions";
 
 const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
   A1: "brand",
@@ -23,6 +24,7 @@ export default async function CareReportPage({
 }: {
   searchParams: Promise<{ team?: string }>;
 }) {
+  await requirePermission("clients.view");
   const { team } = await searchParams;
   const [t, locale, teams, items] = await Promise.all([
     getTranslations("careReport"),

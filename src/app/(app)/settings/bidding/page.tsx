@@ -3,8 +3,10 @@ import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getNumberSetting } from "@/lib/settings";
 import { BiddingSettingsForm } from "./bidding-settings-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsBiddingPage() {
+  await requirePermission("settings.bidding.manage");
   const [t, minMargin, threshold, processingReminderDays, liquidationReminderDays, orderResponseDays] = await Promise.all([
     getTranslations("settings.bidding"),
     getNumberSetting("bidding", "min_margin_pct", 31),

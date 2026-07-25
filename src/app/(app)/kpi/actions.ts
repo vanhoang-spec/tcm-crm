@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { getKpiReport } from "@/lib/kpi";
+import { requirePermission } from "@/lib/permissions";
 
 export type KpiActionState = { error?: string; success?: boolean };
 
@@ -23,6 +24,7 @@ async function audit(entityId: string, field: string, oldValue: string | null, n
  * Ô rỗng → xóa dòng điểm (cho phép gỡ nhầm); ô số → upsert. Kỳ CLOSED → từ chối.
  */
 export async function saveKpiScores(poolKey: string, periodCode: string, _prev: KpiActionState, formData: FormData): Promise<KpiActionState> {
+  await requirePermission("kpi.score");
   const [t, tSet] = await Promise.all([getTranslations("kpi"), getTranslations("settings.kpi")]);
   const existing = await prisma.kpiPeriod.findUnique({ where: { periodCode_poolKey: { periodCode, poolKey } } });
   if (existing?.status === "CLOSED") return { error: t("periodClosed") };
@@ -65,6 +67,7 @@ export async function saveKpiScores(poolKey: string, periodCode: string, _prev: 
  * từng pool vào KpiPeriod (CLOSED + resultJson) — số đã chốt đóng băng vĩnh viễn.
  */
 export async function closeKpiPeriod(periodCode: string, _prev: KpiActionState, _formData: FormData): Promise<KpiActionState> {
+  await requirePermission("kpi.close_period");
   const t = await getTranslations("kpi");
   const data = await getKpiReport(periodCode);
   if (!data) return { error: t("closeBlocked") };
@@ -106,6 +109,7 @@ export async function closeKpiPeriod(periodCode: string, _prev: KpiActionState, 
 
 /** Mở lại kỳ (đã chốt nhầm) — xóa snapshot, tính live trở lại. Có audit. */
 export async function reopenKpiPeriod(periodCode: string): Promise<void> {
+  await requirePermission("kpi.close_period");
   const staffId = await getCurrentStaffId();
   const rows = await prisma.kpiPeriod.findMany({ where: { periodCode, status: "CLOSED" } });
   for (const row of rows) {

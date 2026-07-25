@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { TimelineTemplateCreateForm } from "./template-create-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function TimelineTemplatesPage() {
+  await requirePermission("settings.templates.manage");
   const [t, locale, templates, projectTypeSet] = await Promise.all([
     getTranslations("settings.timelineTemplates"),
     getLocale() as Promise<Locale>,

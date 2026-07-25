@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NumberField } from "@/components/ui/number-field";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Flag, Check, X, Link2 } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -23,12 +24,14 @@ import {
   MoveToLiquidationButton,
 } from "../workflow-actions";
 import { decideGoNogo, addBiddingRound, saveContract } from "../actions";
+import { requirePermission } from "@/lib/permissions";
 
 function toDateInput(d: Date | null): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
 }
 
 export default async function BiddingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("bidding.view");
   const { id } = await params;
 
   const project = await prisma.project.findUnique({
@@ -80,7 +83,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     getNumberSetting("bidding", "order_response_days", 4),
   ]);
 
-  const [matchingTemplatesRaw, allTemplatesRaw, teams, activeStaff, vendors, failReasonSet, auditEntries] = await Promise.all([
+  const [matchingTemplatesRaw, allTemplatesRaw, teams, activeStaff, costDepartments, vendors, failReasonSet, auditEntries] = await Promise.all([
     project.projectTypeId
       ? prisma.costsheetTemplate.findMany({
           where: { isActive: true, projectTypeId: project.projectTypeId },
@@ -93,6 +96,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     }),
     prisma.team.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
     prisma.staff.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
+    prisma.department.findMany({ where: { costPrefix: { not: null }, isActive: true }, select: { code: true, name: true, costPrefix: true }, orderBy: { code: "asc" } }),
     prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.optionSet.findUnique({ where: { code: "fail_reason" }, include: { items: { where: { isActive: true }, orderBy: { sort: "asc" } } } }),
     prisma.auditLog.findMany({ where: { entityType: "project", entityId: project.id }, orderBy: { changedAt: "desc" }, take: 8 }),
@@ -105,6 +109,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
       sections: tp.sections.map((s) => ({
         id: s.id,
         parentId: null, // mẫu (template) luôn phẳng — N-cấp chỉ áp dụng cho CO/CE sống, xem cost-sheet-builder.tsx
+        departmentCode: "", // mẫu không mang phòng ban — người dùng chọn sau khi dựng sheet
         code: s.code,
         icon: s.icon ?? "",
         nameVi: s.nameVi,
@@ -114,6 +119,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
         proxyFeeType: s.proxyFeeType,
         proxyFeeVal: s.proxyFeeVal,
         lines: s.lines.map((l) => ({
+          stableKey: "", // dòng dựng từ mẫu là dòng mới — server sinh khoá lúc lưu
           itemName: l.itemName,
           specs: l.defaultSpecs ?? "",
           lineType: l.lineType,
@@ -157,9 +163,11 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           nameEn: s.nameEn ?? "",
           colorSlot: s.colorSlot ?? "neutral",
           isProxy: s.isProxy,
+          departmentCode: s.departmentCode ?? "",
           proxyFeeType: s.proxyFeeType,
           proxyFeeVal: s.proxyFeeVal,
           lines: s.lines.map((l) => ({
+            stableKey: l.stableKey ?? "",
             itemName: l.itemName,
             specs: l.specs ?? "",
             lineType: l.lineType,
@@ -365,6 +373,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
         ) : (
           <div className="hidden sm:block">
             <CostSheetBuilder
+                departments={costDepartments.map((d) => ({ code: d.code, name: d.name, costPrefix: d.costPrefix! }))}
               projectId={project.id}
               minMarginPct={minMargin}
               data={sheetData}
@@ -424,7 +433,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
                 <summary className="cursor-pointer text-xs font-medium text-brand-600">{tRounds("add")}</summary>
                 <form action={roundBound} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <input name="clientFeedback" placeholder={tRounds("feedback")} className={smallInput} />
-                  <input name="revisedCe" type="number" step="any" placeholder={tRounds("revisedCe")} className={smallInput} />
+                  <NumberField name="revisedCe" placeholder={tRounds("revisedCe")} className={smallInput} />
                   <select name="outcome" defaultValue="ongoing" className={smallInput}>
                     <option value="ongoing">{tRounds("outcomeOngoing")}</option>
                     <option value="accepted">{tRounds("outcomeAccepted")}</option>
@@ -455,7 +464,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
                 <DateField name="poDate" defaultValue={toDateInput(project.contract?.poDate ?? null)} className={smallInput} />
               </Labeled>
               <Labeled label={tContract("paymentTerm")}>
-                <input name="paymentTermDays" type="number" defaultValue={project.contract?.paymentTermDays ?? project.client.paymentTermDays} className={smallInput} />
+                <NumberField name="paymentTermDays" defaultValue={project.contract?.paymentTermDays ?? project.client.paymentTermDays} className={smallInput} />
               </Labeled>
               <Labeled label={tContract("templateSource")}>
                 <select name="templateSource" defaultValue={project.contract?.templateSource ?? "CLIENT"} className={smallInput}>

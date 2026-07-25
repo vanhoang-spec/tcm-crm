@@ -10,6 +10,7 @@ import type { Locale } from "@/i18n/locales";
 import { addCareNote, addContact, transferClientAction } from "../actions";
 import { MAX_CONTACTS } from "@/lib/validators/client";
 import { getMissingClientProfileFields } from "@/lib/client-profile";
+import { requirePermission } from "@/lib/permissions";
 
 const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
   A1: "brand",
@@ -24,6 +25,7 @@ const STATUS_TONE: Record<string, "brand" | "success" | "neutral"> = {
 };
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("clients.view");
   const { id } = await params;
 
   const client = await prisma.client.findUnique({

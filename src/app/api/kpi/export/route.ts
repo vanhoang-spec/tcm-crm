@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { hasPermission } from "@/lib/permissions";
 import { getKpiReport } from "@/lib/kpi";
 
 export const runtime = "nodejs";
@@ -16,6 +17,8 @@ function contentDisposition(filename: string) {
 export async function GET(req: NextRequest) {
   const staffId = await getCurrentStaffId();
   if (!staffId) return new NextResponse("Unauthorized", { status: 401 });
+  // Route handler = API công khai, phải tự kiểm quyền như server action (không dựa vào trang gọi nó).
+  if (!(await hasPermission("kpi.view"))) return new NextResponse("Forbidden", { status: 403 });
 
   const period = req.nextUrl.searchParams.get("period") ?? "";
   const data = await getKpiReport(period);

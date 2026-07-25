@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { COST_REVIEW_CYCLES, type CostReviewCycle } from "@/lib/creative-cost";
+import { requirePermission } from "@/lib/permissions";
 
 export type CreativeSettingsState = { error?: string; success?: boolean };
 
@@ -26,6 +27,7 @@ export async function saveCreativeCycle(
   _prev: CreativeSettingsState,
   formData: FormData,
 ): Promise<CreativeSettingsState> {
+  await requirePermission("settings.creative.manage");
   const t = await getTranslations("settings.creative");
   const cycle = String(formData.get("cycle") ?? "");
   if (!(COST_REVIEW_CYCLES as readonly string[]).includes(cycle)) return { error: t("errorInvalid") };
@@ -42,6 +44,7 @@ export async function saveSalaryBudget(
   _prev: CreativeSettingsState,
   formData: FormData,
 ): Promise<CreativeSettingsState> {
+  await requirePermission("settings.creative.manage");
   const t = await getTranslations("settings.creative");
   const monthlySalary = Number(formData.get("monthlySalary") ?? NaN);
   const headcountRaw = String(formData.get("headcountOverride") ?? "").trim();
@@ -68,6 +71,7 @@ export async function saveSalaryBudget(
 
 /** Xóa 1 dòng ngân sách mồ côi (title không còn khớp nhân sự CREATIVE active nào). */
 export async function deleteSalaryBudget(id: string): Promise<CreativeSettingsState> {
+  await requirePermission("settings.creative.manage");
   await prisma.creativeSalaryBudget.delete({ where: { id } });
   revalidateCreativeCost();
   return { success: true };
@@ -83,6 +87,7 @@ export async function saveRatioMatrix(
   _prev: CreativeSettingsState,
   formData: FormData,
 ): Promise<CreativeSettingsState> {
+  await requirePermission("settings.creative.manage");
   const t = await getTranslations("settings.creative");
   const positions = new Map<number, string>();
   for (const [key, value] of formData.entries()) {
@@ -121,6 +126,7 @@ export async function saveRatioMatrix(
  * KHÔNG tự quy đổi số tháng/tỉ lệ giữa các loại chu kỳ khác nhau — copy y nguyên giá trị.
  */
 export async function copyFromPreviousPeriod(fromPeriodCode: string, toPeriodCode: string): Promise<CreativeSettingsState> {
+  await requirePermission("settings.creative.manage");
   const [budgets, ratios] = await Promise.all([
     prisma.creativeSalaryBudget.findMany({ where: { periodCode: fromPeriodCode } }),
     prisma.creativeAllocationRatio.findMany({ where: { periodCode: fromPeriodCode } }),

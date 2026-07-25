@@ -1,8 +1,10 @@
 import { getTranslations } from "next-intl/server";
 import { getTimekeepingSettings } from "@/lib/timekeeping";
 import { TimekeepingSettingsForm } from "./timekeeping-settings-form";
+import { requirePermission } from "@/lib/permissions";
 
 export default async function TimekeepingSettingsPage() {
+  await requirePermission("settings.timekeeping.manage");
   const [t, settings] = await Promise.all([getTranslations("settings.timekeeping"), getTimekeepingSettings()]);
 
   return (

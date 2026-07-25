@@ -4,6 +4,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { formatNumber } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { getMonthlyTimesheet } from "@/lib/timekeeping";
+import { requirePermission } from "@/lib/permissions";
 
 function shiftMonth(ym: string, delta: number): string {
   const [y, m] = ym.split("-").map(Number);
@@ -12,6 +13,7 @@ function shiftMonth(ym: string, delta: number): string {
 }
 
 export default async function TimesheetPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  await requirePermission("staff.view");
   const { month } = await searchParams;
   const [t, locale] = await Promise.all([getTranslations("staff.timesheet"), getLocale() as Promise<Locale>]);
   const now = new Date();

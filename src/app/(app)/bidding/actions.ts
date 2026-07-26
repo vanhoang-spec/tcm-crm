@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
-import { stringifyAudit } from "@/lib/utils";
+import { stringifyAudit, toNum } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
 import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, DEFAULT_COST_PREFIX } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
@@ -300,12 +300,19 @@ export async function saveCostSheet(
   const overrideNote = String(formData.get("overrideNote") ?? "").trim();
 
   const rawPayload = String(formData.get("sectionsJson") ?? "{}");
-  let payload;
-  try {
-    payload = costSheetPayloadSchema.parse(JSON.parse(rawPayload));
-  } catch {
-    return { error: t("notFound") };
-  }
+  // Lỗi validator ở đây là lỗi NGƯỜI DÙNG sửa được (thiếu tên hạng mục, dòng % nằm trong Chi hộ…)
+  // nên phải nói đúng chỗ sai. Gộp chung thành "không tìm thấy dự án" khiến người dùng tưởng mất
+  // dữ liệu và không biết sửa gì. JSON hỏng mới là lỗi hệ thống — giữ nguyên thông báo cũ.
+  const parsed = (() => {
+    try {
+      return costSheetPayloadSchema.safeParse(JSON.parse(rawPayload));
+    } catch {
+      return null;
+    }
+  })();
+  if (!parsed) return { error: t("notFound") };
+  if (!parsed.success) return { error: t("invalidPayload", { detail: parsed.error.issues[0]?.message ?? "" }) };
+  const payload = parsed.data;
   // Tính lại toàn bộ ở server — không tin số từ client. Cây section N-cấp (Mục→Nhóm→Sub-nhóm→...)
   // được làm phẳng trước (flattenSectionTree) — isProxy kế thừa từ tổ tiên, xem lib/bidding.ts.
   const sectionTree = payload.sections.map((s) => ({
@@ -378,18 +385,20 @@ export async function saveCostSheet(
     totals: { coTotal, ceTotal, chiHo, marginPct: Math.round(marginPct * 100) / 100 },
   });
 
-  // Cổng margin: dưới ngưỡng → bắt buộc override có lý do VÀ phải có quyền riêng.
-  // Quyền tách khỏi bidding.costsheet.edit: sửa bảng giá là việc thường ngày của Account, còn
-  // hạ margin dưới ngưỡng công ty là quyết định thương mại — không mặc nhiên đi kèm.
+  // Cổng margin: dưới ngưỡng KHÔNG chặn LƯU — chỉ chặn DUYỆT.
+  //
+  // Trước đây người không có quyền override không lưu nổi bản dưới sàn, kể cả bản nháp đang dựng
+  // dở: cả bảng bị vứt đi kèm thông báo lỗi. Với chỉ vài người giữ quyền override, đó là nút thắt
+  // thật. Nay: ai cũng lưu được, nhưng bảng dưới sàn chỉ ĐƯỢC DUYỆT bởi người có
+  // `bidding.margin_override` kèm lý do — bất biến "margin gate + override có lý do" giữ nguyên,
+  // chỉ chuyển điểm chốt từ lúc lưu sang lúc duyệt (đúng chỗ lý do thực sự có ý nghĩa).
   let marginOverrideById: string | null = null;
   let marginOverrideNote: string | null = null;
   if (marginPct < minMargin) {
-    if (!(await hasPermission("bidding.margin_override"))) {
-      return { fieldErrors: { overrideNote: t("overrideNotAllowed") } };
-    }
-    if (!overrideNote) return { fieldErrors: { overrideNote: t("overrideNoteRequired") } };
-    marginOverrideById = staffId;
-    marginOverrideNote = overrideNote;
+    // Giữ lý do người dựng ghi (nếu có) để người duyệt đọc, kể cả khi họ không có quyền override.
+    marginOverrideNote = overrideNote || null;
+    // Có quyền + có ghi lý do → tự override luôn, khỏi phải quay lại bấm Duyệt.
+    if (overrideNote && (await hasPermission("bidding.margin_override"))) marginOverrideById = staffId;
   }
 
   // Duyệt theo ngưỡng (FR-12): margin đạt + dưới ngưỡng giá trị + không phải budget-down → auto-approve.
@@ -559,19 +568,65 @@ export async function saveCostSheet(
   return {};
 }
 
-/** CEO duyệt cost_sheet (đường escalate — khi không auto-approve). */
-export async function approveCostSheet(projectId: string, costSheetId: string, _formData?: FormData) {
+/**
+ * CEO duyệt cost_sheet (đường escalate — khi không auto-approve).
+ *
+ * ĐÂY LÀ CHỐT CHẶN CỦA MARGIN GATE: bảng dưới ngưỡng lưu được ở trạng thái chờ duyệt (xem
+ * saveCostSheet), nên nếu duyệt vô điều kiện ở đây thì người có `costsheet.approve` sẽ hạ được
+ * margin dưới sàn mà không cần quyền override, cũng không cần lý do. Duyệt bảng dưới sàn CHÍNH LÀ
+ * override → đòi đúng quyền đó và đòi lý do (nhận lý do người dựng đã ghi nếu có).
+ */
+export async function approveCostSheet(
+  projectId: string,
+  costSheetId: string,
+  _prev: ProjectFormState,
+  formData: FormData,
+): Promise<ProjectFormState> {
   await requirePermission("bidding.costsheet.approve");
+  const t = await getTranslations("bidding.validation");
   const staffId = await getCurrentStaffId();
+
+  const sheet = await prisma.costSheet.findUnique({ where: { id: costSheetId } });
+  if (!sheet) return { error: t("notFound") };
+
+  const minMargin = await getNumberSetting("bidding", "min_margin_pct", 31);
+  const marginPct = computeMarginPct(toNum(sheet.ceTotal), toNum(sheet.coTotal));
+  let overrideData: { marginOverrideById: string | null; marginOverrideNote: string } | null = null;
+  if (marginPct < minMargin) {
+    if (!(await hasPermission("bidding.margin_override"))) {
+      return { fieldErrors: { overrideNote: t("overrideNotAllowed") } };
+    }
+    // Lý do người duyệt vừa ghi, hoặc lý do người dựng đã ghi sẵn — duyệt tức là xác nhận lý do đó.
+    const reason = String(formData.get("overrideNote") ?? "").trim() || sheet.marginOverrideNote || "";
+    if (!reason) return { fieldErrors: { overrideNote: t("overrideNoteRequired") } };
+    overrideData = { marginOverrideById: staffId, marginOverrideNote: reason };
+  }
+
   await prisma.costSheet.update({
     where: { id: costSheetId },
-    data: { approvedById: staffId, approvedAt: new Date(), rejectedById: null, rejectedNote: null, rejectedAt: null },
+    data: {
+      approvedById: staffId,
+      approvedAt: new Date(),
+      rejectedById: null,
+      rejectedNote: null,
+      rejectedAt: null,
+      ...(overrideData ?? {}),
+    },
   });
   await prisma.auditLog.create({
-    data: { entityType: "cost_sheet", entityId: costSheetId, field: "approved", newValue: "true", action: "UPDATE", changedBy: staffId },
+    data: {
+      entityType: "cost_sheet",
+      entityId: costSheetId,
+      field: "approved",
+      newValue: "true",
+      action: "UPDATE",
+      changedBy: staffId,
+      reason: overrideData?.marginOverrideNote ?? null,
+    },
   });
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/reminders");
+  return {};
 }
 
 /** CEO từ chối cost_sheet — bắt buộc lý do, báo lại PIC dự án qua Notification. */
@@ -773,8 +828,22 @@ export async function moveToProcessing(
 
   await prisma.project.update({ where: { id: projectId }, data: { statusId: processingId, processingAt: new Date() } });
   await audit(projectId, "status", project.status.code, "PROCESSING", staffId, "move to processing");
+
+  // Dựng dòng chi phí NGAY khi vào thực thi: từ đây dự án mới được tạm ứng/thanh toán, mà mỗi dòng
+  // chi phí chính là TRẦN CHI. Bảng CO/CE lưu qua saveCostSheet đã tự đồng bộ, nhưng bảng nhập thẳng
+  // vào DB (seed/nhập liệu) thì chưa — không có bước này, dự án vào thực thi với 0 đối tượng trần chi
+  // cho tới khi có người nhớ bấm "Làm mới".
+  // Nuốt lỗi có chủ ý như ở saveCostSheet: đã đổi trạng thái rồi, lỗi đồng bộ không được làm hỏng
+  // thao tác; trang Chi phí vẫn còn nút "Làm mới" nếu bước này trượt.
+  try {
+    await syncFinanceCostLines(projectId);
+  } catch (e) {
+    console.error("[bidding] đồng bộ dòng chi phí thất bại khi vào Processing:", e);
+  }
+
   revalidatePath(`/bidding/${projectId}`);
   revalidatePath("/bidding");
+  revalidatePath("/finance");
   revalidatePath("/reminders"); // vào Processing → xuất hiện trong nhắc việc thực thi
   return {};
 }

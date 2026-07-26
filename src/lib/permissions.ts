@@ -26,10 +26,8 @@ import { PERMISSION_CODES } from "./permission-catalog";
  */
 const ALLOWED_ROLE_CODES = new Set(["ADMIN"]);
 
-/** Tập quyền của người đang thao tác (đã tính act-as). Rỗng nếu chưa đăng nhập / chưa gán role. */
-export async function getMyPermissions(): Promise<Set<string>> {
-  const staffId = await getCurrentStaffId();
-  if (!staffId) return new Set();
+/** Tập quyền của MỘT nhân sự cụ thể. Rỗng nếu chưa gán role. */
+async function permissionsOf(staffId: string): Promise<Set<string>> {
   const staff = await prisma.staff.findUnique({
     where: { id: staffId },
     select: { role: { select: { code: true, permissions: { select: { permissionCode: true } } } } },
@@ -39,8 +37,26 @@ export async function getMyPermissions(): Promise<Set<string>> {
   return new Set(staff.role.permissions.map((p) => p.permissionCode));
 }
 
+/** Tập quyền của người đang thao tác (đã tính act-as). Rỗng nếu chưa đăng nhập / chưa gán role. */
+export async function getMyPermissions(): Promise<Set<string>> {
+  const staffId = await getCurrentStaffId();
+  if (!staffId) return new Set();
+  return permissionsOf(staffId);
+}
+
 export async function hasPermission(code: string): Promise<boolean> {
   return (await getMyPermissions()).has(code);
+}
+
+/**
+ * Quyền xét theo NGƯỜI ĐĂNG NHẬP THẬT thay vì người đang bị mạo danh.
+ *
+ * Chỉ dùng cho chính cơ chế act-as: `getCurrentStaffId()` trả về người BỊ mạo danh, nên nếu lối
+ * thoát act-as gác bằng requirePermission thì admin mạo danh một nhân viên thường sẽ không thoát
+ * ra được — chính cánh cửa thoát bị khoá. Mọi chỗ khác vẫn dùng requirePermission/hasPermission.
+ */
+export async function staffHasPermission(staffId: string, code: string): Promise<boolean> {
+  return (await permissionsOf(staffId)).has(code);
 }
 
 /** Chặn cứng theo quyền — không có → đẩy về Dashboard. Dùng cho page VÀ server action. */

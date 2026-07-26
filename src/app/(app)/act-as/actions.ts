@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { ACT_AS_COOKIE, ACT_AS_COOKIE_OPTS, isAdminStaff, signActAs } from "@/lib/current-staff";
 import { getAuthenticatedStaffId } from "@/lib/auth-session";
 import { ensureTcmFamilyMembership } from "@/lib/chat";
-import { requirePermission } from "@/lib/permissions";
+import { staffHasPermission } from "@/lib/permissions";
 
 /**
  * Xem hệ thống với tư cách nhân sự khác (mạo danh) — CHỈ dành cho ADMIN, phục vụ hỗ trợ/kiểm thử.
@@ -15,9 +15,12 @@ import { requirePermission } from "@/lib/permissions";
  * Trước khi có đăng nhập thật đây là công cụ demo ai cũng dùng được; giờ đã có chốt quyền.
  */
 export async function setActAsStaff(staffId: string) {
-  await requirePermission("system.impersonate");
+  // Gác theo NGƯỜI ĐĂNG NHẬP THẬT, không phải người đang bị mạo danh: requirePermission() xét
+  // getCurrentStaffId() = người BỊ mạo danh, nên admin đang xem hộ một nhân viên thường sẽ bị
+  // chính lối thoát này chặn lại → kẹt vai, chỉ thoát được bằng đăng xuất.
   const authed = await getAuthenticatedStaffId();
-  if (!authed || !(await isAdminStaff(authed))) return; // không phải admin → bỏ qua, im lặng
+  if (!authed || !(await staffHasPermission(authed, "system.impersonate"))) return;
+  if (!(await isAdminStaff(authed))) return; // không phải admin → bỏ qua, im lặng
 
   const store = await cookies();
   if (!staffId || staffId === authed) {

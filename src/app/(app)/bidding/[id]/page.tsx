@@ -24,7 +24,7 @@ import {
   MoveToLiquidationButton,
 } from "../workflow-actions";
 import { decideGoNogo, addBiddingRound, saveContract } from "../actions";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 
 function toDateInput(d: Date | null): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
@@ -198,7 +198,11 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
   const statusCode = project.status.code;
   const isBiddingPhase = statusCode === "BIDDING" || statusCode === "PENDING";
   const goNogoBlocked = project.goNogoStatus === "PENDING";
+  // Badge "chờ duyệt" hiện cho mọi người (thông tin), nhưng NÚT duyệt/từ chối chỉ hiện với người có
+  // quyền: server đã chặn bằng requirePermission, mà chặn kiểu đó là đá người dùng về Dashboard —
+  // bấm một nút rồi văng ra không lời giải thích thì tệ hơn là không thấy nút.
   const pendingApproval = !!sheet && !sheet.approvedById && !sheet.rejectedAt;
+  const canApproveCostSheet = pendingApproval && (await hasPermission("bidding.costsheet.approve"));
   const sheetCoTotal = sheet ? toNum(sheet.coTotal) : 0;
   const sheetCeTotal = sheet ? toNum(sheet.ceTotal) : 0;
   const sheetMarginPct = sheet ? computeMarginPct(sheetCeTotal, sheetCoTotal) : 0;
@@ -335,7 +339,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
       <section className="rounded-xl border border-border bg-surface p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-foreground">{tCostsheet("title")}</h2>
-          {pendingApproval && <span className="hidden sm:block"><ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} /></span>}
+          {canApproveCostSheet && <span className="hidden sm:block"><ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} belowMinMargin={sheetMarginPct < minMargin} /></span>}
         </div>
         {sheet?.rejectedAt && (
           <p className="mb-3 rounded-lg border border-danger/30 bg-danger-bg px-3 py-2 text-xs text-danger">
@@ -361,9 +365,9 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           <div className="rounded-lg border border-border p-2">
             <Badge tone={sheetApprovalTone}>{sheetApprovalLabel}</Badge>
           </div>
-          {pendingApproval && (
+          {canApproveCostSheet && (
             <div className="col-span-2">
-              <ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} />
+              <ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} belowMinMargin={sheetMarginPct < minMargin} />
             </div>
           )}
         </div>

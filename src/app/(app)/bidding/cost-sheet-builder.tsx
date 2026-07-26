@@ -110,8 +110,10 @@ function blankLine(sectionKey: string): Line {
   };
 }
 
-/** parentKey=null → mục gốc. Mục Chi hộ (isProxy) luôn ở gốc — không truyền parentKey cho isProxy=true. */
-function blankSection(isProxy = false, parentKey: string | null = null): Section {
+/** parentKey=null → mục gốc. Mục Chi hộ (isProxy) luôn ở gốc — không truyền parentKey cho isProxy=true.
+ *  `nameVi` phải truyền sẵn cho mục Chi hộ: khối đó hiển thị nhãn cố định, KHÔNG có ô nhập tên, mà
+ *  validator lại đòi tên khác rỗng — để trống là cả bảng không lưu được. */
+function blankSection(isProxy = false, parentKey: string | null = null, nameVi = ""): Section {
   return {
     key: nextKey("s"),
     parentKey: isProxy ? null : parentKey,
@@ -119,7 +121,7 @@ function blankSection(isProxy = false, parentKey: string | null = null): Section
     parentId: null,
     code: isProxy ? "PROXY" : "SECTION",
     icon: isProxy ? "🤝" : "📦",
-    nameVi: "",
+    nameVi,
     nameEn: "",
     colorSlot: "neutral",
     isProxy,
@@ -247,7 +249,7 @@ export function CostSheetBuilder({
     setSections((ss) => ss.map((s) => (s.key === key ? { ...s, ...patch } : s)));
   }
   function addSection(isProxy = false, parentKey: string | null = null) {
-    setSections((ss) => [...ss, blankSection(isProxy, parentKey)]);
+    setSections((ss) => [...ss, blankSection(isProxy, parentKey, isProxy ? t("proxySectionTitle") : "")]);
   }
   /** Xóa cả nhánh (section + mọi section con/cháu + toàn bộ dòng bên trong). */
   function removeSection(key: string) {

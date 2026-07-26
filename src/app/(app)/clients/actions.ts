@@ -25,7 +25,24 @@ function resolveIntroducerId(introducerId: string) {
 export type ClientFormState = {
   error?: string;
   fieldErrors?: Record<string, string>;
+  /**
+   * Giá trị vừa gửi lên, trả ngược để form dựng lại đúng những gì người dùng đã gõ.
+   *
+   * Bắt buộc phải có: sau mỗi form action React reset các input KHÔNG kiểm soát về `defaultValue`.
+   * Với form tạo mới (không có defaultValues) thì reset = trắng trơn — mỗi lần validation trượt là
+   * mất sạch ~15 ô đã nhập. Form khách hàng có tới 4 vòng lỗi mới qua được, tức gõ lại 4 lần.
+   */
+  values?: Record<string, string>;
 };
+
+/** Gom mọi ô text của form để trả ngược khi có lỗi. Bỏ field nội bộ của React ($ACTION_*). */
+function formValues(formData: FormData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === "string" && !key.startsWith("$")) out[key] = value;
+  }
+  return out;
+}
 
 async function parseClientForm(formData: FormData) {
   const t = await getTranslations("validation.client");
@@ -100,7 +117,7 @@ export async function createClient(_prevState: ClientFormState, formData: FormDa
         : (issue?.message ?? tContact("listInvalid"));
   }
   if (!parsed.success || !contactsParsed.success) {
-    return { fieldErrors };
+    return { fieldErrors, values: formValues(formData) };
   }
   const data = parsed.data;
   const contacts = contactsParsed.data;
@@ -108,7 +125,7 @@ export async function createClient(_prevState: ClientFormState, formData: FormDa
   const tClient = await getTranslations("validation.client");
   const existing = await prisma.client.findUnique({ where: { code: data.code } });
   if (existing) {
-    return { fieldErrors: { code: tClient("codeExists") } };
+    return { fieldErrors: { code: tClient("codeExists") }, values: formValues(formData) };
   }
 
   const staffId = await getCurrentStaffId();
@@ -168,7 +185,7 @@ export async function updateClient(
   const tClient = await getTranslations("validation.client");
   const parsed = await parseClientForm(formData);
   if (!parsed.success) {
-    return { fieldErrors: flattenZodErrors(parsed.error) };
+    return { fieldErrors: flattenZodErrors(parsed.error), values: formValues(formData) };
   }
   const data = parsed.data;
 
@@ -181,7 +198,7 @@ export async function updateClient(
     where: { code: data.code, NOT: { id: clientId } },
   });
   if (duplicateCode) {
-    return { fieldErrors: { code: tClient("codeExists") } };
+    return { fieldErrors: { code: tClient("codeExists") }, values: formValues(formData) };
   }
 
   const staffId = await getCurrentStaffId();

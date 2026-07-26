@@ -185,11 +185,12 @@ export async function cancelAdvance(advanceId: string) {
 
 // ── Thanh toán NCC ──
 
-export async function createVendorPayment(formData: FormData) {
+export async function createVendorPayment(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
   await requirePermission("finance.vendor_payment.manage");
+  const t = await getTranslations("finance.vendorPayments");
   const vendorId = nullable(formData.get("vendorId"));
   const amount = bigIntOrZero(formData.get("amount"));
-  if (!vendorId || amount <= BigInt(0)) return;
+  if (!vendorId || amount <= BigInt(0)) return { error: t("errRequired") };
   const financeCostLineId = nullable(formData.get("financeCostLineId"));
   const staffId = await getCurrentStaffId();
 
@@ -197,6 +198,9 @@ export async function createVendorPayment(formData: FormData) {
   // vừa ứng đủ 100% vừa thanh toán đủ 100%, chi gấp đôi giá trị. Trần là netAmount (đã bóc
   // gross-up thuế). Check nằm TRONG transaction để 2 phiếu gửi song song không cùng lách qua.
   if (financeCostLineId) {
+    // Pre-check để có số "còn lại" đưa vào thông báo (check quyết định vẫn nằm trong transaction).
+    const disb = await lineDisbursement(financeCostLineId);
+    if (Number(amount) > disb.remaining) return { error: t("errExceedLine", { remaining: disb.remaining }) };
     try {
       await prisma.$transaction(async (tx) => {
         const line = await tx.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true, projectId: true } });
@@ -223,7 +227,9 @@ export async function createVendorPayment(formData: FormData) {
       });
     } catch (e) {
       const code = e instanceof Error ? e.message : "";
-      if (code === "EXCEED_LINE" || code === "LINE_NOT_FOUND") return;
+      // Trả lỗi RA GIAO DIỆN: trước đây return rỗng nên phiếu bị chặn mà kế toán tưởng đã lưu.
+      if (code === "EXCEED_LINE") return { error: t("errExceedLine", { remaining: disb.remaining }) };
+      if (code === "LINE_NOT_FOUND") return { error: t("errLineNotFound") };
       throw e;
     }
   } else {
@@ -242,28 +248,34 @@ export async function createVendorPayment(formData: FormData) {
   }
   revalidatePath("/finance/vendor-payments");
   revalidatePath("/finance");
+  return { success: true };
 }
 
-export async function markVendorPaymentPaid(id: string) {
+export async function markVendorPaymentPaid(id: string, _prev: FinanceFormState, _formData: FormData): Promise<FinanceFormState> {
   await requirePermission("finance.vendor_payment.pay");
+  const t = await getTranslations("finance.vendorPayments");
   // updateMany + guard SCHEDULED: bấm 2 lần / 2 người cùng bấm không ghi đè paidDate lần đầu.
-  await prisma.vendorPayment.updateMany({
+  const res = await prisma.vendorPayment.updateMany({
     where: { id, status: "SCHEDULED" },
     data: { status: "PAID", paidDate: new Date() },
   });
   revalidatePath("/finance/vendor-payments");
+  // count = 0 → phiếu đã được người khác đánh dấu trả rồi; nói ra thay vì im lặng không đổi gì.
+  if (res.count === 0) return { error: t("errAlreadyPaid") };
+  return { success: true };
 }
 
 // ── Công nợ ──
 
-export async function createClientInvoice(formData: FormData) {
+export async function createClientInvoice(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
   await requirePermission("finance.invoice.manage");
+  const t = await getTranslations("finance.debt");
   const projectId = nullable(formData.get("projectId"));
   const invoiceNo = nullable(formData.get("invoiceNo"));
   const amount = bigIntOrZero(formData.get("amount"));
-  if (!projectId || !invoiceNo || amount <= BigInt(0)) return;
+  if (!projectId || !invoiceNo || amount <= BigInt(0)) return { error: t("errRequired") };
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } });
-  if (!project) return;
+  if (!project) return { error: t("errRequired") };
   const staffId = await getCurrentStaffId();
   await prisma.clientInvoice.create({
     data: {
@@ -279,21 +291,28 @@ export async function createClientInvoice(formData: FormData) {
   });
   revalidatePath("/finance/debt");
   revalidatePath("/reminders");
+  return { success: true };
 }
 
-export async function recordClientPayment(invoiceId: string, formData: FormData) {
+export async function recordClientPayment(
+  invoiceId: string,
+  _prev: FinanceFormState,
+  formData: FormData,
+): Promise<FinanceFormState> {
   await requirePermission("finance.payment.record");
+  const t = await getTranslations("finance.debt");
   const amount = bigIntOrZero(formData.get("amount"));
-  if (amount <= BigInt(0)) return;
+  if (amount <= BigInt(0)) return { error: t("errRequired") };
   // Không cho ghi nhận vượt số còn lại của hóa đơn — trả dư làm outstanding âm và khoản đó
   // "biến mất" khỏi tổng công nợ (trang debt chỉ cộng bucket khi outstanding > 0).
   const [invoice, paidAgg] = await Promise.all([
     prisma.clientInvoice.findUnique({ where: { id: invoiceId }, select: { amount: true } }),
     prisma.clientPayment.aggregate({ where: { invoiceId }, _sum: { amount: true } }),
   ]);
-  if (!invoice) return;
+  if (!invoice) return { error: t("errRequired") };
   const outstanding = invoice.amount - (paidAgg._sum.amount ?? BigInt(0));
-  if (amount > outstanding) return;
+  // Trả lỗi RA GIAO DIỆN: trước đây return rỗng nên kế toán tưởng đã ghi nhận thu tiền.
+  if (amount > outstanding) return { error: t("errOverPayment", { outstanding: Number(outstanding) }) };
   const staffId = await getCurrentStaffId();
   await prisma.clientPayment.create({
     data: {
@@ -307,4 +326,5 @@ export async function recordClientPayment(invoiceId: string, formData: FormData)
   });
   revalidatePath("/finance/debt");
   revalidatePath("/reminders");
+  return { success: true };
 }

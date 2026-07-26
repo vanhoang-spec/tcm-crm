@@ -1,16 +1,11 @@
 import { getLocale, getTranslations } from "next-intl/server";
-import { NumberField } from "@/components/ui/number-field";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
-import { DateField } from "@/components/ui/date-field";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
-import { createClientInvoice, recordClientPayment } from "../actions";
+import { CreateInvoiceForm, RecordPaymentForm } from "./invoice-forms";
 import { requirePermission } from "@/lib/permissions";
-
-const input = "h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 type Bucket = "current" | "d30" | "d60" | "d60plus";
 // Mốc quá hạn = dueDate ?? invoiceDate — thống nhất với cashflow.ts/dashboard.ts/getArOverdueItems:
@@ -82,36 +77,7 @@ export default async function DebtPage() {
       {/* Create invoice */}
       <details className="rounded-xl border border-dashed border-border-strong p-4">
         <summary className="cursor-pointer text-sm font-medium text-brand-600">{t("createInvoice")}</summary>
-        <form action={createClientInvoice} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="text-xs text-muted-foreground">
-            {tc("projectLabel")}
-            <SearchableSelect
-              name="projectId"
-              required
-              placeholder={tc("selectProject")}
-              options={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
-            />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            {t("invoiceNo")}
-            <input name="invoiceNo" required className={input} />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            {t("amount")}
-            <NumberField name="amount" required className={input} />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            {t("invoiceDate")}
-            <DateField name="invoiceDate" className={input} />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            {t("dueDate")}
-            <DateField name="dueDate" className={input} />
-          </label>
-          <div className="flex items-end">
-            <button type="submit" className="h-9 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600">{t("createInvoice")}</button>
-          </div>
-        </form>
+        <CreateInvoiceForm projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))} />
       </details>
 
       {/* Invoices */}
@@ -136,23 +102,7 @@ export default async function DebtPage() {
               <div><span className="block text-xs text-muted-foreground">{t("dueDate")}</span><span className="text-muted-foreground">{inv.dueDate ? formatDate(inv.dueDate) : "—"}</span></div>
             </div>
 
-            {outstanding > 0 && (
-              <form action={recordClientPayment.bind(null, inv.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
-                <label className="text-xs text-muted-foreground">
-                  {t("paymentAmount")}
-                  <NumberField name="amount" className={input + " w-40"} />
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  {t("paidDate")}
-                  <DateField name="paidDate" className={input + " w-40"} />
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  {t("method")}
-                  <input name="method" className={input + " w-40"} />
-                </label>
-                <button type="submit" className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">{t("recordPayment")}</button>
-              </form>
-            )}
+            {outstanding > 0 && <RecordPaymentForm invoiceId={inv.id} />}
           </div>
         ))}
         {rows.length === 0 && (

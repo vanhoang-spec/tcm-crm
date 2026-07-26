@@ -1,17 +1,12 @@
 import { getLocale, getTranslations } from "next-intl/server";
-import { NumberField } from "@/components/ui/number-field";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
-import { DateField } from "@/components/ui/date-field";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
-import { createVendorPayment, markVendorPaymentPaid } from "../actions";
-import { VendorPaymentLinePicker, type PickerLine } from "./line-picker";
+import { type PickerLine } from "./line-picker";
+import { CreateVendorPaymentForm, MarkPaidButton } from "./payment-forms";
 import { requirePermission } from "@/lib/permissions";
-
-const input = "h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 export default async function VendorPaymentsPage() {
   await requirePermission("finance.view");
@@ -70,40 +65,11 @@ export default async function VendorPaymentsPage() {
       {/* Create voucher */}
       <details className="rounded-xl border border-dashed border-border-strong p-4">
         <summary className="cursor-pointer text-sm font-medium text-brand-600">{t("create")}</summary>
-        <form action={createVendorPayment} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-xs text-muted-foreground">
-            {t("vendor")}
-            <SearchableSelect
-              name="vendorId"
-              required
-              placeholder={t("selectVendor")}
-              options={vendors.map((v) => ({ value: v.id, label: v.name }))}
-            />
-          </label>
-          <VendorPaymentLinePicker
-            projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
-            lines={pickerLines}
-          />
-          <label className="text-xs text-muted-foreground">
-            {tc("amount")}
-            <NumberField name="amount" className={input} />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            {t("dueDate")}
-            <DateField name="dueDate" className={input} />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            {t("invoiceNo")}
-            <input name="invoiceNo" className={input} />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            {t("note")}
-            <input name="note" className={input} />
-          </label>
-          <div className="sm:col-span-2">
-            <button type="submit" className="h-9 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600">{t("create")}</button>
-          </div>
-        </form>
+        <CreateVendorPaymentForm
+          vendors={vendors.map((v) => ({ value: v.id, label: v.name }))}
+          projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+          lines={pickerLines}
+        />
       </details>
 
       <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-xl border border-border bg-surface">
@@ -131,11 +97,7 @@ export default async function VendorPaymentsPage() {
                   <Badge tone={p.status === "PAID" ? "success" : "warning"}>{t(`status${p.status}`)}</Badge>
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {p.status === "SCHEDULED" && (
-                    <form action={markVendorPaymentPaid.bind(null, p.id)}>
-                      <button type="submit" className="rounded-lg border border-success/40 px-2 py-1 text-xs font-medium text-success hover:bg-success/10">{t("markPaid")}</button>
-                    </form>
-                  )}
+                  {p.status === "SCHEDULED" && <MarkPaidButton id={p.id} />}
                 </td>
               </tr>
             ))}

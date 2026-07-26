@@ -985,14 +985,15 @@
       "rejectNoteRequired": "Bắt buộc nhập lý do khi từ chối",
       "rejectedBy": "Từ chối bởi {name} · {date}",
       "rejectedNoteLabel": "Lý do từ chối: {note}",
-      "overrideNote": "Lý do override (bắt buộc khi margin < ngưỡng)",
+      "overrideNote": "Lý do hạ margin dưới ngưỡng (gửi kèm cho người duyệt)",
       "save": "Lưu CO/CE",
       "submitApprove": "Lưu & trình duyệt",
       "autoApproved": "Đủ điều kiện auto-approve (dưới ngưỡng & đạt margin)",
       "sectionNameVi": "Tên hạng mục",
       "sectionDepartment": "Phòng ban phụ trách",
       "sectionDepartmentNone": "— Chưa gán phòng —",
-      "sectionDepartmentHint": "Quyết định tiền tố mã của mọi dòng trong hạng mục (VD: OPE-001). Mã do hệ thống tự đánh khi lưu."
+      "sectionDepartmentHint": "Quyết định tiền tố mã của mọi dòng trong hạng mục (VD: OPE-001). Mã do hệ thống tự đánh khi lưu.",
+      "overrideNotePlaceholder": "Lý do duyệt dưới ngưỡng margin…"
     },
     "rounds": {
       "title": "Vòng deal giá",
@@ -1068,6 +1069,7 @@
       "overrideNoteRequired": "Bắt buộc ghi lý do khi override margin.",
       "goNogoRequired": "Cần quyết định Go/No-Go (GO) trước khi dựng CO/CE.",
       "notFound": "Không tìm thấy dự án.",
+      "invalidPayload": "Bảng CO/CE chưa hợp lệ: {detail}",
       "overrideNotAllowed": "Bạn không có quyền hạ margin xuống dưới ngưỡng tối thiểu. Liên hệ người có quyền duyệt."
     }
   },
@@ -1727,7 +1729,11 @@
       "costLineNone": "Dự án này không còn dòng nào chưa chi hết",
       "costLinePickProject": "Chọn dự án trước",
       "costLineRemaining": "còn {amount}đ",
-      "costLineHint": "Gắn dòng thì khoản chi này chịu chung trần với tạm ứng của dòng đó. Bỏ trống = khoản chi cấp dự án, không có trần theo dòng."
+      "costLineHint": "Gắn dòng thì khoản chi này chịu chung trần với tạm ứng của dòng đó. Bỏ trống = khoản chi cấp dự án, không có trần theo dòng.",
+      "errRequired": "Vui lòng chọn nhà cung cấp và nhập số tiền.",
+      "errExceedLine": "Tổng chi vượt giá trị dòng chi phí (còn lại {remaining}).",
+      "errLineNotFound": "Dòng chi phí không còn tồn tại — hãy làm mới CO/CE.",
+      "errAlreadyPaid": "Phiếu này đã được đánh dấu đã trả."
     },
     "debt": {
       "title": "Công nợ khách hàng (AR)",
@@ -1751,7 +1757,9 @@
       "aging30": "Quá hạn 1–30 ngày",
       "aging60": "Quá hạn 31–60 ngày",
       "aging60plus": "Quá hạn > 60 ngày",
-      "totalOutstanding": "Tổng công nợ"
+      "totalOutstanding": "Tổng công nợ",
+      "errRequired": "Vui lòng chọn dự án, nhập số hóa đơn và số tiền hợp lệ.",
+      "errOverPayment": "Số tiền thu vượt số còn lại của hóa đơn (còn {outstanding})."
     },
     "cashflow": {
       "title": "Ước tính Dòng tiền (toàn danh mục dự án)",

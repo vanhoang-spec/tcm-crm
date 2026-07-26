@@ -60,6 +60,13 @@ export function ClientForm({
   const t = useTranslations("clients.form");
   const tCommon = useTranslations("common");
 
+  /**
+   * Giá trị vừa gõ (server trả về sau khi validation trượt) được ưu tiên hơn giá trị gốc.
+   * React reset input không kiểm soát về `defaultValue` sau mỗi form action — thiếu bước này thì
+   * mỗi lần báo lỗi là người dùng phải gõ lại toàn bộ form.
+   */
+  const keep = (name: string, fallback?: string) => state.values?.[name] ?? fallback;
+
   return (
     <form action={formAction} className="space-y-6">
       {state.error && (
@@ -72,7 +79,7 @@ export function ClientForm({
         <Field label={t("code")} error={state.fieldErrors?.code} required>
           <input
             name="code"
-            defaultValue={defaultValues?.code}
+            defaultValue={keep("code", defaultValues?.code)}
             placeholder={t("codePlaceholder")}
             maxLength={3}
             className={cn(inputClass(!!state.fieldErrors?.code), "uppercase")}
@@ -82,7 +89,7 @@ export function ClientForm({
         <Field label={t("name")} error={state.fieldErrors?.name} required>
           <input
             name="name"
-            defaultValue={defaultValues?.name}
+            defaultValue={keep("name", defaultValues?.name)}
             placeholder={t("namePlaceholder")}
             className={inputClass(!!state.fieldErrors?.name)}
           />
@@ -91,7 +98,7 @@ export function ClientForm({
         <Field label={t("taxCode")} error={state.fieldErrors?.taxCode} required>
           <input
             name="taxCode"
-            defaultValue={defaultValues?.taxCode}
+            defaultValue={keep("taxCode", defaultValues?.taxCode)}
             placeholder={t("taxCodePlaceholder")}
             className={inputClass(!!state.fieldErrors?.taxCode)}
           />
@@ -100,7 +107,7 @@ export function ClientForm({
         <Field label={t("ownerTeam")} error={state.fieldErrors?.ownerTeamId} required>
           <select
             name="ownerTeamId"
-            defaultValue={defaultValues?.ownerTeamId}
+            defaultValue={keep("ownerTeamId", defaultValues?.ownerTeamId)}
             className={inputClass(!!state.fieldErrors?.ownerTeamId)}
           >
             <option value="">{t("selectTeam")}</option>
@@ -116,7 +123,7 @@ export function ClientForm({
           <Combobox
             name="brandName"
             options={brands}
-            defaultValue={defaultValues?.brandName}
+            defaultValue={keep("brandName", defaultValues?.brandName)}
             placeholder={t("brandPlaceholder")}
             required
             hasError={!!state.fieldErrors?.brandName}
@@ -127,7 +134,7 @@ export function ClientForm({
         <Field label={t("industry")} error={state.fieldErrors?.industryId} required>
           <select
             name="industryId"
-            defaultValue={defaultValues?.industryId}
+            defaultValue={keep("industryId", defaultValues?.industryId)}
             className={inputClass(!!state.fieldErrors?.industryId)}
           >
             <option value="">{t("selectIndustry")}</option>
@@ -142,7 +149,7 @@ export function ClientForm({
         <Field label={t("classification")} error={state.fieldErrors?.classificationId} required>
           <select
             name="classificationId"
-            defaultValue={defaultValues?.classificationId}
+            defaultValue={keep("classificationId", defaultValues?.classificationId)}
             className={inputClass(!!state.fieldErrors?.classificationId)}
           >
             <option value="">{t("selectClassification")}</option>
@@ -165,7 +172,7 @@ export function ClientForm({
           <Field label={t("status")} error={state.fieldErrors?.statusId} required>
             <select
               name="statusId"
-              defaultValue={defaultValues?.statusId}
+              defaultValue={keep("statusId", defaultValues?.statusId)}
               className={inputClass(!!state.fieldErrors?.statusId)}
             >
               <option value="">{t("selectStatus")}</option>
@@ -181,7 +188,7 @@ export function ClientForm({
         <Field label={t("introducer")} error={state.fieldErrors?.introducerId} required>
           <SearchableSelect
             name="introducerId"
-            defaultValue={defaultValues?.introducerId ?? ""}
+            defaultValue={keep("introducerId", defaultValues?.introducerId) ?? ""}
             placeholder={t("selectIntroducer")}
             hasError={!!state.fieldErrors?.introducerId}
             options={[
@@ -194,20 +201,20 @@ export function ClientForm({
         <Field label={t("paymentTerm")} error={state.fieldErrors?.paymentTermDays} required>
           <NumberField
             name="paymentTermDays"
-            defaultValue={defaultValues?.paymentTermDays ?? 90}
+            defaultValue={state.values?.paymentTermDays ?? defaultValues?.paymentTermDays ?? 90}
             className={inputClass(!!state.fieldErrors?.paymentTermDays)}
           />
         </Field>
 
         <Field label={t("phone")} error={state.fieldErrors?.phone} required>
-          <input name="phone" defaultValue={defaultValues?.phone} className={inputClass(!!state.fieldErrors?.phone)} />
+          <input name="phone" defaultValue={keep("phone", defaultValues?.phone)} className={inputClass(!!state.fieldErrors?.phone)} />
         </Field>
 
         <Field label={t("email")} error={state.fieldErrors?.email} required>
           <input
             name="email"
             type="email"
-            defaultValue={defaultValues?.email}
+            defaultValue={keep("email", defaultValues?.email)}
             className={inputClass(!!state.fieldErrors?.email)}
           />
         </Field>
@@ -215,32 +222,32 @@ export function ClientForm({
         <Field label={t("bankAccount")} error={state.fieldErrors?.bankAccount} required className="sm:col-span-2">
           <input
             name="bankAccount"
-            defaultValue={defaultValues?.bankAccount}
+            defaultValue={keep("bankAccount", defaultValues?.bankAccount)}
             placeholder={t("bankAccountPlaceholder")}
             className={inputClass(!!state.fieldErrors?.bankAccount)}
           />
         </Field>
 
         <Field label={t("address")} error={state.fieldErrors?.address} required className="sm:col-span-2">
-          <input name="address" defaultValue={defaultValues?.address} className={inputClass(!!state.fieldErrors?.address)} />
+          <input name="address" defaultValue={keep("address", defaultValues?.address)} className={inputClass(!!state.fieldErrors?.address)} />
         </Field>
 
         <Field label={t("note")} error={state.fieldErrors?.note} className="sm:col-span-2">
-          <textarea name="note" defaultValue={defaultValues?.note} rows={3} className={inputClass(false)} />
+          <textarea name="note" defaultValue={keep("note", defaultValues?.note)} rows={3} className={inputClass(false)} />
         </Field>
 
         <label className="flex items-center gap-2 text-sm text-foreground sm:col-span-2">
           <input
             type="checkbox"
             name="isNew"
-            defaultChecked={defaultValues?.isNew ?? true}
+            defaultChecked={state.values ? state.values.isNew === "on" : (defaultValues?.isNew ?? true)}
             className="h-4 w-4 rounded border-border-strong text-brand-500 focus:ring-brand-400"
           />
           {t("isNew")}
         </label>
       </fieldset>
 
-      {mode === "create" && <ContactsFieldset error={state.fieldErrors?.contacts} />}
+      {mode === "create" && <ContactsFieldset error={state.fieldErrors?.contacts} values={state.values} />}
 
       <div className="flex items-center gap-3 border-t border-border pt-4">
         <Button type="submit" disabled={pending}>
@@ -251,9 +258,10 @@ export function ClientForm({
   );
 }
 
-function ContactsFieldset({ error }: { error?: string }) {
+function ContactsFieldset({ error, values }: { error?: string; values?: Record<string, string> }) {
   const t = useTranslations("clients.form");
   const nextKey = useRef(1);
+  // Số dòng do state React giữ nên sống qua form action; chỉ NỘI DUNG ô bị reset → dựng lại từ `values`.
   const [rows, setRows] = useState<{ key: number }[]>([{ key: 0 }]);
 
   return (
@@ -282,12 +290,31 @@ function ContactsFieldset({ error }: { error?: string }) {
               )}
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input name={`contact_name_${index}`} placeholder={t("contactName")} required className={smallInput} />
-              <input name={`contact_title_${index}`} placeholder={t("contactTitle")} required className={smallInput} />
-              <input name={`contact_phone_${index}`} placeholder={t("contactPhone")} required className={smallInput} />
+              <input
+                name={`contact_name_${index}`}
+                defaultValue={values?.[`contact_name_${index}`]}
+                placeholder={t("contactName")}
+                required
+                className={smallInput}
+              />
+              <input
+                name={`contact_title_${index}`}
+                defaultValue={values?.[`contact_title_${index}`]}
+                placeholder={t("contactTitle")}
+                required
+                className={smallInput}
+              />
+              <input
+                name={`contact_phone_${index}`}
+                defaultValue={values?.[`contact_phone_${index}`]}
+                placeholder={t("contactPhone")}
+                required
+                className={smallInput}
+              />
               <input
                 name={`contact_email_${index}`}
                 type="email"
+                defaultValue={values?.[`contact_email_${index}`]}
                 placeholder={t("contactEmail")}
                 required
                 className={smallInput}

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Menu, X, Bell, LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { setActAsStaff } from "@/app/(app)/act-as/actions";
 import { Logo } from "./logo";
 import { SidebarContent } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
@@ -32,6 +34,16 @@ export function Header({
   const [open, setOpen] = useState(false);
   const t = useTranslations("common");
   const tAuth = useTranslations("auth");
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  /** Truyền chuỗi rỗng = xoá cookie act-as, quay về chính mình (xem act-as/actions.ts). */
+  function stopImpersonating() {
+    startTransition(async () => {
+      await setActAsStaff("");
+      router.refresh();
+    });
+  }
 
   return (
     <>
@@ -79,7 +91,10 @@ export function Header({
 
         {impersonating && (
           <div className="absolute inset-x-0 top-16 border-b border-warning/40 bg-warning-bg px-4 py-1.5 text-center text-xs text-warning">
-            {tAuth("stopImpersonating")}
+            {/* Nút thật, không phải nhãn: đây là lối thoát DUY NHẤT ngoài đăng xuất. */}
+            <button type="button" onClick={() => stopImpersonating()} className="font-medium underline underline-offset-2 hover:opacity-80">
+              {tAuth("stopImpersonating")}
+            </button>
           </div>
         )}
       </header>

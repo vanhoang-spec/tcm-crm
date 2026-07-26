@@ -99,7 +99,6 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "projects.ctv.contract", module: "projects", labelVi: "Sinh hợp đồng CTV", labelEn: "Generate CTV contracts", sensitive: true },
   { code: "projects.liquidation.send", module: "projects", labelVi: "Chuyển CO/CE sang Nghiệm thu", labelEn: "Send cost sheet to liquidation", sensitive: true },
   { code: "projects.acceptance.confirm", module: "projects", labelVi: "Xác nhận khách nghiệm thu", labelEn: "Confirm client acceptance", sensitive: true },
-  { code: "projects.invoice.edit", module: "projects", labelVi: "Nhập thông tin hoá đơn", labelEn: "Enter invoice info", sensitive: true },
   { code: "projects.guest.manage", module: "projects", labelVi: "Tạo / thu hồi link mời khách xem", labelEn: "Create / revoke guest invites" },
 
   // ── ✦ Creative ──
@@ -125,6 +124,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "finance.advance.approve", module: "finance", labelVi: "Xác nhận giải ngân / quyết toán / huỷ tạm ứng", labelEn: "Disburse / settle / cancel advance", sensitive: true },
   { code: "finance.vendor_payment.manage", module: "finance", labelVi: "Tạo đề nghị thanh toán NCC", labelEn: "Create vendor payment request" },
   { code: "finance.vendor_payment.pay", module: "finance", labelVi: "Đánh dấu đã chi cho NCC", labelEn: "Mark vendor payment paid", sensitive: true },
+  { code: "finance.vendor_payment.over_cap", module: "finance", labelVi: "Lập phiếu chi vượt trần chi của dự án (kèm lý do)", labelEn: "Create vendor payment above project cap (with reason)", sensitive: true },
   { code: "finance.invoice.manage", module: "finance", labelVi: "Phát hành hoá đơn khách", labelEn: "Issue client invoice", sensitive: true },
   { code: "finance.payment.record", module: "finance", labelVi: "Ghi nhận khách thanh toán", labelEn: "Record client payment", sensitive: true },
   { code: "finance.costlines.refresh", module: "finance", labelVi: "Đồng bộ lại dòng chi phí từ CO/CE", labelEn: "Refresh cost lines from cost sheet" },

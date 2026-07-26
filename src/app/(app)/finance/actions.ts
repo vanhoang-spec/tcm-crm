@@ -5,8 +5,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
-import { syncFinanceCostLines, lineDisbursement, getStaffAdvanceQuota } from "@/lib/finance";
-import { requirePermission } from "@/lib/permissions";
+import { syncFinanceCostLines, lineDisbursement, projectDisbursement, getStaffAdvanceQuota } from "@/lib/finance";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 
 export type FinanceFormState = { error?: string; success?: boolean; notice?: boolean };
 
@@ -233,18 +233,65 @@ export async function createVendorPayment(_prev: FinanceFormState, formData: For
       throw e;
     }
   } else {
-    // Khoản chi cấp dự án, không gắn dòng nào — giữ nguyên hành vi cũ, không có trần theo dòng.
-    await prisma.vendorPayment.create({
-      data: {
-        vendorId,
-        projectId: nullable(formData.get("projectId")),
-        amount,
-        dueDate: dateOrNull(formData.get("dueDate")),
-        invoiceNo: nullable(formData.get("invoiceNo")),
-        note: nullable(formData.get("note")),
-        createdById: staffId,
-      },
-    });
+    // Khoản chi CẤP DỰ ÁN (không gắn dòng cụ thể). Trước đây nhánh này KHÔNG có trần nào và dự án
+    // cũng không bắt buộc — đó là cửa duy nhất để chi tiền không kiểm soát. Nay: bắt buộc gắn dự
+    // án, trần = tổng số thực trả còn lại của dự án, vượt trần phải có quyền riêng + lý do.
+    const projectId = nullable(formData.get("projectId"));
+    if (!projectId) return { error: t("errProjectRequired") };
+
+    const disb = await projectDisbursement(projectId);
+    const overCapNote = nullable(formData.get("overCapNote"));
+    // Dự án chưa có dòng chi phí nào (chưa dựng/chưa đồng bộ CO/CE) → chưa có trần để đối chiếu,
+    // coi như vượt trần: vẫn chi được nhưng phải là người có quyền và phải ghi lý do.
+    const overCap = !disb.hasLines || Number(amount) > disb.remaining;
+    if (overCap) {
+      if (!(await hasPermission("finance.vendor_payment.over_cap"))) {
+        return { error: disb.hasLines ? t("errExceedProject", { remaining: disb.remaining }) : t("errNoCostLines") };
+      }
+      if (!overCapNote) return { error: disb.hasLines ? t("errOverCapReason", { remaining: disb.remaining }) : t("errNoCostLinesReason") };
+    }
+
+    // Check QUYẾT ĐỊNH trong transaction: 2 phiếu gửi song song không cùng đọc số dư cũ rồi cùng lọt.
+    let createdId: string | null = null;
+    try {
+      await prisma.$transaction(async (tx) => {
+        const [capAgg, advAgg, payAgg] = await Promise.all([
+          tx.financeCostLine.aggregate({ where: { projectId, isStale: false, isProxy: false }, _sum: { netAmount: true } }),
+          tx.advance.aggregate({ where: { projectId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
+          tx.vendorPayment.aggregate({ where: { projectId }, _sum: { amount: true } }),
+        ]);
+        const remaining =
+          Number(capAgg._sum.netAmount ?? 0) - Number(advAgg._sum.amount ?? 0) - Number(payAgg._sum.amount ?? 0);
+        if (Number(amount) > remaining && !overCapNote) throw new Error("EXCEED_PROJECT");
+        const created = await tx.vendorPayment.create({
+          data: {
+            vendorId,
+            projectId,
+            amount,
+            dueDate: dateOrNull(formData.get("dueDate")),
+            invoiceNo: nullable(formData.get("invoiceNo")),
+            note: nullable(formData.get("note")),
+            overCapNote: overCap ? overCapNote : null,
+            createdById: staffId,
+          },
+        });
+        createdId = created.id;
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === "EXCEED_PROJECT") {
+        return { error: t("errExceedProject", { remaining: disb.remaining }) };
+      }
+      throw e;
+    }
+    // Ghi vết vượt trần SAU commit — khoản chi vượt trần phải truy được ai duyệt và vì sao.
+    if (overCap && createdId) {
+      await audit("vendor_payment", createdId, "OVER_CAP", {
+        amount: amount.toString(),
+        projectId,
+        remainingBefore: disb.remaining,
+        reason: overCapNote,
+      });
+    }
   }
   revalidatePath("/finance/vendor-payments");
   revalidatePath("/finance");

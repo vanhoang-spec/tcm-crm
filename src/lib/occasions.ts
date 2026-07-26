@@ -5,7 +5,9 @@ import { TCM_FAMILY_GROUP_NAME } from "./chat";
 
 /**
  * Tin nhắn chúc mừng tự động vào "GIA ĐÌNH TCM" — sinh nhật nhân sự, kỷ niệm thâm niên, sinh nhật
- * công ty. App KHÔNG có cron thật — chạy theo pattern "check-and-notify mỗi lần layout render" như
+ * công ty. Chạy bởi scheduler 5 phút/lần (src/instrumentation.ts) nên tin xuất hiện trong vòng ≤5 phút
+ * sau mốc giờ, kể cả ngày không ai mở app. LƯU Ý: mốc 8/9/10 giờ đọc bằng now.getHours() = giờ LOCAL
+ * của tiến trình server, phụ thuộc biến TZ — server phải đặt TZ=Asia/Ho_Chi_Minh. Cùng pattern như
  * lib/reminders.ts. Do đó "đúng 9:00am" nghĩa là: tin xuất hiện ngay khi có người tải trang ĐẦU TIÊN
  * sau 9:00am hôm đó (không phải chính xác từng giây) — hạn chế đã biết của kiến trúc không-cron này.
  * Chống gửi trùng bằng unique constraint SpecialOccasionLog(occasionType, refId, occasionDate) — an

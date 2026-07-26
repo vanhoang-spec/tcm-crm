@@ -2,9 +2,11 @@
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
+import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
-import { stringifyAudit } from "@/lib/utils";
+import { stringifyAudit, toNum } from "@/lib/utils";
+import { clientBillableTotal } from "@/lib/bidding";
 import { hashGuestToken } from "@/lib/guest-session";
 import { syncTimelineOrders, dispatchOrder } from "@/lib/project-orders";
 import { spawnTasksForCreativeOrder } from "@/lib/creative";
@@ -477,17 +479,62 @@ export async function setExpectedAcceptanceSignDate(projectId: string, formData:
   revalidateProject(projectId);
 }
 
-/** Kế toán điền Số hóa đơn / Ngày hóa đơn sau khi xuất hóa đơn cho dự án. */
-export async function saveInvoiceInfo(projectId: string, formData: FormData) {
-  await requirePermission("projects.invoice.edit");
+export type LiquidationInvoiceState = { error?: string; success?: boolean };
+
+/**
+ * Kế toán phát hành hóa đơn khách NGAY tại tab Nghiệm thu → tạo ClientInvoice THẬT (module ④).
+ *
+ * Thay cho cặp ô Contract.invoiceNo/invoiceDate cũ: hai chỗ đó ghi số hóa đơn mà KHÔNG có số tiền
+ * và không liên kết gì với bảng công nợ, nên kế toán điền xong vẫn tưởng đã xuất hóa đơn trong khi
+ * công nợ trống trơn. Nay chỉ còn MỘT nguồn sự thật là ClientInvoice.
+ *
+ * Trần = CE + Chi hộ của ĐÚNG revision đã chuyển nghiệm thu, tính lại ở server (không tin số từ
+ * client). Cho xuất nhiều đợt nhưng tổng không vượt trần.
+ */
+export async function createLiquidationInvoice(
+  projectId: string,
+  _prev: LiquidationInvoiceState,
+  formData: FormData,
+): Promise<LiquidationInvoiceState> {
+  await requirePermission("finance.invoice.manage");
+  const t = await getTranslations("projects.liquidation");
+
   const invoiceNo = nullable(formData.get("invoiceNo"));
-  const invoiceDate = dateOrNull(formData.get("invoiceDate"));
+  const amount = Math.round(Number(str(formData.get("amount"))) || 0);
+  if (!invoiceNo || amount <= 0) return { error: t("errRequired") };
+
+  const [project, sheet] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } }),
+    prisma.costSheet.findFirst({
+      where: { projectId, version: "CTRACT" },
+      orderBy: { createdAt: "desc" },
+      include: { sentToLiquidationRevision: true },
+    }),
+  ]);
+  const rev = sheet?.sentToLiquidationRevision ?? null;
+  if (!project || !rev) return { error: t("errNoSentRev") };
+
+  const billable = clientBillableTotal(toNum(rev.ceTotal), toNum(rev.chiHo));
+  const issuedAgg = await prisma.clientInvoice.aggregate({ where: { projectId }, _sum: { amount: true } });
+  const remaining = billable - toNum(issuedAgg._sum.amount ?? BigInt(0));
+  if (amount > remaining) return { error: t("errExceedBillable", { rev: rev.revNo, remaining }) };
+
   const staffId = await getCurrentStaffId();
-  await prisma.contract.upsert({
-    where: { projectId },
-    update: { invoiceNo, invoiceDate, invoiceById: staffId },
-    create: { projectId, invoiceNo, invoiceDate, invoiceById: staffId },
+  const created = await prisma.clientInvoice.create({
+    data: {
+      projectId,
+      clientId: project.clientId,
+      invoiceNo,
+      invoiceDate: dateOrNull(formData.get("invoiceDate")) ?? new Date(),
+      amount: BigInt(amount),
+      dueDate: dateOrNull(formData.get("dueDate")),
+      note: nullable(formData.get("note")),
+      createdById: staffId,
+    },
   });
-  await audit("contract", projectId, "SAVE_INVOICE_INFO", { invoiceNo, invoiceDate: invoiceDate?.toISOString() ?? null });
+  await audit("client_invoice", created.id, "CREATE", { projectId, invoiceNo, amount, fromRevNo: rev.revNo });
   revalidateProject(projectId);
+  revalidatePath("/finance/debt");
+  revalidatePath("/reminders");
+  return { success: true };
 }

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { arDueBase, arOutstanding } from "./ar";
 import { getNumberSetting } from "./settings";
 
 // ─────────────────────────────────────────────────────────
@@ -109,10 +110,16 @@ export async function getCashflowForecast(): Promise<CashflowForecast> {
   // Cash In — công nợ phải thu (hóa đơn khách chưa thu hết). Ưu tiên hiển thị dự án Liquidation trước Processing.
   // Mốc tiền về = hạn thanh toán (hoặc ngày hóa đơn nếu không có hạn) + 14 ngày trừ hao.
   for (const inv of invoices) {
-    const paid = inv.payments.reduce((s, p) => s + Number(p.amount), 0);
-    const outstanding = Number(inv.amount) - paid;
+    // Định nghĩa "còn phải thu" và "mốc đến hạn" dùng chung ở lib/ar.ts. Đệm 14 ngày bên dưới là
+    // khác biệt CỐ Ý của riêng trang này nên không gộp vào đó.
+    const outstanding = arOutstanding({
+      amount: Number(inv.amount),
+      invoiceDate: inv.invoiceDate,
+      dueDate: inv.dueDate,
+      paidAmounts: inv.payments.map((p) => Number(p.amount)),
+    });
     if (outstanding <= 0) continue;
-    const baseDate = inv.dueDate ?? inv.invoiceDate;
+    const baseDate = arDueBase(inv);
     items.push({
       id: `inv-${inv.id}`,
       type: "IN",

@@ -245,8 +245,8 @@ export async function checkOrderDeadlineReminders(): Promise<void> {
           projectId: order.projectId,
         })),
       });
+      await prisma.projectOrder.update({ where: { id: order.id }, data: { deadlineReminderSentAt: new Date() } });
     }
-    await prisma.projectOrder.update({ where: { id: order.id }, data: { deadlineReminderSentAt: new Date() } });
   }
 }
 
@@ -289,7 +289,8 @@ export async function getCreativeOverdueTasks(teamCode?: string): Promise<Creati
 }
 
 /**
- * No-cron: gọi mỗi lần layout render. Phát hiện task Creative quá deadline mà chưa trả → nhắc 1 lần
+ * Chạy bởi scheduler 5 phút/lần (src/instrumentation.ts); layout render là lưới an toàn. Phát hiện
+ * task Creative quá deadline mà chưa trả → nhắc 1 lần
  * cho người thực hiện (assignee) + người giao (CD). Idempotent qua `deadlineReminderSentAt` (reset khi
  * đổi deadline ở assignCreativeTask). Lock là phép tính thời gian nên lọc ở JS trước khi gửi/gắn cờ.
  */
@@ -320,8 +321,8 @@ export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
           projectId: task.projectId,
         })),
       });
+      await prisma.creativeTask.update({ where: { id: task.id }, data: { deadlineReminderSentAt: new Date() } });
     }
-    await prisma.creativeTask.update({ where: { id: task.id }, data: { deadlineReminderSentAt: new Date() } });
   }
 }
 
@@ -366,7 +367,8 @@ export async function getDepartmentTaskOverdueTasks(teamCode?: string): Promise<
 }
 
 /**
- * No-cron: gọi mỗi lần layout render. Phát hiện task bộ phận quá deadline mà chưa trả → nhắc 1 lần
+ * Chạy bởi scheduler 5 phút/lần (src/instrumentation.ts); layout render là lưới an toàn. Phát hiện
+ * task bộ phận quá deadline mà chưa trả → nhắc 1 lần
  * cho người thực hiện (assignee) + người giao (lead). Idempotent qua `deadlineReminderSentAt` (reset khi
  * đổi deadline ở assignDepartmentTask). Mirror checkCreativeTaskDeadlineReminders.
  */
@@ -397,8 +399,8 @@ export async function checkDepartmentTaskDeadlineReminders(): Promise<void> {
           projectId: task.projectId,
         })),
       });
+      await prisma.departmentTask.update({ where: { id: task.id }, data: { deadlineReminderSentAt: new Date() } });
     }
-    await prisma.departmentTask.update({ where: { id: task.id }, data: { deadlineReminderSentAt: new Date() } });
   }
 }
 
@@ -437,7 +439,7 @@ export async function getAcceptanceSignReminders(teamCode?: string): Promise<Acc
 }
 
 /**
- * Không có cron — gọi mỗi lần layout render (như checkOrderDeadlineReminders). Idempotent qua
+ * Chạy bởi scheduler 5 phút/lần (src/instrumentation.ts); layout render là lưới an toàn. Idempotent qua
  * `acceptanceReminderSentAt`: dự án Đang nghiệm thu tới/qua "Ngày dự kiến khách ký" mà khách chưa
  * xác nhận nghiệm thu → nhắc Project Leader + Owner 1 lần (đổi mốc ngày sẽ reset cờ để nhắc lại).
  */
@@ -468,8 +470,8 @@ export async function checkAcceptanceSignReminders(): Promise<void> {
           projectId: c.projectId,
         })),
       });
+      await prisma.contract.update({ where: { id: c.id }, data: { acceptanceReminderSentAt: new Date() } });
     }
-    await prisma.contract.update({ where: { id: c.id }, data: { acceptanceReminderSentAt: new Date() } });
   }
 }
 
@@ -548,7 +550,7 @@ export async function checkInventoryReturnReminders(): Promise<void> {
           projectId: doc.projectId,
         })),
       });
+      await prisma.stockDocument.update({ where: { id: doc.id }, data: { returnReminderSentAt: new Date() } });
     }
-    await prisma.stockDocument.update({ where: { id: doc.id }, data: { returnReminderSentAt: new Date() } });
   }
 }

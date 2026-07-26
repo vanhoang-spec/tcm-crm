@@ -121,7 +121,13 @@ export default async function DashboardPage() {
           <h2 className="text-sm font-semibold text-foreground">{t("sectionCashflow")}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatValue icon={TrendingUp} label={t("cashInActual")} value={money(cashflow.inActual)} tone="success" />
-            <StatValue icon={TrendingUp} label={t("cashInRemaining")} value={money(cashflow.inRemaining)} tone="brand" />
+            <StatValue
+              icon={TrendingUp}
+              label={t("cashInRemaining")}
+              value={money(cashflow.inRemaining)}
+              sub={t("cashInRemainingOverdue", { amount: money(cashflow.inOverdue) })}
+              tone="brand"
+            />
             <StatValue icon={TrendingDown} label={t("cashOutActual")} value={money(cashflow.outActual)} tone="danger" />
             <StatValue icon={TrendingDown} label={t("cashOutRemaining")} value={money(cashflow.outRemaining)} tone="brand" />
           </div>

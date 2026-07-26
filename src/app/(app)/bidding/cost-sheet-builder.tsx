@@ -8,6 +8,7 @@ import { NumberField } from "@/components/ui/number-field";
 import {
   computeMarginPct,
   computeMakeupCe,
+  clientBillableTotal,
   computeCostSheetTotals,
   flattenSectionTree,
   taxGrossUp,
@@ -26,9 +27,12 @@ import { saveCostSheet, type ProjectFormState } from "./actions";
 export type LineData = {
   /**
    * Khoá BỀN của dòng — module ④ (Chi phí & Công nợ) khoá tạm ứng/thanh toán vào đây.
-   * Builder chỉ MANG THEO, không tự sinh: dòng mới để "" và server sinh khi lưu
-   * (`crypto.randomUUID` phía trình duyệt chỉ có trong secure context, mà production chạy HTTP).
-   * Gửi lại y nguyên ở mọi lần lưu — đổi giá trị này là mất dấu tiền đã ứng của dòng.
+   * Builder SINH khoá ngay khi dòng ra đời (newStableKey) và gửi lại y nguyên ở mọi lần lưu.
+   *
+   * ĐỪNG quay lại kiểu cũ "để rỗng cho server sinh": state builder khởi tạo một lần bằng useState
+   * nên props mới sau khi lưu không chảy ngược vào state → lần lưu thứ 2 trong cùng phiên lại gửi
+   * rỗng, server sinh BỘ KHOÁ MỚI, và syncFinanceCostLines tạo dòng chi phí mới (mở lại trần chi
+   * đầy đủ) trong khi dòng cũ đang giữ tạm ứng bị đánh stale → chi tiền hai lần cho cùng một khoản.
    */
   stableKey: string;
   itemName: string;
@@ -88,11 +92,22 @@ function nextKey(prefix: string) {
   return `${prefix}${uid}`;
 }
 
+/**
+ * Khoá bền cho dòng chi phí, sinh ngay lúc dòng ra đời.
+ *
+ * KHÔNG dùng `crypto.randomUUID`: đó là API [SecureContext], mà production chạy HTTP trong LAN
+ * công ty nên nó `undefined` ở trình duyệt. Thời điểm + số ngẫu nhiên là đủ: khoá chỉ cần duy nhất
+ * trong phạm vi một bảng CO/CE, và server vẫn khử trùng lần cuối trước khi ghi.
+ */
+function newStableKey(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function blankLine(sectionKey: string): Line {
   return {
     key: nextKey("l"),
     sectionKey,
-    stableKey: "", // rỗng = dòng mới, server sinh khoá lúc lưu
+    stableKey: newStableKey(),
     itemName: "",
     specs: "",
     lineType: "QTY_PRICE",
@@ -146,7 +161,9 @@ function hydrate(sections: SectionData[]): { sections: Section[]; lines: Line[] 
   }));
   const outLines: Line[] = [];
   sections.forEach((s, i) => {
-    for (const l of s.lines) outLines.push({ ...l, key: nextKey("l"), sectionKey: keys[i] });
+    // `stableKey || newStableKey()` bao luôn 2 đường nạp có khoá rỗng: dựng từ mẫu (template) và
+    // dữ liệu cũ lưu trước khi có trường này — khỏi phải vá riêng ở từng trang gọi builder.
+    for (const l of s.lines) outLines.push({ ...l, stableKey: l.stableKey || newStableKey(), key: nextKey("l"), sectionKey: keys[i] });
   });
   return { sections: outSections, lines: outLines };
 }
@@ -261,7 +278,10 @@ export function CostSheetBuilder({
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
   function addLine(sectionKey: string) {
-    setLines((ls) => [...ls, blankLine(sectionKey)]);
+    // Dựng dòng NGOÀI updater để updater giữ tính thuần: React StrictMode (bật mặc định ở dev) gọi
+    // updater 2 lần, blankLine chạy 2 lần sẽ sinh 2 khoá và chỉ 1 khoá sống — gây nhiễu khi soi lỗi.
+    const line = blankLine(sectionKey);
+    setLines((ls) => [...ls, line]);
   }
   function removeLine(key: string) {
     setLines((ls) => ls.filter((l) => l.key !== key));
@@ -428,7 +448,7 @@ export function CostSheetBuilder({
           </div>
         </div>
       </div>
-      <Stat label={t("grandTotalForClient")} value={formatNumber(ceTotal + totals.chiHo, locale)} />
+      <Stat label={t("grandTotalForClient")} value={formatNumber(clientBillableTotal(ceTotal, totals.chiHo), locale)} />
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={runMakeup} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700 hover:bg-brand-100">

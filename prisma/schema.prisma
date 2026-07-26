@@ -949,6 +949,10 @@ model CostLine {
   section   CostSheetSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   vendor    Vendor?          @relation(fields: [vendorId], references: [id])
 
+  /// Hai dòng cùng stableKey trong một bảng sẽ bị module ④ GỘP làm một (FinanceCostLine khoá theo
+  /// lineKey) và tiền của một dòng biến mất im lặng. Ràng buộc này biến lỗi đó thành lỗi nổ ngay.
+  /// saveCostSheet đã khử trùng trước khi ghi nên từ giao diện không chạm tới được.
+  @@unique([costSheetId, stableKey])
   @@map("cost_line")
 }
 
@@ -1345,6 +1349,10 @@ model FinanceCostLine {
   /// tổng mọi khoản chi của dòng: thanh toán NCC + tạm ứng NV + tạm ứng chuyển thẳng NCC.
   /// Không dùng `amount` làm trần: phần gross-up là thuế công ty nộp hộ, không trao cho ai.
   netAmount   BigInt   @default(0)
+  /// Dòng thuộc hạng mục Chi hộ (CostSheetSection.isProxy). Chi hộ là tiền ứng giùm khách, NẰM
+  /// NGOÀI giá vốn (bất biến #2) — nên nó có trần chi riêng theo từng dòng như mọi dòng khác,
+  /// nhưng KHÔNG được cộng vào trần cấp dự án (xem projectDisbursement) và không vào margin.
+  isProxy     Boolean  @default(false)
   vendorId    String?
   sourceRevNo Int      @default(0) // revNo của CostSheetRevision đã đồng bộ gần nhất
   sort        Int      @default(0)
@@ -1412,6 +1420,9 @@ model VendorPayment {
   status      String    @default("SCHEDULED") // SCHEDULED | PAID
   invoiceNo   String?
   note        String?
+  /// Lý do lập phiếu VƯỢT trần chi của dự án — có giá trị = phiếu đã vượt trần (hiện badge cảnh
+  /// báo ở danh sách). Null = phiếu nằm trong trần. Đòi quyền finance.vendor_payment.over_cap.
+  overCapNote String?
   createdById String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

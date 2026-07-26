@@ -79,7 +79,7 @@
     "cashOut": "Cash out",
     "cashOutActual": "Paid (this month)",
     "cashOutRemaining": "Expected (rest of month)",
-    "cashflowHint": "Current calendar month — display only, no dedicated filtered list yet.",
+    "cashflowHint": "Current calendar month. Expected in / out = every open item due before month end, INCLUDING amounts already overdue.",
     "taskOverdueRatio": "Overdue tasks / total tasks",
     "deptAccount": "Account",
     "deptCreative": "Creative",
@@ -87,7 +87,8 @@
     "deptOperations": "Operations",
     "deptProduction": "Production",
     "deptPurchasing": "Purchasing",
-    "displayOnlyHint": "Display only — no filtered list page for this metric yet"
+    "displayOnlyHint": "Display only — no filtered list page for this metric yet",
+    "cashInRemainingOverdue": "Of which overdue: {amount}"
   },
   "clients": {
     "list": {
@@ -1054,7 +1055,8 @@
         "industryId": "Industry",
         "classificationId": "Vendor-list classification"
       },
-      "blockedIncompleteProfile": "Can't sign contract yet — client profile is missing: {fields}. Complete it on the client page."
+      "blockedIncompleteProfile": "Can't sign contract yet — client profile is missing: {fields}. Complete it on the client page.",
+      "blockedNeedInvoice": "No invoice has been issued for this project — cannot finish. Issue the invoice on the Liquidation tab first."
     },
     "validation": {
       "nameRequired": "Project name is required",
@@ -1357,9 +1359,23 @@
       "invoiceTitle": "Invoice",
       "invoiceNoLabel": "Invoice No.",
       "invoiceDateLabel": "Invoice date",
-      "invoiceSave": "Save invoice",
-      "invoiceSavedBy": "Entered by {name}",
-      "invoiceEmpty": "No invoice info yet."
+      "staleRevWarning": "The cost sheet has a newer revision (v{latest}) than the one sent to liquidation (v{sent}). Figures below are the older version.",
+      "staleRevAction": "Send latest revision",
+      "invoiceBillableLabel": "Client owes (CE + pass-through)",
+      "invoiceIssuedLabel": "Already invoiced",
+      "invoiceRemainingLabel": "Left to invoice",
+      "invoiceAmountLabel": "Amount",
+      "invoiceDueDateLabel": "Payment due",
+      "invoiceNoteLabel": "Note",
+      "invoiceCreateBtn": "Issue invoice",
+      "invoiceNeedSentRev": "No cost sheet revision has been sent to liquidation yet — there is no baseline to check the invoice amount against.",
+      "invoiceListTitle": "Invoices issued",
+      "invoiceListEmpty": "No invoice issued yet.",
+      "invoicePaidShort": "paid",
+      "invoiceOpenDebt": "Open receivables page",
+      "errRequired": "Enter an invoice number and a valid amount.",
+      "errNoSentRev": "No cost sheet revision has been sent to liquidation to check against.",
+      "errExceedBillable": "Exceeds the amount left to invoice on cost sheet v{rev} ({remaining} remaining)."
     },
     "operations": {
       "title": "Operations — Outsourced Labor (CTV)",
@@ -1733,7 +1749,17 @@
       "errRequired": "Select a vendor and enter an amount.",
       "errExceedLine": "Total spend exceeds the cost line value ({remaining} remaining).",
       "errLineNotFound": "That cost line no longer exists — refresh CO/CE.",
-      "errAlreadyPaid": "This voucher is already marked as paid."
+      "errAlreadyPaid": "This voucher is already marked as paid.",
+      "errProjectRequired": "Select the project this payment belongs to.",
+      "errExceedProject": "Exceeds the project spending cap ({remaining} remaining). Requires an over-cap approver.",
+      "errOverCapReason": "This payment exceeds the project cap ({remaining} remaining) — a reason is required.",
+      "errNoCostLines": "This project has no cost lines yet (CO/CE not built or not synced) so there is no cap to check against. Requires an over-cap approver.",
+      "errNoCostLinesReason": "This project has no cost lines to check against — a reason is required.",
+      "overCapNote": "Over-cap reason (if any)",
+      "overCapNoteHint": "Only required when the payment exceeds the project cap, or the project has no cost lines yet.",
+      "overCapBadge": "Over cap",
+      "projectRemaining": "Project cap remaining: {amount}",
+      "projectNoLines": "No cost lines on this project — needs over-cap permission plus a reason."
     },
     "debt": {
       "title": "Client receivables (AR)",
@@ -1759,7 +1785,8 @@
       "aging60plus": "Overdue > 60 days",
       "totalOutstanding": "Total receivables",
       "errRequired": "Select a project, enter an invoice number and a valid amount.",
-      "errOverPayment": "Payment exceeds the invoice balance ({outstanding} remaining)."
+      "errOverPayment": "Payment exceeds the invoice balance ({outstanding} remaining).",
+      "defNote": "Total receivables = every invoice with a balance, no time limit. Aging is measured from the due date, or the invoice date when no due date was entered. The Cash Flow Forecast page shows a different figure because it adds a 14-day collection buffer to that date."
     },
     "cashflow": {
       "title": "Cash Flow Forecast (all projects)",

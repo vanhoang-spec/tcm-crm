@@ -141,7 +141,8 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 1. Margin gate 31% + override có lý do.
 2. Chi hộ ngoài margin.
 3. Mọi thứ mới phải cộng vào `coTotal` hoặc chỉ tác động lúc suy ra `ceTotal` — **không tạo hệ thống tổng tiền song song**.
-4. Chặn Finished nếu thiếu CECO Liquid/Invoice; chặn chuyển Processing nếu thiếu confirm email/PO/HĐ.
+4. Chặn Finished nếu **chưa phát hành hóa đơn nào** (`ClientInvoice`) — đã thực thi trong `markFinished`. Chỉ đòi ĐÃ PHÁT HÀNH, không đòi thu đủ (khoản giữ lại bảo hành 5–10% là bình thường). Phần "CECO Liquid" (`CostSheet.version="LIQUID"`) vẫn **chưa lập trình** — hiện dùng con trỏ `sentToLiquidationRevisionId` làm mốc đối chiếu. Chặn chuyển Processing nếu thiếu confirm email/PO/HĐ.
+   - Hóa đơn có MỘT nguồn sự thật là `ClientInvoice`, phát hành ở tab Nghiệm thu (`createLiquidationInvoice`) với trần = CE + Chi hộ của bản đã chuyển nghiệm thu. Cặp ô `Contract.invoiceNo/invoiceDate` cũ đã bỏ khỏi UI (cột còn trong DB, không ai đọc/ghi).
 
 ### Từ vựng
 | Từ | Nghĩa |
@@ -174,6 +175,9 @@ Server công ty: `192.168.1.111` (LAN) — domain `app.tcmbtl.com`. User `tcm`, 
 
 Quy trình đã dùng: **backup DB production → đồng bộ code (tar over ssh) → `prisma migrate deploy` → `npm run build` → `pm2 restart`**.
 
+- **Bộ hẹn giờ nhắc việc chạy TRONG tiến trình Next** (`src/instrumentation.ts`, chu kỳ 5 phút) — `pm2 restart` là đủ, KHÔNG cần cron của OS. Sau khi restart, kiểm `pm2 logs` phải thấy dòng `[jobs] scheduler bật`.
+- ⚠ **Server phải đặt `TZ=Asia/Ho_Chi_Minh`** (hoặc set trong env của pm2): mốc giờ 8/9/10h của `src/lib/occasions.ts` đọc bằng `now.getHours()` = giờ local của tiến trình, sai TZ là lệch 7 tiếng.
+
 ⚠️ **Chỉ deploy khi ở trong mạng LAN công ty.** Cổng 22 ở IP public (115.79.195.150) trả về host key **khác** với server đã biết → không phải máy chủ CRM, không được đẩy dữ liệu vào đó.
 
 - Fingerprint server thật (192.168.1.111, ED25519): `SHA256:EWU4YXJM5NoE01QTVwLnXV2ao1Q1TG7fwvabxf39CfU`
@@ -192,9 +196,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 ## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
 
 1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
-   - **Danh mục 89 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+   - **Danh mục 90 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+     Ngoại lệ: `finance.vendor_payment.over_cap` được kiểm bằng `hasPermission()` **bên trong** `createVendorPayment` (action đã có `requirePermission("finance.vendor_payment.manage")` ở đầu) chứ không phải một điểm chặn riêng — đừng đi tìm `requirePermission` tương ứng.
    - **248 điểm chặn**: 177 server action + 64 page + 7 route API. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
-   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 89 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
+   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 90 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
    - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
    - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
    - ⚠ **Không gate bằng `layout.tsx`**: layout không re-render khi điều hướng phía client và không chặn được server action — xem `node_modules/next/dist/docs/01-app/02-guides/authentication.md` dòng 1350 và 1446. Ẩn mục khỏi menu chỉ là trang trí.
@@ -208,6 +213,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 6. **Chưa có test tự động.** Verify hiện làm bằng tsc/eslint/build + browser thủ công.
 7. **CO/CE chỉ có CE tổng ở cấp bảng**, chưa có CE theo từng dòng (Phase 2 đã bàn: CE-per-line + gom N dòng CO → 1 dòng CE + make-up theo dòng + AI gợi ý markup — **chưa làm**).
 8. SQLite single-writer: giữ transaction ngắn, fan-out notification **sau** commit.
+9. **Nhắc việc nay có bộ hẹn giờ thật** (`src/instrumentation.ts` + `src/lib/job-runner.ts`) — không còn phụ thuộc "có người mở app". Hạn chế còn lại: tick 5 phút chứ không phải cron theo giờ chính xác; nếu pm2 chạy cluster thì mỗi instance có một timer, nhưng "vé chạy" (bảng `setting`, module `jobs`) bảo đảm mỗi chu kỳ chỉ một lượt chạy thật. Layout render vẫn gọi `runDueJobs()` làm lưới an toàn.
 
 ---
 

@@ -41,6 +41,26 @@ export default async function VendorPaymentsPage() {
       l.vendorPayments.reduce((s, p) => s + toNum(p.amount), 0),
   }));
 
+  // Trần chi CẤP DỰ ÁN cho phiếu không gắn dòng — cùng công thức với projectDisbursement ở
+  // lib/finance.ts (Σ netAmount dòng còn hiệu lực, KHÔNG gồm Chi hộ, trừ đã ứng và đã lập phiếu).
+  // Ở đây chỉ để HIỂN THỊ; server vẫn tính lại trong transaction trước khi ghi.
+  const [capLines, advByProject, payByProject] = await Promise.all([
+    prisma.financeCostLine.groupBy({ by: ["projectId"], where: { isStale: false, isProxy: false }, _sum: { netAmount: true } }),
+    prisma.advance.groupBy({ by: ["projectId"], where: { status: { not: "CANCELED" } }, _sum: { amount: true } }),
+    prisma.vendorPayment.groupBy({ by: ["projectId"], _sum: { amount: true } }),
+  ]);
+  const capBaseBy = new Map(capLines.map((r) => [r.projectId, toNum(r._sum.netAmount ?? BigInt(0))]));
+  const advBy = new Map(advByProject.map((r) => [r.projectId, toNum(r._sum.amount ?? BigInt(0))]));
+  const payBy = new Map(payByProject.map((r) => [r.projectId ?? "", toNum(r._sum.amount ?? BigInt(0))]));
+  const projectCaps: Record<string, { remaining: number; hasLines: boolean }> = {};
+  for (const p of projects) {
+    const base = capBaseBy.get(p.id) ?? 0;
+    projectCaps[p.id] = {
+      remaining: base - (advBy.get(p.id) ?? 0) - (payBy.get(p.id) ?? 0),
+      hasLines: capBaseBy.has(p.id),
+    };
+  }
+
   const totalScheduled = payments.filter((p) => p.status === "SCHEDULED").reduce((s, p) => s + toNum(p.amount), 0);
   const totalPaid = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + toNum(p.amount), 0);
 
@@ -69,6 +89,7 @@ export default async function VendorPaymentsPage() {
           vendors={vendors.map((v) => ({ value: v.id, label: v.name }))}
           projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
           lines={pickerLines}
+          projectCaps={projectCaps}
         />
       </details>
 
@@ -94,7 +115,11 @@ export default async function VendorPaymentsPage() {
                 <td className="px-3 py-2 text-muted-foreground">{p.dueDate ? formatDate(p.dueDate) : "—"}</td>
                 <td className="px-3 py-2 text-muted-foreground">{p.invoiceNo ?? "—"}</td>
                 <td className="px-3 py-2">
-                  <Badge tone={p.status === "PAID" ? "success" : "warning"}>{t(`status${p.status}`)}</Badge>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge tone={p.status === "PAID" ? "success" : "warning"}>{t(`status${p.status}`)}</Badge>
+                    {/* Phiếu vượt trần phải nhìn thấy ngay trong danh sách, kèm lý do ở tooltip. */}
+                    {p.overCapNote && <span title={p.overCapNote}><Badge tone="danger">{t("overCapBadge")}</Badge></span>}
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-right">
                   {p.status === "SCHEDULED" && <MarkPaidButton id={p.id} />}

@@ -1,8 +1,8 @@
 import { prisma } from "./prisma";
 
 /**
- * "Đến hẹn" cho Reminder tạo trong chat — check-on-render (như occasions.ts/reminders.ts), KHÔNG
- * có cron thật. Khi remindAt <= now: đăng 1 SYSTEM message (systemEvent=REMINDER_DUE) vào đúng hội
+ * "Đến hẹn" cho Reminder tạo trong chat — chạy bởi scheduler 5 phút/lần (src/instrumentation.ts),
+ * nên độ trễ tối đa ~5 phút so với remindAt. Khi remindAt <= now: đăng 1 SYSTEM message (systemEvent=REMINDER_DUE) vào đúng hội
  * thoại + fan-out Notification cho đối tượng (ME=chỉ người tạo, GROUP=cả hội thoại).
  *
  * Idempotency chống bắn trùng khi nhiều request cùng lúc trigger check (nhiều người mở app cùng lúc

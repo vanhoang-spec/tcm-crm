@@ -5,12 +5,13 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/ui/date-field";
-import { formatDateTime, formatNumber, formatPercent, pickLabel } from "@/lib/utils";
-import { computeMarginPct } from "@/lib/bidding";
+import { formatDate, formatDateTime, formatNumber, formatPercent, pickLabel, toNum } from "@/lib/utils";
+import { clientBillableTotal, computeMarginPct } from "@/lib/bidding";
 import { STATUS_TONE } from "@/lib/bidding-ui";
 import type { Locale } from "@/i18n/locales";
-import { confirmClientAcceptance, setExpectedAcceptanceSignDate, saveInvoiceInfo } from "../../actions";
-import { requirePermission } from "@/lib/permissions";
+import { confirmClientAcceptance, setExpectedAcceptanceSignDate, sendCostSheetToLiquidation } from "../../actions";
+import { LiquidationInvoiceForm } from "./invoice-form";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 
 function toDateInput(d: Date | null): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
@@ -23,28 +24,56 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
   await requirePermission("projects.view");
   const { id } = await params;
 
-  const [t, locale, project] = await Promise.all([
+  const [t, locale, project, invoices, canCreateInvoice, canSendLiquidation] = await Promise.all([
     getTranslations("projects.liquidation"),
     getLocale() as Promise<Locale>,
     prisma.project.findUnique({
       where: { id },
       include: {
         status: true,
-        contract: { include: { clientAcceptanceConfirmedBy: true, invoiceBy: true } },
+        contract: { include: { clientAcceptanceConfirmedBy: true } },
         costSheets: {
           where: { version: "CTRACT" },
           orderBy: { createdAt: "desc" },
           take: 1,
-          include: { sentToLiquidationRevision: true, sentToLiquidationBy: true },
+          include: {
+            sentToLiquidationRevision: true,
+            sentToLiquidationBy: true,
+            revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } },
+          },
         },
       },
     }),
+    prisma.clientInvoice.findMany({
+      where: { projectId: id },
+      orderBy: { invoiceDate: "desc" },
+      include: { payments: { select: { amount: true } } },
+    }),
+    hasPermission("finance.invoice.manage"),
+    hasPermission("projects.liquidation.send"),
   ]);
   if (!project) notFound();
 
   const contract = project.contract;
   const sheet = project.costSheets[0] ?? null;
   const sentRev = sheet?.sentToLiquidationRevision ?? null;
+
+  // Bản đã chuyển nghiệm thu là ẢNH CHỤP thủ công: CO/CE vẫn sửa tiếp được sau đó. Không cảnh báo
+  // thì kế toán xuất hóa đơn theo số cũ mà không biết.
+  const latestRevNo = sheet?.revisions[0]?.revNo ?? null;
+  const isStaleRev = !!sentRev && latestRevNo != null && latestRevNo > sentRev.revNo;
+
+  // Trần xuất hóa đơn = CE + Chi hộ của ĐÚNG bản đã chuyển nghiệm thu (xem clientBillableTotal).
+  const billable = sentRev ? clientBillableTotal(toNum(sentRev.ceTotal), toNum(sentRev.chiHo)) : 0;
+  const issued = invoices.reduce((s, inv) => s + toNum(inv.amount), 0);
+  const remainingBillable = billable - issued;
+
+  // Ngày mặc định trên form: hôm nay, và hạn = hôm nay + payment term của hợp đồng (UTC, HANDOVER 4.3).
+  const now = new Date();
+  const todayIso = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString().slice(0, 10);
+  const dueIso = contract?.paymentTermDays
+    ? new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + contract.paymentTermDays)).toISOString().slice(0, 10)
+    : "";
 
   return (
     <div className="space-y-4">
@@ -99,6 +128,21 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
           </>
         ) : (
           <>
+            {isStaleRev && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning-bg px-3 py-2">
+                <p className="text-xs text-warning">{t("staleRevWarning", { sent: sentRev.revNo, latest: latestRevNo ?? 0 })}</p>
+                {canSendLiquidation && (
+                  <form action={sendCostSheetToLiquidation.bind(null, id)}>
+                    <button
+                      type="submit"
+                      className="h-8 rounded-lg border border-warning/40 px-3 text-xs font-medium text-warning hover:bg-warning/10"
+                    >
+                      {t("staleRevAction")}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <SummaryCard label={t("coceRevLabel")} value={`v${sentRev.revNo}`} />
               <SummaryCard label={t("coTotal")} value={formatNumber(sentRev.coTotal, locale)} />
@@ -162,27 +206,55 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
         </div>
       </section>
 
-      {/* Xuất hóa đơn */}
+      {/* Xuất hóa đơn — tạo ClientInvoice THẬT (một nguồn sự thật, dùng chung với /finance/debt) */}
       <section className="rounded-xl border border-border bg-surface p-5">
         <h3 className="text-sm font-semibold text-foreground">{t("invoiceTitle")}</h3>
-        <form action={saveInvoiceInfo.bind(null, id)} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground">{t("invoiceNoLabel")}</label>
-            <input name="invoiceNo" defaultValue={contract?.invoiceNo ?? ""} className={smallInput} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground">{t("invoiceDateLabel")}</label>
-            <DateField name="invoiceDate" defaultValue={toDateInput(contract?.invoiceDate ?? null)} className={smallInput} />
-          </div>
-          <div className="sm:col-span-2">
-            <button type="submit" className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-medium text-white hover:bg-brand-600">
-              {t("invoiceSave")}
-            </button>
-          </div>
-        </form>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {contract?.invoiceNo ? t("invoiceSavedBy", { name: contract.invoiceBy?.fullName ?? "—" }) : t("invoiceEmpty")}
-        </p>
+        {!sentRev ? (
+          <p className="mt-2 text-sm text-muted-foreground">{t("invoiceNeedSentRev")}</p>
+        ) : (
+          <>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <SummaryCard label={t("invoiceBillableLabel")} value={formatNumber(billable, locale)} />
+              <SummaryCard label={t("invoiceIssuedLabel")} value={formatNumber(issued, locale)} />
+              <SummaryCard label={t("invoiceRemainingLabel")} value={formatNumber(remainingBillable, locale)} />
+            </div>
+
+            <div className="mt-4 border-t border-border pt-3">
+              <p className="text-xs font-medium text-foreground">{t("invoiceListTitle")}</p>
+              {invoices.length === 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">{t("invoiceListEmpty")}</p>
+              ) : (
+                <ul className="mt-2 space-y-1">
+                  {invoices.map((inv) => {
+                    const paid = inv.payments.reduce((s, p) => s + toNum(p.amount), 0);
+                    return (
+                      <li key={inv.id} className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{inv.invoiceNo}</span>
+                        <span className="tabular-nums">{formatNumber(toNum(inv.amount), locale)}</span>
+                        <span className="text-success">
+                          {t("invoicePaidShort")}: {formatNumber(paid, locale)}
+                        </span>
+                        <span>{formatDate(inv.invoiceDate)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <Link href="/finance/debt" className="mt-2 inline-block text-xs text-brand-600 hover:underline">
+                {t("invoiceOpenDebt")} →
+              </Link>
+            </div>
+
+            {canCreateInvoice && remainingBillable > 0 && (
+              <LiquidationInvoiceForm
+                projectId={id}
+                suggestedAmount={remainingBillable}
+                defaultInvoiceDate={todayIso}
+                defaultDueDate={dueIso}
+              />
+            )}
+          </>
+        )}
       </section>
     </div>
   );

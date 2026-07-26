@@ -476,6 +476,17 @@ export async function saveCostSheet(
     const itemCodeByLineIndex = assignItemCodes(payload.lines, prefixBySectionKey);
     const codeOfLine = new Map(payload.lines.map((l, i) => [l, itemCodeByLineIndex[i]]));
 
+    // Khoá BỀN của từng dòng: nhận khoá builder gửi lên, chỉ sinh mới khi THIẾU (payload cũ) hoặc
+    // TRÙNG với dòng khác trong cùng bảng. Khử trùng là bắt buộc: hai dòng cùng khoá sẽ bị
+    // syncFinanceCostLines gộp làm một (Map theo lineKey) và tiền của một dòng biến mất im lặng.
+    const usedStableKeys = new Set<string>();
+    const stableKeyOfLine = new Map<(typeof payload.lines)[number], string>();
+    for (const l of payload.lines) {
+      const key = l.stableKey && !usedStableKeys.has(l.stableKey) ? l.stableKey : randomUUID();
+      usedStableKeys.add(key);
+      stableKeyOfLine.set(l, key);
+    }
+
     for (const section of payload.sections) {
       const sectionId = idByKey.get(section.key)!;
       const lines = payload.lines.filter((l) => l.sectionKey === section.key);
@@ -490,10 +501,9 @@ export async function saveCostSheet(
             return {
               costSheetId: sheetId,
               sectionId,
-              // Khoá BỀN: giữ nguyên giá trị client gửi lên (dòng đã tồn tại), chỉ sinh mới khi
-              // thiếu (dòng mới thêm, hoặc payload cũ trước khi có trường này). Đây là thứ giữ
+              // Khoá BỀN đã chốt ở trên (nhận từ builder, khử trùng, sinh bù khi thiếu) — thứ giữ
               // liên kết tạm ứng/thanh toán sống sót qua mỗi lần xoá-tạo-lại của saveCostSheet.
-              stableKey: l.stableKey || randomUUID(),
+              stableKey: stableKeyOfLine.get(l)!,
               itemCode: codeOfLine.get(l) ?? null,
               lineType: l.lineType,
               itemName: l.itemName,
@@ -929,7 +939,15 @@ export async function moveToLiquidation(
   return {};
 }
 
-/** Liquidation → Finished. Cần Kế toán đã xác nhận "Đã nhận đủ hồ sơ nghiệm thu" (FR-02/06). */
+/**
+ * Liquidation → Finished. Cần Kế toán đã xác nhận "Đã nhận đủ hồ sơ nghiệm thu" (FR-02/06)
+ * VÀ dự án đã phát hành ít nhất một hóa đơn.
+ *
+ * Điều kiện hóa đơn là bất biến #4 trong HANDOVER mục 6 nhưng trước đây KHÔNG được thực thi: dự án
+ * đóng sổ được khi khách chưa nhận hóa đơn nào, tiền coi như bốc hơi khỏi tầm ngắm. Cố ý chỉ đòi
+ * ĐÃ PHÁT HÀNH chứ không đòi thu đủ — khoản giữ lại 5–10% bảo hành là bình thường trong nghề, đòi
+ * thu sạch sẽ khiến dự án nằm mãi ở Nghiệm thu.
+ */
 export async function markFinished(
   projectId: string,
   _prev?: ProjectFormState,
@@ -938,15 +956,17 @@ export async function markFinished(
   await requirePermission("bidding.status.change");
   const t = await getTranslations("bidding.result");
   const staffId = await getCurrentStaffId();
-  const [project, contract, finishedId] = await Promise.all([
+  const [project, contract, invoiceCount, finishedId] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, include: { status: true } }),
     prisma.contract.findUnique({ where: { projectId } }),
+    prisma.clientInvoice.count({ where: { projectId } }),
     getStatusId("FINISHED"),
   ]);
   if (!project) return { error: "not found" };
   // Chỉ từ LIQUIDATION — FINISHED sai đường sẽ mở lại grace 7 ngày cho task đã khóa.
   if (project.status.code !== "LIQUIDATION") return { error: "invalid status" };
   if (!contract?.acceptanceDocsConfirmedAt) return { error: t("blockedNeedAcceptanceDocs") };
+  if (invoiceCount === 0) return { error: t("blockedNeedInvoice") };
 
   await prisma.project.update({ where: { id: projectId }, data: { statusId: finishedId, finishedAt: new Date() } });
   await audit(projectId, "status", project.status.code, "FINISHED", staffId, "mark finished");

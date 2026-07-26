@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { arStatus } from "./ar";
 import { EXECUTION_STATUS_CODES } from "./projects";
 import { getCreativeDashboardStats } from "./creative";
 import { getCreativeOverdueTasks } from "./reminders";
@@ -59,7 +60,14 @@ export async function getBusinessVolumeAllTeams(now: Date): Promise<Record<strin
 
 // ── Khối 2: Cashflow MTD (tháng dương lịch, không buffer) — chỉ exec (CEO/CFO) gọi ──
 
-export type CashflowMtd = { inActual: number; inRemaining: number; outActual: number; outRemaining: number };
+export type CashflowMtd = {
+  inActual: number;
+  inRemaining: number;
+  /** Phần của inRemaining đã quá hạn — tách ra để BGĐ nhìn phát biết ngay, xem ghi chú bên dưới. */
+  inOverdue: number;
+  outActual: number;
+  outRemaining: number;
+};
 
 export async function getCashflowMtd(now: Date): Promise<CashflowMtd> {
   const monthStart = startOfMonth(now);
@@ -70,23 +78,42 @@ export async function getCashflowMtd(now: Date): Promise<CashflowMtd> {
     prisma.clientInvoice.findMany({ select: { amount: true, invoiceDate: true, dueDate: true, payments: { select: { amount: true } } } }),
     prisma.vendorPayment.findMany({ where: { status: "PAID", paidDate: { gte: monthStart, lt: now } }, select: { amount: true } }),
     prisma.advance.findMany({ where: { disbursedAt: { gte: monthStart, lt: now } }, select: { amount: true } }),
-    prisma.vendorPayment.findMany({ where: { status: "SCHEDULED", dueDate: { lt: monthEnd } }, select: { amount: true } }),
+    // dueDate nullable và form cho để trống — Prisma/SQL loại NULL khỏi `lt` nên phiếu chưa có hạn
+    // đang VÔ HÌNH ở đây, trong khi cashflow.ts coi là cần chi ngay hôm nay. Lấy cả hai cho khớp.
+    prisma.vendorPayment.findMany({
+      where: { status: "SCHEDULED", OR: [{ dueDate: { lt: monthEnd } }, { dueDate: null }] },
+      select: { amount: true },
+    }),
     prisma.advance.findMany({ where: { status: "REQUESTED" }, select: { amount: true } }),
   ]);
 
   const inActual = payments.reduce((s, p) => s + Number(p.amount), 0);
-  const inRemaining = unpaidInvoices.reduce((s, inv) => {
-    const baseDate = inv.dueDate ?? inv.invoiceDate;
-    if (baseDate < now || baseDate >= monthEnd) return s;
-    const paid = inv.payments.reduce((ps, p) => ps + Number(p.amount), 0);
-    const outstanding = Number(inv.amount) - paid;
-    return outstanding > 0 ? s + outstanding : s;
-  }, 0);
+
+  // "Sẽ thu" = mọi khoản còn dư có hạn rơi TRƯỚC cuối tháng, TÍNH CẢ phần đã quá hạn từ trước.
+  // Trước đây có thêm điều kiện `baseDate < now → bỏ qua`, tức loại sạch khoản quá hạn: nợ càng
+  // xấu (quá hạn càng lâu) thì càng vô hình trên dashboard — đúng chỗ BGĐ cần thấy nhất.
+  let inRemaining = 0;
+  let inOverdue = 0;
+  for (const inv of unpaidInvoices) {
+    const st = arStatus(
+      {
+        amount: Number(inv.amount),
+        invoiceDate: inv.invoiceDate,
+        dueDate: inv.dueDate,
+        paidAmounts: inv.payments.map((p) => Number(p.amount)),
+      },
+      now,
+    );
+    if (st.outstanding <= 0 || st.dueBase >= monthEnd) continue;
+    inRemaining += st.outstanding;
+    if (st.isOverdue) inOverdue += st.outstanding;
+  }
+
   const outActual = vendorPaymentsPaid.reduce((s, p) => s + Number(p.amount), 0) + advancesDisbursed.reduce((s, a) => s + Number(a.amount), 0);
   const outRemaining =
     vendorPaymentsScheduled.reduce((s, p) => s + Number(p.amount), 0) + advancesRequested.reduce((s, a) => s + Number(a.amount), 0);
 
-  return { inActual, inRemaining, outActual, outRemaining };
+  return { inActual, inRemaining, inOverdue, outActual, outRemaining };
 }
 
 // ── Khối 3: Tiến độ task theo bộ phận ──────────────────

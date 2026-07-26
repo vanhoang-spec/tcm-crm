@@ -3,23 +3,17 @@ import { FloatingDock } from "@/components/layout/floating-dock";
 import { Header } from "@/components/layout/header";
 import { prisma } from "@/lib/prisma";
 import {
-  checkOrderDeadlineReminders,
-  checkAcceptanceSignReminders,
-  checkCreativeTaskDeadlineReminders,
-  checkDepartmentTaskDeadlineReminders,
   getBiddingReminders,
   getCareOverdueClients,
   getPendingCostSheetApprovals,
   getTimelineOverdueItems,
-  checkInventoryReturnReminders,
 } from "@/lib/reminders";
 import { getArOverdueItems } from "@/lib/finance";
 import { redirect } from "next/navigation";
 import { getCurrentStaffId, getSessionContext } from "@/lib/current-staff";
 import { getMyPermissions } from "@/lib/permissions";
 import { needsPasswordChange } from "@/lib/auth";
-import { checkSpecialOccasions } from "@/lib/occasions";
-import { checkChatReminders } from "@/lib/chat-reminders";
+import { runDueJobs } from "@/lib/job-runner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // ── Chốt chặn đăng nhập: chạy TRƯỚC mọi query để người chưa đăng nhập không kích hoạt
@@ -28,16 +22,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!session) redirect("/login");
   if (await needsPasswordChange(session.authenticatedStaffId)) redirect("/change-password");
 
-  // Không có cron — check-and-notify chạy mỗi lần layout render (xem doc-comment trong lib/reminders.ts).
-  await Promise.all([
-    checkOrderDeadlineReminders(),
-    checkAcceptanceSignReminders(),
-    checkCreativeTaskDeadlineReminders(),
-    checkDepartmentTaskDeadlineReminders(),
-    checkInventoryReturnReminders(),
-    checkSpecialOccasions(),
-    checkChatReminders(),
-  ]);
+  // Scheduler chạy ở src/instrumentation.ts (5 phút/lần). Vẫn gọi ở đây làm LƯỚI AN TOÀN cho
+  // trường hợp tiến trình server không bật được timer — runDueJobs tự tiết chế bằng vé chạy nên
+  // không nhân đôi thông báo và không quét lại 7 job mỗi lần render như trước.
+  await runDueJobs();
 
   // currentStaffId lấy TRƯỚC vì badge chuông phải đếm notification CỦA RIÊNG người đang đăng nhập —
   // đếm toàn hệ thống sẽ lộ số thông báo của người khác và cho phép "đọc hộ" (xem markNotificationRead).

@@ -70,7 +70,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
         proxyFeeType: s.proxyFeeType,
         proxyFeeVal: s.proxyFeeVal,
         lines: s.lines.map((l) => ({
-          stableKey: "", // dòng dựng từ mẫu là dòng mới — server sinh khoá lúc lưu
+          stableKey: "", // hydrate() ở builder sinh khoá khi nạp mẫu
           itemName: l.itemName,
           specs: l.defaultSpecs ?? "",
           lineType: l.lineType,

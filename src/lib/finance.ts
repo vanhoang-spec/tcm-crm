@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { arStartOfToday, arStatus } from "./ar";
 import { getNumberSetting } from "./settings";
 import { computeLineNetAmount } from "./bidding";
 
@@ -27,8 +28,11 @@ export function financeLineKey(stableKey: string): string {
 }
 
 /**
- * Đồng bộ (Refresh) các dòng CO nội bộ từ CostSheet CTRACT mới nhất xuống FinanceCostLine.
- * - Chỉ lấy dòng thuộc section isProxy=false (loại Chi hộ).
+ * Đồng bộ (Refresh) các dòng chi phí từ CostSheet CTRACT mới nhất xuống FinanceCostLine.
+ * - Lấy CẢ dòng Chi hộ (section isProxy) nhưng gắn cờ `isProxy` để tách bạch: Chi hộ là tiền ứng
+ *   giùm khách, có trần chi riêng theo dòng như mọi dòng khác nhưng KHÔNG thuộc giá vốn nên không
+ *   được cộng vào trần cấp dự án (xem projectDisbursement) và không vào margin (bất biến #2).
+ *   Trước đây Chi hộ bị bỏ hẳn, khiến toàn bộ tiền chi hộ phải đi đường phiếu chi không trần.
  * - Upsert theo (projectId, lineKey); dòng cũ không còn ở version mới → isStale=true (giữ lịch sử tạm ứng).
  * Trả về số liệu tóm tắt { added, updated, staled, revNo }.
  */
@@ -53,11 +57,27 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
   // Mỗi dòng CO nội bộ (non-proxy) = MỘT dòng chi phí, khoá theo stableKey nên không còn gộp
   // nhầm hai dòng trùng tên ở hai hạng mục khác nhau. Dòng chưa có stableKey (dữ liệu trước khi
   // có trường này) bị BỎ QUA thay vì gộp bừa — đã backfill toàn bộ nên trên thực tế không xảy ra.
-  const liveLines = new Map<string, { itemCode: string | null; sectionCode: string; sectionName: string; itemName: string; specs: string | null; amount: bigint; netAmount: bigint; vendorId: string | null; sort: number }>();
+  const liveLines = new Map<string, { itemCode: string | null; sectionCode: string; sectionName: string; itemName: string; specs: string | null; amount: bigint; netAmount: bigint; isProxy: boolean; vendorId: string | null; sort: number }>();
   let sortCounter = 0;
   let skippedNoKey = 0;
+
+  // Chi hộ KẾ THỪA xuống nhánh con: section con nằm dưới một mục Chi hộ cũng là Chi hộ dù tự nó
+  // không đánh dấu — giống hệt effectiveIsProxy trong flattenSectionTree (lib/bidding.ts). Lấy
+  // thẳng s.isProxy sẽ bỏ sót cả nhánh con và đẩy tiền chi hộ vào trần giá vốn.
+  const sectionById = new Map(sheet.sections.map((s) => [s.id, s]));
+  const effectiveProxy = (start: (typeof sheet.sections)[number]): boolean => {
+    let cur: (typeof sheet.sections)[number] | undefined = start;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur.id)) {
+      if (cur.isProxy) return true;
+      seen.add(cur.id);
+      cur = cur.parentSectionId ? sectionById.get(cur.parentSectionId) : undefined;
+    }
+    return false;
+  };
+
   for (const s of sheet.sections) {
-    if (s.isProxy) continue;
+    const isProxy = effectiveProxy(s);
     for (const l of s.lines) {
       if (!l.stableKey) {
         skippedNoKey++;
@@ -70,6 +90,7 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
         itemName: l.itemName,
         specs: l.specs,
         amount: l.amount,
+        isProxy,
         // PERCENT_OF_TOTAL là dòng suy ra, không gross-up → net chính bằng amount đã lưu; khỏi
         // phải tính lại directCo ở đây (và khỏi rủi ro lệch làm tròn so với lúc lưu CO/CE).
         netAmount:
@@ -114,6 +135,7 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
           specs: live.specs,
           amount: live.amount,
           netAmount: live.netAmount,
+          isProxy: live.isProxy,
           vendorId: live.vendorId,
           sort: live.sort,
           sourceRevNo: revNo,
@@ -133,6 +155,7 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
           specs: live.specs,
           amount: live.amount,
           netAmount: live.netAmount,
+          isProxy: live.isProxy,
           vendorId: live.vendorId,
           sort: live.sort,
           sourceRevNo: revNo,
@@ -190,6 +213,44 @@ export async function lineDisbursement(financeCostLineId: string): Promise<LineD
   return { advanced, paid, disbursed, netAmount, remaining: netAmount - disbursed };
 }
 
+export type ProjectDisbursement = {
+  /** Trần = Σ số thực trả của các dòng chi phí còn hiệu lực, KHÔNG gồm Chi hộ. */
+  capBase: number;
+  advanced: number;
+  paid: number;
+  disbursed: number;
+  remaining: number;
+  /** false = dự án chưa có dòng chi phí nào (chưa dựng/chưa đồng bộ CO/CE) → mọi khoản chi đều vượt trần. */
+  hasLines: boolean;
+};
+
+/**
+ * Trần chi Ở CẤP DỰ ÁN — dùng cho phiếu chi không gắn dòng chi phí cụ thể.
+ *
+ * Trước đây nhánh này không có trần nào: số tiền tùy ý, dự án cũng không bắt buộc. Nay lấy tổng
+ * số THỰC TRẢ của mọi dòng còn hiệu lực làm trần, nhất quán với trần cấp dòng (lineDisbursement).
+ *
+ * KHÔNG dùng CostSheet.coTotal làm trần: coTotal đã gross-up thuế + phí quản lý + dự phòng, chênh
+ * lệch so với số thực trả đo trên T013 là 70.250.002đ — lấy nó làm trần là cho chi vượt đúng phần
+ * thuế công ty nộp hộ.
+ *
+ * LOẠI Chi hộ khỏi capBase: Chi hộ là tiền ứng giùm khách, ngoài giá vốn (bất biến #2). Nó có trần
+ * riêng theo từng dòng qua lineDisbursement, không trộn vào túi giá vốn của dự án.
+ */
+export async function projectDisbursement(projectId: string): Promise<ProjectDisbursement> {
+  const [capAgg, lineCount, advAgg, payAgg] = await Promise.all([
+    prisma.financeCostLine.aggregate({ where: { projectId, isStale: false, isProxy: false }, _sum: { netAmount: true } }),
+    prisma.financeCostLine.count({ where: { projectId, isStale: false, isProxy: false } }),
+    prisma.advance.aggregate({ where: { projectId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
+    prisma.vendorPayment.aggregate({ where: { projectId }, _sum: { amount: true } }),
+  ]);
+  const capBase = Number(capAgg._sum.netAmount ?? BigInt(0));
+  const advanced = Number(advAgg._sum.amount ?? BigInt(0));
+  const paid = Number(payAgg._sum.amount ?? BigInt(0));
+  const disbursed = advanced + paid;
+  return { capBase, advanced, paid, disbursed, remaining: capBase - disbursed, hasLines: lineCount > 0 };
+}
+
 export type StaffAdvanceQuota = {
   openCount: number;
   outstandingAmount: number;
@@ -244,14 +305,18 @@ export type ArOverdueItem = {
   daysOverdue: number;
 };
 
-/** Hóa đơn khách quá hạn mà còn dư — thuần computed cho /reminders.
- * Mốc quá hạn = dueDate ?? invoiceDate (thống nhất với cashflow.ts/dashboard.ts/trang debt):
- * hóa đơn không có dueDate nhưng phát hành đã lâu vẫn phải được nhắc, không "vô hình". */
+/** Hóa đơn khách quá hạn mà còn dư — thuần computed cho /reminders. Định nghĩa "còn phải thu",
+ * "mốc đến hạn" và "quá hạn" lấy từ lib/ar.ts, dùng chung với trang Công nợ / dashboard / cashflow.
+ *
+ * So theo NGÀY (đầu ngày hôm nay) chứ không theo thời điểm: trước đây so với `now` nên hóa đơn đến
+ * hạn ĐÚNG HÔM NAY đã bị tính quá hạn ngay từ sáng và hiện "quá hạn 0 ngày" trên chuông, trong khi
+ * trang Công nợ vẫn xếp nó vào "Chưa tới hạn". Nay cả hai nói cùng một điều. */
 export async function getArOverdueItems(teamCode?: string): Promise<ArOverdueItem[]> {
   const now = new Date();
+  const today = arStartOfToday(now);
   const invoices = await prisma.clientInvoice.findMany({
     where: {
-      OR: [{ dueDate: { lt: now } }, { dueDate: null, invoiceDate: { lt: now } }],
+      OR: [{ dueDate: { lt: today } }, { dueDate: null, invoiceDate: { lt: today } }],
       project: teamCode ? { ownerTeam: { code: teamCode } } : undefined,
     },
     include: {
@@ -263,10 +328,18 @@ export async function getArOverdueItems(teamCode?: string): Promise<ArOverdueIte
 
   const out: ArOverdueItem[] = [];
   for (const inv of invoices) {
-    const paid = inv.payments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const outstanding = Number(inv.amount) - paid;
-    if (outstanding <= 0) continue;
-    const dueDate = inv.dueDate ?? inv.invoiceDate;
+    const st = arStatus(
+      {
+        amount: Number(inv.amount),
+        invoiceDate: inv.invoiceDate,
+        dueDate: inv.dueDate,
+        paidAmounts: inv.payments.map((p) => Number(p.amount)),
+      },
+      now,
+    );
+    // Lọc lại phía app: invoiceDate có thể mang cả giờ (fallback `new Date()` lúc tạo hóa đơn) nên
+    // điều kiện SQL ở trên vẫn có thể lọt hóa đơn mà tính theo ngày thì chưa quá hạn.
+    if (st.outstanding <= 0 || !st.isOverdue) continue;
     out.push({
       invoiceId: inv.id,
       invoiceNo: inv.invoiceNo,
@@ -275,9 +348,9 @@ export async function getArOverdueItems(teamCode?: string): Promise<ArOverdueIte
       projectName: inv.project.name,
       clientName: inv.client.name,
       teamCode: inv.project.ownerTeam?.code ?? null,
-      outstanding,
-      dueDate,
-      daysOverdue: Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)),
+      outstanding: st.outstanding,
+      dueDate: st.dueBase,
+      daysOverdue: st.daysOverdue,
     });
   }
   return out.sort((a, b) => b.daysOverdue - a.daysOverdue);

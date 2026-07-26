@@ -79,7 +79,7 @@
     "cashOut": "Dòng tiền ra",
     "cashOutActual": "Đã chi (tháng này)",
     "cashOutRemaining": "Sẽ chi (đến cuối tháng)",
-    "cashflowHint": "Theo tháng dương lịch hiện tại — số hiển thị, chưa có trang lọc chi tiết riêng.",
+    "cashflowHint": "Theo tháng dương lịch hiện tại. Sẽ thu / Sẽ chi = mọi khoản còn dư có hạn rơi trước cuối tháng, TÍNH CẢ phần đã quá hạn từ trước.",
     "taskOverdueRatio": "Task trễ / tổng task",
     "deptAccount": "Account",
     "deptCreative": "Creative",
@@ -87,7 +87,8 @@
     "deptOperations": "Operations",
     "deptProduction": "Production",
     "deptPurchasing": "Purchasing",
-    "displayOnlyHint": "Chỉ hiển thị — chưa có trang danh sách lọc theo chỉ tiêu này"
+    "displayOnlyHint": "Chỉ hiển thị — chưa có trang danh sách lọc theo chỉ tiêu này",
+    "cashInRemainingOverdue": "Trong đó quá hạn: {amount}"
   },
   "clients": {
     "list": {
@@ -1054,7 +1055,8 @@
         "industryId": "Ngành hàng",
         "classificationId": "Phân loại vendor-list"
       },
-      "blockedIncompleteProfile": "Chưa thể ký hợp đồng — hồ sơ khách hàng còn thiếu: {fields}. Vào trang khách hàng để bổ sung."
+      "blockedIncompleteProfile": "Chưa thể ký hợp đồng — hồ sơ khách hàng còn thiếu: {fields}. Vào trang khách hàng để bổ sung.",
+      "blockedNeedInvoice": "Chưa phát hành hóa đơn nào cho dự án — không thể kết thúc. Xuất hóa đơn ở tab Nghiệm thu trước."
     },
     "validation": {
       "nameRequired": "Tên dự án bắt buộc",
@@ -1357,9 +1359,23 @@
       "invoiceTitle": "Xuất hóa đơn",
       "invoiceNoLabel": "Số hóa đơn",
       "invoiceDateLabel": "Ngày hóa đơn",
-      "invoiceSave": "Lưu hóa đơn",
-      "invoiceSavedBy": "Đã nhập bởi {name}",
-      "invoiceEmpty": "Chưa có thông tin hóa đơn."
+      "staleRevWarning": "CO/CE đã có bản mới hơn (v{latest}) so với bản đã chuyển nghiệm thu (v{sent}). Số liệu dưới đây là bản cũ.",
+      "staleRevAction": "Chuyển bản mới nhất",
+      "invoiceBillableLabel": "Khách phải trả (CE + Chi hộ)",
+      "invoiceIssuedLabel": "Đã xuất hóa đơn",
+      "invoiceRemainingLabel": "Còn được xuất",
+      "invoiceAmountLabel": "Số tiền",
+      "invoiceDueDateLabel": "Hạn thanh toán",
+      "invoiceNoteLabel": "Ghi chú",
+      "invoiceCreateBtn": "Phát hành hóa đơn",
+      "invoiceNeedSentRev": "Chưa có bản CO/CE nào được chuyển sang Nghiệm thu — chưa có mốc để đối chiếu số tiền xuất hóa đơn.",
+      "invoiceListTitle": "Hóa đơn đã phát hành",
+      "invoiceListEmpty": "Chưa phát hành hóa đơn nào.",
+      "invoicePaidShort": "đã thu",
+      "invoiceOpenDebt": "Mở trang Công nợ",
+      "errRequired": "Nhập số hóa đơn và số tiền hợp lệ.",
+      "errNoSentRev": "Chưa có bản CO/CE nào được chuyển sang Nghiệm thu để đối chiếu.",
+      "errExceedBillable": "Vượt số còn được xuất theo bản CO/CE v{rev} (còn {remaining})."
     },
     "operations": {
       "title": "Vận hành — Thuê ngoài (CTV)",
@@ -1733,7 +1749,17 @@
       "errRequired": "Vui lòng chọn nhà cung cấp và nhập số tiền.",
       "errExceedLine": "Tổng chi vượt giá trị dòng chi phí (còn lại {remaining}).",
       "errLineNotFound": "Dòng chi phí không còn tồn tại — hãy làm mới CO/CE.",
-      "errAlreadyPaid": "Phiếu này đã được đánh dấu đã trả."
+      "errAlreadyPaid": "Phiếu này đã được đánh dấu đã trả.",
+      "errProjectRequired": "Phải chọn dự án cho khoản chi này.",
+      "errExceedProject": "Vượt trần chi của dự án (còn {remaining}). Cần người có quyền duyệt vượt trần.",
+      "errOverCapReason": "Khoản chi vượt trần của dự án (còn {remaining}) — bắt buộc ghi lý do.",
+      "errNoCostLines": "Dự án chưa có dòng chi phí nào (chưa dựng hoặc chưa đồng bộ CO/CE) nên chưa có trần để đối chiếu. Cần người có quyền duyệt vượt trần.",
+      "errNoCostLinesReason": "Dự án chưa có dòng chi phí nào để đối chiếu — bắt buộc ghi lý do.",
+      "overCapNote": "Lý do vượt trần (nếu có)",
+      "overCapNoteHint": "Chỉ bắt buộc khi khoản chi vượt trần của dự án, hoặc dự án chưa có dòng chi phí nào.",
+      "overCapBadge": "Vượt trần",
+      "projectRemaining": "Trần chi còn lại của dự án: {amount}",
+      "projectNoLines": "Dự án chưa có dòng chi phí — cần quyền duyệt vượt trần kèm lý do."
     },
     "debt": {
       "title": "Công nợ khách hàng (AR)",
@@ -1759,7 +1785,8 @@
       "aging60plus": "Quá hạn > 60 ngày",
       "totalOutstanding": "Tổng công nợ",
       "errRequired": "Vui lòng chọn dự án, nhập số hóa đơn và số tiền hợp lệ.",
-      "errOverPayment": "Số tiền thu vượt số còn lại của hóa đơn (còn {outstanding})."
+      "errOverPayment": "Số tiền thu vượt số còn lại của hóa đơn (còn {outstanding}).",
+      "defNote": "Tổng công nợ = toàn bộ hóa đơn còn dư, không giới hạn thời gian. Tuổi nợ tính theo hạn thanh toán; hóa đơn chưa nhập hạn thì lấy ngày hóa đơn. Trang Ước tính dòng tiền cho số khác vì ở đó mốc tiền về được cộng thêm 14 ngày trừ hao."
     },
     "cashflow": {
       "title": "Ước tính Dòng tiền (toàn danh mục dự án)",

@@ -23,10 +23,13 @@ export function CreateVendorPaymentForm({
   vendors,
   projects,
   lines,
+  projectCaps,
 }: {
   vendors: { value: string; label: string }[];
   projects: { value: string; label: string }[];
   lines: PickerLine[];
+  /** Trần chi còn lại theo dự án — để người lập phiếu thấy trước khi bấm lưu, không phải đoán. */
+  projectCaps: Record<string, { remaining: number; hasLines: boolean }>;
 }) {
   const t = useTranslations("finance.vendorPayments");
   const tc = useTranslations("finance.common");
@@ -38,7 +41,7 @@ export function CreateVendorPaymentForm({
         {t("vendor")}
         <SearchableSelect name="vendorId" required placeholder={t("selectVendor")} options={vendors} />
       </label>
-      <VendorPaymentLinePicker projects={projects} lines={lines} />
+      <VendorPaymentLinePicker projects={projects} lines={lines} projectCaps={projectCaps} />
       <label className="text-xs text-muted-foreground">
         {tc("amount")}
         <NumberField name="amount" className={input} />
@@ -54,6 +57,11 @@ export function CreateVendorPaymentForm({
       <label className="text-xs text-muted-foreground">
         {t("note")}
         <input name="note" className={input} />
+      </label>
+      <label className="text-xs text-muted-foreground sm:col-span-2">
+        {t("overCapNote")}
+        <input name="overCapNote" className={input} />
+        <span className="mt-1 block text-[11px] leading-snug">{t("overCapNoteHint")}</span>
       </label>
       {state.error && (
         <p className="rounded-lg border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger sm:col-span-2" role="alert">

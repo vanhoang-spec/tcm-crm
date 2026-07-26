@@ -79,6 +79,17 @@ export function computeMarginPct(ceTotal: number, coTotal: number): number {
 }
 
 /**
+ * SỐ TIỀN XUẤT HÓA ĐƠN CHO KHÁCH của một bảng CO/CE = CE + Chi hộ.
+ *
+ * CE là giá chào đã gồm VAT; Chi hộ nằm NGOÀI margin nên không bao giờ được cộng vào
+ * ceTotal/coTotal (bất biến #2, #3) — cộng riêng ở đây. Đây là định nghĩa DUY NHẤT của con số
+ * "khách phải trả": builder CO/CE hiển thị nó, và tab Nghiệm thu dùng nó làm trần xuất hóa đơn.
+ */
+export function clientBillableTotal(ceTotal: number, chiHo: number): number {
+  return ceTotal + chiHo;
+}
+
+/**
  * Make-up engine: từ các dòng CO markup-eligible (QTY_PRICE/FIXED, KHÔNG thuộc hạng mục Chi hộ,
  * caller phải lọc trước — dòng PERCENT_OF_TOTAL và toàn bộ hạng mục Chi hộ loại khỏi markup),
  * đề xuất tổng CE để đạt margin tối thiểu.

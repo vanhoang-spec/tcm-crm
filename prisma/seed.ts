@@ -1967,10 +1967,17 @@ async function main() {
     code === "system.impersonate" || // chỉ ADMIN
     code === "dashboard.cashflow" || // (2)
     code === "dashboard.all_teams" || // (2)
+    code === "finance.vendor_payment.over_cap" || // vượt trần chi dự án — chỉ cấp exec, xem EXEC_EXTRA
     code.startsWith("ai."); // (3)
 
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
-  const EXEC_EXTRA = ["dashboard.cashflow", "dashboard.all_teams", "ai.board_report", "ai.trend"];
+  const EXEC_EXTRA = [
+    "dashboard.cashflow",
+    "dashboard.all_teams",
+    "ai.board_report",
+    "ai.trend",
+    "finance.vendor_payment.over_cap",
+  ];
 
   /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
   const extraByGroup: Record<string, string[]> = {

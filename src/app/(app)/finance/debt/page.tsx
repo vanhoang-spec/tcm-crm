@@ -2,22 +2,11 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber, formatDate, toNum } from "@/lib/utils";
+import { arStatus, type ArAgingBucket } from "@/lib/ar";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
 import { CreateInvoiceForm, RecordPaymentForm } from "./invoice-forms";
 import { requirePermission } from "@/lib/permissions";
-
-type Bucket = "current" | "d30" | "d60" | "d60plus";
-// Mốc quá hạn = dueDate ?? invoiceDate — thống nhất với cashflow.ts/dashboard.ts/getArOverdueItems:
-// hóa đơn không có dueDate nhưng phát hành đã lâu vẫn phải rơi vào bucket quá hạn, không "vô hình".
-function agingBucket(dueDate: Date | null, invoiceDate: Date, now: Date): Bucket {
-  const base = dueDate ?? invoiceDate;
-  const days = Math.floor((now.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "current";
-  if (days <= 30) return "d30";
-  if (days <= 60) return "d60";
-  return "d60plus";
-}
 
 export default async function DebtPage() {
   await requirePermission("finance.view");
@@ -34,17 +23,22 @@ export default async function DebtPage() {
   ]);
 
   const rows = invoices.map((inv) => {
-    const paid = inv.payments.reduce((s, p) => s + toNum(p.amount), 0);
-    const amount = toNum(inv.amount);
-    const outstanding = amount - paid;
-    return { inv, amount, paid, outstanding, bucket: outstanding > 0 ? agingBucket(inv.dueDate, inv.invoiceDate, now) : ("current" as Bucket) };
+    const paidAmounts = inv.payments.map((p) => toNum(p.amount));
+    const st = arStatus({ amount: toNum(inv.amount), invoiceDate: inv.invoiceDate, dueDate: inv.dueDate, paidAmounts }, now);
+    return {
+      inv,
+      amount: toNum(inv.amount),
+      paid: paidAmounts.reduce((s, p) => s + p, 0),
+      outstanding: st.outstanding,
+      bucket: st.bucket,
+    };
   });
 
-  const buckets: Record<Bucket, number> = { current: 0, d30: 0, d60: 0, d60plus: 0 };
+  const buckets: Record<ArAgingBucket, number> = { current: 0, d30: 0, d60: 0, d60plus: 0 };
   for (const r of rows) if (r.outstanding > 0) buckets[r.bucket] += r.outstanding;
   const totalOutstanding = buckets.current + buckets.d30 + buckets.d60 + buckets.d60plus;
 
-  const bucketMeta: { key: Bucket; label: string; tone: "neutral" | "warning" | "danger" }[] = [
+  const bucketMeta: { key: ArAgingBucket; label: string; tone: "neutral" | "warning" | "danger" }[] = [
     { key: "current", label: t("agingCurrent"), tone: "neutral" },
     { key: "d30", label: t("aging30"), tone: "warning" },
     { key: "d60", label: t("aging60"), tone: "warning" },
@@ -72,6 +66,9 @@ export default async function DebtPage() {
             </div>
           ))}
         </div>
+        {/* Nói thẳng định nghĩa: cùng dữ liệu này nhưng trang Dòng tiền cho số khác (đệm 14 ngày),
+            trước đây không chỗ nào giải thích nên người đọc tưởng số bị sai. */}
+        <p className="mt-3 text-xs leading-snug text-muted-foreground">{t("defNote")}</p>
       </section>
 
       {/* Create invoice */}

@@ -72,6 +72,7 @@ export default async function SettingsStaffPage() {
                   workLocation: s.workLocation,
                   managerName: s.manager?.fullName ?? null,
                   isActive: s.isActive,
+                  payrollExempt: s.payrollExempt,
                   dateOfBirth: s.dateOfBirth,
                   firstWorkDate: s.firstWorkDate,
                   createdAt: s.createdAt,

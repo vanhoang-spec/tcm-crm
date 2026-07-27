@@ -659,7 +659,12 @@
       "roleHint": "Chưa gán nhóm quyền thì người này đăng nhập vào sẽ không mở được mục nào. Có thể đổi sau ở Phân quyền.",
       "payrollExemptLabel": "TCM không trả lương",
       "payrollExemptHint": "Tick khi TCM không trả lương người này (thủ kho, bảo vệ điểm kho do bên thứ ba trả). Vẫn xếp ca và hiện trên bảng công để tham chiếu, nhưng không vào quỹ KPI, quỹ lương Creative và không tích phép năm.",
-      "errorLoginDomain": "Tài khoản đăng nhập phải là email @tcmbtl.com hoặc tên tài khoản nội bộ."
+      "errorLoginDomain": "Tài khoản đăng nhập phải là email @tcmbtl.com hoặc tên tài khoản nội bộ.",
+      "editLogin": "Sửa tài khoản",
+      "cancelEdit": "Huỷ",
+      "save": "Lưu",
+      "saved": "Đã lưu.",
+      "payrollExemptShort": "Không tính lương"
     },
     "warehouses": {
       "title": "Kho & địa điểm",
@@ -735,6 +740,7 @@
       "groupOPERATIONS": "Operations",
       "groupPRODUCTION": "Production",
       "groupPURCHASING": "Purchasing",
+      "groupWAREHOUSE": "Kho",
       "groupIT": "IT",
       "groupUNASSIGNED": "Chưa gán role",
       "catalogTitle": "Danh mục role (phân cấp)",

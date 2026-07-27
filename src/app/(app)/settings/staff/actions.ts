@@ -113,6 +113,45 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
 }
 
 /**
+ * Sửa TÀI KHOẢN ĐĂNG NHẬP + cờ không-trả-lương sau khi đã tạo.
+ *
+ * Trước đây gõ sai lúc tạo là kẹt vĩnh viễn: không action nào trong app ghi `email`, mà đây lại là
+ * thứ gõ tay nhiều nhất (nhất là khi mở điểm kho mới, nhập một loạt tài khoản vận hành).
+ * Cố ý CHỈ hai field này — phòng ban/chức danh/quản lý vẫn chưa sửa được trong app (xem HANDOVER).
+ */
+export async function updateStaffLogin(staffId: string, _prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
+  await requirePermission("settings.staff.manage");
+  const t = await getTranslations("settings.staff");
+  const email = normalizeLoginId(String(formData.get("email") ?? ""));
+  const payrollExempt = formData.get("payrollExempt") === "on";
+  if (!email) return { error: t("errorRequired") };
+  if (!isAllowedLoginDomain(email)) return { error: t("errorLoginDomain") };
+
+  const target = await prisma.staff.findUnique({ where: { id: staffId }, select: { email: true, payrollExempt: true } });
+  if (!target) return { error: t("errorRequired") };
+  if (email !== target.email) {
+    const clash = await prisma.staff.findUnique({ where: { email }, select: { id: true } });
+    if (clash && clash.id !== staffId) return { error: t("errorEmailExists", { email }) };
+  }
+
+  await prisma.staff.update({ where: { id: staffId }, data: { email, payrollExempt } });
+  await prisma.auditLog.create({
+    data: {
+      entityType: "staff",
+      entityId: staffId,
+      field: "email,payrollExempt",
+      oldValue: JSON.stringify({ email: target.email, payrollExempt: target.payrollExempt }),
+      newValue: JSON.stringify({ email, payrollExempt }),
+      action: "UPDATE",
+      changedBy: await getCurrentStaffId(),
+    },
+  });
+  revalidatePath("/settings/staff");
+  revalidatePath("/staff/timesheet");
+  return { success: "SAVED" };
+}
+
+/**
  * Admin cấp lại mật khẩu — 2 cách:
  *  - "DEFAULT": xoá mật khẩu hiện tại, nhân sự đăng nhập lại bằng mật khẩu chung và bị ép đổi ngay.
  *  - "LINK": sinh link đặt lại dùng 1 lần; gửi email nếu đã cấu hình SMTP, nếu chưa thì trả link

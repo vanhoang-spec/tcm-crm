@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { formatDate } from "@/lib/utils";
-import { updateStaffStatus, deleteStaff, adminResetPassword, unlockStaffAccount, type StaffFormState } from "./actions";
+import { updateStaffStatus, deleteStaff, adminResetPassword, unlockStaffAccount, updateStaffLogin, type StaffFormState } from "./actions";
 
 export type StaffRowData = {
   id: string;
@@ -15,6 +15,7 @@ export type StaffRowData = {
   workLocation: string | null;
   managerName: string | null;
   isActive: boolean;
+  payrollExempt: boolean;
   dateOfBirth: Date | null;
   firstWorkDate: Date | null;
   createdAt: Date;
@@ -30,6 +31,10 @@ export function StaffRow({ staff }: { staff: StaffRowData }) {
   const [confirming, setConfirming] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [copied, setCopied] = useState(false);
+  const [editingLogin, setEditingLogin] = useState(false);
+
+  const loginAction = updateStaffLogin.bind(null, staff.id);
+  const [loginState, loginFormAction, loginPending] = useActionState<StaffFormState, FormData>(loginAction, {});
 
   const resetAction = adminResetPassword.bind(null, staff.id);
   const [resetState, resetFormAction, resetPending] = useActionState<StaffFormState, FormData>(resetAction, {});
@@ -46,7 +51,49 @@ export function StaffRow({ staff }: { staff: StaffRowData }) {
   return (
     <tr>
       <td className="px-3 py-2 font-medium text-foreground">{staff.fullName}</td>
-      <td className="px-3 py-2 text-muted-foreground">{staff.email}</td>
+      <td className="px-3 py-2 text-muted-foreground">
+        {!editingLogin ? (
+          <div className="flex flex-col items-start gap-0.5">
+            <span>{staff.email}</span>
+            <div className="flex items-center gap-1.5">
+              {staff.payrollExempt && (
+                <span className="rounded bg-surface-2 px-1.5 text-[10px] text-muted-foreground">{t("payrollExemptShort")}</span>
+              )}
+              <button type="button" onClick={() => setEditingLogin(true)} className="text-[11px] text-brand-600 hover:underline">
+                {t("editLogin")}
+              </button>
+            </div>
+            {loginState.success === "SAVED" && <span className="text-[11px] text-success">{t("saved")}</span>}
+          </div>
+        ) : (
+          <form action={loginFormAction} className="flex flex-col gap-1">
+            <input
+              name="email"
+              defaultValue={staff.email}
+              autoCapitalize="none"
+              spellCheck={false}
+              className="h-8 w-48 rounded-md border border-border-strong bg-surface px-2 text-xs"
+            />
+            <label className="flex items-center gap-1.5 text-[11px]">
+              <input type="checkbox" name="payrollExempt" defaultChecked={staff.payrollExempt} className="h-3.5 w-3.5 rounded border-border-strong" />
+              {t("payrollExemptLabel")}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="submit"
+                disabled={loginPending}
+                className="h-7 rounded-md bg-brand-600 px-2 text-[11px] font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              >
+                {loginPending ? "..." : t("save")}
+              </button>
+              <button type="button" onClick={() => setEditingLogin(false)} className="text-[11px] text-muted-foreground hover:underline">
+                {t("cancelEdit")}
+              </button>
+            </div>
+            {loginState.error && <span className="text-[11px] text-danger">{loginState.error}</span>}
+          </form>
+        )}
+      </td>
       <td className="px-3 py-2 text-muted-foreground">{staff.title ?? "—"}</td>
       <td className="px-3 py-2 text-muted-foreground">{staff.departmentName ?? "—"}</td>
       <td className="px-3 py-2 text-muted-foreground">{staff.gender ?? "—"}</td>

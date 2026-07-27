@@ -659,7 +659,12 @@
       "roleHint": "Without a permission group this person can sign in but cannot open anything. It can be changed later under Roles.",
       "payrollExemptLabel": "Not paid by TCM",
       "payrollExemptHint": "Tick when TCM does not pay this person (warehouse keeper or guard paid by a third party). They are still scheduled and listed on the timesheet for reference, but stay out of the KPI pool, the Creative salary pool, and accrue no annual leave.",
-      "errorLoginDomain": "The login must be a @tcmbtl.com email or an internal account name."
+      "errorLoginDomain": "The login must be a @tcmbtl.com email or an internal account name.",
+      "editLogin": "Edit login",
+      "cancelEdit": "Cancel",
+      "save": "Save",
+      "saved": "Saved.",
+      "payrollExemptShort": "Unpaid by TCM"
     },
     "warehouses": {
       "title": "Warehouses & locations",
@@ -735,6 +740,7 @@
       "groupOPERATIONS": "Operations",
       "groupPRODUCTION": "Production",
       "groupPURCHASING": "Purchasing",
+      "groupWAREHOUSE": "Warehouse",
       "groupIT": "IT",
       "groupUNASSIGNED": "No role assigned",
       "catalogTitle": "Role catalog (hierarchy)",

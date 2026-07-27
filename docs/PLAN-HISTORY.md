@@ -2304,3 +2304,34 @@ grant + cây 19 node giữ nguyên. Backup DB trước migration rebuild bảng 
 Gán role Thủ kho/Bảo vệ cho người thật khi có; đổi role anh Bình khỏi ADMIN_STAFF; quyết thời điểm
 T10/2026 tạo tài khoản mới; cân nhắc thêm đường SỬA email sau khi tạo (hiện gõ sai là vĩnh viễn không
 sửa được trong app — chưa làm vì ngoài phạm vi 7 câu đã chốt).
+
+## Bổ sung 28/07 (cùng ngày): sửa tài khoản đăng nhập + đưa anh Bình về đúng vai bảo vệ
+
+Chủ dự án yêu cầu thêm sau khi xem kết quả: (a) cho sửa tài khoản đăng nhập sau khi tạo — sắp nhập
+tay nhiều tài khoản khi mở điểm kho mới; (b) hạ quyền anh Bình (TCM-0040) về đúng vai bảo vệ.
+
+- `updateStaffLogin` (settings/staff/actions.ts): sửa ĐÚNG HAI field — tài khoản đăng nhập +
+  cờ payrollExempt, đi qua cùng `normalizeLoginId` / `isAllowedLoginDomain` như lúc tạo, chặn trùng
+  (loại trừ chính mình), ghi AuditLog cũ→mới. Cố ý KHÔNG mở sửa phòng ban/chức danh/quản lý — đó là
+  gap riêng đã ghi ở HANDOVER, không gộp vào đây.
+- UI: nút "Sửa tài khoản" ngay dưới email ở mỗi hàng /settings/staff, kèm nhãn "Không tính lương".
+- Anh Bình: ADMIN_STAFF (63 quyền, có xem tài chính + duyệt tạm ứng) → SECURITY_GUARD (2 quyền);
+  tài khoản `@tcm.internal` → `baove.binh@tcm.local`. GIỮ payrollExempt = false vì còn lương tới T9/2026.
+
+### Sự cố trong lúc thao tác — ghi lại để không lặp
+
+Lần đầu đổi role tôi dò phần tử bằng cách leo `parentElement` từ `<form>`, trúng nhầm hàng và đổi role
+của LÊ NGỌC CHÂU (TCM-0010, Assistant HR Manager) thành Bảo vệ. Phát hiện ngay khi đối chiếu DB (staffId
+trong log không khớp người cần sửa), khôi phục về ADMIN_STAFF theo `roleText` trong seed.ts:92. Bài học:
+khi thao tác trên DỮ LIỆU NHÂN SỰ THẬT, phải khoá phần tử bằng ô đầu tiên của đúng `<tr>`
+(`tr.querySelector('td').textContent === tên`), không leo cây DOM; và luôn đối chiếu DB sau mỗi lần ghi.
+
+Sự cố này cũng làm lộ một lỗi thật: thiếu key i18n `settings.roles.groupWAREHOUSE` (thêm nhóm role
+WAREHOUSE vào ROLE_GROUP_ORDER ở đợt trước mà quên nhãn) — trang /settings/roles ném MISSING_MESSAGE.
+Script kiểm parity KHÔNG bắt được vì key sinh động `group${g}`. Đã bổ sung vi/en.
+
+### Kiểm chứng
+Sửa tài khoản: gõ `baove.binh` → lưu `baove.binh@tcm.local`, audit ghi cũ→mới. Chặn trùng: đổi sang
+`lnchau@tcmbtl.com` → "Email đã tồn tại". Chặn tên miền lạ: `binh@gmail.com` → báo lỗi đúng. Sau 2 lần
+thử sai DB KHÔNG đổi (42 nhân sự, email giữ nguyên). Nhóm "Kho" hiện đúng trong danh sách phân quyền.
+tsc/eslint/build sạch; i18n 0/0 (2731 key).

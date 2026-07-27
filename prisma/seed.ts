@@ -1834,6 +1834,16 @@ async function main() {
     { code: "PRODUCTION_STAFF", name: "Production Staff", groupCode: "PRODUCTION", parentCode: "PRODUCTION_MANAGER", sort: 71 },
     { code: "PURCHASING_MANAGER", name: "Purchasing Manager", groupCode: "PURCHASING", parentCode: null, sort: 80 },
     { code: "PURCHASING_STAFF", name: "Purchasing Staff", groupCode: "PURCHASING", parentCode: "PURCHASING_MANAGER", sort: 81 },
+    // Kho v2 K2 (27/07/2026): vai trò MỚI — người duy nhất xác nhận thực xuất/thực nhập. Chưa gán ai;
+    // chủ dự án chọn người ở /settings/staff (audit CEO trước đó ghi nhận "không có role thủ kho").
+    {
+      code: "WAREHOUSE_KEEPER",
+      name: "Thủ kho (Warehouse Keeper)",
+      description: "Soạn hàng và xác nhận số thực xuất / thực nhập; lập phiếu chuyển đổi lô và xuất hủy.",
+      groupCode: "WAREHOUSE",
+      parentCode: null,
+      sort: 85,
+    },
     { code: "IT_STAFF", name: "Nhân viên IT", groupCode: "IT", parentCode: null, sort: 90 },
   ];
   const roleByCode: Record<string, { id: string }> = {};
@@ -1885,9 +1895,18 @@ async function main() {
     code === "finance.invoice.over_cap" || // hóa đơn vượt trần CO/CE — chỉ cấp exec, xem EXEC_EXTRA
     code === "projects.pnl.view" || // P&L dự án — chỉ cấp exec, xem EXEC_EXTRA
     code.startsWith("purchasing.") || // PO — chỉ nhóm Thu mua + BGĐ, xem extraByGroup
+    // Kho v2 K2: tách vai theo spec (đề xuất ≠ duyệt ≠ xác nhận thực tế) — xem WAREHOUSE_EXTRA
+    code === "inventory.request.approve" ||
+    code === "inventory.request.approve_any" ||
+    code === "inventory.issue.confirm" ||
+    code === "inventory.intake.confirm" ||
+    code === "inventory.lot.convert" ||
+    code === "inventory.destroy" ||
     code.startsWith("ai."); // (3)
 
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
+  /** Kho v2 K2 — quyền của THỦ KHO: người duy nhất chốt số thực xuất/thực nhập, chuyển lô, xuất hủy. */
+  const WAREHOUSE_EXTRA = ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"];
   const EXEC_EXTRA = [
     "dashboard.cashflow",
     "dashboard.all_teams",
@@ -1898,22 +1917,32 @@ async function main() {
     "projects.pnl.view",
     "purchasing.po.manage",
     "purchasing.po.receive",
+    "inventory.request.approve",
+    "inventory.request.approve_any",
   ];
 
   /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
   const extraByGroup: Record<string, string[]> = {
     BOD: EXEC_EXTRA,
-    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend"],
+    // Account duyệt đề xuất xuất kho của dự án MÌNH phụ trách (PIC/Leader) — quyết định flow K2
+    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve"],
     CREATIVE: ["ai.brainstorm"],
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
     HR: ["ai.brainstorm", "ai.content"],
     FINANCE: ["ai.costsheet"],
     PURCHASING: ["purchasing.po.manage", "purchasing.po.receive"],
+    WAREHOUSE: WAREHOUSE_EXTRA,
   };
   /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
   const extraByRole: Record<string, string[]> = {
     CFO: EXEC_EXTRA, // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
+    // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
+    ACCOUNT_DIRECTOR: ["inventory.request.approve_any"],
+    ACCOUNT_MANAGER: ["inventory.request.approve_any"],
+    // Chưa ai giữ role Thủ kho → OPE Manager giữ tạm vai xác nhận kho như TRƯỚC khi có ma trận
+    // (đúng nguyên tắc "grant mặc định = quyền mọi người đang có"). Giao người thật xong thì BGĐ bỏ tick.
+    OPERATIONS_MANAGER: WAREHOUSE_EXTRA,
   };
 
   const baseGrantCodes = PERMISSION_CODES.filter((c) => !isRestricted(c));
@@ -1953,6 +1982,25 @@ async function main() {
       key: "20260727_wave34_pnl",
       codes: ["projects.pnl.view"],
       roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO",
+    },
+    // 28/07/2026 Kho v2 K2 — tách vai kho. Đề xuất: mọi role (trước đây ai cũng lập được phiếu xuất).
+    { key: "20260728_kho_k2_request_create", codes: ["inventory.request.create"] },
+    // Duyệt: Account (dự án mình) + BGĐ; duyệt-mọi-dự-án: AD/AM + BGĐ.
+    {
+      key: "20260728_kho_k2_approve",
+      codes: ["inventory.request.approve"],
+      roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "BOD",
+    },
+    {
+      key: "20260728_kho_k2_approve_any",
+      codes: ["inventory.request.approve_any"],
+      roleFilter: (r) => r.code === "ACCOUNT_DIRECTOR" || r.code === "ACCOUNT_MANAGER" || r.groupCode === "BOD",
+    },
+    // Xác nhận thực xuất/nhập + chuyển lô + xuất hủy: nhóm Thủ kho; OPE Manager giữ tạm tới khi giao người.
+    {
+      key: "20260728_kho_k2_keeper",
+      codes: ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"],
+      roleFilter: (r) => r.groupCode === "WAREHOUSE" || r.code === "OPERATIONS_MANAGER",
     },
   ];
   for (const bf of backfills) {

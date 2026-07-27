@@ -37,7 +37,7 @@ export default async function InventoryDocumentsPage({
 
   const newButtons = [
     { href: "/inventory/documents/new/transfer", label: t("newTransfer") },
-    { href: "/inventory/documents/new/issue", label: t("newIssue") },
+    { href: "/inventory/requests/new/issue", label: t("newIssue") },
     { href: "/inventory/documents/new/return", label: t("newReturn") },
     { href: "/inventory/documents/new/import", label: t("newImport") },
     { href: "/inventory/documents/new/adjust", label: t("newAdjust") },

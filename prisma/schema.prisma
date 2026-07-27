@@ -185,6 +185,11 @@ model Staff {
   stockDocumentsCreated       StockDocument[]           @relation("StockDocCreatedBy")
   stockDocumentsConfirmed     StockDocument[]           @relation("StockDocConfirmedBy")
   stockDocumentsCanceled      StockDocument[]           @relation("StockDocCanceledBy")
+  stockRequestsCreated        StockRequest[]            @relation("StockRequestCreatedBy")
+  stockRequestsApproved       StockRequest[]            @relation("StockRequestApprovedBy")
+  stockRequestsRejected       StockRequest[]            @relation("StockRequestRejectedBy")
+  stockRequestsConfirmed      StockRequest[]            @relation("StockRequestConfirmedBy")
+  stockRequestsCanceled       StockRequest[]            @relation("StockRequestCanceledBy")
   departmentsLed              Department[]              @relation("DepartmentLead")
   shiftAssignments            ShiftAssignment[]         @relation("ShiftAssignmentStaff")
   scheduleWeeksConfirmed      ScheduleWeek[]            @relation("ScheduleWeekConfirmedBy")
@@ -616,6 +621,7 @@ model Project {
   collectionMilestones CollectionMilestone[]
   purchaseOrders    PurchaseOrder[]
   stockDocuments    StockDocument[]
+  stockRequests     StockRequest[]
   inventoryHoldings ProjectHolding[]
   inventoryItemsBound InventoryItem[] @relation("InventoryItemBoundProject")
   planningJobs      PlanningJob[]
@@ -1578,6 +1584,7 @@ model PurchaseOrder {
   vendor   Vendor              @relation(fields: [vendorId], references: [id])
   lines    PurchaseOrderLine[]
   payments VendorPayment[]
+  stockRequests StockRequest[]
 
   @@index([projectId])
   @@map("purchase_order")
@@ -1898,6 +1905,7 @@ model Warehouse {
   balances      StockBalance[]
   documentsFrom StockDocument[] @relation("StockDocFromWarehouse")
   documentsTo   StockDocument[] @relation("StockDocToWarehouse")
+  requests      StockRequest[]
 
   @@map("warehouse")
 }
@@ -1966,6 +1974,7 @@ model InventoryItem {
   lines    StockDocumentLine[]
   holdings ProjectHolding[]
   convertLinesIn StockDocumentLine[] @relation("StockLineConvertTo")
+  requestLines   StockRequestLine[]
 
   @@index([parentItemId])
   @@index([categoryId])
@@ -2006,6 +2015,7 @@ model StockDocument {
   confirmedBy   Staff?              @relation("StockDocConfirmedBy", fields: [confirmedById], references: [id])
   canceledBy    Staff?              @relation("StockDocCanceledBy", fields: [canceledById], references: [id])
   lines         StockDocumentLine[]
+  requests      StockRequest[]
 
   @@index([type, status])
   @@index([projectId])
@@ -2044,6 +2054,67 @@ model StockBalance {
 
   @@unique([warehouseId, itemId])
   @@map("stock_balance")
+}
+
+/// Kho v2 — K2: ĐỀ XUẤT kho (tầng người, đặt TRÊN sổ cái). Tồn kho KHÔNG đổi ở bước đề xuất/duyệt;
+/// chỉ khi thủ kho xác nhận thực tế mới sinh StockDocument (documentId) và ghi sổ.
+///   ISSUE : OPE đề xuất → Account PIC (hoặc AD/AM) duyệt → thủ kho xác nhận thực xuất → phiếu XE
+///   INTAKE: PUR/OPE/Account báo hàng về (nối PO hoặc hàng khách gửi hoặc đồ site quay về)
+///           → thủ kho xác nhận thực nhập → phiếu NK. KHÔNG có bước duyệt (spec workflow c).
+model StockRequest {
+  id               String    @id @default(cuid())
+  code             String    @unique // {DX|DN}-{YYMM}-{seq3}, retry P2002 khi trùng
+  type             String // ISSUE | INTAKE
+  status           String    @default("PROPOSED") // PROPOSED | APPROVED | REJECTED | CANCELED | DONE
+  warehouseId      String // ISSUE = kho xuất; INTAKE = kho nhận
+  projectId        String? // bắt buộc khi ISSUE
+  purchaseOrderId  String? // INTAKE từ PO (module 🛒) — chỉ để đối chiếu, PO vẫn là làn cam kết riêng
+  expectedReturnAt DateTime? // ISSUE có dòng tái sử dụng — chép sang phiếu XE lúc xác nhận
+  note             String?
+  createdById      String?
+  approvedById     String?
+  approvedAt       DateTime?
+  rejectedById     String?
+  rejectedAt       DateTime?
+  rejectReason     String?
+  confirmedById    String? // thủ kho
+  confirmedAt      DateTime?
+  canceledById     String?
+  canceledAt       DateTime?
+  documentId       String? // phiếu kho sinh ra khi xác nhận — mốc đối chiếu đề xuất ↔ sổ cái
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  warehouse     Warehouse          @relation(fields: [warehouseId], references: [id])
+  project       Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  purchaseOrder PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  createdBy     Staff?             @relation("StockRequestCreatedBy", fields: [createdById], references: [id])
+  approvedBy    Staff?             @relation("StockRequestApprovedBy", fields: [approvedById], references: [id])
+  rejectedBy    Staff?             @relation("StockRequestRejectedBy", fields: [rejectedById], references: [id])
+  confirmedBy   Staff?             @relation("StockRequestConfirmedBy", fields: [confirmedById], references: [id])
+  canceledBy    Staff?             @relation("StockRequestCanceledBy", fields: [canceledById], references: [id])
+  document      StockDocument?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  lines         StockRequestLine[]
+
+  @@index([type, status])
+  @@index([projectId])
+  @@map("stock_request")
+}
+
+model StockRequestLine {
+  id                String  @id @default(cuid())
+  requestId         String
+  itemId            String
+  quantity          Int // số đề xuất (>0)
+  confirmedQuantity Int? // thủ kho ghi số thực xuất/thực nhập (≤ quantity); chênh lệch hiện vĩnh viễn
+  note              String?
+  sort              Int     @default(0)
+
+  request StockRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  item    InventoryItem @relation(fields: [itemId], references: [id])
+
+  @@unique([requestId, itemId])
+  @@map("stock_request_line")
 }
 
 /// Đồ TÁI SỬ DỤNG đang ở hiện trường theo dự án = Σ ISSUE − Σ RETURN (chỉ dòng isReusable).

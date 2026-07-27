@@ -77,7 +77,7 @@ export default async function InventoryStockPage({
 
   const quickActions = [
     { href: "/inventory/documents/new/transfer", icon: ArrowLeftRight, label: t("quickTransfer"), badge: 0 },
-    { href: "/inventory/documents/new/issue", icon: PackageOpen, label: t("quickIssue"), badge: 0 },
+    { href: "/inventory/requests/new/issue", icon: PackageOpen, label: t("quickIssue"), badge: 0 },
     { href: "/inventory/documents/new/return", icon: Undo2, label: t("quickReturn"), badge: 0 },
     { href: "/inventory/documents", icon: Inbox, label: t("quickReceive"), badge: pendingCount },
   ];

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type Labels = { stock: string; documents: string; items: string };
+type Labels = { stock: string; requests: string; documents: string; items: string };
 
 const TABS: { key: keyof Labels; seg: string }[] = [
   { key: "stock", seg: "" },
+  { key: "requests", seg: "/requests" },
   { key: "documents", seg: "/documents" },
   { key: "items", seg: "/items" },
 ];

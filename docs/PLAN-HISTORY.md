@@ -2122,3 +2122,80 @@ K2 role THỦ KHO + quyền mới + lệnh xuất đề xuất→duyệt→xác 
 PO C3, khách gửi, đồ thẳng site quay về) + siết CONVERT/DESTROY về thủ kho. K3 giữ chỗ tồn kho → CO
 giá 0 (quyết định 3/4/5) + trần OPE + cảnh báo lệch. K4 kỳ chiến dịch ≤15 ngày + điều chuyển có duyệt
 + holding A→B + thang cảnh báo date vào job-runner.
+
+---
+
+# BATCH: Kho v2 — K2 (role Thủ kho + tầng đề xuất/duyệt) — 28/07/2026
+
+Đợt 2 của Kho v2 (7 quyết định chốt 27/07 xem mục "Kho v2 — K1"). Nội dung: đưa workflow a (xuất kho)
+và workflow c (nhập kho) của spec vào hệ thống bằng một TẦNG ĐỀ XUẤT đặt LÊN TRÊN sổ cái bất biến.
+
+## Nguyên tắc dựng
+
+**Tồn kho chỉ đổi ở bước cuối cùng — thủ kho xác nhận số THỰC TẾ.** Đề xuất và duyệt không chạm sổ
+cái; huỷ/từ chối không để lại dấu vết tồn kho vì chưa từng có phiếu. Khi thủ kho chốt số, phiếu
+StockDocument sinh ra trong CÙNG transaction với việc trừ/cộng tồn, và `StockRequest.documentId` giữ
+mốc đối chiếu đề xuất ↔ sổ cái. Toàn bộ toán tồn kho + guard chống âm của v1 giữ nguyên, không sửa dòng nào.
+
+## Data model (migration 20260728010000, additive thuần — 2 bảng mới)
+
+- `StockRequest`: code `{DX|DN}-{YYMM}-{seq3}`, type ISSUE|INTAKE, status PROPOSED|APPROVED|REJECTED|
+  CANCELED|DONE, warehouseId, projectId? (bắt buộc khi ISSUE), purchaseOrderId? (đối chiếu PO — PO vẫn
+  là làn cam kết riêng, KHÔNG ăn trần), expectedReturnAt?, 5 cặp người-thời điểm (created/approved/
+  rejected+reason/confirmed/canceled), documentId?.
+- `StockRequestLine`: quantity (đề xuất) + confirmedQuantity? (thực tế) — chênh lệch hiện vĩnh viễn,
+  cùng triết lý receivedQuantity của phiếu chuyển kho.
+- `lib/inventory-request.ts` (thuần): mã, `confirmableStatus` (ISSUE cần APPROVED, INTAKE xác nhận
+  thẳng), `canApproveIssue` (PIC/Leader hoặc approve_any), `availableToRequest`.
+
+## Hai luồng
+
+**Xuất kho (DX)** — OPE đề xuất → Account PIC/Leader ĐÚNG dự án (hoặc AD/AM) duyệt → thủ kho chốt số
+thực xuất ≤ số duyệt → phiếu XE + trừ tồn + cộng holding (dòng tái sử dụng). Chặn ở khâu đề xuất VÀ
+kiểm lại lúc duyệt: hàng hết hạn, lô ràng dự án khác (statusCode P), hàng của khách khác (ownerClient
+≠ client dự án), vượt **khả dụng = tồn − đã duyệt chưa xuất**.
+
+**Báo hàng về (DN)** — PUR/OPE/Account báo (gắn PO nếu có) → KHÔNG có bước duyệt (đúng spec workflow c)
+→ thủ kho chốt số thực nhập → phiếu NK + cộng tồn. Dùng chung cho 3 nguồn: PO, hàng khách gửi, đồ site
+quay về (quyết định Câu 6 — khai lại trạng thái/tình trạng lúc về bằng cách tạo lô mới trước).
+
+**Giữ chỗ mềm** là điểm dễ bỏ sót: nếu chỉ trừ tồn lúc xuất thật thì hai lệnh đã duyệt cùng hứa một lô
+hàng. Nên `availableToRequest` trừ luôn phần APPROVED-chưa-DONE (tính theo cặp kho×item).
+
+## Quyền + vai (107 mã, +6)
+
+`inventory.request.create` (mọi role — trước đây ai cũng lập được phiếu xuất) · `.approve` (Account +
+BGĐ) · `.approve_any` (AD/AM + BGĐ, sensitive) · `issue.confirm` · `intake.confirm` · `lot.convert` ·
+`destroy` (4 mã cuối = nhóm Thủ kho). Role MỚI `WAREHOUSE_KEEPER` (nhóm `WAREHOUSE`, thêm vào
+ROLE_GROUP_ORDER của trang /settings/roles). **OPERATIONS_MANAGER giữ tạm 4 quyền kho** — đúng nguyên
+tắc "grant mặc định = quyền mọi người đang có", vì chưa ai được gán role Thủ kho; giao người thật xong
+thì BGĐ bỏ tick. 4 backfill `20260728_kho_k2_*` có marker chống chạy lại.
+
+Chốt PIC dùng DỮ LIỆU dự án chứ không chỉ mã quyền: ai có `.approve` nhưng không phải PIC/Leader thì
+KHÔNG thấy nút duyệt và có dòng giải thích tại chỗ. Dự án chưa gán PIC (21 dự án cũ) chỉ `approve_any`
+duyệt được — cố ý, tránh tự duyệt đề xuất của chính mình khi dữ liệu phụ trách còn trống.
+
+## Gỡ đường cũ
+
+`createIssueDoc` + `/documents/new/issue` XOÁ HẲN (một đường duy nhất cho xuất kho). `/documents/new/
+import` giữ nhưng gác `inventory.intake.confirm` — chỉ thủ kho, dùng cho kiểm kê/tồn đầu kỳ; hàng có
+người báo về đi qua DN. CONVERT → `inventory.lot.convert`, DESTROY → `inventory.destroy` (K1 tạm để
+`doc.create`). Notification fan-out nay theo MÃ QUYỀN (`notifyByPermission`) thay danh sách phòng ban
+cứng — xoá được ghi chú "chưa có mapping thủ kho — nợ v2" trong code.
+
+## Kiểm chứng (browser thật, dọn sạch sau)
+
+DX-2607-001: đề xuất 5 (tồn giữ nguyên 20) → duyệt → thủ kho chốt 4 → XE-2607-001 (note tham chiếu DX),
+tồn 16, holding T002 = 4, dòng ghi 4/5. Giữ chỗ mềm: duyệt tiếp DX-002 16 cái → picker hiện "khả dụng
+0" dù tồn thực 16; cố gửi đề xuất nữa → chặn cả ở UI ("vượt số khả dụng") lẫn SERVER ("Vượt số khả
+dụng: O.R.B.TCM.001"). DN-2607-001: báo 50 → không có bước duyệt → thủ kho chốt 48 → NK-2607-002, tồn
+100→148. Act-as Account Staff (Tươi): không thấy form thủ kho ở DX-002; tự lập DX-003 cho dự án mình
+KHÔNG phụ trách → không có nút Duyệt + hiện đúng dòng "Bạn không phải PIC/Leader...". tsc/eslint sạch;
+i18n 0/0 (2709 key); build sạch +3 route requests; đối chiếu catalog↔điểm chặn: 107 mã, chỉ payroll (2)
++ system.impersonate thiếu guard như đã biết. Dọn: 0 item/phiếu/đề xuất/tồn/notification, cây 19 node +
+1358 grant giữ nguyên.
+
+## Còn lại
+
+K3 (giữ chỗ tồn kho → CO giá 0 + trần OPE + gộp dòng BM02), K4 (kỳ chiến dịch ≤15 ngày, điều chuyển có
+duyệt, holding A→B, thang cảnh báo hạn dùng vào job-runner).

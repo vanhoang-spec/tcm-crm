@@ -153,8 +153,9 @@ async function createInboundDoc(type: DocType, _prev: DocFormState, formData: Fo
   redirect(`/inventory/documents/${docId}`);
 }
 
+/** Nhập kho TRỰC TIẾP (kiểm kê, tồn đầu kỳ) — thủ kho tự làm; hàng có người báo về đi qua đề xuất DN. */
 export async function createImportDoc(prev: DocFormState, formData: FormData): Promise<DocFormState> {
-  await requirePermission("inventory.doc.create");
+  await requirePermission("inventory.intake.confirm");
   return createInboundDoc("IMPORT", prev, formData);
 }
 export async function createAdjustDoc(prev: DocFormState, formData: FormData): Promise<DocFormState> {
@@ -269,68 +270,8 @@ export async function cancelTransfer(docId: string, _prev: DocFormState, _formDa
   return { success: true };
 }
 
-// ── XUẤT EVENT / TRẢ VỀ — 1 bước, gắn dự án ──────────────
-
-export async function createIssueDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
-  await requirePermission("inventory.doc.create");
-  const t = await getTranslations("inventory.documents");
-  const fromWarehouseId = String(formData.get("fromWarehouseId") ?? "");
-  const projectId = String(formData.get("projectId") ?? "");
-  const expectedReturnRaw = String(formData.get("expectedReturnAt") ?? "").trim();
-  const note = String(formData.get("note") ?? "").trim() || null;
-  if (!fromWarehouseId || !projectId) return { error: t("errorInvalid") };
-  const { lines, error } = await parseLines(formData, { allowNegative: false });
-  if (error) return { error };
-
-  const project = await prisma.project.findUnique({ where: { id: projectId }, include: { status: true } });
-  if (!project || !(EXECUTION_STATUS_CODES as readonly string[]).includes(project.status.code)) return { error: t("errorProjectRequired") };
-
-  const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: lines.map((l) => l.itemId) } },
-    select: { id: true, isReusable: true, code: true, expiryDate: true },
-  });
-  // Hàng hết hạn dùng: CHẶN xuất dùng — chỉ còn đường phiếu XUẤT HỦY (spec nhóm M-a)
-  const expired = items.filter((i) => expiryLevel(i.expiryDate, new Date()) === "EXPIRED");
-  if (expired.length > 0) return { error: t("errorExpired", { items: expired.map((i) => i.code).join(", ") }) };
-  const reusableIds = new Set(items.filter((i) => i.isReusable).map((i) => i.id));
-  const hasReusable = lines.some((l) => reusableIds.has(l.itemId));
-  const expectedReturnAt = expectedReturnRaw ? new Date(expectedReturnRaw) : null;
-  if (hasReusable && (!expectedReturnAt || Number.isNaN(expectedReturnAt.getTime()))) return { error: t("errorReturnRequired") };
-
-  const staffId = await getCurrentStaffId();
-  let docId = "";
-  try {
-    await createDocWithRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const code = await nextDocCode(tx, "ISSUE", new Date());
-        const doc = await tx.stockDocument.create({
-          data: {
-            code,
-            type: "ISSUE",
-            status: "COMPLETED",
-            fromWarehouseId,
-            projectId,
-            expectedReturnAt: hasReusable ? expectedReturnAt : null,
-            note,
-            createdById: staffId,
-            lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note, sort: i })) },
-          },
-        });
-        for (const l of lines) {
-          await debitBalance(tx, fromWarehouseId, l.itemId, l.quantity);
-          if (reusableIds.has(l.itemId)) await creditHolding(tx, projectId, l.itemId, l.quantity);
-        }
-        docId = doc.id;
-      })
-    );
-  } catch (e) {
-    if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
-    throw e;
-  }
-  await audit(docId, "CREATE");
-  revalidate();
-  redirect(`/inventory/documents/${docId}`);
-}
+// ── TRẢ VỀ KHO — 1 bước, gắn dự án ───────────────────────
+// XUẤT KHO nay đi qua tầng đề xuất (K2): inventory/requests — thủ kho xác nhận mới sinh phiếu XE.
 
 export async function createReturnDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
   await requirePermission("inventory.doc.create");
@@ -380,7 +321,7 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
 // Đường ra DUY NHẤT cho hàng hết hạn / trạng thái D. K2 siết về quyền thủ kho riêng.
 
 export async function createDestroyDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
-  await requirePermission("inventory.doc.create");
+  await requirePermission("inventory.destroy");
   const t = await getTranslations("inventory.documents");
   const fromWarehouseId = String(formData.get("fromWarehouseId") ?? "");
   const note = String(formData.get("note") ?? "").trim();
@@ -433,7 +374,7 @@ type ConvertLineInput = {
 };
 
 export async function createConvertDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
-  await requirePermission("inventory.doc.create");
+  await requirePermission("inventory.lot.convert");
   const t = await getTranslations("inventory.documents");
   const warehouseId = String(formData.get("fromWarehouseId") ?? "");
   const note = String(formData.get("note") ?? "").trim() || null;

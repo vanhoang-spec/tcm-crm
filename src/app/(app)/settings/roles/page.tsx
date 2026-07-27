@@ -18,6 +18,7 @@ const ROLE_GROUP_ORDER = [
   "OPERATIONS",
   "PRODUCTION",
   "PURCHASING",
+  "WAREHOUSE",
   "IT",
 ] as const;
 

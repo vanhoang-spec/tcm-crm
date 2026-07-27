@@ -4,19 +4,18 @@ import { useActionState, useMemo, useState } from "react";
 import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { Minus, Plus, X } from "lucide-react";
-import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   createAdjustDoc,
   createDestroyDoc,
   createImportDoc,
-  createIssueDoc,
   createReturnDoc,
   createTransferDoc,
   type DocFormState,
 } from "./actions";
 
-export type DocKind = "IMPORT" | "ADJUST" | "TRANSFER" | "ISSUE" | "RETURN" | "DESTROY";
+/** Xuất kho cho dự án KHÔNG còn ở đây — đi qua đề xuất + duyệt + thủ kho (inventory/requests, K2). */
+export type DocKind = "IMPORT" | "ADJUST" | "TRANSFER" | "RETURN" | "DESTROY";
 
 export type PickerItem = {
   id: string;
@@ -39,7 +38,6 @@ const ACTIONS: Record<DocKind, (prev: DocFormState, fd: FormData) => Promise<Doc
   IMPORT: createImportDoc,
   ADJUST: createAdjustDoc,
   TRANSFER: createTransferDoc,
-  ISSUE: createIssueDoc,
   RETURN: createReturnDoc,
   DESTROY: createDestroyDoc,
 };
@@ -70,7 +68,7 @@ export function DocForm({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Nguồn hiển thị tồn: ISSUE/TRANSFER = kho nguồn; IMPORT/ADJUST = kho đích; RETURN = holding của dự án
+  // Nguồn hiển thị tồn: TRANSFER/DESTROY = kho nguồn; IMPORT/ADJUST = kho đích; RETURN = holding của dự án
   const sourceWarehouseId = kind === "IMPORT" || kind === "ADJUST" ? toWarehouseId : fromWarehouseId;
   const holdings = useMemo(
     () => (kind === "RETURN" ? (holdingsByProject?.[projectId] ?? []) : null),
@@ -96,8 +94,6 @@ export function DocForm({
     return m;
   }, [items, holdings, sourceWarehouseId]);
 
-  const hasReusableLine = kind === "ISSUE" && lines.some((l) => itemById.get(l.itemId)?.isReusable);
-
   function addLine(itemId: string) {
     setLines((prev) => (prev.some((l) => l.itemId === itemId) ? prev : [...prev, { itemId, quantity: 1, note: "" }]));
     setPickerOpen(false);
@@ -118,7 +114,7 @@ export function DocForm({
       <input type="hidden" name="linesJson" value={JSON.stringify(lines.map((l) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note || undefined })))} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {(kind === "TRANSFER" || kind === "ISSUE" || kind === "DESTROY") && (
+        {(kind === "TRANSFER" || kind === "DESTROY") && (
           <label className="space-y-1 text-xs text-muted-foreground">
             {t("formFromWarehouse")}
             <select name="fromWarehouseId" value={fromWarehouseId} onChange={(e) => setFromWarehouseId(e.target.value)} className={input + " w-full"}>
@@ -147,22 +143,15 @@ export function DocForm({
             </select>
           </label>
         )}
-        {(kind === "ISSUE" || kind === "RETURN") && (
+        {kind === "RETURN" && (
           <label className="space-y-1 text-xs text-muted-foreground">
             {t("formProject")}
             <SearchableSelect
               name="projectId"
               value={projectId}
-              onChange={(v) => { setProjectId(v); if (kind === "RETURN") setLines([]); }}
+              onChange={(v) => { setProjectId(v); setLines([]); }}
               options={(projects ?? []).map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
             />
-          </label>
-        )}
-        {kind === "ISSUE" && (
-          <label className="space-y-1 text-xs text-muted-foreground">
-            {t("formExpectedReturn")}
-            <DateField name="expectedReturnAt" required={hasReusableLine} className={input + " w-full"} />
-            <span className="block text-[11px] leading-snug">{t("issueReusableHint")}</span>
           </label>
         )}
         <label className="space-y-1 text-xs text-muted-foreground sm:col-span-2">

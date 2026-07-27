@@ -34,6 +34,9 @@ export const ctvRowSchema = z.object({
   pitTax: z.coerce.number().min(0).nullable().optional(),
   netReceived: z.coerce.number().min(0).nullable().optional(),
   note: z.string().trim().optional().default(""),
+  /** Dòng CO/CE của khoản chi này — server kiểm dòng thuộc đúng dự án trước khi ghi. Trống = kế
+   *  thừa dòng mặc định của đợt (CtvBatch.defaultFinanceCostLineId). */
+  financeCostLineId: z.string().trim().optional().default(""),
 });
 
 export type CtvRowPayload = z.infer<typeof ctvRowSchema>;

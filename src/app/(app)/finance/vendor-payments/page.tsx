@@ -5,7 +5,7 @@ import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
 import { type PickerLine } from "./line-picker";
-import { CreateVendorPaymentForm, MarkPaidButton, UnmarkPaidButton } from "./payment-forms";
+import { CreateVendorPaymentForm, MarkPaidButton, UnmarkPaidButton, CancelPaymentButton } from "./payment-forms";
 import { requirePermission } from "@/lib/permissions";
 
 export default async function VendorPaymentsPage() {
@@ -14,7 +14,9 @@ export default async function VendorPaymentsPage() {
     getTranslations("finance.vendorPayments"),
     getTranslations("finance.common"),
     getLocale() as Promise<Locale>,
-    prisma.vendorPayment.findMany({ include: { vendor: true, project: true }, orderBy: { createdAt: "desc" } }),
+    // Phiếu đã huỷ rời khỏi danh sách (bản ghi vẫn còn trong DB + AuditLog) — nhất quán với hóa
+    // đơn đã huỷ ở trang Công nợ.
+    prisma.vendorPayment.findMany({ where: { status: { not: "CANCELED" } }, include: { vendor: true, project: true }, orderBy: { createdAt: "desc" } }),
     prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { status: { code: { in: [...EXECUTION_STATUS_CODES] } } }, orderBy: { updatedAt: "desc" } }),
   ]);
@@ -26,7 +28,7 @@ export default async function VendorPaymentsPage() {
     orderBy: [{ projectId: "asc" }, { sort: "asc" }],
     include: {
       advances: { where: { status: { not: "CANCELED" } }, select: { amount: true } },
-      vendorPayments: { select: { amount: true } },
+      vendorPayments: { where: { status: { not: "CANCELED" } }, select: { amount: true } },
     },
   });
   const pickerLines: PickerLine[] = rawLines.map((l) => ({
@@ -46,8 +48,16 @@ export default async function VendorPaymentsPage() {
   // Ở đây chỉ để HIỂN THỊ; server vẫn tính lại trong transaction trước khi ghi.
   const [capLines, advByProject, payByProject] = await Promise.all([
     prisma.financeCostLine.groupBy({ by: ["projectId"], where: { isStale: false, isProxy: false }, _sum: { netAmount: true } }),
-    prisma.advance.groupBy({ by: ["projectId"], where: { status: { not: "CANCELED" } }, _sum: { amount: true } }),
-    prisma.vendorPayment.groupBy({ by: ["projectId"], _sum: { amount: true } }),
+    prisma.advance.groupBy({
+      by: ["projectId"],
+      where: { status: { not: "CANCELED" }, financeCostLine: { isProxy: false } },
+      _sum: { amount: true },
+    }),
+    prisma.vendorPayment.groupBy({
+      by: ["projectId"],
+      where: { status: { not: "CANCELED" }, OR: [{ financeCostLineId: null }, { financeCostLine: { isProxy: false } }] },
+      _sum: { amount: true },
+    }),
   ]);
   const capBaseBy = new Map(capLines.map((r) => [r.projectId, toNum(r._sum.netAmount ?? BigInt(0))]));
   const advBy = new Map(advByProject.map((r) => [r.projectId, toNum(r._sum.amount ?? BigInt(0))]));
@@ -122,7 +132,14 @@ export default async function VendorPaymentsPage() {
                   </div>
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {p.status === "SCHEDULED" ? <MarkPaidButton id={p.id} /> : <UnmarkPaidButton id={p.id} />}
+                  {p.status === "SCHEDULED" ? (
+                    <div className="flex flex-col items-end gap-1">
+                      <MarkPaidButton id={p.id} />
+                      <CancelPaymentButton id={p.id} />
+                    </div>
+                  ) : (
+                    <UnmarkPaidButton id={p.id} />
+                  )}
                 </td>
               </tr>
             ))}

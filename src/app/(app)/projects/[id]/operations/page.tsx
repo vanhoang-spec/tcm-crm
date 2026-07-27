@@ -14,16 +14,26 @@ export default async function ProjectOperationsPage({ params }: { params: Promis
   const project = await prisma.project.findUnique({ where: { id }, include: { status: true } });
   if (!project) notFound();
 
-  const [t, tTasks, batches, deptTasks, deptStaffOptions] = await Promise.all([
+  const [t, tTasks, batches, deptTasks, deptStaffOptions, costLines] = await Promise.all([
     getTranslations("projects.operations"),
     getTranslations("projects.deptTasks"),
     prisma.ctvBatch.findMany({
       where: { projectId: id },
-      include: { rows: { orderBy: { sort: "asc" } } },
+      include: {
+        rows: { orderBy: { sort: "asc" } },
+        // Phiếu chi đã sinh từ đợt (còn hiệu lực) — để hiện trạng thái "đã đề xuất thanh toán".
+        vendorPayments: { where: { status: { not: "CANCELED" } }, select: { amount: true, status: true } },
+      },
       orderBy: { createdAt: "asc" },
     }),
     getDepartmentTasks(id, "OPE"),
     getDepartmentStaffOptions("OPE"),
+    // Dòng CO/CE còn hiệu lực của dự án — nguồn cho ô "Dòng CO" (gán CTV vào dòng) + khối đối chiếu.
+    prisma.financeCostLine.findMany({
+      where: { projectId: id, isStale: false },
+      orderBy: { sort: "asc" },
+      select: { id: true, itemCode: true, itemName: true, sectionName: true, netAmount: true, isProxy: true },
+    }),
   ]);
   const deptTaskBoardData = deptTasks.map((task) => toDepartmentTaskBoardData(task, project.status.code, project.finishedAt));
 
@@ -35,6 +45,10 @@ export default async function ProjectOperationsPage({ params }: { params: Promis
     teamLeader: b.teamLeader,
     workLocation: b.workLocation,
     hasSourceFile: !!b.sourceFileKey,
+    defaultFinanceCostLineId: b.defaultFinanceCostLineId,
+    paymentsCreated: b.vendorPayments.length,
+    paymentsTotal: b.vendorPayments.reduce((s, p) => s + toNum(p.amount), 0),
+    paymentsPaid: b.vendorPayments.filter((p) => p.status === "PAID").length,
     rows: b.rows.map((r) => ({
       id: r.id,
       sort: r.sort,
@@ -64,9 +78,19 @@ export default async function ProjectOperationsPage({ params }: { params: Promis
       pitTax: r.pitTax == null ? null : toNum(r.pitTax),
       netReceived: r.netReceived == null ? null : toNum(r.netReceived),
       note: r.note,
+      financeCostLineId: r.financeCostLineId,
       generated: !!r.generatedFileKey,
       generatedAt: r.generatedAt ? r.generatedAt.toISOString() : null,
     })),
+  }));
+
+  const costLineData = costLines.map((l) => ({
+    id: l.id,
+    itemCode: l.itemCode,
+    itemName: l.itemName,
+    sectionName: l.sectionName,
+    netAmount: toNum(l.netAmount),
+    isProxy: l.isProxy,
   }));
 
   return (
@@ -84,7 +108,9 @@ export default async function ProjectOperationsPage({ params }: { params: Promis
         <h2 className="text-lg font-semibold text-foreground">{t("title")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t("desc")}</p>
       </div>
-      <OperationsPanel projectId={id} batches={batchData} />
+      {/* Chưa có dòng chi phí (dự án chưa đồng bộ CO/CE → module ④) thì khối gán dòng CO trong
+          panel sẽ nhắc bấm "Làm mới" ở /finance trước — T005/T006 đang đúng tình trạng này. */}
+      <OperationsPanel projectId={id} batches={batchData} costLines={costLineData} />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { NumberField } from "@/components/ui/number-field";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createVendorPayment, markVendorPaymentPaid, unmarkVendorPaymentPaid, type FinanceFormState } from "../actions";
+import { cancelVendorPayment, createVendorPayment, markVendorPaymentPaid, unmarkVendorPaymentPaid, type FinanceFormState, type FinanceFormStateWithValues } from "../actions";
 import { VendorPaymentLinePicker, type PickerLine } from "./line-picker";
 
 /**
@@ -33,7 +33,7 @@ export function CreateVendorPaymentForm({
 }) {
   const t = useTranslations("finance.vendorPayments");
   const tc = useTranslations("finance.common");
-  const [state, formAction, pending] = useActionState<FinanceFormState, FormData>(createVendorPayment, {});
+  const [state, formAction, pending] = useActionState<FinanceFormStateWithValues, FormData>(createVendorPayment, {});
 
   return (
     <form action={formAction} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -50,17 +50,19 @@ export function CreateVendorPaymentForm({
         {t("dueDate")}
         <DateField name="dueDate" className={input} />
       </label>
+      {/* defaultValue từ state (pattern A5): React 19 reset input uncontrolled sau mỗi action —
+          luồng vượt trần (lỗi → điền lý do → submit lại) không được bắt gõ lại các ô này. */}
       <label className="text-xs text-muted-foreground">
         {t("invoiceNo")}
-        <input name="invoiceNo" className={input} />
+        <input name="invoiceNo" defaultValue={state.values?.invoiceNo ?? ""} className={input} />
       </label>
       <label className="text-xs text-muted-foreground">
         {t("note")}
-        <input name="note" className={input} />
+        <input name="note" defaultValue={state.values?.note ?? ""} className={input} />
       </label>
       <label className="text-xs text-muted-foreground sm:col-span-2">
         {t("overCapNote")}
-        <input name="overCapNote" className={input} />
+        <input name="overCapNote" defaultValue={state.values?.overCapNote ?? ""} className={input} />
         <span className="mt-1 block text-[11px] leading-snug">{t("overCapNoteHint")}</span>
       </label>
       {state.error && (
@@ -99,6 +101,42 @@ export function MarkPaidButton({ id }: { id: string }) {
       </button>
       {state.error && (
         <p className="mt-1 text-[11px] text-danger" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+/** Huỷ phiếu chi lập nhầm (chỉ phiếu CHƯA trả). Ẩn sau một cú bấm, lý do bắt buộc ở server —
+ *  cùng khuôn với UnmarkPaidButton/VoidInvoiceButton. */
+export function CancelPaymentButton({ id }: { id: string }) {
+  const t = useTranslations("finance.vendorPayments");
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<FinanceFormState, FormData>(
+    cancelVendorPayment.bind(null, id),
+    {},
+  );
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-[11px] text-muted-foreground hover:text-danger">
+        {t("cancelPayment")}
+      </button>
+    );
+  }
+  return (
+    <form action={formAction} className="space-y-1">
+      <input name="cancelNote" placeholder={t("cancelNotePlaceholder")} className="h-8 w-40 rounded-lg border border-border-strong bg-surface px-2 text-xs" />
+      <button
+        type="submit"
+        disabled={pending}
+        className="block rounded-lg border border-danger/40 px-2 py-1 text-[11px] font-medium text-danger hover:bg-danger-bg disabled:opacity-60"
+      >
+        {t("cancelPayment")}
+      </button>
+      {state.error && (
+        <p className="text-[11px] text-danger" role="alert">
           {state.error}
         </p>
       )}

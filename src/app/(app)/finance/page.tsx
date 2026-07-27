@@ -53,7 +53,7 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
         orderBy: [{ isStale: "asc" }, { sort: "asc" }],
         include: {
           vendor: true,
-          vendorPayments: { select: { amount: true } },
+          vendorPayments: { where: { status: { not: "CANCELED" } }, select: { amount: true } },
           advances: {
             orderBy: { installmentNo: "asc" },
             include: { recipientVendor: true, recipientStaff: true, requestedBy: true, disbursedBy: true, settledBy: true },

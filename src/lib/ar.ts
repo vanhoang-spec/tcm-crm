@@ -49,6 +49,20 @@ export function arDueBase(inv: { invoiceDate: Date; dueDate: Date | null }): Dat
   return inv.dueDate ?? inv.invoiceDate;
 }
 
+/**
+ * Hạn thanh toán mặc định khi form bỏ trống = ngày hóa đơn + số ngày điều khoản
+ * (Contract.paymentTermDays, thiếu thì Client.paymentTermDays — khách nào cũng có, mặc định 90).
+ *
+ * Trước đây bỏ trống nghĩa là dueDate NULL → arDueBase rơi về NGÀY HÓA ĐƠN → hóa đơn xuất hôm nay
+ * mai đã "quá hạn 1 ngày": nhóm tuổi nợ sai và chuông nhắc nợ kêu bậy ngay từ hóa đơn đầu tiên.
+ *
+ * Lấy phần ngày theo giờ LOCAL rồi dựng UTC-midnight — cùng quy ước với arStartOfToday, vì
+ * invoiceDate có thể mang cả giờ (fallback `new Date()` lúc tạo).
+ */
+export function arDefaultDueDate(invoiceDate: Date, termDays: number): Date {
+  return new Date(Date.UTC(invoiceDate.getFullYear(), invoiceDate.getMonth(), invoiceDate.getDate() + termDays));
+}
+
 export function arOutstanding(inv: ArInvoiceInput): number {
   return inv.amount - inv.paidAmounts.reduce((sum, p) => sum + p, 0);
 }

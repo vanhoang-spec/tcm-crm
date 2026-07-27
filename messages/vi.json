@@ -1026,7 +1026,10 @@
       "sectionDepartment": "Phòng ban phụ trách",
       "sectionDepartmentNone": "— Chưa gán phòng —",
       "sectionDepartmentHint": "Quyết định tiền tố mã của mọi dòng trong hạng mục (VD: OPE-001). Mã do hệ thống tự đánh khi lưu.",
-      "overrideNotePlaceholder": "Lý do duyệt dưới ngưỡng margin…"
+      "overrideNotePlaceholder": "Lý do duyệt dưới ngưỡng margin…",
+      "exportClientXlsx": "Xuất báo giá (Excel)",
+      "exportInternalXlsx": "Xuất CO/CE nội bộ (Excel)",
+      "printView": "Bản in / PDF"
     },
     "rounds": {
       "title": "Vòng deal giá",
@@ -1360,7 +1363,14 @@
       "sendToLiquidation": "Chuyển sang Nghiệm thu",
       "sendToLiquidationHint": "Gửi bản CO/CE mới nhất (phiên bản hiện tại) sang tab Nghiệm thu để khách hàng ký. Có thể sửa tiếp và bấm lại nếu cần thay đổi lần cuối.",
       "sentToLiquidationInfo": "Đã chuyển v{rev} sang Nghiệm thu lúc {date} · bởi {name}",
-      "sentToLiquidationNone": "Chưa chuyển phiên bản nào sang Nghiệm thu."
+      "sentToLiquidationNone": "Chưa chuyển phiên bản nào sang Nghiệm thu.",
+      "exportClientXlsx": "Xuất báo giá (Excel)",
+      "exportInternalXlsx": "Xuất CO/CE nội bộ (Excel)",
+      "printView": "Bản in / PDF",
+      "printBtn": "In / Lưu PDF",
+      "printBack": "Về tab CO/CE",
+      "printSwitchInternal": "Xem bản nội bộ",
+      "printSwitchClient": "Xem bản gửi khách"
     },
     "liquidation": {
       "title": "Nghiệm thu & Thanh lý",
@@ -1407,7 +1417,10 @@
       "invoiceOpenDebt": "Mở trang Công nợ",
       "errRequired": "Nhập số hóa đơn và số tiền hợp lệ.",
       "errNoSentRev": "Chưa có bản CO/CE nào được chuyển sang Nghiệm thu để đối chiếu.",
-      "errExceedBillable": "Vượt số còn được xuất theo bản CO/CE v{rev} (còn {remaining})."
+      "errExceedBillable": "Vượt số còn được xuất theo bản CO/CE v{rev} (còn {remaining}).",
+      "ctvVarianceWarning": "CO đang là số kế hoạch: biên bản/BM08 CTV đã nhập {direction} {amount} đ so với dòng CO tương ứng. Cập nhật CO/CE bằng số thật (tạo revision mới) trước khi chốt nghiệm thu, nếu không margin sẽ sai.",
+      "ctvVarianceOver": "VƯỢT",
+      "ctvVarianceUnder": "THẤP HƠN"
     },
     "operations": {
       "title": "Vận hành — Thuê ngoài (CTV)",
@@ -1449,7 +1462,37 @@
       "generatedBadge": "Đã tạo",
       "generatedAtLabel": "Tạo lúc",
       "notGeneratedYet": "Chưa tạo",
-      "mobileNote": "Xem đầy đủ lưới trên máy tính."
+      "mobileNote": "Xem đầy đủ lưới trên máy tính.",
+      "noCostLines": "Dự án chưa có dòng chi phí để gán CTV — mở Chi phí & Công nợ và bấm \"Làm mới\" để đồng bộ từ CO/CE trước.",
+      "defaultCostLine": "Dòng CO mặc định của đợt (dòng nào không gán riêng sẽ tính vào dòng này)",
+      "defaultCostLineNone": "— Chưa chọn —",
+      "proxyTag": "Chi hộ",
+      "rowCostLine": "Dòng CO",
+      "rowCostLineInherit": "(theo đợt)",
+      "cmpTitle": "Đối chiếu CO ↔ CTV",
+      "cmpHint": "Kế hoạch = số thực trả (netAmount) của dòng CO. CTV = tiền trao cho người nhận theo BM08 (Gross thì lấy Thực nhận). Cập nhật ngay khi gõ, kể cả dòng chưa Lưu.",
+      "cmpLine": "Dòng CO",
+      "cmpPlan": "Kế hoạch",
+      "cmpCtv": "CTV đã nhập",
+      "cmpVariance": "Chênh lệch",
+      "cmpTotalCost": "Tổng (giá vốn)",
+      "cmpProxyNote": "Chi hộ (ngoài giá vốn, trần riêng theo dòng):",
+      "cmpUnassigned": "Chưa gán dòng CO: {amount} đ — gán riêng từng dòng hoặc chọn dòng mặc định của đợt trước khi đề xuất thanh toán.",
+      "payCreate": "Đề xuất thanh toán",
+      "payHint": "Sinh mỗi dòng CO một phiếu chi chờ trả ở Thanh toán NCC — kế toán chuyển khoản theo BM08 rồi đánh dấu đã trả.",
+      "payDueDate": "Hạn chuyển khoản",
+      "payOverCapNote": "Lý do vượt trần",
+      "payOverCapNotePlaceholder": "Vì sao ký vượt kế hoạch…",
+      "paySuccess": "Đã tạo {count} phiếu chi, tổng {total} đ. Kế toán đã được báo.",
+      "payCreatedInfo": "Đã đề xuất thanh toán: {count} phiếu, tổng {total} đ.",
+      "payViewLink": "Xem ở Thanh toán NCC →",
+      "payAlreadyCreated": "Đợt này đã đề xuất thanh toán rồi. Muốn đề xuất lại thì huỷ các phiếu chi cũ ở Thanh toán NCC trước.",
+      "payUnassigned": "Còn {amount, number} đ chưa gán được vào dòng CO nào — gán đủ trước khi đề xuất thanh toán.",
+      "payNothing": "Chưa có dòng nào có tiền để thanh toán.",
+      "payStaleLine": "Dòng CO \"{item}\" đã cũ (CO/CE đã đổi) — mở Chi phí & Công nợ bấm Làm mới rồi gán lại.",
+      "payOverCap": "CTV vượt trần các dòng: {items}. Cần người có quyền duyệt vượt trần đề xuất.",
+      "payOverCapReason": "CTV vượt trần các dòng: {items} — bắt buộc ghi lý do.",
+      "payProjectNotExecuting": "Dự án không ở giai đoạn thực thi — không đề xuất thanh toán được."
     },
     "planning": {
       "title": "Planning",
@@ -1801,7 +1844,11 @@
       "errReverseReason": "Bắt buộc ghi lý do khi bỏ đánh dấu đã trả.",
       "errReverseWrongStatus": "Phiếu này không ở trạng thái Đã trả.",
       "unmarkPaid": "Bỏ đánh dấu đã trả",
-      "unmarkNotePlaceholder": "Lý do…"
+      "unmarkNotePlaceholder": "Lý do…",
+      "cancelPayment": "Huỷ phiếu",
+      "cancelNotePlaceholder": "Lý do huỷ…",
+      "errCancelReason": "Bắt buộc ghi lý do huỷ phiếu.",
+      "errCancelWrongStatus": "Chỉ huỷ được phiếu chưa trả. Phiếu đã trả phải bỏ đánh dấu đã trả trước."
     },
     "debt": {
       "title": "Công nợ khách hàng (AR)",
@@ -1833,7 +1880,17 @@
       "errVoidHasPayments": "Hóa đơn đã có ghi nhận thu tiền — phải đảo khoản thu trước khi huỷ.",
       "errAlreadyVoided": "Hóa đơn này đã huỷ.",
       "voidBtn": "Huỷ hóa đơn",
-      "voidNotePlaceholder": "Lý do huỷ hóa đơn…"
+      "voidNotePlaceholder": "Lý do huỷ hóa đơn…",
+      "overCapNote": "Lý do vượt trần (nếu có)",
+      "overCapNoteHint": "Chỉ bắt buộc khi số tiền vượt trần CO/CE còn lại, hoặc dự án chưa có CO/CE.",
+      "overCapBadge": "Vượt trần",
+      "capRemaining": "Còn được xuất theo CO/CE: {remaining} đ",
+      "capNoSheet": "Dự án chưa có CO/CE — xuất hóa đơn sẽ cần quyền vượt trần + lý do.",
+      "dueDateHint": "Bỏ trống = ngày hóa đơn + điều khoản thanh toán của hợp đồng/khách hàng.",
+      "errExceedCap": "Vượt trần còn được xuất theo CO/CE (còn {remaining}). Cần người có quyền phát hành vượt trần.",
+      "errOverCapReason": "Hóa đơn vượt trần còn được xuất (còn {remaining}) — bắt buộc ghi lý do.",
+      "errNoSheetCap": "Dự án chưa có CO/CE nên chưa có trần để đối chiếu. Cần người có quyền phát hành vượt trần.",
+      "errNoSheetCapReason": "Dự án chưa có CO/CE để đối chiếu — bắt buộc ghi lý do."
     },
     "cashflow": {
       "title": "Ước tính Dòng tiền (toàn danh mục dự án)",

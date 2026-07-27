@@ -652,6 +652,10 @@ model CtvBatch {
   teamLeader    String? // "Nhóm trưởng"
   workLocation  String? // "Địa điểm làm việc" — điền vào {DiaDiemLamViec} của biên bản
   sourceFileKey String? // storageKey (lib/chat-storage.ts) của file Excel gốc đã import, để tải lại
+  /// Dòng CO/CE MẶC ĐỊNH của cả đợt — dòng nào không tự gán riêng thì kế thừa dòng này. Đặt ở cấp
+  /// đợt để sống sót qua import Excel replace-all (import xoá sạch gán theo từng dòng).
+  /// SetNull: dòng CO biến mất ở bản CO/CE mới KHÔNG được kéo đổ dữ liệu đợt CTV.
+  defaultFinanceCostLineId String?
   createdById   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -659,6 +663,11 @@ model CtvBatch {
   project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy Staff?        @relation(fields: [createdById], references: [id])
   rows      CtvContract[]
+  defaultFinanceCostLine FinanceCostLine? @relation("CtvBatchDefaultLine", fields: [defaultFinanceCostLineId], references: [id], onDelete: SetNull)
+  /// Phiếu chi NCC sinh từ đợt này ("Đề xuất thanh toán") — kênh trả CTV thật của TCM là kế toán
+  /// chuyển khoản theo BM08, nên tiền đi qua VendorPayment để ăn trần dòng CO + vào cashflow như
+  /// mọi khoản chi khác (quyết định CEO 27/07/2026 — không dựng hệ thanh toán song song).
+  vendorPayments VendorPayment[]
 
   @@index([projectId])
   @@map("ctv_batch")
@@ -701,12 +710,19 @@ model CtvContract {
   note              String?
   generatedFileKey  String? // storageKey (.docx đã điền) — set sau khi bấm "Tạo hợp đồng CTV"
   generatedAt       DateTime?
+  /// Dòng CO/CE mà chi phí CTV này thuộc về — để đối chiếu Kế hoạch ↔ Đã ký theo TỪNG dòng CO
+  /// (một đợt roadshow gồm MC/PG/Sup/Helper/Bảo vệ là 5-6 dòng CO đơn giá khác nhau, gán cả đợt
+  /// vào 1 dòng thì con số chênh lệch vô nghĩa). Trống = kế thừa defaultFinanceCostLineId của đợt.
+  /// SetNull: dòng CO biến mất ở bản mới KHÔNG được xoá biên bản CTV đã ký (chứng từ pháp lý).
+  financeCostLineId String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   batch CtvBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  financeCostLine FinanceCostLine? @relation("CtvRowLine", fields: [financeCostLineId], references: [id], onDelete: SetNull)
 
   @@index([batchId, sort])
+  @@index([financeCostLineId])
   @@map("ctv_contract")
 }
 
@@ -1364,6 +1380,8 @@ model FinanceCostLine {
   vendor   Vendor?   @relation(fields: [vendorId], references: [id])
   advances Advance[]
   vendorPayments VendorPayment[]
+  ctvRows     CtvContract[] @relation("CtvRowLine")
+  ctvBatchesDefault CtvBatch[] @relation("CtvBatchDefaultLine")
 
   @@unique([projectId, lineKey])
   @@index([projectId])
@@ -1422,12 +1440,20 @@ model VendorPayment {
   amount      BigInt
   dueDate     DateTime?
   paidDate    DateTime?
-  status      String    @default("SCHEDULED") // SCHEDULED | PAID
+  status      String    @default("SCHEDULED") // SCHEDULED | PAID | CANCELED
   invoiceNo   String?
   note        String?
   /// Lý do lập phiếu VƯỢT trần chi của dự án — có giá trị = phiếu đã vượt trần (hiện badge cảnh
   /// báo ở danh sách). Null = phiếu nằm trong trần. Đòi quyền finance.vendor_payment.over_cap.
   overCapNote String?
+  /// Huỷ phiếu lập nhầm (chỉ khi CHƯA trả — phiếu đã trả phải "bỏ đánh dấu đã trả" trước).
+  /// KHÔNG xoá bản ghi; phiếu huỷ bị loại khỏi trần chi, cashflow và danh sách.
+  canceledById String?
+  canceledAt   DateTime?
+  cancelNote   String?
+  /// Đợt CTV (BM08) sinh ra phiếu này qua "Đề xuất thanh toán CTV" — mỗi phiếu = tổng tiền các
+  /// dòng CTV của MỘT dòng CO trong đợt. SetNull: xoá đợt không được xoá phiếu chi đã lập.
+  ctvBatchId  String?
   createdById String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1438,8 +1464,10 @@ model VendorPayment {
   // SetNull chứ không Cascade: dòng CO/CE biến mất (đổi tên/xoá ở bản mới) KHÔNG được làm mất
   // chứng từ đã chi — khoản chi vẫn còn, chỉ mất liên kết dòng.
   financeCostLine FinanceCostLine? @relation(fields: [financeCostLineId], references: [id], onDelete: SetNull)
+  ctvBatch  CtvBatch? @relation(fields: [ctvBatchId], references: [id], onDelete: SetNull)
 
   @@index([vendorId, status])
+  @@index([ctvBatchId])
   @@map("vendor_payment")
 }
 
@@ -1456,6 +1484,10 @@ model ClientInvoice {
   /// Lần gần nhất đã bắn nhắc nợ quá hạn. Chống spam: hóa đơn quá hạn 200 ngày mà nhắc mỗi 5 phút
   /// thì không ai đọc chuông nữa. Chu kỳ nhắc lại lấy từ setting finance.ar_reminder_repeat_days.
   arReminderSentAt DateTime?
+  /// Lý do phát hành VƯỢT trần (CE + Chi hộ của CO/CE hiện hành trừ đã xuất) hoặc phát hành cho
+  /// dự án CHƯA có CO/CE. Có giá trị = hóa đơn vượt trần (badge cảnh báo ở trang Công nợ).
+  /// Đòi quyền finance.invoice.over_cap. Cửa Nghiệm thu có trần CỨNG riêng, không đi qua đây.
+  overCapNote String?
   /// Huỷ hóa đơn (xuất nhầm số/sai tiền). KHÔNG xoá bản ghi — số hóa đơn đã phát hành phải truy
   /// được. Hóa đơn đã huỷ bị loại khỏi MỌI phép tính công nợ và khỏi điều kiện kết thúc dự án.
   /// Chỉ huỷ được khi chưa ghi nhận lần thu nào (có thu rồi thì phải đảo khoản thu trước).

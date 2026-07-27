@@ -180,7 +180,7 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
 export type LineDisbursement = {
   /** Tạm ứng chưa huỷ — GỘP cả 2 loại: ứng cho NV giữ tiền (STAFF) và ứng chuyển thẳng NCC (VENDOR). */
   advanced: number;
-  /** Thanh toán NCC đã lập cho dòng này (mọi trạng thái trừ huỷ). */
+  /** Thanh toán NCC đã lập cho dòng này (SCHEDULED + PAID, không tính phiếu đã huỷ). */
   paid: number;
   /** Tổng đã chi ra = advanced + paid. */
   disbursed: number;
@@ -204,7 +204,7 @@ export async function lineDisbursement(financeCostLineId: string): Promise<LineD
   const [line, advAgg, payAgg] = await Promise.all([
     prisma.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true } }),
     prisma.advance.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
-    prisma.vendorPayment.aggregate({ where: { financeCostLineId }, _sum: { amount: true } }),
+    prisma.vendorPayment.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
   ]);
   const advanced = Number(advAgg._sum.amount ?? BigInt(0));
   const paid = Number(payAgg._sum.amount ?? BigInt(0));
@@ -236,13 +236,25 @@ export type ProjectDisbursement = {
  *
  * LOẠI Chi hộ khỏi capBase: Chi hộ là tiền ứng giùm khách, ngoài giá vốn (bất biến #2). Nó có trần
  * riêng theo từng dòng qua lineDisbursement, không trộn vào túi giá vốn của dự án.
+ *
+ * LOẠI Chi hộ khỏi CẢ disbursed: capBase đã bỏ dòng Chi hộ thì khoản chi GẮN vào dòng Chi hộ cũng
+ * phải bỏ — nếu không, chi hộ gặm trần giá vốn (tử số có, mẫu số không). Khoản chi cấp dự án
+ * (không gắn dòng) vẫn đếm đủ vì không có cách biết nó thuộc Chi hộ hay giá vốn.
  */
 export async function projectDisbursement(projectId: string): Promise<ProjectDisbursement> {
+  // "Không thuộc dòng Chi hộ": tạm ứng LUÔN gắn dòng (cột bắt buộc) → chỉ cần dòng non-proxy;
+  // phiếu chi có thể không gắn dòng (khoản cấp dự án) → không gắn dòng HOẶC dòng non-proxy.
   const [capAgg, lineCount, advAgg, payAgg] = await Promise.all([
     prisma.financeCostLine.aggregate({ where: { projectId, isStale: false, isProxy: false }, _sum: { netAmount: true } }),
     prisma.financeCostLine.count({ where: { projectId, isStale: false, isProxy: false } }),
-    prisma.advance.aggregate({ where: { projectId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
-    prisma.vendorPayment.aggregate({ where: { projectId }, _sum: { amount: true } }),
+    prisma.advance.aggregate({
+      where: { projectId, status: { not: "CANCELED" }, financeCostLine: { isProxy: false } },
+      _sum: { amount: true },
+    }),
+    prisma.vendorPayment.aggregate({
+      where: { projectId, status: { not: "CANCELED" }, OR: [{ financeCostLineId: null }, { financeCostLine: { isProxy: false } }] },
+      _sum: { amount: true },
+    }),
   ]);
   const capBase = Number(capAgg._sum.netAmount ?? BigInt(0));
   const advanced = Number(advAgg._sum.amount ?? BigInt(0));

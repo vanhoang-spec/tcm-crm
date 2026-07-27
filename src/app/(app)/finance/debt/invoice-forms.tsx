@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { NumberField } from "@/components/ui/number-field";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createClientInvoice, recordClientPayment, voidClientInvoice, type FinanceFormState } from "../actions";
+import { createClientInvoice, recordClientPayment, voidClientInvoice, type FinanceFormState, type FinanceFormStateWithValues } from "../actions";
 
 /**
  * Hai form của trang Công nợ, tách ra client để HIỆN LỖI từ server action.
@@ -27,20 +27,37 @@ function ErrorLine({ state }: { state: FinanceFormState }) {
   );
 }
 
-export function CreateInvoiceForm({ projects }: { projects: { value: string; label: string }[] }) {
+export function CreateInvoiceForm({
+  projects,
+  projectCaps,
+}: {
+  projects: { value: string; label: string }[];
+  /** Trần còn được xuất theo dự án (CE + Chi hộ của CO/CE hiện hành trừ đã xuất) — null = chưa có
+   *  CO/CE. Chỉ để HIỂN THỊ trước khi bấm lưu; server tính lại trong transaction. */
+  projectCaps: Record<string, number | null>;
+}) {
   const t = useTranslations("finance.debt");
   const tc = useTranslations("finance.common");
-  const [state, formAction, pending] = useActionState<FinanceFormState, FormData>(createClientInvoice, {});
+  const [state, formAction, pending] = useActionState<FinanceFormStateWithValues, FormData>(createClientInvoice, {});
+  const [projectId, setProjectId] = useState("");
+  const cap = projectId ? projectCaps[projectId] : undefined;
 
   return (
     <form action={formAction} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
       <label className="text-xs text-muted-foreground">
         {tc("projectLabel")}
-        <SearchableSelect name="projectId" required placeholder={tc("selectProject")} options={projects} />
+        <SearchableSelect name="projectId" required placeholder={tc("selectProject")} options={projects} onChange={setProjectId} />
+        {cap !== undefined && (
+          <span className={`mt-1 block text-[11px] leading-snug ${cap == null ? "text-warning" : ""}`}>
+            {cap == null ? t("capNoSheet") : t("capRemaining", { remaining: cap.toLocaleString("vi-VN") })}
+          </span>
+        )}
       </label>
       <label className="text-xs text-muted-foreground">
         {t("invoiceNo")}
-        <input name="invoiceNo" required className={input} />
+        {/* defaultValue từ state: React 19 reset input uncontrolled sau mỗi action — không giữ lại
+            thì luồng vượt trần (lỗi → điền lý do → submit lại) bắt người dùng gõ lại số hóa đơn. */}
+        <input name="invoiceNo" required defaultValue={state.values?.invoiceNo ?? ""} className={input} />
       </label>
       <label className="text-xs text-muted-foreground">
         {t("amount")}
@@ -53,6 +70,12 @@ export function CreateInvoiceForm({ projects }: { projects: { value: string; lab
       <label className="text-xs text-muted-foreground">
         {t("dueDate")}
         <DateField name="dueDate" className={input} />
+        <span className="mt-1 block text-[11px] leading-snug">{t("dueDateHint")}</span>
+      </label>
+      <label className="text-xs text-muted-foreground">
+        {t("overCapNote")}
+        <input name="overCapNote" defaultValue={state.values?.overCapNote ?? ""} className={input} />
+        <span className="mt-1 block text-[11px] leading-snug">{t("overCapNoteHint")}</span>
       </label>
       <div className="flex items-end">
         <button

@@ -133,16 +133,20 @@ body {
   border-color: var(--border);
 }
 
-/* In sơ đồ tổ chức (/orgchart) — ẩn toàn bộ app chrome, chỉ giữ lại khung sơ đồ. */
+/* In sơ đồ tổ chức (/orgchart) + bản in báo giá CO/CE (/projects/[id]/co-ce/print) — ẩn toàn bộ
+   app chrome (sidebar/header/dock), chỉ giữ lại vùng in. */
 @media print {
   body * {
     visibility: hidden;
   }
   #org-chart-print-area,
-  #org-chart-print-area * {
+  #org-chart-print-area *,
+  #costsheet-print-area,
+  #costsheet-print-area * {
     visibility: visible;
   }
-  #org-chart-print-area {
+  #org-chart-print-area,
+  #costsheet-print-area {
     position: absolute;
     left: 0;
     top: 0;

@@ -92,6 +92,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "projects.staffing.edit", module: "projects", labelVi: "Sửa bảng nhân sự vận hành", labelEn: "Edit staffing grid" },
   { code: "projects.order.manage", module: "projects", labelVi: "Sửa ORDER (hạng mục đặt hàng)", labelEn: "Edit orders" },
   { code: "projects.order.dispatch", module: "projects", labelVi: "Phát lệnh ORDER cho bộ phận", labelEn: "Dispatch orders to departments" },
+  { code: "projects.order.respond", module: "projects", labelVi: "Nhận / trả kết quả ORDER (phía bộ phận)", labelEn: "Accept orders / submit order results" },
+  { code: "projects.task.manage", module: "projects", labelVi: "Tạo / xoá / giao task bộ phận (Planning, Thu mua, Vận hành, Sản xuất)", labelEn: "Create / delete / assign department tasks" },
+  { code: "projects.task.submit", module: "projects", labelVi: "Nộp kết quả task bộ phận", labelEn: "Submit department task work" },
+  { code: "projects.task.approve", module: "projects", labelVi: "Duyệt / trả lại task bộ phận", labelEn: "Approve / reject department tasks" },
   { code: "projects.planning.manage", module: "projects", labelVi: "Giao & hoàn thành chặng Planning", labelEn: "Assign & complete planning stages" },
   { code: "projects.proposal.submit", module: "projects", labelVi: "Nộp phiên bản proposal", labelEn: "Submit proposal version" },
   { code: "projects.proposal.approve", module: "projects", labelVi: "Yêu cầu sửa / chốt proposal", labelEn: "Request revision / confirm proposal", sensitive: true },
@@ -126,6 +130,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "finance.vendor_payment.pay", module: "finance", labelVi: "Đánh dấu đã chi cho NCC", labelEn: "Mark vendor payment paid", sensitive: true },
   { code: "finance.vendor_payment.over_cap", module: "finance", labelVi: "Lập phiếu chi vượt trần chi của dự án (kèm lý do)", labelEn: "Create vendor payment above project cap (with reason)", sensitive: true },
   { code: "finance.invoice.manage", module: "finance", labelVi: "Phát hành hoá đơn khách", labelEn: "Issue client invoice", sensitive: true },
+  { code: "finance.invoice.over_cap", module: "finance", labelVi: "Phát hành hoá đơn vượt trần CO/CE hoặc cho dự án chưa có CO/CE (kèm lý do)", labelEn: "Issue invoice above cost sheet cap or without a cost sheet (with reason)", sensitive: true },
   { code: "finance.payment.record", module: "finance", labelVi: "Ghi nhận khách thanh toán", labelEn: "Record client payment", sensitive: true },
   { code: "finance.costlines.refresh", module: "finance", labelVi: "Đồng bộ lại dòng chi phí từ CO/CE", labelEn: "Refresh cost lines from cost sheet" },
 

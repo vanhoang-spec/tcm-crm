@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 import { isTaskLocked, markOrderItemDone } from "@/lib/projects";
 
 // Mirror src/app/(app)/creative/actions.ts — bản tổng quát cho DepartmentTask (PLANNING/PCC/OPE/PRO).
@@ -52,6 +53,7 @@ function done(department: string, projectId?: string) {
 
 /** Lead giao task cho 1 nhân sự — chọn deadline + tick "không cần lead duyệt". */
 export async function assignDepartmentTask(taskId: string, formData: FormData) {
+  await requirePermission("projects.task.manage");
   const task = await loadUnlocked(taskId);
   if (!task) return;
   const assigneeId = nullable(formData.get("assigneeId"));
@@ -76,6 +78,7 @@ export async function assignDepartmentTask(taskId: string, formData: FormData) {
 
 /** Nhân sự bấm GỬI — nhập link kết quả + số giờ (bội số 0.25). Định tuyến theo cờ lead-không-cần-duyệt. */
 export async function submitDepartmentTask(taskId: string, formData: FormData) {
+  await requirePermission("projects.task.submit");
   const task = await loadUnlocked(taskId);
   if (!task) return;
   const link = str(formData.get("deliverableLinkUrl"));
@@ -107,6 +110,7 @@ export async function submitDepartmentTask(taskId: string, formData: FormData) {
 
 /** Lead duyệt task SUBMITTED → trả kết quả cho người ORDER. */
 export async function approveDepartmentTask(taskId: string) {
+  await requirePermission("projects.task.approve");
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "SUBMITTED") return;
   const staffId = await getCurrentStaffId();
@@ -121,6 +125,7 @@ export async function approveDepartmentTask(taskId: string) {
 
 /** Lead trả lại task để sửa → REVISION, tăng revisionCount, báo nhân sự. */
 export async function rejectDepartmentTask(taskId: string, formData: FormData) {
+  await requirePermission("projects.task.approve");
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "SUBMITTED") return;
   const staffId = await getCurrentStaffId();
@@ -135,6 +140,7 @@ export async function rejectDepartmentTask(taskId: string, formData: FormData) {
 
 /** Lead tạo task lẻ (ngoài luồng tự sinh) — trong tab bộ phận đang mở. */
 export async function createDepartmentTask(projectId: string, department: string, formData: FormData) {
+  await requirePermission("projects.task.manage");
   const title = str(formData.get("title"));
   if (!title) return;
   const project = await prisma.project.findUnique({ where: { id: projectId }, include: { status: true } });
@@ -155,6 +161,7 @@ export async function createDepartmentTask(projectId: string, department: string
 
 /** Xóa task chưa giao (và dự án chưa bị khóa). */
 export async function deleteDepartmentTask(taskId: string) {
+  await requirePermission("projects.task.manage");
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "UNASSIGNED") return;
   await prisma.departmentTask.delete({ where: { id: taskId } });

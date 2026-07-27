@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
+import { requirePermission } from "@/lib/permissions";
 import { ORDER_DEPARTMENT_LABELS } from "@/lib/bidding";
 import { spawnTasksForCreativeOrder } from "@/lib/creative";
 import { spawnPlanningJobForOrder } from "@/lib/planning";
@@ -24,6 +25,7 @@ const DEPARTMENT_TAB_SEG: Record<string, string> = {
 
 /** Đặt lịch họp Brainstorm — mời nhiều người, gửi notification NGAY, không có bước Accept. */
 export async function createBrainstormOrder(projectId: string, formData: FormData) {
+  await requirePermission("projects.order.dispatch");
   const meetingAtRaw = String(formData.get("meetingAt") ?? "").trim();
   if (!meetingAtRaw) return;
   const meetingLocation = toNullable(String(formData.get("meetingLocation") ?? ""));
@@ -75,6 +77,7 @@ export async function createBrainstormOrder(projectId: string, formData: FormDat
 
 /** Order gửi 1 trong 5 phòng ban — cần phòng ban bấm "Chấp nhận" mới coi là đã nhận task. */
 export async function createDepartmentOrder(projectId: string, department: string, formData: FormData) {
+  await requirePermission("projects.order.dispatch");
   if (!(department in ORDER_DEPARTMENT_LABELS)) return;
 
   const extraBriefInfo = toNullable(String(formData.get("extraBriefInfo") ?? ""));
@@ -156,6 +159,7 @@ export async function createDepartmentOrder(projectId: string, department: strin
 
 /** Phòng ban bấm "Chấp nhận" — xác nhận đã nhận task và sẽ trả output đúng timeline. */
 export async function acceptOrder(projectId: string, orderId: string) {
+  await requirePermission("projects.order.respond");
   const staffId = await getCurrentStaffId();
   await prisma.projectOrder.update({
     where: { id: orderId },
@@ -166,6 +170,7 @@ export async function acceptOrder(projectId: string, orderId: string) {
 
 /** Phòng ban hoàn thành task → gửi link kết quả (Drive/OneDrive), báo ngay cho Account đã Order. */
 export async function submitOrderResult(projectId: string, orderId: string, formData: FormData) {
+  await requirePermission("projects.order.respond");
   const resultLinkUrl = String(formData.get("resultLinkUrl") ?? "").trim();
   if (!resultLinkUrl) return;
 

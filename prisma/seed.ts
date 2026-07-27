@@ -1968,6 +1968,7 @@ async function main() {
     code === "dashboard.cashflow" || // (2)
     code === "dashboard.all_teams" || // (2)
     code === "finance.vendor_payment.over_cap" || // vượt trần chi dự án — chỉ cấp exec, xem EXEC_EXTRA
+    code === "finance.invoice.over_cap" || // hóa đơn vượt trần CO/CE — chỉ cấp exec, xem EXEC_EXTRA
     code.startsWith("ai."); // (3)
 
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
@@ -1977,6 +1978,7 @@ async function main() {
     "ai.board_report",
     "ai.trend",
     "finance.vendor_payment.over_cap",
+    "finance.invoice.over_cap",
   ];
 
   /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
@@ -2001,6 +2003,50 @@ async function main() {
     if ((await prisma.rolePermission.count({ where: { roleId } })) > 0) continue; // đã cấu hình tay → không đụng
     const codes = new Set([...baseGrantCodes, ...(extraByGroup[r.groupCode] ?? []), ...(extraByRole[r.code] ?? [])]);
     await prisma.rolePermission.createMany({ data: [...codes].map((permissionCode) => ({ roleId, permissionCode })) });
+  }
+
+  // ── Vòng 4b: backfill mã quyền MỚI cho role ĐÃ có grant (mỗi đợt chạy đúng MỘT lần) ──
+  // Vòng 4 chỉ điền cho role chưa có dòng grant nào, nên mã thêm vào catalog SAU khi ma trận đã
+  // dựng sẽ không bao giờ tự tới tay các role đang dùng — làm xong tính năng mà chỉ ADMIN thấy
+  // (đúng chuyện đã xảy ra với finance.vendor_payment.over_cap: 0 grant suốt một đợt).
+  // Đánh dấu từng đợt vào bảng setting (module "seed"): re-seed KHÔNG chạy lại đợt đã xong, để
+  // không đè lên việc admin đã cố tình BỎ tick sau đó.
+  const backfills: { key: string; codes: string[]; roleFilter?: (r: (typeof roleSeeds)[number]) => boolean }[] = [
+    // 27/07/2026 — gác 10 action ORDER + task bộ phận (trước đó KHÔNG gác, ai đăng nhập cũng làm
+    // được): grant cho MỌI role đúng nguyên tắc "grant mặc định = quyền mọi người có trước khi bật
+    // ma trận"; BGĐ siết dần ở /settings/roles.
+    { key: "20260727_order_task_codes", codes: ["projects.order.respond", "projects.task.manage", "projects.task.submit", "projects.task.approve"] },
+    // 27/07/2026 — hai mã vượt trần (phiếu chi + hóa đơn) cấp cho BGĐ + CFO, theo quyết định chủ
+    // dự án (cùng nhóm được duyệt CO/CE & override margin). Các role khác muốn có thì BGĐ tick.
+    {
+      key: "20260727_over_cap_exec",
+      codes: ["finance.vendor_payment.over_cap", "finance.invoice.over_cap"],
+      roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO",
+    },
+  ];
+  for (const bf of backfills) {
+    const marker = await prisma.setting.findUnique({
+      where: { module_key_scope_scopeRef: { module: "seed", key: bf.key, scope: "GLOBAL", scopeRef: "" } },
+    });
+    if (marker) continue;
+    for (const r of roleSeeds) {
+      if (r.code === "ADMIN") continue;
+      if (bf.roleFilter && !bf.roleFilter(r)) continue;
+      const roleId = roleByCode[r.code].id;
+      if ((await prisma.rolePermission.count({ where: { roleId } })) === 0) continue; // role trống — Vòng 4 đã/sẽ lo trọn bộ
+      const have = new Set(
+        (await prisma.rolePermission.findMany({ where: { roleId, permissionCode: { in: bf.codes } }, select: { permissionCode: true } })).map(
+          (g) => g.permissionCode,
+        ),
+      );
+      const missing = bf.codes.filter((c) => !have.has(c));
+      if (missing.length > 0) {
+        await prisma.rolePermission.createMany({ data: missing.map((permissionCode) => ({ roleId, permissionCode })) });
+      }
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: bf.key, scope: "GLOBAL", scopeRef: "", value: JSON.stringify(new Date().toISOString()) },
+    });
   }
 
   // ── Module ⑥ KPI — tiêu chí đánh giá + lương vị trí + điểm mẫu ──

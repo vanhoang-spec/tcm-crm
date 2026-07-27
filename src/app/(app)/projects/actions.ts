@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit, toNum } from "@/lib/utils";
 import { clientBillableTotal } from "@/lib/bidding";
+import { arDefaultDueDate } from "@/lib/ar";
 import { hashGuestToken } from "@/lib/guest-session";
 import { syncTimelineOrders, dispatchOrder } from "@/lib/project-orders";
 import { spawnTasksForCreativeOrder } from "@/lib/creative";
@@ -503,13 +504,17 @@ export async function createLiquidationInvoice(
   const amount = Math.round(Number(str(formData.get("amount"))) || 0);
   if (!invoiceNo || amount <= 0) return { error: t("errRequired") };
 
-  const [project, sheet] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, select: { clientId: true } }),
+  const [project, sheet, contract] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { clientId: true, client: { select: { paymentTermDays: true } } },
+    }),
     prisma.costSheet.findFirst({
       where: { projectId, version: "CTRACT" },
       orderBy: { createdAt: "desc" },
       include: { sentToLiquidationRevision: true },
     }),
+    prisma.contract.findUnique({ where: { projectId }, select: { paymentTermDays: true } }),
   ]);
   const rev = sheet?.sentToLiquidationRevision ?? null;
   if (!project || !rev) return { error: t("errNoSentRev") };
@@ -520,14 +525,19 @@ export async function createLiquidationInvoice(
   if (amount > remaining) return { error: t("errExceedBillable", { rev: rev.revNo, remaining }) };
 
   const staffId = await getCurrentStaffId();
+  const invoiceDate = dateOrNull(formData.get("invoiceDate")) ?? new Date();
   const created = await prisma.clientInvoice.create({
     data: {
       projectId,
       clientId: project.clientId,
       invoiceNo,
-      invoiceDate: dateOrNull(formData.get("invoiceDate")) ?? new Date(),
+      invoiceDate,
       amount: BigInt(amount),
-      dueDate: dateOrNull(formData.get("dueDate")),
+      // Bỏ trống hạn = ngày hóa đơn + điều khoản hợp đồng/khách hàng — dueDate null làm hóa đơn
+      // "quá hạn" ngay hôm sau (arDueBase rơi về ngày hóa đơn) và chuông nhắc nợ kêu bậy.
+      dueDate:
+        dateOrNull(formData.get("dueDate")) ??
+        arDefaultDueDate(invoiceDate, contract?.paymentTermDays ?? project.client.paymentTermDays),
       note: nullable(formData.get("note")),
       createdById: staffId,
     },

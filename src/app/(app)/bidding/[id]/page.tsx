@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { NumberField } from "@/components/ui/number-field";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Flag, Check, X, Link2 } from "lucide-react";
+import { ArrowLeft, Pencil, Flag, Check, X, Link2, FileSpreadsheet, Printer } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
@@ -339,7 +339,23 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
       <section className="rounded-xl border border-border bg-surface p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-foreground">{tCostsheet("title")}</h2>
-          {canApproveCostSheet && <span className="hidden sm:block"><ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} belowMinMargin={sheetMarginPct < minMargin} /></span>}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Xuất báo giá — dùng nhiều nhất ở giai đoạn thầu (16/21 dự án đang BIDDING). */}
+            {sheet && (
+              <>
+                <a href={`/api/costsheet/${project.id}/quotation?mode=client`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> {tCostsheet("exportClientXlsx")}
+                </a>
+                <a href={`/api/costsheet/${project.id}/quotation?mode=internal`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> {tCostsheet("exportInternalXlsx")}
+                </a>
+                <Link href={`/projects/${project.id}/co-ce/print`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                  <Printer className="h-3.5 w-3.5" /> {tCostsheet("printView")}
+                </Link>
+              </>
+            )}
+            {canApproveCostSheet && <span className="hidden sm:block"><ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} belowMinMargin={sheetMarginPct < minMargin} /></span>}
+          </div>
         </div>
         {sheet?.rejectedAt && (
           <p className="mb-3 rounded-lg border border-danger/30 bg-danger-bg px-3 py-2 text-xs text-danger">

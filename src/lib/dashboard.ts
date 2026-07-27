@@ -77,7 +77,9 @@ export async function getCashflowMtd(now: Date): Promise<CashflowMtd> {
     prisma.clientPayment.findMany({ where: { paidDate: { gte: monthStart, lt: now } }, select: { amount: true } }),
     prisma.clientInvoice.findMany({ where: { voidedAt: null }, select: { amount: true, invoiceDate: true, dueDate: true, payments: { select: { amount: true } } } }),
     prisma.vendorPayment.findMany({ where: { status: "PAID", paidDate: { gte: monthStart, lt: now } }, select: { amount: true } }),
-    prisma.advance.findMany({ where: { disbursedAt: { gte: monthStart, lt: now } }, select: { amount: true } }),
+    // Loại tạm ứng đã HUỶ-SAU-GIẢI-NGÂN (reverseDisbursedAdvance): tiền đã thu hồi thì không còn
+    // là "đã chi" của tháng — giữ lại sẽ thổi phồng cash-out thực tế.
+    prisma.advance.findMany({ where: { disbursedAt: { gte: monthStart, lt: now }, status: { not: "CANCELED" } }, select: { amount: true } }),
     // dueDate nullable và form cho để trống — Prisma/SQL loại NULL khỏi `lt` nên phiếu chưa có hạn
     // đang VÔ HÌNH ở đây, trong khi cashflow.ts coi là cần chi ngay hôm nay. Lấy cả hai cho khớp.
     prisma.vendorPayment.findMany({

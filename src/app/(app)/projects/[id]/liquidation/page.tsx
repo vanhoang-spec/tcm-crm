@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/ui/date-field";
 import { formatDate, formatDateTime, formatNumber, formatPercent, pickLabel, toNum } from "@/lib/utils";
 import { clientBillableTotal, computeMarginPct } from "@/lib/bidding";
+import { ctvRowCost, ctvEffectiveLineId, ctvPlanVsActual } from "@/lib/ctv-costing";
 import { STATUS_TONE } from "@/lib/bidding-ui";
 import type { Locale } from "@/i18n/locales";
 import { confirmClientAcceptance, setExpectedAcceptanceSignDate, sendCostSheetToLiquidation } from "../../actions";
@@ -31,6 +32,7 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
       where: { id },
       include: {
         status: true,
+        client: { select: { paymentTermDays: true } },
         contract: { include: { clientAcceptanceConfirmedBy: true } },
         costSheets: {
           where: { version: "CTRACT" },
@@ -58,6 +60,39 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
   const sheet = project.costSheets[0] ?? null;
   const sentRev = sheet?.sentToLiquidationRevision ?? null;
 
+  // Chênh CO ↔ CTV đã nhập (BM08): CO là số KẾ HOẠCH cho tới khi người phụ trách sửa lại bằng số
+  // thật lúc nghiệm thu (ra revision mới — đúng quy trình 3 revision T013 đã đi). Còn chênh mà đã
+  // chốt là margin nuôi KPI sai. Chỉ CẢNH BÁO, không chặn.
+  const [ctvBatches, ctvLines] = await Promise.all([
+    prisma.ctvBatch.findMany({
+      where: { projectId: id },
+      select: {
+        defaultFinanceCostLineId: true,
+        rows: { select: { amount: true, pitTax: true, netReceived: true, grossNet: true, financeCostLineId: true } },
+      },
+    }),
+    prisma.financeCostLine.findMany({
+      where: { projectId: id, isStale: false },
+      select: { id: true, itemCode: true, itemName: true, sectionName: true, netAmount: true, isProxy: true },
+    }),
+  ]);
+  const ctvCmp = ctvPlanVsActual(
+    ctvLines.map((l) => ({ ...l, netAmount: toNum(l.netAmount) })),
+    ctvBatches.flatMap((b) =>
+      b.rows.map((r) => ({
+        lineId: ctvEffectiveLineId(r.financeCostLineId, b.defaultFinanceCostLineId),
+        cost: ctvRowCost({
+          amount: r.amount == null ? null : toNum(r.amount),
+          pitTax: r.pitTax == null ? null : toNum(r.pitTax),
+          netReceived: r.netReceived == null ? null : toNum(r.netReceived),
+          grossNet: r.grossNet,
+        }),
+      })),
+    ),
+  );
+  // Chỉ tính dòng giá vốn (bất biến #2: Chi hộ ngoài margin) + tiền CTV chưa gán dòng.
+  const ctvVariance = ctvCmp.byLine.filter((l) => !l.isProxy).reduce((s, l) => s + l.variance, 0) + ctvCmp.unassignedCost;
+
   // Bản đã chuyển nghiệm thu là ẢNH CHỤP thủ công: CO/CE vẫn sửa tiếp được sau đó. Không cảnh báo
   // thì kế toán xuất hóa đơn theo số cũ mà không biết.
   const latestRevNo = sheet?.revisions[0]?.revNo ?? null;
@@ -68,12 +103,13 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
   const issued = invoices.reduce((s, inv) => s + toNum(inv.amount), 0);
   const remainingBillable = billable - issued;
 
-  // Ngày mặc định trên form: hôm nay, và hạn = hôm nay + payment term của hợp đồng (UTC, HANDOVER 4.3).
+  // Ngày mặc định trên form: hôm nay, và hạn = hôm nay + payment term (UTC, HANDOVER 4.3).
+  // Hợp đồng chưa nhập điều khoản thì rơi về điều khoản của KHÁCH (Client.paymentTermDays, mặc
+  // định 90) — trước đây rơi về "" nghĩa là dueDate NULL, hóa đơn mai đã "quá hạn".
   const now = new Date();
   const todayIso = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString().slice(0, 10);
-  const dueIso = contract?.paymentTermDays
-    ? new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + contract.paymentTermDays)).toISOString().slice(0, 10)
-    : "";
+  const termDays = contract?.paymentTermDays ?? project.client.paymentTermDays;
+  const dueIso = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + termDays)).toISOString().slice(0, 10);
 
   return (
     <div className="space-y-4">
@@ -128,6 +164,18 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
           </>
         ) : (
           <>
+            {/* CTV đã nhập lệch CO kế hoạch — nhắc cập nhật CO/CE bằng số thật TRƯỚC khi chốt.
+                Cùng vị trí với cảnh báo bản nghiệm thu cũ (hạng mục B2). */}
+            {ctvVariance !== 0 && (
+              <div className="mt-3 rounded-lg border border-warning/40 bg-warning-bg px-3 py-2">
+                <p className="text-xs text-warning">
+                  {t("ctvVarianceWarning", {
+                    amount: formatNumber(Math.abs(ctvVariance), locale),
+                    direction: ctvVariance > 0 ? t("ctvVarianceOver") : t("ctvVarianceUnder"),
+                  })}
+                </p>
+              </div>
+            )}
             {isStaleRev && (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning-bg px-3 py-2">
                 <p className="text-xs text-warning">{t("staleRevWarning", { sent: sentRev.revNo, latest: latestRevNo ?? 0 })}</p>

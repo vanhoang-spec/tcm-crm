@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { arStatus, type ArAgingBucket } from "@/lib/ar";
+import { clientBillableTotal } from "@/lib/bidding";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
 import { CreateInvoiceForm, RecordPaymentForm, VoidInvoiceButton } from "./invoice-forms";
@@ -22,6 +23,26 @@ export default async function DebtPage() {
     }),
     prisma.project.findMany({ where: { status: { code: { in: [...EXECUTION_STATUS_CODES] } } }, orderBy: { updatedAt: "desc" } }),
   ]);
+
+  // Trần còn được xuất theo dự án (hiển thị trước cho kế toán; server tính lại trong transaction):
+  // CE + Chi hộ của bảng CO/CE CTRACT hiện hành trừ hóa đơn đã xuất chưa huỷ. null = chưa có CO/CE.
+  const [sheets, issuedByProject] = await Promise.all([
+    prisma.costSheet.findMany({
+      where: { projectId: { in: projects.map((p) => p.id) }, version: "CTRACT" },
+      orderBy: { createdAt: "desc" },
+      select: { projectId: true, ceTotal: true, chiHo: true },
+    }),
+    prisma.clientInvoice.groupBy({ by: ["projectId"], where: { voidedAt: null }, _sum: { amount: true } }),
+  ]);
+  const issuedBy = new Map(issuedByProject.map((r) => [r.projectId, toNum(r._sum.amount ?? BigInt(0))]));
+  const projectCaps: Record<string, number | null> = {};
+  for (const p of projects) projectCaps[p.id] = null;
+  for (const s of sheets) {
+    // findMany trả mọi bảng CTRACT theo createdAt desc — chỉ lấy bảng MỚI NHẤT của mỗi dự án.
+    if (projectCaps[s.projectId] == null) {
+      projectCaps[s.projectId] = clientBillableTotal(toNum(s.ceTotal), toNum(s.chiHo)) - (issuedBy.get(s.projectId) ?? 0);
+    }
+  }
 
   const rows = invoices.map((inv) => {
     const paidAmounts = inv.payments.map((p) => toNum(p.amount));
@@ -75,7 +96,7 @@ export default async function DebtPage() {
       {/* Create invoice */}
       <details className="rounded-xl border border-dashed border-border-strong p-4">
         <summary className="cursor-pointer text-sm font-medium text-brand-600">{t("createInvoice")}</summary>
-        <CreateInvoiceForm projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))} />
+        <CreateInvoiceForm projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))} projectCaps={projectCaps} />
       </details>
 
       {/* Invoices */}
@@ -86,6 +107,12 @@ export default async function DebtPage() {
               <div>
                 <span className="font-semibold text-foreground">{inv.invoiceNo}</span>
                 <span className="ml-2 text-xs text-muted-foreground">{inv.client.name} · {inv.project.code}</span>
+                {/* Hóa đơn vượt trần phải nhìn thấy ngay trong danh sách, kèm lý do ở tooltip. */}
+                {inv.overCapNote && (
+                  <span className="ml-2" title={inv.overCapNote}>
+                    <Badge tone="danger">{t("overCapBadge")}</Badge>
+                  </span>
+                )}
               </div>
               {outstanding > 0 && (
                 <Badge tone={bucket === "d60plus" ? "danger" : bucket === "current" ? "neutral" : "warning"}>

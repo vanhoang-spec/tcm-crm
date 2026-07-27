@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Gavel } from "lucide-react";
+import { ArrowRight, FileSpreadsheet, Gavel, Printer } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { formatNumber, formatPercent, formatDateTime, toNum } from "@/lib/utils";
@@ -148,12 +148,28 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
           <h2 className="text-lg font-semibold text-foreground">{t("title")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t("desc")}</p>
         </div>
-        <Link
-          href={`/bidding/${id}`}
-          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
-        >
-          <Gavel className="h-3.5 w-3.5" /> {t("openBuilder")}
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Xuất file — chỉ khi đã có bảng CO/CE. Route tự gác quyền bidding.view. */}
+          {sheet && (
+            <>
+              <a href={`/api/costsheet/${id}/quotation?mode=client`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                <FileSpreadsheet className="h-3.5 w-3.5" /> {t("exportClientXlsx")}
+              </a>
+              <a href={`/api/costsheet/${id}/quotation?mode=internal`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                <FileSpreadsheet className="h-3.5 w-3.5" /> {t("exportInternalXlsx")}
+              </a>
+              <Link href={`/projects/${id}/co-ce/print`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                <Printer className="h-3.5 w-3.5" /> {t("printView")}
+              </Link>
+            </>
+          )}
+          <Link
+            href={`/bidding/${id}`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
+          >
+            <Gavel className="h-3.5 w-3.5" /> {t("openBuilder")}
+          </Link>
+        </div>
       </div>
 
       {!sheet ? (

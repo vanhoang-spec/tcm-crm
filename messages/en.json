@@ -1026,7 +1026,10 @@
       "sectionDepartment": "Owning department",
       "sectionDepartmentNone": "— No department —",
       "sectionDepartmentHint": "Sets the code prefix for every line in this section (e.g. OPE-001). Codes are auto-assigned on save.",
-      "overrideNotePlaceholder": "Reason for approving below the margin floor…"
+      "overrideNotePlaceholder": "Reason for approving below the margin floor…",
+      "exportClientXlsx": "Export quotation (Excel)",
+      "exportInternalXlsx": "Export internal CO/CE (Excel)",
+      "printView": "Print / PDF view"
     },
     "rounds": {
       "title": "Deal rounds",
@@ -1360,7 +1363,14 @@
       "sendToLiquidation": "Send to Liquidation",
       "sendToLiquidationHint": "Send the current CO/CE revision to the Liquidation tab for client sign-off. You can keep editing and resend if a last-minute change is needed.",
       "sentToLiquidationInfo": "Sent v{rev} to Liquidation at {date} · by {name}",
-      "sentToLiquidationNone": "No revision has been sent to Liquidation yet."
+      "sentToLiquidationNone": "No revision has been sent to Liquidation yet.",
+      "exportClientXlsx": "Export quotation (Excel)",
+      "exportInternalXlsx": "Export internal CO/CE (Excel)",
+      "printView": "Print / PDF view",
+      "printBtn": "Print / Save PDF",
+      "printBack": "Back to CO/CE tab",
+      "printSwitchInternal": "View internal version",
+      "printSwitchClient": "View client version"
     },
     "liquidation": {
       "title": "Liquidation & Handover",
@@ -1407,7 +1417,10 @@
       "invoiceOpenDebt": "Open receivables page",
       "errRequired": "Enter an invoice number and a valid amount.",
       "errNoSentRev": "No cost sheet revision has been sent to liquidation to check against.",
-      "errExceedBillable": "Exceeds the amount left to invoice on cost sheet v{rev} ({remaining} remaining)."
+      "errExceedBillable": "Exceeds the amount left to invoice on cost sheet v{rev} ({remaining} remaining).",
+      "ctvVarianceWarning": "The cost sheet still holds plan figures: entered CTV (BM08) is {direction} the matching cost lines by {amount} đ. Update the cost sheet with actuals (new revision) before closing, or the margin will be wrong.",
+      "ctvVarianceOver": "OVER",
+      "ctvVarianceUnder": "UNDER"
     },
     "operations": {
       "title": "Operations — Outsourced Labor (CTV)",
@@ -1449,7 +1462,37 @@
       "generatedBadge": "Generated",
       "generatedAtLabel": "Generated at",
       "notGeneratedYet": "Not generated",
-      "mobileNote": "View the full grid on a computer."
+      "mobileNote": "View the full grid on a computer.",
+      "noCostLines": "This project has no cost lines to link CTV rows to — open Finance and press \"Refresh\" to sync from the cost sheet first.",
+      "defaultCostLine": "Batch default cost line (rows without their own link count into this line)",
+      "defaultCostLineNone": "— Not set —",
+      "proxyTag": "Client-paid",
+      "rowCostLine": "Cost line",
+      "rowCostLineInherit": "(batch default)",
+      "cmpTitle": "Cost sheet ↔ CTV comparison",
+      "cmpHint": "Plan = the line's net (actually-paid-out) amount. CTV = money handed to recipients per BM08 (Gross rows use Net received). Updates as you type, including unsaved rows.",
+      "cmpLine": "Cost line",
+      "cmpPlan": "Plan",
+      "cmpCtv": "CTV entered",
+      "cmpVariance": "Variance",
+      "cmpTotalCost": "Total (cost of sales)",
+      "cmpProxyNote": "Client-paid (outside cost of sales, per-line caps):",
+      "cmpUnassigned": "Not linked to any cost line: {amount} đ — link each row or set the batch default before requesting payment.",
+      "payCreate": "Request payment",
+      "payHint": "Creates one scheduled voucher per cost line in Vendor Payments — accounting transfers per BM08 then marks paid.",
+      "payDueDate": "Transfer due date",
+      "payOverCapNote": "Over-cap reason",
+      "payOverCapNotePlaceholder": "Why it exceeds the plan…",
+      "paySuccess": "Created {count} vouchers, total {total} đ. Accounting has been notified.",
+      "payCreatedInfo": "Payment requested: {count} vouchers, total {total} đ.",
+      "payViewLink": "View in Vendor Payments →",
+      "payAlreadyCreated": "Payment for this batch was already requested. Cancel the old vouchers in Vendor Payments first to request again.",
+      "payUnassigned": "{amount, number} đ is not linked to any cost line — link everything before requesting payment.",
+      "payNothing": "No rows carry an amount to pay.",
+      "payStaleLine": "Cost line \"{item}\" is stale (cost sheet changed) — press Refresh in Finance and re-link.",
+      "payOverCap": "CTV exceeds the cap on: {items}. Someone with the over-cap permission must request this.",
+      "payOverCapReason": "CTV exceeds the cap on: {items} — a reason is required.",
+      "payProjectNotExecuting": "Project is not in an execution stage — payment cannot be requested."
     },
     "planning": {
       "title": "Planning",
@@ -1801,7 +1844,11 @@
       "errReverseReason": "A reason is required to un-mark as paid.",
       "errReverseWrongStatus": "This voucher is not in Paid status.",
       "unmarkPaid": "Un-mark as paid",
-      "unmarkNotePlaceholder": "Reason…"
+      "unmarkNotePlaceholder": "Reason…",
+      "cancelPayment": "Cancel voucher",
+      "cancelNotePlaceholder": "Reason…",
+      "errCancelReason": "A reason is required to cancel the voucher.",
+      "errCancelWrongStatus": "Only unpaid vouchers can be canceled. Un-mark the payment first."
     },
     "debt": {
       "title": "Client receivables (AR)",
@@ -1833,7 +1880,17 @@
       "errVoidHasPayments": "This invoice has recorded payments — reverse them before voiding.",
       "errAlreadyVoided": "This invoice is already voided.",
       "voidBtn": "Void invoice",
-      "voidNotePlaceholder": "Reason for voiding…"
+      "voidNotePlaceholder": "Reason for voiding…",
+      "overCapNote": "Over-cap reason (if any)",
+      "overCapNoteHint": "Only required when the amount exceeds the remaining cost-sheet cap, or the project has no cost sheet.",
+      "overCapBadge": "Over cap",
+      "capRemaining": "Remaining issuable per cost sheet: {remaining} đ",
+      "capNoSheet": "Project has no cost sheet — issuing will require the over-cap permission + a reason.",
+      "dueDateHint": "Leave blank = invoice date + payment terms of the contract/client.",
+      "errExceedCap": "Exceeds the remaining issuable amount per cost sheet ({remaining} left). Requires the over-cap permission.",
+      "errOverCapReason": "Invoice exceeds the remaining issuable amount ({remaining} left) — a reason is required.",
+      "errNoSheetCap": "Project has no cost sheet, so there is no cap to check against. Requires the over-cap permission.",
+      "errNoSheetCapReason": "Project has no cost sheet to check against — a reason is required."
     },
     "cashflow": {
       "title": "Cash Flow Forecast (all projects)",

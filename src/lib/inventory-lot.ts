@@ -28,16 +28,37 @@ export function buildItemCode(group: string, status: string, condition: string, 
 export type ExpiryLevel = "EXPIRED" | "RED" | "ORANGE" | "YELLOW";
 
 /**
- * Mức cảnh báo hạn dùng theo quy ước UTC-midnight của app: vàng ≤90 · cam ≤60 · đỏ ≤30 ngày
- * trước hết hạn; qua ngày hết hạn = EXPIRED (chặn xuất dùng, chỉ còn phiếu DESTROY).
+ * Số ngày giữa hai mốc theo quy ước UTC-midnight của app (HANDOVER §4.3) — dùng chung cho hạn dùng
+ * và cho đếm ngày kỳ chiến dịch. MỘT nguồn sự thật, đừng tự viết lại phép trừ ngày ở chỗ khác.
+ */
+export function utcDayDiff(from: Date, to: Date): number {
+  // Đọc bằng thành phần ĐỊA PHƯƠNG, không phải UTC: mốc UTC-midnight của app khi xem ở Asia/Saigon
+  // là 07:00 ĐÚNG NGÀY đó, còn new Date() lúc 0-7h sáng lại rơi vào ngày UTC hôm trước. Dùng
+  // getUTCDate() thì mọi so sánh với "bây giờ" trong khung giờ đó lệch đúng 1 ngày.
+  // (Server bắt buộc TZ=Asia/Ho_Chi_Minh — xem HANDOVER mục 8.)
+  const day = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.floor((day(to) - day(from)) / 86_400_000);
+}
+
+/**
+ * Mức cảnh báo hạn dùng: vàng ≤90 · cam ≤60 · đỏ ≤30 ngày trước hết hạn; qua ngày hết hạn =
+ * EXPIRED (chặn xuất dùng, chỉ còn phiếu DESTROY).
  */
 export function expiryLevel(expiry: Date | null | undefined, now: Date): ExpiryLevel | null {
   if (!expiry) return null;
-  const day = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  const days = Math.floor((day(expiry) - day(now)) / 86_400_000);
+  const days = utcDayDiff(now, expiry);
   if (days < 0) return "EXPIRED";
   if (days <= 30) return "RED";
   if (days <= 60) return "ORANGE";
   if (days <= 90) return "YELLOW";
   return null;
+}
+
+/** Thang nghiêm trọng — chỉ nhắc khi mức hiện tại NẶNG HƠN mức đã nhắc (không spam, không bỏ mốc). */
+const EXPIRY_RANK: Record<ExpiryLevel, number> = { YELLOW: 1, ORANGE: 2, RED: 3, EXPIRED: 4 };
+
+export function shouldWarnExpiry(current: ExpiryLevel | null, alreadyWarned: string | null | undefined): boolean {
+  if (!current) return false;
+  const prev = alreadyWarned && alreadyWarned in EXPIRY_RANK ? EXPIRY_RANK[alreadyWarned as ExpiryLevel] : 0;
+  return EXPIRY_RANK[current] > prev;
 }

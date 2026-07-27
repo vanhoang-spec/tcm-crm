@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, formatNumber } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { ReceiveForm } from "../receive-form";
+import { HoldingReceiveForm } from "../holding-receive-form";
 import { ExpectedReturnForm } from "../expected-return-form";
 import { requirePermission } from "@/lib/permissions";
 
@@ -22,6 +23,7 @@ export default async function StockDocumentDetailPage({ params }: { params: Prom
       fromWarehouse: true,
       toWarehouse: true,
       project: { select: { id: true, code: true, name: true } },
+      fromProject: { select: { id: true, code: true, name: true } },
       createdBy: { select: { fullName: true } },
       confirmedBy: { select: { fullName: true } },
       canceledBy: { select: { fullName: true } },
@@ -33,9 +35,11 @@ export default async function StockDocumentDetailPage({ params }: { params: Prom
   const typeLabel = t(`type${doc.type}` as Parameters<typeof t>[0]);
   const statusLabel = t(`status${doc.status}` as Parameters<typeof t>[0]);
   const isPendingTransfer = doc.type === "TRANSFER" && doc.status === "PENDING";
+  const isPendingHolding = doc.type === "HOLDING" && doc.status === "PENDING";
   const showReceivedCol = doc.type === "TRANSFER" && doc.status === "COMPLETED";
 
   const meta: { label: string; value: string }[] = [
+    ...(doc.fromProject ? [{ label: t("fromProject"), value: `${doc.fromProject.code} — ${doc.fromProject.name}` }] : []),
     ...(doc.fromWarehouse ? [{ label: t("from"), value: doc.fromWarehouse.name }] : []),
     ...(doc.toWarehouse ? [{ label: t("to"), value: doc.toWarehouse.name }] : []),
     ...(doc.createdBy ? [{ label: t("createdBy"), value: doc.createdBy.fullName }] : []),
@@ -108,7 +112,14 @@ export default async function StockDocumentDetailPage({ params }: { params: Prom
         />
       )}
 
-      {doc.type === "ISSUE" && doc.status === "COMPLETED" && doc.expectedReturnAt && (
+      {isPendingHolding && (
+        <HoldingReceiveForm
+          docId={doc.id}
+          lines={doc.lines.map((l) => ({ id: l.id, code: l.item.code, name: l.item.name, unit: l.item.unit, quantity: l.quantity }))}
+        />
+      )}
+
+      {(doc.type === "ISSUE" || doc.type === "HOLDING") && doc.status === "COMPLETED" && doc.expectedReturnAt && (
         <ExpectedReturnForm docId={doc.id} current={doc.expectedReturnAt.toISOString().slice(0, 10)} />
       )}
     </div>

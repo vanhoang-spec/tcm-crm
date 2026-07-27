@@ -1245,7 +1245,11 @@
     "stockRequestWaitApprove": "Awaiting Account approval",
     "stockRequestWaitConfirm": "Awaiting keeper confirmation",
     "stockRequestItem": "{warehouse} · {lines} lines · waiting {days} days",
-    "stockRequestEmpty": "No stock requests are waiting."
+    "stockRequestEmpty": "No stock requests are waiting.",
+    "expirySection": "Upcoming expiries",
+    "expiryItem": "{days} days left · {qty} in stock",
+    "expiryItemExpired": "EXPIRED · {qty} in stock — can only leave via a destruction document",
+    "expiryEmpty": "No lots are nearing expiry"
   },
   "projects": {
     "list": {
@@ -2373,7 +2377,8 @@
       "quickIssue": "Issue to event",
       "quickReturn": "Return",
       "quickReceive": "Receive",
-      "colLot": "Lot"
+      "colLot": "Lot",
+      "campaignDays": "Campaign: {count} days"
     },
     "documents": {
       "title": "Stock documents",
@@ -2463,7 +2468,22 @@
       "errorConvertLegacy": "{item} has no status/condition (legacy lot) — update the item first.",
       "errorConvertSame": "{item}: new status/condition equals the current one.",
       "errorConvertSameInline": "New status/condition must differ from the current one.",
-      "errorSeqFull": "Target code combination is out of sequence numbers (max 999)."
+      "errorSeqFull": "Target code combination is out of sequence numbers (max 999).",
+      "newLoss": "Report loss / damage",
+      "newHolding": "Move goods between projects",
+      "typeLOSS": "Loss / damage",
+      "typeHOLDING": "On-site transfer",
+      "lossHint": "Deducts the project's on-site goods WITHOUT crediting the warehouse. Use when goods are lost or damaged on site — a reason is required.",
+      "holdingHint": "Goods go straight from this project's site to another project's site without returning to the warehouse. The receiving side must confirm receipt IN FULL; if short, cancel the document and let the sender file a loss report for the shortfall.",
+      "holdingReceiveHint": "Receive IN FULL or cancel — no partial receipt. Any shortfall must go through the sender's loss report.",
+      "confirmHoldingReceive": "Confirm receipt",
+      "fromProject": "From project",
+      "formFromProject": "Sending project",
+      "formToProject": "Receiving project",
+      "errorSameProject": "Sending and receiving projects must differ",
+      "errorBoundOtherProject": "Lot is bound to another project: {items}",
+      "errorOtherClientGoods": "Goods belong to another client, cannot be cross-used: {items}",
+      "formLossReason": "Loss / damage reason"
     },
     "items": {
       "title": "Item catalog",
@@ -2643,7 +2663,27 @@
       "reserveFlowHint": "Hold existing stock for an upcoming project so it enters the cost sheet at zero unit price (already paid for under an earlier contract). Accounting or the HR Manager approves — either one is enough. Stock levels do NOT change at this step.",
       "errorNotReadyToUse": "Only lots marked “Ready to use” can be reserved: {items}",
       "errorOverReserveCap": "Exceeds the quantity reserved and approved for this project: {items}",
-      "reserveApprovedHint": "Approved — open the project's cost sheet tab and use the “Reserved stock” panel to insert it."
+      "reserveApprovedHint": "Approved — open the project's cost sheet tab and use the “Reserved stock” panel to insert it.",
+      "newTransferRequest": "Propose warehouse transfer",
+      "typeTRANSFER": "Warehouse transfer",
+      "transferFlowHint": "Propose → an approver with transfer rights approves → the keeper confirms the actual quantity shipped (creating the transfer document) → the destination warehouse confirms receipt. Stock is NOT changed at this step.",
+      "errorSameWarehouse": "Source and destination warehouses must differ",
+      "errorCampaignExpired": "The project's campaign period has been open for {days} days (max {max}). Settle it — return goods or file a loss report — before issuing more.",
+      "confirmTransferTitle": "Keeper confirms goods shipped to the destination",
+      "confirmTransferHint": "Enter the quantity actually shipped from the source warehouse (no more than approved). Confirming debits the source and creates the transfer document — the destination is credited only when it confirms receipt."
+    },
+    "consumption": {
+      "title": "Project material consumption",
+      "hint": "Recomputed from the ledger: delivered on site − returned to warehouse − moved to other projects − reported lost − still on site.",
+      "campaignOpen": "Campaign period open since {date}",
+      "empty": "This project has no stock documents yet",
+      "colItem": "Item",
+      "colDelivered": "Delivered",
+      "colReturned": "Returned",
+      "colMovedOut": "Moved out",
+      "colLost": "Lost / damaged",
+      "colOnSite": "On site",
+      "colConsumed": "Consumed"
     }
   },
   "staff": {

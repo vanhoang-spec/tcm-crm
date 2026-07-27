@@ -120,6 +120,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "inventory.view", module: "inventory", labelVi: "Xem kho & sổ kho", labelEn: "View inventory & ledger" },
   { code: "inventory.doc.create", module: "inventory", labelVi: "Lập phiếu nhập / điều chỉnh / xuất / trả", labelEn: "Create import / adjust / issue / return docs" },
   { code: "inventory.transfer.create", module: "inventory", labelVi: "Lập phiếu chuyển kho", labelEn: "Create transfer doc" },
+  { code: "inventory.transfer.approve", module: "inventory", labelVi: "Duyệt đề xuất điều chuyển kho", labelEn: "Approve warehouse transfer requests" },
   { code: "inventory.transfer.confirm", module: "inventory", labelVi: "Xác nhận nhận hàng chuyển kho", labelEn: "Confirm transfer receipt" },
   { code: "inventory.transfer.cancel", module: "inventory", labelVi: "Huỷ phiếu chuyển kho", labelEn: "Cancel transfer", sensitive: true },
   { code: "inventory.item.manage", module: "inventory", labelVi: "Tạo / sửa mặt hàng", labelEn: "Create / edit items" },

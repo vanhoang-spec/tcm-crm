@@ -3,7 +3,19 @@
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { NumberField } from "@/components/ui/number-field";
-import { approveIssueRequest, cancelRequest, confirmIntakeRequest, confirmIssueRequest, rejectIssueRequest, type RequestFormState, approveReserveRequest, rejectReserveRequest } from "./actions";
+import {
+  approveIssueRequest,
+  approveReserveRequest,
+  approveTransferRequest,
+  cancelRequest,
+  confirmIntakeRequest,
+  confirmIssueRequest,
+  confirmTransferRequest,
+  rejectIssueRequest,
+  rejectReserveRequest,
+  rejectTransferRequest,
+  type RequestFormState,
+} from "./actions";
 
 const input =
   "h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 sm:h-9";
@@ -12,10 +24,10 @@ export type ConfirmLine = { id: string; code: string; name: string; unit: string
 
 /** Duyệt / từ chối — chỉ hiện với PIC dự án hoặc người có quyền duyệt mọi dự án (page đã lọc). */
 /** Dùng chung cho lệnh XUẤT (PIC dự án duyệt) và GIỮ CHỖ (Kế toán/HR Manager duyệt). */
-export function ApproveForm({ requestId, kind = "ISSUE" }: { requestId: string; kind?: "ISSUE" | "RESERVE" }) {
+export function ApproveForm({ requestId, kind = "ISSUE" }: { requestId: string; kind?: "ISSUE" | "RESERVE" | "TRANSFER" }) {
   const t = useTranslations("inventory.requests");
-  const approveFn = kind === "RESERVE" ? approveReserveRequest : approveIssueRequest;
-  const rejectFn = kind === "RESERVE" ? rejectReserveRequest : rejectIssueRequest;
+  const approveFn = kind === "RESERVE" ? approveReserveRequest : kind === "TRANSFER" ? approveTransferRequest : approveIssueRequest;
+  const rejectFn = kind === "RESERVE" ? rejectReserveRequest : kind === "TRANSFER" ? rejectTransferRequest : rejectIssueRequest;
   const [approveState, approveAction, approving] = useActionState<RequestFormState, FormData>(approveFn.bind(null, requestId), {});
   const [rejectState, rejectAction, rejecting] = useActionState<RequestFormState, FormData>(rejectFn.bind(null, requestId), {});
   const [showReject, setShowReject] = useState(false);
@@ -60,8 +72,8 @@ export function ApproveForm({ requestId, kind = "ISSUE" }: { requestId: string; 
 }
 
 /** Thủ kho xác nhận thực xuất / thực nhập — mặc định bằng số đề xuất, sửa xuống được. */
-export function ConfirmForm({ requestId, kind, lines }: { requestId: string; kind: "ISSUE" | "INTAKE"; lines: ConfirmLine[] }) {
-  const action = kind === "ISSUE" ? confirmIssueRequest : confirmIntakeRequest;
+export function ConfirmForm({ requestId, kind, lines }: { requestId: string; kind: "ISSUE" | "INTAKE" | "TRANSFER"; lines: ConfirmLine[] }) {
+  const action = kind === "ISSUE" ? confirmIssueRequest : kind === "TRANSFER" ? confirmTransferRequest : confirmIntakeRequest;
   const [state, formAction, pending] = useActionState<RequestFormState, FormData>(action.bind(null, requestId), {});
   const t = useTranslations("inventory.requests");
   const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(lines.map((l) => [l.id, l.quantity])));
@@ -69,8 +81,8 @@ export function ConfirmForm({ requestId, kind, lines }: { requestId: string; kin
   return (
     <form action={formAction} className="space-y-3 rounded-xl border border-border bg-surface p-4">
       <div>
-        <h2 className="text-sm font-semibold text-foreground">{kind === "ISSUE" ? t("confirmIssueTitle") : t("confirmIntakeTitle")}</h2>
-        <p className="text-xs text-muted-foreground">{kind === "ISSUE" ? t("confirmIssueHint") : t("confirmIntakeHint")}</p>
+        <h2 className="text-sm font-semibold text-foreground">{kind === "INTAKE" ? t("confirmIntakeTitle") : kind === "TRANSFER" ? t("confirmTransferTitle") : t("confirmIssueTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{kind === "INTAKE" ? t("confirmIntakeHint") : kind === "TRANSFER" ? t("confirmTransferHint") : t("confirmIssueHint")}</p>
       </div>
       <ul className="space-y-2">
         {lines.map((l) => (

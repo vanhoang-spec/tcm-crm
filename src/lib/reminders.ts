@@ -4,6 +4,7 @@ import { getArOverdueItems } from "./finance";
 import { ORDER_DEPARTMENT_LABELS } from "./bidding";
 import { ACTIVE_TASK_STATUSES, isTaskLocked } from "./creative";
 import { ACTIVE_DEPARTMENT_TASK_STATUSES } from "./department-tasks";
+import { expiryLevel, shouldWarnExpiry, utcDayDiff, type ExpiryLevel } from "./inventory-lot";
 
 function daysBetween(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
@@ -487,6 +488,97 @@ export type InventoryReturnReminderItem = {
   daysOverdue: number;
 };
 
+export type ExpiringLotItem = {
+  itemId: string;
+  code: string;
+  name: string;
+  level: ExpiryLevel;
+  expiryDate: Date;
+  daysLeft: number;
+  quantity: number;
+};
+
+/** Lô có hạn dùng đang ở vùng cảnh báo (còn tồn > 0) — cho khối nhắc việc ở /reminders. */
+export async function getExpiringLots(): Promise<ExpiringLotItem[]> {
+  const now = new Date();
+  const items = await prisma.inventoryItem.findMany({
+    where: {
+      isActive: true,
+      expiryDate: { not: null, lte: new Date(now.getTime() + 91 * 86_400_000) }, // lọc thô ở DB
+      balances: { some: { quantity: { gt: 0 } } },
+    },
+    include: { balances: { select: { quantity: true } } },
+    orderBy: { expiryDate: "asc" },
+  });
+  const out: ExpiringLotItem[] = [];
+  for (const it of items) {
+    // Phân loại CHÍNH XÁC vẫn bằng expiryLevel — cùng một nguồn với badge ở /inventory và guard xuất.
+    const level = expiryLevel(it.expiryDate, now);
+    if (!level) continue;
+    out.push({
+      itemId: it.id,
+      code: it.code,
+      name: it.name,
+      level,
+      expiryDate: it.expiryDate!,
+      daysLeft: utcDayDiff(now, it.expiryDate!),
+      quantity: it.balances.reduce((s, b) => s + b.quantity, 0),
+    });
+  }
+  return out;
+}
+
+const EXPIRY_TITLE: Record<ExpiryLevel, string> = {
+  YELLOW: "Sắp hết hạn (còn ≤ 90 ngày)",
+  ORANGE: "Sắp hết hạn (còn ≤ 60 ngày)",
+  RED: "Sắp hết hạn (còn ≤ 30 ngày)",
+  EXPIRED: "ĐÃ HẾT HẠN — chỉ còn xuất hủy",
+};
+
+/**
+ * Cảnh báo hạn dùng theo thang vàng/cam/đỏ/hết hạn (K4).
+ *
+ * Idempotent bằng MỨC đã nhắc (`expiryReminderLevel`) chứ không bằng cờ một-lần: cùng một mức chỉ
+ * bắn một lần dù job chạy 288 lượt/ngày, nhưng mức nặng hơn vẫn bắn tiếp. Vào giữa chừng thì bắn
+ * thẳng mức hiện tại, không bắn bù mức nhẹ hơn.
+ */
+export async function checkExpiryWarnings(): Promise<void> {
+  const lots = await getExpiringLots();
+  if (lots.length === 0) return;
+
+  const levels = await prisma.inventoryItem.findMany({
+    where: { id: { in: lots.map((l) => l.itemId) } },
+    select: { id: true, expiryReminderLevel: true },
+  });
+  const warnedBy = new Map(levels.map((l) => [l.id, l.expiryReminderLevel]));
+  const due = lots.filter((l) => shouldWarnExpiry(l.level, warnedBy.get(l.itemId)));
+  if (due.length === 0) return;
+
+  // Người nhận: thủ kho (theo quyền xác nhận nhập kho) + ADMIN. ADMIN là SÀN CỨNG trong code,
+  // không có dòng grant nào trong DB, nên query theo quyền sẽ bỏ sót nếu không cộng riêng.
+  const keepers = await prisma.staff.findMany({
+    where: {
+      isActive: true,
+      OR: [{ role: { permissions: { some: { permissionCode: "inventory.intake.confirm" } } } }, { role: { code: "ADMIN" } }],
+    },
+    select: { id: true },
+  });
+  if (keepers.length === 0) return;
+
+  for (const lot of due) {
+    await prisma.notification.createMany({
+      data: keepers.map((k) => ({
+        recipientStaffId: k.id,
+        type: "INVENTORY_EXPIRY_WARNING",
+        title: `${EXPIRY_TITLE[lot.level]} — lô ${lot.code}`,
+        body: `${lot.name} · còn ${lot.quantity} · hạn ${lot.expiryDate.toISOString().slice(0, 10)}`,
+      })),
+    });
+    // Chỉ stamp SAU khi gửi — gửi lỗi thì lần chạy sau nhắc lại.
+    await prisma.inventoryItem.update({ where: { id: lot.itemId }, data: { expiryReminderLevel: lot.level } });
+  }
+}
+
 export type StockRequestReminderItem = {
   requestId: string;
   code: string;
@@ -536,7 +628,9 @@ export async function getInventoryReturnReminders(teamCode?: string): Promise<In
   const now = new Date();
   const docs = await prisma.stockDocument.findMany({
     where: {
-      type: "ISSUE",
+      // K4: phiếu CH (chuyển đồ sang dự án khác) cũng phải nhắc — projectId của nó là bên NHẬN,
+      // nên cùng một điều kiện "dự án còn giữ đồ" dùng lại được nguyên vẹn.
+      type: { in: ["ISSUE", "HOLDING"] },
       status: "COMPLETED",
       expectedReturnAt: { lt: now },
       project: {
@@ -568,7 +662,7 @@ export async function getInventoryReturnReminders(teamCode?: string): Promise<In
 export async function checkInventoryReturnReminders(): Promise<void> {
   const docs = await prisma.stockDocument.findMany({
     where: {
-      type: "ISSUE",
+      type: { in: ["ISSUE", "HOLDING"] },
       status: "COMPLETED",
       expectedReturnAt: { lt: new Date() },
       returnReminderSentAt: null,

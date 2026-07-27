@@ -13,7 +13,7 @@ const RESERVE_EXCLUDED_STATUS = ["LOST", "CANCELED"];
  * chỗ của CHÍNH dự án đang chọn được trả riêng (`reservedFree`) để client cộng lại: hàng đó vẫn
  * dùng được cho dự án đó. Server kiểm lại lần cuối — đây chỉ là con số cho người dùng nhìn.
  */
-export async function loadRequestFormData(kind: "ISSUE" | "INTAKE" | "RESERVE") {
+export async function loadRequestFormData(kind: "ISSUE" | "INTAKE" | "RESERVE" | "TRANSFER") {
   const now = new Date();
   const [warehouses, items, approvedIssueLines, reserveLines, usedLines] = await Promise.all([
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: [{ isMain: "desc" }, { code: "asc" }] }),
@@ -30,7 +30,7 @@ export async function loadRequestFormData(kind: "ISSUE" | "INTAKE" | "RESERVE") 
     }),
     kind !== "INTAKE"
       ? prisma.stockRequestLine.findMany({
-          where: { request: { type: "ISSUE", status: "APPROVED" } },
+          where: { request: { type: { in: ["ISSUE", "TRANSFER"] }, status: "APPROVED" } },
           select: { itemId: true, quantity: true, request: { select: { warehouseId: true } } },
         })
       : Promise.resolve([]),

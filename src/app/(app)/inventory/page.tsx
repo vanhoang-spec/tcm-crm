@@ -9,6 +9,7 @@ import type { Locale } from "@/i18n/locales";
 import { getStockOverview, getProjectHoldings, getInTransitQuantities, getCategoryTree } from "@/lib/inventory";
 import { ITEM_CONDITION_CODES, ITEM_STATUS_CODES, expiryLevel } from "@/lib/inventory-lot";
 import { requirePermission } from "@/lib/permissions";
+import { getNumberSetting } from "@/lib/settings";
 
 const sel = "h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm sm:h-9";
 
@@ -49,6 +50,7 @@ export default async function InventoryStockPage({
     getProjectHoldings(),
     getInTransitQuantities(),
   ]);
+  const campaignMaxDays = await getNumberSetting("inventory", "campaign_max_days", 15);
   const inTransitTotal = Array.from(inTransit.values()).reduce((s, v) => s + v, 0);
   const now = new Date();
 
@@ -76,7 +78,7 @@ export default async function InventoryStockPage({
   );
 
   const quickActions = [
-    { href: "/inventory/documents/new/transfer", icon: ArrowLeftRight, label: t("quickTransfer"), badge: 0 },
+    { href: "/inventory/requests/new/transfer", icon: ArrowLeftRight, label: t("quickTransfer"), badge: 0 },
     { href: "/inventory/requests/new/issue", icon: PackageOpen, label: t("quickIssue"), badge: 0 },
     { href: "/inventory/documents/new/return", icon: Undo2, label: t("quickReturn"), badge: 0 },
     { href: "/inventory/documents", icon: Inbox, label: t("quickReceive"), badge: pendingCount },
@@ -266,11 +268,16 @@ export default async function InventoryStockPage({
             {holdings.map((h) => (
               <Link
                 key={h.projectId}
-                href={`/inventory/documents?project=${h.projectId}`}
+                href={`/inventory/consumption/${h.projectId}`}
                 className="rounded-xl border border-border bg-surface p-3 hover:bg-surface-2"
               >
                 <p className="text-sm font-semibold text-foreground">{h.projectName}</p>
                 <p className="font-mono text-xs text-muted-foreground">{h.projectCode}</p>
+                {h.campaignDays !== null && (
+                  <p className="mt-1">
+                    <Badge tone={h.campaignDays > campaignMaxDays ? "danger" : "neutral"}>{t("campaignDays", { count: h.campaignDays })}</Badge>
+                  </p>
+                )}
                 <ul className="mt-2 space-y-1">
                   {h.items.map((it) => (
                     <li key={it.itemId} className="flex justify-between text-xs">

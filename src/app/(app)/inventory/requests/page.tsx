@@ -34,11 +34,14 @@ export default async function StockRequestsPage({
   const canApprove = perms.has("inventory.request.approve");
   const canIssue = perms.has("inventory.issue.confirm");
   const canIntake = perms.has("inventory.intake.confirm");
+  const canApproveTransfer = perms.has("inventory.transfer.approve");
   // "Chờ mình": người duyệt thấy đề xuất PROPOSED; thủ kho thấy lệnh đã duyệt + báo hàng về
   const isMine = (r: (typeof requests)[number]) =>
     (canApprove && r.type === "ISSUE" && r.status === "PROPOSED") ||
     (canIssue && r.type === "ISSUE" && r.status === "APPROVED") ||
-    (canIntake && r.type === "INTAKE" && r.status === "PROPOSED");
+    (canIntake && r.type === "INTAKE" && r.status === "PROPOSED") ||
+    (canApproveTransfer && r.type === "TRANSFER" && r.status === "PROPOSED") ||
+    (canIssue && r.type === "TRANSFER" && r.status === "APPROVED");
   const ordered = [...requests.filter(isMine), ...requests.filter((r) => !isMine(r))];
   const pendingMine = requests.filter(isMine).length;
 
@@ -50,6 +53,7 @@ export default async function StockRequestsPage({
           { href: "/inventory/requests/new/reserve", label: t("newReserveRequest") },
         ]
       : []),
+    ...(perms.has("inventory.transfer.create") ? [{ href: "/inventory/requests/new/transfer", label: t("newTransferRequest") }] : []),
   ];
 
   return (

@@ -457,6 +457,9 @@ async function main() {
     { module: "finance", key: "max_outstanding_advance_amount_per_staff", value: "50000000" }, // 50 triệu VND đang giữ / NV
     { module: "finance", key: "cashflow_weekly_buckets", value: "4" }, // CFO: số chu kỳ tuần trên /finance/cashflow
     { module: "finance", key: "cashflow_monthly_buckets", value: "2" }, // CFO: số chu kỳ tháng tiếp theo
+    // ── Kho v2 K4 ── kỳ chiến dịch: đồ ra hiện trường quá số ngày này thì KHÔNG cho xuất thêm
+    //    cho dự án đó, buộc chốt kỳ (trả về kho / báo mất) trước. Kỳ tự đóng khi holding về 0.
+    { module: "inventory", key: "campaign_max_days", value: "15" },
     // ── Đăng nhập ── mật khẩu chung cấp cho nhân sự mới / khi admin cấp lại. Nhân sự BẮT BUỘC
     //    đổi ngay lần đăng nhập đầu (Staff.mustChangePassword mặc định true) — xem src/lib/auth.ts.
     { module: "auth", key: "default_password", value: "TCM123456" },
@@ -2081,6 +2084,15 @@ async function main() {
       key: "20260728_kho_k3_reserve_approve",
       codes: ["inventory.reservation.approve"],
       roleFilter: (r) => r.groupCode === "FINANCE" || r.code === "HR_MANAGER" || r.groupCode === "BOD",
+    },
+ 
+    // 29/07/2026 Kho v2 K4 — điều chuyển kho nay phải qua duyệt (trước K4 ai lập được là chạy
+    // thẳng vào sổ cái). Người duyệt = OPE Manager (chủ vận hành kho) + BGĐ; Thủ kho KHÔNG tự duyệt
+    // đề xuất của chính mình, họ chỉ chốt số thực xuất.
+    {
+      key: "20260729_kho_k4_transfer_approve",
+      codes: ["inventory.transfer.approve"],
+      roleFilter: (r) => r.code === "OPERATIONS_MANAGER" || r.groupCode === "BOD",
     },
   ];
   for (const bf of backfills) {

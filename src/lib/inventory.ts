@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
+import { utcDayDiff } from "./inventory-lot";
 
 // ─────────────────────────────────────────────────────────
 // MODULE ⑧ KHO — hằng số + hàm thuần + transaction helpers + IO reads.
@@ -7,7 +8,7 @@ import { prisma } from "./prisma";
 // mọi cập nhật số dư phải đi qua debit/credit helpers TRONG cùng transaction với phiếu.
 // ─────────────────────────────────────────────────────────
 
-export const DOC_TYPES = ["IMPORT", "ADJUST", "TRANSFER", "ISSUE", "RETURN", "CONVERT", "DESTROY"] as const;
+export const DOC_TYPES = ["IMPORT", "ADJUST", "TRANSFER", "ISSUE", "RETURN", "CONVERT", "DESTROY", "HOLDING", "LOSS"] as const;
 export type DocType = (typeof DOC_TYPES)[number];
 
 export const DOC_CODE_PREFIX: Record<DocType, string> = {
@@ -18,6 +19,8 @@ export const DOC_CODE_PREFIX: Record<DocType, string> = {
   RETURN: "TH",
   CONVERT: "CD",
   DESTROY: "XH",
+  HOLDING: "CH", // chuyển đồ hiện trường giữa 2 dự án (không qua kho)
+  LOSS: "BM",    // báo mất/hỏng ở hiện trường — trừ holding, KHÔNG cộng lại kho
 };
 
 // ── Kho v2 — phần thuần của mô hình lô nằm ở inventory-lot.ts, re-export để giữ một điểm import ──
@@ -115,6 +118,29 @@ export async function creditHolding(tx: Tx, projectId: string, itemId: string, q
     update: { quantity: { increment: qty } },
     create: { projectId, itemId, quantity: qty },
   });
+}
+
+/**
+ * Hôm nay theo quy ước UTC-midnight của app (HANDOVER §4.3).
+ *
+ * Lấy NGÀY ĐỊA PHƯƠNG rồi mới dựng UTC-midnight — giống hệt dateOrNull() parse chuỗi "YYYY-MM-DD"
+ * người dùng gõ. Dùng getUTCDate() thì từ 0h đến 7h sáng giờ Sài Gòn sẽ đóng dấu ngày HÔM QUA.
+ */
+export function utcMidnightToday(now: Date = new Date()): Date {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
+/**
+ * Đóng KỲ CHIẾN DỊCH khi dự án không còn giữ đồ nào ở hiện trường (K4).
+ *
+ * Gọi ở cuối MỌI transaction làm giảm holding: trả về kho, chuyển sang dự án khác, báo mất. Không
+ * đóng thì guard 15 ngày sẽ khoá dự án vĩnh viễn dù hàng đã về hết.
+ */
+export async function closeCampaignIfSettled(tx: Tx, projectId: string): Promise<void> {
+  const left = await tx.projectHolding.count({ where: { projectId, quantity: { gt: 0 } } });
+  if (left === 0) {
+    await tx.project.updateMany({ where: { id: projectId }, data: { stockCampaignOpenedAt: null } });
+  }
 }
 
 // ── IO reads ──────────────────────────────────────────────
@@ -285,25 +311,107 @@ export type ProjectHoldingRow = {
   projectCode: string;
   projectName: string;
   items: { itemId: string; code: string; name: string; unit: string | null; quantity: number }[];
+  /** K4: số ngày kỳ chiến dịch đã mở; null = chưa mở kỳ (hàng dùng một lần thì không mở). */
+  campaignDays: number | null;
 };
 
 /** Đồ tái sử dụng đang ở hiện trường, gom theo dự án (chỉ dòng quantity > 0). */
 export async function getProjectHoldings(projectId?: string): Promise<ProjectHoldingRow[]> {
   const holdings = await prisma.projectHolding.findMany({
     where: { quantity: { gt: 0 }, ...(projectId ? { projectId } : {}) },
-    include: { project: { select: { id: true, code: true, name: true } }, item: true },
+    include: { project: { select: { id: true, code: true, name: true, stockCampaignOpenedAt: true } }, item: true },
     orderBy: [{ projectId: "asc" }, { item: { code: "asc" } }],
   });
   const byProject = new Map<string, ProjectHoldingRow>();
   for (const h of holdings) {
     let row = byProject.get(h.projectId);
     if (!row) {
-      row = { projectId: h.projectId, projectCode: h.project.code, projectName: h.project.name, items: [] };
+      row = {
+        projectId: h.projectId,
+        projectCode: h.project.code,
+        projectName: h.project.name,
+        items: [],
+        campaignDays: h.project.stockCampaignOpenedAt ? utcDayDiff(h.project.stockCampaignOpenedAt, new Date()) : null,
+      };
       byProject.set(h.projectId, row);
     }
     row.items.push({ itemId: h.itemId, code: h.item.code, name: h.item.name, unit: h.item.unit, quantity: h.quantity });
   }
   return Array.from(byProject.values());
+}
+
+export type ConsumptionRow = {
+  itemId: string;
+  code: string;
+  name: string;
+  unit: string | null;
+  delivered: number; // đã giao ra hiện trường (xuất kho + nhận từ dự án khác)
+  returned: number; // đã trả về kho
+  movedOut: number; // chuyển sang dự án khác
+  lost: number; // báo mất / hỏng
+  onSite: number; // còn ở hiện trường (đối chiếu chéo với ProjectHolding)
+  consumed: number; // TIÊU HAO THẬT = giao − trả − chuyển đi − mất − còn ở site
+};
+
+/**
+ * Tiêu hao của một dự án, tính LẠI TỪ SỔ CÁI (K4) — không đọc ProjectHolding, vì bảng đó không có
+ * chiều thời gian và bỏ sót toàn bộ hàng dùng một lần (loại không bao giờ có phiếu trả).
+ *
+ * TIÊU HAO THẬT = (ISSUE + CH nhận) − RETURN − CH gửi − BM mất − còn ở hiện trường.
+ * Trừ cả "mất" và "còn ở site" là CỐ Ý: hai khoản đó có cột riêng, gộp vào tiêu hao thì hàng tái sử
+ * dụng đang nằm ngoài site sẽ hiện như đã dùng hết. Hàng dùng một lần không có holding nên hai
+ * khoản đó = 0 và công thức rút về (giao − trả − chuyển đi) đúng như trực giác.
+ *
+ * Chỉ đếm phiếu COMPLETED. Cộng cả đời dự án: kỳ đóng thì holding = 0 nên tổng cả đời CHÍNH LÀ
+ * tiêu hao thật — cắt theo cửa sổ ngày chỉ thêm biến số chứ không thêm sự thật.
+ */
+export async function getProjectConsumption(projectId: string): Promise<ConsumptionRow[]> {
+  const lines = await prisma.stockDocumentLine.findMany({
+    where: {
+      document: {
+        status: "COMPLETED",
+        OR: [
+          { projectId, type: { in: ["ISSUE", "RETURN", "LOSS", "HOLDING"] } },
+          { fromProjectId: projectId, type: "HOLDING" },
+        ],
+      },
+    },
+    include: {
+      item: { select: { id: true, code: true, name: true, unit: true } },
+      document: { select: { type: true, projectId: true } },
+    },
+  });
+
+  const rows = new Map<string, ConsumptionRow>();
+  const row = (it: { id: string; code: string; name: string; unit: string | null }) => {
+    let r = rows.get(it.id);
+    if (!r) {
+      r = { itemId: it.id, code: it.code, name: it.name, unit: it.unit, delivered: 0, returned: 0, movedOut: 0, lost: 0, onSite: 0, consumed: 0 };
+      rows.set(it.id, r);
+    }
+    return r;
+  };
+  for (const l of lines) {
+    const r = row(l.item);
+    const isIncoming = l.document.projectId === projectId;
+    if (l.document.type === "ISSUE") r.delivered += l.quantity;
+    else if (l.document.type === "RETURN") r.returned += l.quantity;
+    else if (l.document.type === "LOSS") r.lost += l.quantity;
+    else if (l.document.type === "HOLDING") {
+      // Cùng loại phiếu, hai chiều: dự án này là bên nhận thì cộng vào "đã giao", là bên gửi thì
+      // cộng vào "chuyển đi". Chỉ phiếu COMPLETED nên phần đang treo không bị tính hai lần.
+      if (isIncoming) r.delivered += l.quantity;
+      else r.movedOut += l.quantity;
+    }
+  }
+
+  const holdings = await prisma.projectHolding.findMany({ where: { projectId }, select: { itemId: true, quantity: true } });
+  const onSiteBy = new Map(holdings.map((h) => [h.itemId, h.quantity]));
+  for (const r of rows.values()) {
+    r.onSite = onSiteBy.get(r.itemId) ?? 0;
+    r.consumed = r.delivered - r.returned - r.movedOut - r.lost - r.onSite;
+  }
+  return Array.from(rows.values()).sort((a, b) => a.code.localeCompare(b.code));
 }
 
 /** Phiếu chuyển kho đang chờ nhận (PENDING) — ghim đầu danh sách + badge mobile. */

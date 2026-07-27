@@ -8,13 +8,13 @@
  * ISSUE/INTAKE vì đã có sẵn sinh mã, cặp duyệt/từ chối/huỷ, audit, notify — nhưng KHÔNG bao giờ
  * đụng sổ cái: vòng đời dừng ở APPROVED (không có DONE, không sinh StockDocument).
  */
-export const REQUEST_TYPES = ["ISSUE", "INTAKE", "RESERVE"] as const;
+export const REQUEST_TYPES = ["ISSUE", "INTAKE", "RESERVE", "TRANSFER"] as const;
 export type RequestType = (typeof REQUEST_TYPES)[number];
 
 export const REQUEST_STATUSES = ["PROPOSED", "APPROVED", "REJECTED", "CANCELED", "DONE"] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
-export const REQUEST_CODE_PREFIX: Record<RequestType, string> = { ISSUE: "DX", INTAKE: "DN", RESERVE: "GC" };
+export const REQUEST_CODE_PREFIX: Record<RequestType, string> = { ISSUE: "DX", INTAKE: "DN", RESERVE: "GC", TRANSFER: "DK" };
 
 export function buildRequestCode(type: RequestType, date: Date, seq: number): string {
   const ym = `${String(date.getFullYear()).slice(2)}${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -25,8 +25,17 @@ export function buildRequestCode(type: RequestType, date: Date, seq: number): st
  * Trạng thái mà thủ kho được phép xác nhận thực tế:
  * ISSUE phải qua duyệt (APPROVED); INTAKE không có bước duyệt (spec workflow c) nên xác nhận thẳng.
  */
+/** BẢN ĐỒ TƯỜNG MINH — đừng dùng nhánh mặc định: loại mới rơi nhầm vào PROPOSED nghĩa là thủ kho
+ *  xác nhận được đề xuất CHƯA DUYỆT, và trình biên dịch không bắt được. */
+const CONFIRMABLE: Record<RequestType, RequestStatus> = {
+  ISSUE: "APPROVED",
+  TRANSFER: "APPROVED",
+  INTAKE: "PROPOSED",
+  RESERVE: "PROPOSED", // giữ chỗ không có bước xác nhận — dừng ở APPROVED
+};
+
 export function confirmableStatus(type: RequestType): RequestStatus {
-  return type === "ISSUE" ? "APPROVED" : "PROPOSED";
+  return CONFIRMABLE[type];
 }
 
 /**

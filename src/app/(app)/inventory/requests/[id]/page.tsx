@@ -26,6 +26,7 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
     where: { id },
     include: {
       warehouse: true,
+      toWarehouse: true,
       project: { select: { id: true, code: true, name: true, ownerId: true, leaderId: true, owner: { select: { fullName: true } }, leader: { select: { fullName: true } } } },
       purchaseOrder: { select: { id: true, code: true, projectId: true } },
       createdBy: { select: { fullName: true } },
@@ -41,6 +42,7 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
 
   const isIssue = req.type === "ISSUE";
   const isReserve = req.type === "RESERVE";
+  const isTransfer = req.type === "TRANSFER";
   // Giữ chỗ: Kế toán HOẶC HR Manager duyệt (một mã quyền, không ràng PIC dự án như lệnh xuất).
   const showApproveReserve = isReserve && req.status === "PROPOSED" && perms.has("inventory.reservation.approve");
   const showApprove =
@@ -50,8 +52,9 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
     !!req.project &&
     canApproveIssue(req.project, staffId, perms.has("inventory.request.approve_any"));
   // Giữ chỗ KHÔNG có bước xác nhận: vòng đời dừng ở APPROVED, tồn kho không đổi.
+  const showApproveTransfer = isTransfer && req.status === "PROPOSED" && perms.has("inventory.transfer.approve");
   const showConfirm =
-    (isIssue && req.status === "APPROVED" && perms.has("inventory.issue.confirm")) ||
+    ((isIssue || isTransfer) && req.status === "APPROVED" && perms.has("inventory.issue.confirm")) ||
     (req.type === "INTAKE" && req.status === "PROPOSED" && perms.has("inventory.intake.confirm"));
   const showCancel =
     ["PROPOSED", "APPROVED"].includes(req.status) &&
@@ -61,6 +64,7 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
 
   const meta: { label: string; value: string }[] = [
     { label: t("colWarehouse"), value: req.warehouse.name },
+    ...(req.toWarehouse ? [{ label: t("formToWarehouse"), value: req.toWarehouse.name }] : []),
     ...(req.createdBy ? [{ label: t("createdBy"), value: req.createdBy.fullName }] : []),
     ...(req.project?.owner ? [{ label: t("projectPic"), value: req.project.owner.fullName }] : []),
     ...(req.project?.leader ? [{ label: t("projectLeader"), value: req.project.leader.fullName }] : []),
@@ -146,10 +150,11 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
       {blockedByPic && <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("notPicHint")}</p>}
       {showApprove && <ApproveForm requestId={req.id} />}
       {showApproveReserve && <ApproveForm requestId={req.id} kind="RESERVE" />}
+      {showApproveTransfer && <ApproveForm requestId={req.id} kind="TRANSFER" />}
       {showConfirm && (
         <ConfirmForm
           requestId={req.id}
-          kind={isIssue ? "ISSUE" : "INTAKE"}
+          kind={isIssue ? "ISSUE" : isTransfer ? "TRANSFER" : "INTAKE"}
           lines={req.lines.map((l) => ({ id: l.id, code: l.item.code, name: l.item.name, unit: l.item.unit, quantity: l.quantity }))}
         />
       )}

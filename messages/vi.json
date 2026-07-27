@@ -1245,7 +1245,11 @@
     "stockRequestWaitApprove": "Chờ Account duyệt",
     "stockRequestWaitConfirm": "Chờ thủ kho xác nhận",
     "stockRequestItem": "{warehouse} · {lines} dòng hàng · treo {days} ngày",
-    "stockRequestEmpty": "Không có đề xuất kho nào đang chờ."
+    "stockRequestEmpty": "Không có đề xuất kho nào đang chờ.",
+    "expirySection": "Hạn dùng sắp tới",
+    "expiryItem": "Còn {days} ngày · tồn {qty}",
+    "expiryItemExpired": "ĐÃ HẾT HẠN · tồn {qty} — chỉ ra được bằng phiếu xuất hủy",
+    "expiryEmpty": "Không có lô nào sắp hết hạn"
   },
   "projects": {
     "list": {
@@ -2373,7 +2377,8 @@
       "quickIssue": "Xuất event",
       "quickReturn": "Trả về kho",
       "quickReceive": "Nhận hàng",
-      "colLot": "Lô"
+      "colLot": "Lô",
+      "campaignDays": "Kỳ chiến dịch: {count} ngày"
     },
     "documents": {
       "title": "Phiếu kho",
@@ -2463,7 +2468,22 @@
       "errorConvertLegacy": "{item} chưa có trạng thái/tình trạng (lô cũ) — cập nhật item trước.",
       "errorConvertSame": "{item}: trạng thái/tình trạng mới trùng hiện tại.",
       "errorConvertSameInline": "Trạng thái/tình trạng mới phải khác hiện tại.",
-      "errorSeqFull": "Tổ hợp mã đích đã hết số thứ tự (tối đa 999)."
+      "errorSeqFull": "Tổ hợp mã đích đã hết số thứ tự (tối đa 999).",
+      "newLoss": "Báo mất / hỏng",
+      "newHolding": "Chuyển đồ giữa 2 dự án",
+      "typeLOSS": "Báo mất / hỏng",
+      "typeHOLDING": "Chuyển đồ hiện trường",
+      "lossHint": "Trừ đồ đang giữ của dự án, KHÔNG cộng lại kho. Dùng khi hàng mất/hỏng ở hiện trường — bắt buộc ghi rõ lý do.",
+      "holdingHint": "Đồ đi thẳng từ site dự án này sang site dự án khác, không quay về kho. Bên nhận phải xác nhận nhận ĐỦ thì mới ghi nhận; nhận thiếu thì huỷ phiếu rồi bên gửi lập phiếu báo mất cho phần hụt.",
+      "holdingReceiveHint": "Nhận ĐỦ hoặc huỷ — không có nhận thiếu. Phần hụt phải đi qua phiếu báo mất của bên gửi.",
+      "confirmHoldingReceive": "Xác nhận nhận đồ",
+      "fromProject": "Từ dự án",
+      "formFromProject": "Dự án gửi",
+      "formToProject": "Dự án nhận",
+      "errorSameProject": "Dự án gửi và dự án nhận phải khác nhau",
+      "errorBoundOtherProject": "Lô đang ràng dự án khác: {items}",
+      "errorOtherClientGoods": "Hàng của khách khác, không dùng chéo được: {items}",
+      "formLossReason": "Lý do mất / hỏng"
     },
     "items": {
       "title": "Danh mục hàng",
@@ -2643,7 +2663,27 @@
       "reserveFlowHint": "Giữ hàng còn tồn cho dự án sắp chạy để đưa vào CO với đơn giá 0 (hàng đã tính tiền ở hợp đồng trước). Kế toán hoặc Trưởng phòng Nhân sự duyệt — một trong hai là đủ. Tồn kho KHÔNG đổi ở bước này.",
       "errorNotReadyToUse": "Chỉ hàng trạng thái “Sẵn sàng dùng” mới giữ chỗ được: {items}",
       "errorOverReserveCap": "Vượt số đã được duyệt giữ chỗ cho dự án này: {items}",
-      "reserveApprovedHint": "Đã duyệt — mở tab CO/CE của dự án, panel “Kho đã duyệt” để chèn vào bảng."
+      "reserveApprovedHint": "Đã duyệt — mở tab CO/CE của dự án, panel “Kho đã duyệt” để chèn vào bảng.",
+      "newTransferRequest": "Đề xuất điều chuyển kho",
+      "typeTRANSFER": "Điều chuyển kho",
+      "transferFlowHint": "Đề xuất → người có quyền duyệt điều chuyển duyệt → thủ kho chốt số thực xuất (sinh phiếu chuyển kho) → kho đích xác nhận nhận đủ. Tồn kho CHƯA đổi ở bước này.",
+      "errorSameWarehouse": "Kho nguồn và kho đích phải khác nhau",
+      "errorCampaignExpired": "Kỳ chiến dịch của dự án đã mở {days} ngày (tối đa {max}). Phải chốt kỳ — trả đồ về kho hoặc lập phiếu báo mất — trước khi xuất thêm.",
+      "confirmTransferTitle": "Thủ kho xác nhận thực xuất sang kho đích",
+      "confirmTransferHint": "Nhập số thực xuất khỏi kho nguồn (không vượt số đã duyệt). Bấm xác nhận là trừ kho nguồn và sinh phiếu chuyển kho — kho đích xác nhận nhận đủ thì mới cộng tồn bên đó."
+    },
+    "consumption": {
+      "title": "Tiêu hao vật tư theo dự án",
+      "hint": "Tính lại từ sổ kho: giao ra hiện trường − trả về kho − chuyển sang dự án khác − báo mất − còn ở hiện trường.",
+      "campaignOpen": "Kỳ chiến dịch mở từ {date}",
+      "empty": "Dự án chưa có phiếu kho nào",
+      "colItem": "Mặt hàng",
+      "colDelivered": "Đã giao",
+      "colReturned": "Đã trả kho",
+      "colMovedOut": "Chuyển đi dự án khác",
+      "colLost": "Mất / hỏng",
+      "colOnSite": "Còn ở hiện trường",
+      "colConsumed": "Tiêu hao thật"
     }
   },
   "staff": {

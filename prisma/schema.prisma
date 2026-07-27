@@ -627,7 +627,13 @@ model Project {
   ctvBatches        CtvBatch[]
   collectionMilestones CollectionMilestone[]
   purchaseOrders    PurchaseOrder[]
-  stockDocuments    StockDocument[]
+  /// Kho v2 K4 — mốc mở KỲ CHIẾN DỊCH đang chạy (UTC-midnight). null = không có kỳ nào mở.
+  /// CỜ TRẠNG THÁI, không phải lịch sử: lịch sử nằm ở sổ cái StockDocument (bất biến). Tự set khi
+  /// thủ kho xác nhận xuất đồ tái sử dụng, tự xoá khi holding của dự án về 0.
+  stockCampaignOpenedAt DateTime?
+
+  stockDocuments    StockDocument[] @relation("StockDocProject")
+  stockDocumentsFrom StockDocument[] @relation("StockDocFromProject")
   stockRequests     StockRequest[]
   inventoryHoldings ProjectHolding[]
   inventoryItemsBound InventoryItem[] @relation("InventoryItemBoundProject")
@@ -1921,9 +1927,10 @@ model Warehouse {
   updatedAt DateTime @updatedAt
 
   balances      StockBalance[]
+  stockRequestsTo StockRequest[] @relation("StockRequestToWarehouse")
   documentsFrom StockDocument[] @relation("StockDocFromWarehouse")
   documentsTo   StockDocument[] @relation("StockDocToWarehouse")
-  requests      StockRequest[]
+  requests      StockRequest[] @relation("StockRequestWarehouse")
 
   @@map("warehouse")
 }
@@ -1975,6 +1982,10 @@ model InventoryItem {
   boundProjectId String? // bắt buộc app-layer khi statusCode=P (hàng theo chính xác dự án)
   expiryDate     DateTime? // hàng khách có date — hết hạn: chặn xuất dùng, chỉ còn phiếu DESTROY
   clientDocNo    String? // số phiếu xuất kho của KHÁCH khi gửi hàng (nhóm isClientOwned)
+  /// K4 — MỨC cảnh báo hạn dùng ĐÃ nhắc (YELLOW|ORANGE|RED|EXPIRED). KHÔNG phải cờ một-lần: chỉ
+  /// bắn khi mức hiện tại NGHIÊM TRỌNG HƠN mức đã lưu → một lô được nhắc đủ 4 mốc mà không spam.
+  /// Gia hạn date thì reset null để nhắc lại từ đầu.
+  expiryReminderLevel String?
   seq            Int? // số thứ tự 001–999 trong tổ hợp mã (suy lại được từ code — lưu để đọc nhanh)
   isActive     Boolean  @default(true)
   note         String?
@@ -2014,7 +2025,10 @@ model StockDocument {
   status               String    @default("COMPLETED") // PENDING (chỉ TRANSFER) | COMPLETED | CANCELED
   fromWarehouseId      String?
   toWarehouseId        String?
-  projectId            String? // bắt buộc khi ISSUE | RETURN
+  projectId            String? // bắt buộc khi ISSUE | RETURN | LOSS; với HOLDING = dự án NHẬN
+  /// K4 — phiếu CH (chuyển đồ hiện trường A→B): dự án GỬI. projectId để là bên NHẬN, nhờ vậy bộ
+  /// nhắc trả đồ dùng lại nguyên vẹn (nó lọc theo projectId + holding > 0).
+  fromProjectId        String?
   expectedReturnAt     DateTime? // ISSUE có dòng tái sử dụng — mốc nhắc trả đồ
   returnReminderSentAt DateTime? // idempotent no-cron — reset khi đổi expectedReturnAt
   note                 String?
@@ -2028,7 +2042,8 @@ model StockDocument {
 
   fromWarehouse Warehouse?          @relation("StockDocFromWarehouse", fields: [fromWarehouseId], references: [id])
   toWarehouse   Warehouse?          @relation("StockDocToWarehouse", fields: [toWarehouseId], references: [id])
-  project       Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project       Project?            @relation("StockDocProject", fields: [projectId], references: [id], onDelete: SetNull)
+  fromProject   Project?            @relation("StockDocFromProject", fields: [fromProjectId], references: [id], onDelete: SetNull)
   createdBy     Staff?              @relation("StockDocCreatedBy", fields: [createdById], references: [id])
   confirmedBy   Staff?              @relation("StockDocConfirmedBy", fields: [confirmedById], references: [id])
   canceledBy    Staff?              @relation("StockDocCanceledBy", fields: [canceledById], references: [id])
@@ -2084,7 +2099,9 @@ model StockRequest {
   code             String    @unique // {DX|DN}-{YYMM}-{seq3}, retry P2002 khi trùng
   type             String // ISSUE | INTAKE
   status           String    @default("PROPOSED") // PROPOSED | APPROVED | REJECTED | CANCELED | DONE
-  warehouseId      String // ISSUE = kho xuất; INTAKE = kho nhận
+  warehouseId      String // ISSUE = kho xuất; INTAKE = kho nhận; RESERVE = kho đang giữ; TRANSFER = kho NGUỒN
+  /// K4 — TRANSFER (đề xuất chuyển kho): kho ĐÍCH. Các loại khác để null.
+  toWarehouseId    String?
   projectId        String? // bắt buộc khi ISSUE
   purchaseOrderId  String? // INTAKE từ PO (module 🛒) — chỉ để đối chiếu, PO vẫn là làn cam kết riêng
   expectedReturnAt DateTime? // ISSUE có dòng tái sử dụng — chép sang phiếu XE lúc xác nhận
@@ -2103,7 +2120,8 @@ model StockRequest {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  warehouse     Warehouse          @relation(fields: [warehouseId], references: [id])
+  warehouse     Warehouse          @relation("StockRequestWarehouse", fields: [warehouseId], references: [id])
+  toWarehouse   Warehouse?         @relation("StockRequestToWarehouse", fields: [toWarehouseId], references: [id])
   project       Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
   purchaseOrder PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   createdBy     Staff?             @relation("StockRequestCreatedBy", fields: [createdById], references: [id])

@@ -11,6 +11,8 @@ import {
   ITEM_CONDITION_CODES,
   ITEM_STATUS_CODES,
   InsufficientStockError,
+  closeCampaignIfSettled,
+  utcMidnightToday,
   TCM_OWNER_SEG,
   buildItemCode,
   creditBalance,
@@ -42,18 +44,6 @@ function revalidate() {
   revalidatePath("/inventory");
   revalidatePath("/inventory/documents");
   revalidatePath("/reminders");
-}
-
-/** Fan-out notification cho staff OPE + PRO (chưa có mapping thủ kho — nợ v2). */
-async function notifyFieldDepts(type: string, title: string, body: string | null, projectId?: string | null) {
-  const recipients = await prisma.staff.findMany({
-    where: { department: { code: { in: ["OPE", "PRO"] } }, isActive: true },
-    select: { id: true },
-  });
-  if (recipients.length === 0) return;
-  await prisma.notification.createMany({
-    data: recipients.map((r) => ({ recipientStaffId: r.id, type, title, body, projectId: projectId ?? null })),
-  });
 }
 
 /** Parse + validate dòng hàng chung: item tồn tại, active, stockable, không trùng; qty nguyên ≠ 0 (âm chỉ cho ADJUST). */
@@ -163,54 +153,9 @@ export async function createAdjustDoc(prev: DocFormState, formData: FormData): P
   return createInboundDoc("ADJUST", prev, formData);
 }
 
-// ── CHUYỂN KHO — 2 bước: PENDING (trừ nguồn) → nhận/hủy ──
-
-export async function createTransferDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
-  await requirePermission("inventory.transfer.create");
-  const t = await getTranslations("inventory.documents");
-  const fromWarehouseId = String(formData.get("fromWarehouseId") ?? "");
-  const toWarehouseId = String(formData.get("toWarehouseId") ?? "");
-  const note = String(formData.get("note") ?? "").trim() || null;
-  if (!fromWarehouseId || !toWarehouseId) return { error: t("errorInvalid") };
-  if (fromWarehouseId === toWarehouseId) return { error: t("errorSameWarehouse") };
-  const { lines, error } = await parseLines(formData, { allowNegative: false });
-  if (error) return { error };
-
-  const staffId = await getCurrentStaffId();
-  let docId = "";
-  let docCode = "";
-  try {
-    await createDocWithRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const code = await nextDocCode(tx, "TRANSFER", new Date());
-        const doc = await tx.stockDocument.create({
-          data: {
-            code,
-            type: "TRANSFER",
-            status: "PENDING",
-            fromWarehouseId,
-            toWarehouseId,
-            note,
-            createdById: staffId,
-            lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note, sort: i })) },
-          },
-        });
-        for (const l of lines) await debitBalance(tx, fromWarehouseId, l.itemId, l.quantity);
-        docId = doc.id;
-        docCode = doc.code;
-      })
-    );
-  } catch (e) {
-    if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
-    throw e;
-  }
-  await audit(docId, "CREATE");
-  // Notify SAU commit — giữ transaction ngắn (SQLite single-writer)
-  const to = await prisma.warehouse.findUnique({ where: { id: toWarehouseId }, select: { name: true } });
-  await notifyFieldDepts("INVENTORY_TRANSFER_INCOMING", `Phiếu chuyển kho ${docCode} đang tới ${to?.name ?? ""}`, "Vui lòng xác nhận khi nhận đủ hàng.");
-  revalidate();
-  redirect(`/inventory/documents/${docId}`);
-}
+// ── CHUYỂN KHO — nhận / huỷ phiếu CK ─────────────────────
+// Phiếu do THỦ KHO sinh ra khi chốt lệnh điều chuyển đã duyệt (inventory/requests, K4); ở đây chỉ
+// còn hai đầu kia của vòng đời: kho đích nhận đủ/thiếu, hoặc huỷ hoàn tồn về kho nguồn.
 
 export async function confirmTransferReceive(docId: string, _prev: DocFormState, formData: FormData): Promise<DocFormState> {
   await requirePermission("inventory.transfer.confirm");
@@ -305,6 +250,7 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
           await debitHolding(tx, projectId, l.itemId, l.quantity); // guard: không trả quá số đang giữ
           await creditBalance(tx, toWarehouseId, l.itemId, l.quantity);
         }
+        await closeCampaignIfSettled(tx, projectId); // K4 — hàng về hết thì kỳ chiến dịch đóng
         docId = doc.id;
       })
     );
@@ -315,6 +261,178 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
   await audit(docId, "CREATE");
   revalidate();
   redirect(`/inventory/documents/${docId}`);
+}
+
+// ── K4: BÁO MẤT / HỎNG Ở HIỆN TRƯỜNG (LOSS) ──────────────
+// Trừ holding NHƯNG KHÔNG cộng lại kho — hàng không còn nữa. Đây là LỐI THOÁT bắt buộc của kỳ
+// chiến dịch: guard chống âm khiến đồ mất không trả về được, không có phiếu này thì holding kẹt
+// vĩnh viễn và dự án bị khoá khỏi mọi lệnh xuất mới sau 15 ngày.
+
+export async function createLossDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.destroy"); // cùng nghĩa "ghi giảm tài sản" với xuất hủy
+  const t = await getTranslations("inventory.documents");
+  const projectId = String(formData.get("projectId") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  if (!projectId) return { error: t("errorInvalid") };
+  if (!note) return { error: t("errorReasonRequired") };
+  const { lines, error } = await parseLines(formData, { allowNegative: false });
+  if (error) return { error };
+
+  const staffId = await getCurrentStaffId();
+  let docId = "";
+  try {
+    await createDocWithRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const code = await nextDocCode(tx, "LOSS", new Date());
+        const doc = await tx.stockDocument.create({
+          data: {
+            code,
+            type: "LOSS",
+            status: "COMPLETED",
+            projectId,
+            note,
+            createdById: staffId,
+            lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note, sort: i })) },
+          },
+        });
+        for (const l of lines) await debitHolding(tx, projectId, l.itemId, l.quantity);
+        await closeCampaignIfSettled(tx, projectId);
+        docId = doc.id;
+      })
+    );
+  } catch (e) {
+    if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
+    throw e;
+  }
+  await audit(docId, "CREATE", note);
+  revalidate();
+  redirect(`/inventory/documents/${docId}`);
+}
+
+// ── K4: CHUYỂN ĐỒ HIỆN TRƯỜNG GIỮA 2 DỰ ÁN (HOLDING) ─────
+// Hàng đang ở site dự án A chuyển thẳng sang dự án B, KHÔNG quay về kho (quyết định Câu 7).
+// 2 bước như chuyển kho: gửi trừ holding A ngay, bên B xác nhận mới cộng. Tồn kho KHÔNG đổi.
+// CỐ Ý không cho nhận thiếu: phần hụt là mất mát phải có chứng từ → phiếu BM của bên A.
+
+export async function createHoldingTransfer(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.request.create");
+  const t = await getTranslations("inventory.documents");
+  const fromProjectId = String(formData.get("fromProjectId") ?? "");
+  const projectId = String(formData.get("projectId") ?? ""); // dự án NHẬN
+  const expectedReturnRaw = String(formData.get("expectedReturnAt") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim() || null;
+  if (!fromProjectId || !projectId) return { error: t("errorInvalid") };
+  if (fromProjectId === projectId) return { error: t("errorSameProject") };
+  const { lines, error } = await parseLines(formData, { allowNegative: false });
+  if (error) return { error };
+
+  const [target, items] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, include: { status: true } }),
+    prisma.inventoryItem.findMany({
+      where: { id: { in: lines.map((l) => l.itemId) } },
+      select: { id: true, code: true, expiryDate: true, ownerClientId: true, boundProjectId: true },
+    }),
+  ]);
+  if (!target || !(EXECUTION_STATUS_CODES as readonly string[]).includes(target.status.code)) return { error: t("errorProjectRequired") };
+
+  const expired = items.filter((i) => expiryLevel(i.expiryDate, new Date()) === "EXPIRED");
+  if (expired.length > 0) return { error: t("errorExpired", { items: expired.map((i) => i.code).join(", ") }) };
+  const wrongProject = items.filter((i) => i.boundProjectId && i.boundProjectId !== projectId);
+  if (wrongProject.length > 0) return { error: t("errorBoundOtherProject", { items: wrongProject.map((i) => i.code).join(", ") }) };
+  const wrongClient = items.filter((i) => i.ownerClientId && i.ownerClientId !== target.clientId);
+  if (wrongClient.length > 0) return { error: t("errorOtherClientGoods", { items: wrongClient.map((i) => i.code).join(", ") }) };
+
+  // Hạn trả MỚI bắt buộc: bộ nhắc trả đồ neo vào phiếu, không có hạn thì hàng rơi khỏi radar.
+  const expectedReturnAt = expectedReturnRaw ? new Date(expectedReturnRaw) : null;
+  if (!expectedReturnAt || Number.isNaN(expectedReturnAt.getTime())) return { error: t("errorReturnRequired") };
+
+  const staffId = await getCurrentStaffId();
+  let docId = "";
+  try {
+    await createDocWithRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const code = await nextDocCode(tx, "HOLDING", new Date());
+        const doc = await tx.stockDocument.create({
+          data: {
+            code,
+            type: "HOLDING",
+            status: "PENDING",
+            fromProjectId,
+            projectId,
+            expectedReturnAt,
+            note,
+            createdById: staffId,
+            lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note, sort: i })) },
+          },
+        });
+        for (const l of lines) await debitHolding(tx, fromProjectId, l.itemId, l.quantity);
+        // CỐ Ý không chốt kỳ của bên gửi ở đây: phiếu còn PENDING thì đồ chưa thật sự đi.
+        // Chốt sớm rồi huỷ sẽ mở lại kỳ bằng ngày hôm nay = reset đồng hồ 15 ngày.
+        docId = doc.id;
+      })
+    );
+  } catch (e) {
+    if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
+    throw e;
+  }
+  await audit(docId, "CREATE");
+  revalidate();
+  redirect(`/inventory/documents/${docId}`);
+}
+
+/** Bên NHẬN xác nhận — nhận ĐỦ hoặc huỷ, không có nhận thiếu (phần hụt phải đi qua phiếu BM của bên gửi). */
+export async function confirmHoldingReceive(docId: string, _prev: DocFormState, _formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.request.create");
+  const t = await getTranslations("inventory.documents");
+  const doc = await prisma.stockDocument.findUnique({ where: { id: docId }, include: { lines: true } });
+  if (!doc || doc.type !== "HOLDING" || !doc.projectId) return { error: t("errorInvalid") };
+
+  const staffId = await getCurrentStaffId();
+  const done = await prisma.$transaction(async (tx) => {
+    const res = await tx.stockDocument.updateMany({
+      where: { id: docId, status: "PENDING" },
+      data: { status: "COMPLETED", confirmedById: staffId, confirmedAt: new Date() },
+    });
+    if (res.count === 0) return false;
+    for (const l of doc.lines) {
+      await creditHolding(tx, doc.projectId!, l.itemId, l.quantity);
+      await tx.stockDocumentLine.update({ where: { id: l.id }, data: { receivedQuantity: l.quantity } });
+    }
+    // Bên nhận bắt đầu giữ đồ → mở kỳ chiến dịch cho họ nếu chưa có.
+    await tx.project.updateMany({
+      where: { id: doc.projectId!, stockCampaignOpenedAt: null },
+      data: { stockCampaignOpenedAt: utcMidnightToday() },
+    });
+    // Giờ đồ mới thật sự rời bên gửi → chốt kỳ của họ nếu đã trả hết.
+    if (doc.fromProjectId) await closeCampaignIfSettled(tx, doc.fromProjectId);
+    return true;
+  });
+  if (!done) return { error: t("errorAlreadyProcessed") };
+  await audit(docId, "UPDATE", "confirm holding receive");
+  revalidate();
+  return { success: true };
+}
+
+export async function cancelHoldingTransfer(docId: string, _prev: DocFormState, _formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.request.create");
+  const t = await getTranslations("inventory.documents");
+  const doc = await prisma.stockDocument.findUnique({ where: { id: docId }, include: { lines: true } });
+  if (!doc || doc.type !== "HOLDING" || !doc.fromProjectId) return { error: t("errorInvalid") };
+
+  const staffId = await getCurrentStaffId();
+  const done = await prisma.$transaction(async (tx) => {
+    const res = await tx.stockDocument.updateMany({
+      where: { id: docId, status: "PENDING" },
+      data: { status: "CANCELED", canceledById: staffId, canceledAt: new Date() },
+    });
+    if (res.count === 0) return false;
+    for (const l of doc.lines) await creditHolding(tx, doc.fromProjectId!, l.itemId, l.quantity); // hoàn ĐỦ về bên gửi
+    return true; // kỳ của bên gửi chưa từng bị đóng (xem createHoldingTransfer) → ngày mở gốc giữ nguyên
+  });
+  if (!done) return { error: t("errorAlreadyProcessed") };
+  await audit(docId, "UPDATE", "cancel holding transfer");
+  revalidate();
+  return { success: true };
 }
 
 // ── KHO V2: XUẤT HỦY (DESTROY) — 1 bước, bắt buộc lý do ──
@@ -537,7 +655,7 @@ export async function updateExpectedReturn(docId: string, _prev: DocFormState, f
   if (!d || Number.isNaN(d.getTime())) return { error: t("errorInvalid") };
 
   const doc = await prisma.stockDocument.findUnique({ where: { id: docId }, select: { type: true, status: true } });
-  if (!doc || doc.type !== "ISSUE" || doc.status !== "COMPLETED") return { error: t("errorInvalid") };
+  if (!doc || !["ISSUE", "HOLDING"].includes(doc.type) || doc.status !== "COMPLETED") return { error: t("errorInvalid") };
 
   await prisma.stockDocument.update({
     where: { id: docId },

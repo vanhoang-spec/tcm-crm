@@ -36,13 +36,14 @@ export default async function InventoryDocumentsPage({
   const statusLabel = (st: string) => t(`status${st}` as Parameters<typeof t>[0]);
 
   const newButtons = [
-    { href: "/inventory/documents/new/transfer", label: t("newTransfer") },
     { href: "/inventory/requests/new/issue", label: t("newIssue") },
     { href: "/inventory/documents/new/return", label: t("newReturn") },
     { href: "/inventory/documents/new/import", label: t("newImport") },
     { href: "/inventory/documents/new/adjust", label: t("newAdjust") },
     { href: "/inventory/documents/new/convert", label: t("newConvert") },
     { href: "/inventory/documents/new/destroy", label: t("newDestroy") },
+    { href: "/inventory/documents/new/loss", label: t("newLoss") },
+    { href: "/inventory/documents/new/holding", label: t("newHolding") },
   ];
 
   return (

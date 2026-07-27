@@ -197,13 +197,19 @@ export async function updateItem(itemId: string, _prev: ItemFormState, formData:
     if (stock > 0 || holding > 0) return { error: t("errorInUse") };
   }
 
+  // K4: đổi hạn dùng thì XOÁ mốc đã cảnh báo — không xoá thì lô lùi hạn (nhập lại date xa hơn) vẫn
+  // mang mốc cũ và thang cảnh báo sẽ câm cho tới khi vượt mức đã bắn.
+  const expiryChanged = (item.expiryDate?.getTime() ?? null) !== (expiryDate?.getTime() ?? null);
   await prisma.$transaction(async (tx) => {
-    await tx.inventoryItem.update({ where: { id: itemId }, data: { name, unit, isReusable, isActive, expiryDate, clientDocNo, note } });
+    await tx.inventoryItem.update({
+      where: { id: itemId },
+      data: { name, unit, isReusable, isActive, expiryDate, clientDocNo, note, ...(expiryChanged ? { expiryReminderLevel: null } : {}) },
+    });
     if (item.parts.length > 0) {
       // Lan thuộc tính lô xuống phần con (tên phần giữ nguyên — có thể đã sửa tay)
       await tx.inventoryItem.updateMany({
         where: { parentItemId: itemId },
-        data: { isReusable, isActive, expiryDate, clientDocNo },
+        data: { isReusable, isActive, expiryDate, clientDocNo, ...(expiryChanged ? { expiryReminderLevel: null } : {}) },
       });
     }
   });

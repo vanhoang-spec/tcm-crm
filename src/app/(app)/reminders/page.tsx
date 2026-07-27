@@ -12,6 +12,7 @@ import {
   getTimelineOverdueItems,
   getCreativeOverdueTasks,
   getDepartmentTaskOverdueTasks,
+  getExpiringLots,
   getInventoryReturnReminders,
   getStockRequestReminders,
 } from "@/lib/reminders";
@@ -34,6 +35,8 @@ const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
   A3: "warning",
 };
 
+const EXPIRY_TONE = { YELLOW: "warning", ORANGE: "warning", RED: "danger", EXPIRED: "danger" } as const;
+
 export default async function RemindersPage({
   searchParams,
 }: {
@@ -53,7 +56,7 @@ export default async function RemindersPage({
     finance: perms.has("finance.view"),
     inventory: perms.has("inventory.view"),
   };
-  const [t, tClients, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, stockRequestItems, notifications] = await Promise.all([
+  const [t, tClients, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, stockRequestItems, expiringLots, notifications] = await Promise.all([
     getTranslations("reminders"),
     getTranslations("clients.list"),
     getLocale() as Promise<Locale>,
@@ -68,6 +71,8 @@ export default async function RemindersPage({
     can.finance ? getArOverdueItems(team) : [],
     can.inventory ? getInventoryReturnReminders(team) : [],
     can.inventory ? getStockRequestReminders(team) : [],
+    // Hạn dùng KHÔNG lọc theo team: lô hàng nằm ở kho, không thuộc dự án nào.
+    can.inventory ? getExpiringLots() : [],
     // Chỉ thông báo CỦA người đang đăng nhập (body có thể chứa preview chat/nội dung riêng tư).
     // CHAT_MESSAGE có badge riêng trong module Chat — không lặp lại ở đây (khớp công thức chuông layout.tsx).
     prisma.notification.findMany({
@@ -339,6 +344,34 @@ export default async function RemindersPage({
             </li>
           ))}
           {inventoryItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("inventoryEmpty")}</li>}
+        </ul>
+      </section>
+      )}
+
+      {/* Hạn dùng sắp tới — thang vàng 90 / cam 60 / đỏ 30 / hết hạn (K4). */}
+      {can.inventory && (
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("expirySection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {expiringLots.map((lot) => (
+            <li key={lot.itemId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <span className="text-sm font-medium text-foreground">{lot.name}</span>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge tone={EXPIRY_TONE[lot.level]}>{lot.code}</Badge>
+                  <span>
+                    {lot.level === "EXPIRED"
+                      ? t("expiryItemExpired", { qty: formatNumber(lot.quantity, locale) })
+                      : t("expiryItem", { days: formatNumber(lot.daysLeft, locale), qty: formatNumber(lot.quantity, locale) })}
+                  </span>
+                </div>
+              </div>
+              <Link href="/inventory" className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {t("goToInventory")}
+              </Link>
+            </li>
+          ))}
+          {expiringLots.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("expiryEmpty")}</li>}
         </ul>
       </section>
       )}

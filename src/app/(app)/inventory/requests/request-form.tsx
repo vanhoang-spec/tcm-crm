@@ -6,7 +6,7 @@ import { Minus, Plus, X } from "lucide-react";
 import { NumberField } from "@/components/ui/number-field";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createIntakeRequest, createIssueRequest, createReserveRequest, type RequestFormState } from "./actions";
+import { createIntakeRequest, createIssueRequest, createReserveRequest, createTransferRequest, type RequestFormState } from "./actions";
 
 const input =
   "h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
@@ -30,6 +30,7 @@ const ACTION_BY_KIND = {
   ISSUE: createIssueRequest,
   INTAKE: createIntakeRequest,
   RESERVE: createReserveRequest,
+  TRANSFER: createTransferRequest,
 } as const;
 
 export function RequestForm({
@@ -40,7 +41,7 @@ export function RequestForm({
   purchaseOrders,
   reservedFree,
 }: {
-  kind: "ISSUE" | "INTAKE" | "RESERVE";
+  kind: "ISSUE" | "INTAKE" | "RESERVE" | "TRANSFER";
   warehouses: WarehouseOption[];
   items: RequestPickerItem[];
   projects?: ProjectOption[];
@@ -52,6 +53,7 @@ export function RequestForm({
   const t = useTranslations("inventory.requests");
 
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
+  const [toWarehouseId, setToWarehouseId] = useState(kind === "TRANSFER" ? warehouses[1]?.id ?? "" : "");
   const [projectId, setProjectId] = useState("");
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
@@ -86,7 +88,7 @@ export function RequestForm({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-xs text-muted-foreground">
-          {kind === "ISSUE" ? t("formFromWarehouse") : t("formToWarehouse")}
+          {kind === "ISSUE" || kind === "TRANSFER" ? t("formFromWarehouse") : t("formToWarehouse")}
           <select name="warehouseId" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className={input + " w-full"}>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
@@ -116,6 +118,18 @@ export function RequestForm({
             )}
           </>
         )}
+        {kind === "TRANSFER" && (
+          <label className="space-y-1 text-xs text-muted-foreground">
+            {t("formToWarehouse")}
+            <select name="toWarehouseId" value={toWarehouseId} onChange={(e) => setToWarehouseId(e.target.value)} className={input + " w-full"}>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {kind === "INTAKE" && (
           <label className="space-y-1 text-xs text-muted-foreground">
             {t("formPo")}
@@ -136,7 +150,13 @@ export function RequestForm({
       </div>
 
       <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">
-        {kind === "ISSUE" ? t("issueFlowHint") : kind === "RESERVE" ? t("reserveFlowHint") : t("intakeFlowHint")}
+        {kind === "ISSUE"
+          ? t("issueFlowHint")
+          : kind === "RESERVE"
+            ? t("reserveFlowHint")
+            : kind === "TRANSFER"
+              ? t("transferFlowHint")
+              : t("intakeFlowHint")}
       </p>
 
       <div className="space-y-2">
@@ -187,7 +207,7 @@ export function RequestForm({
                   <Plus className="h-4 w-4" />
                 </button>
                 {info.unit && <span className="text-xs text-muted-foreground">{info.unit}</span>}
-                {kind === "ISSUE" && l.quantity > avail && (
+                {(kind === "ISSUE" || kind === "TRANSFER") && l.quantity > avail && (
                   <span className="text-xs font-medium text-danger">{t("overAvailable", { item: info.code })}</span>
                 )}
               </div>
@@ -238,7 +258,7 @@ export function RequestForm({
                         <span className="font-mono text-xs text-muted-foreground">{r.code}</span>
                       </span>
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        {kind === "ISSUE" ? t("availableAt", { count: r.qty }) : ""}
+                        {kind === "ISSUE" || kind === "TRANSFER" ? t("availableAt", { count: r.qty }) : ""}
                         {r.unit ? ` ${r.unit}` : ""}
                       </span>
                     </button>

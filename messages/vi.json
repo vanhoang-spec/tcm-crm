@@ -1472,9 +1472,7 @@
       "msErrRequired": "Nhập tên đợt và % (0–100).",
       "msErrHasInvoices": "Đợt đã có hóa đơn phát hành — không xoá được.",
       "msPickLabel": "Đợt thu",
-      "msPickNone": "— Không gắn đợt —",
-      "acceptanceDocBtn": "Tải biên bản nghiệm thu (.docx, theo bản v{rev})",
-      "acceptanceDocDraftNote": "Mẫu biên bản đang là BẢN NHÁP — duyệt/thay mẫu chính thức trước khi ký với khách (templates/NGHIEMTHU-TEMPLATE-MAPPING.md)."
+      "msPickNone": "— Không gắn đợt —"
     },
     "operations": {
       "title": "Vận hành — Thuê ngoài (CTV)",

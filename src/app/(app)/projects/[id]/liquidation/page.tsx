@@ -212,15 +212,6 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
                 )}
               </div>
             )}
-            {/* C6b: tải biên bản nghiệm thu (.docx) — số từ ĐÚNG bản đã chuyển. Mẫu đang là BẢN
-                NHÁP (templates/NGHIEMTHU-TEMPLATE-MAPPING.md) — thay mẫu thật trước khi ký khách. */}
-            <a
-              href={`/api/costsheet/${id}/acceptance`}
-              className="mt-3 inline-flex items-center gap-1 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-2"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" /> {t("acceptanceDocBtn", { rev: sentRev.revNo })}
-            </a>
-            <p className="mt-1 text-[11px] text-warning">{t("acceptanceDocDraftNote")}</p>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <SummaryCard label={t("coceRevLabel")} value={`v${sentRev.revNo}`} />
               <SummaryCard label={t("coTotal")} value={formatNumber(sentRev.coTotal, locale)} />

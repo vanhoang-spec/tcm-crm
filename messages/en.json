@@ -1472,9 +1472,7 @@
       "msErrRequired": "Enter a name and a % (0–100).",
       "msErrHasInvoices": "Milestone already has issued invoices — cannot delete.",
       "msPickLabel": "Billing milestone",
-      "msPickNone": "— No milestone —",
-      "acceptanceDocBtn": "Download acceptance minutes (.docx, from v{rev})",
-      "acceptanceDocDraftNote": "The minutes template is a DRAFT — approve/replace with the official template before signing with the client (templates/NGHIEMTHU-TEMPLATE-MAPPING.md)."
+      "msPickNone": "— No milestone —"
     },
     "operations": {
       "title": "Operations — Outsourced Labor (CTV)",

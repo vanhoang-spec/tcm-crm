@@ -139,7 +139,22 @@ export function SearchableSelect({
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
-      {name && <input type="hidden" name={name} form={form} value={selected} required={required} />}
+      {/* KHÔNG dùng type="hidden" khi có `required`: trình duyệt chặn submit nhưng KHÔNG hiện được
+          thông báo trên ô ẩn → bấm nút mà "không có gì xảy ra", người dùng không hiểu vì sao.
+          Ô 1px trong suốt vẫn được coi là hiển thị nên bong bóng "Vui lòng điền vào trường này"
+          neo đúng chỗ. pointer-events-none + tabIndex -1 để không cướp chuột/tab của nút chọn. */}
+      {name && (
+        <input
+          name={name}
+          form={form}
+          value={selected}
+          onChange={() => {}}
+          required={required}
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 h-px w-px opacity-0"
+        />
+      )}
       <button
         type="button"
         disabled={disabled}

@@ -196,10 +196,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 ## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
 
 1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
-   - **Danh mục 90 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+   - **danh mục 91 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
      Ngoại lệ: `finance.vendor_payment.over_cap` được kiểm bằng `hasPermission()` **bên trong** `createVendorPayment` (action đã có `requirePermission("finance.vendor_payment.manage")` ở đầu) chứ không phải một điểm chặn riêng — đừng đi tìm `requirePermission` tương ứng.
    - **248 điểm chặn**: 177 server action + 64 page + 7 route API. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
-   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 90 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
+   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 91 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
    - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
    - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
    - ⚠ **Không gate bằng `layout.tsx`**: layout không re-render khi điều hướng phía client và không chặn được server action — xem `node_modules/next/dist/docs/01-app/02-guides/authentication.md` dòng 1350 và 1446. Ẩn mục khỏi menu chỉ là trang trí.

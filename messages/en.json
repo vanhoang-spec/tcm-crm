@@ -114,7 +114,8 @@
     },
     "concentration": {
       "title": "Client concentration warning (FR-11)",
-      "desc": "will auto-enable once module ④ Cost & Receivables has revenue data — proposed default threshold is 40%/team."
+      "desc": "Clients at or above {pct}% of their team's invoiced revenue in {year}:",
+      "row": "{client} · Team {team} — {pct}% of team revenue ({amount})"
     },
     "new": {
       "backToList": "Back to list",
@@ -360,7 +361,11 @@
       "kpiTitle": "KPI & Performance Pay",
       "kpiDesc": "Evaluation criteria, 75/25 pool parameters, position salaries",
       "aiTitle": "AI assistant",
-      "aiDesc": "DeepSeek connection status and how to configure the API key."
+      "aiDesc": "DeepSeek connection status and how to configure the API key.",
+      "departmentsTitle": "Departments",
+      "departmentsDesc": "Department lead and CO/CE cost-line prefix.",
+      "securityTitle": "Security",
+      "securityDesc": "Change the shared password issued to new staff."
     },
     "bidding": {
       "backToSettings": "Back to Settings",
@@ -787,6 +792,33 @@
       "errorInvalid": "Invalid value.",
       "errorDuplicate": "Criterion code already exists.",
       "saved": "Saved."
+    },
+    "departments": {
+      "backToSettings": "Back to settings",
+      "title": "Departments",
+      "desc": "Department lead (schedules the week, approves Planning proposals) and the CO/CE cost-line prefix. Department codes are fixed; changing them needs a migration.",
+      "prefixPlaceholder": "e.g. ACC",
+      "leadLabel": "Department lead",
+      "leadNone": "— Not set —",
+      "active": "Active",
+      "errNameRequired": "Enter a department name.",
+      "errPrefixFormat": "Prefix must be 2–5 uppercase letters.",
+      "errPrefixTaken": "That prefix is already used by {name}.",
+      "errNotFound": "Department not found."
+    },
+    "security": {
+      "backToSettings": "Back to settings",
+      "title": "Security",
+      "desc": "The shared password issued to new staff and on admin reset.",
+      "defaultPasswordTitle": "Company default password",
+      "defaultPasswordHint": "Used for first login or after an admin reset — the system forces a change straight after. Does not affect anyone who already set their own password.",
+      "stillFactoryDefault": "Still using the factory default password. Change it before opening the system company-wide.",
+      "newPassword": "New default password",
+      "confirmPassword": "Confirm",
+      "saved": "Saved.",
+      "errTooShort": "Password must be at least {min} characters.",
+      "errMismatch": "The two entries do not match.",
+      "usingDefaultCount": "{count} active staff have not set their own password yet — they use this shared password."
     }
   },
   "bidding": {
@@ -1722,7 +1754,13 @@
       "colNetAmount": "Net payable",
       "colPaid": "Paid to vendor",
       "netVsCoHint": "Net payable (spending cap). CO after tax gross-up: {co}đ — the difference is tax the company remits, not paid to anyone.",
-      "outdatedWarning": "Cost lines came from an older cost sheet (rev {synced}) while the sheet is now at rev {current}. Per-line amounts — and the spending caps based on them — may be wrong. Click \"Refresh\" to re-sync."
+      "outdatedWarning": "Cost lines came from an older cost sheet (rev {synced}) while the sheet is now at rev {current}. Per-line amounts — and the spending caps based on them — may be wrong. Click \"Refresh\" to re-sync.",
+      "errReverseReason": "A reason is required to reverse a disbursed advance.",
+      "errReverseWrongStatus": "Only advances in Disbursed status can be reversed.",
+      "errStaleLine": "This cost line is no longer in the latest CO/CE — cannot request an advance.",
+      "errProjectNotExecuting": "This project is no longer in execution — cannot request an advance.",
+      "reverseBtn": "Reverse (money recovered)",
+      "reverseNotePlaceholder": "Reason for reversing a disbursed advance…"
     },
     "vendorPayments": {
       "title": "Vendor payments",
@@ -1759,7 +1797,11 @@
       "overCapNoteHint": "Only required when the payment exceeds the project cap, or the project has no cost lines yet.",
       "overCapBadge": "Over cap",
       "projectRemaining": "Project cap remaining: {amount}",
-      "projectNoLines": "No cost lines on this project — needs over-cap permission plus a reason."
+      "projectNoLines": "No cost lines on this project — needs over-cap permission plus a reason.",
+      "errReverseReason": "A reason is required to un-mark as paid.",
+      "errReverseWrongStatus": "This voucher is not in Paid status.",
+      "unmarkPaid": "Un-mark as paid",
+      "unmarkNotePlaceholder": "Reason…"
     },
     "debt": {
       "title": "Client receivables (AR)",
@@ -1786,7 +1828,12 @@
       "totalOutstanding": "Total receivables",
       "errRequired": "Select a project, enter an invoice number and a valid amount.",
       "errOverPayment": "Payment exceeds the invoice balance ({outstanding} remaining).",
-      "defNote": "Total receivables = every invoice with a balance, no time limit. Aging is measured from the due date, or the invoice date when no due date was entered. The Cash Flow Forecast page shows a different figure because it adds a 14-day collection buffer to that date."
+      "defNote": "Total receivables = every invoice with a balance, no time limit. Aging is measured from the due date, or the invoice date when no due date was entered. The Cash Flow Forecast page shows a different figure because it adds a 14-day collection buffer to that date.",
+      "errVoidReason": "A reason is required to void an invoice.",
+      "errVoidHasPayments": "This invoice has recorded payments — reverse them before voiding.",
+      "errAlreadyVoided": "This invoice is already voided.",
+      "voidBtn": "Void invoice",
+      "voidNotePlaceholder": "Reason for voiding…"
     },
     "cashflow": {
       "title": "Cash Flow Forecast (all projects)",

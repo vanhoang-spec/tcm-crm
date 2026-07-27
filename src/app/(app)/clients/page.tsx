@@ -60,8 +60,6 @@ export default async function ClientsPage({
     }),
   ]);
 
-  // Cảnh báo tập trung khách hàng (FR-11) — bật đủ khi có dữ liệu doanh thu từ module ④ Chi phí.
-  const concentrationReady = false;
 
   return (
     <div className="space-y-6">
@@ -84,7 +82,8 @@ export default async function ClientsPage({
         </div>
       </div>
 
-      {!concentrationReady && <ConcentrationBanner />}
+      {/* Tự ẩn khi không có khách nào vượt ngưỡng — xem concentration-banner.tsx */}
+      <ConcentrationBanner />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <TeamFilterTabs teams={teams} activeCode={team} allLabel={t("allTeams")} />

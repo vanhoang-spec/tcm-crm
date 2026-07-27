@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { NumberField } from "@/components/ui/number-field";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createVendorPayment, markVendorPaymentPaid, type FinanceFormState } from "../actions";
+import { createVendorPayment, markVendorPaymentPaid, unmarkVendorPaymentPaid, type FinanceFormState } from "../actions";
 import { VendorPaymentLinePicker, type PickerLine } from "./line-picker";
 
 /**
@@ -99,6 +99,42 @@ export function MarkPaidButton({ id }: { id: string }) {
       </button>
       {state.error && (
         <p className="mt-1 text-[11px] text-danger" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+/** Đảo trạng thái "đã trả" (bấm nhầm / lệnh chuyển tiền bị trả về). Ẩn sau một cú bấm để không
+ *  ai lỡ tay: mở ra mới thấy ô lý do — lý do là bắt buộc ở server. */
+export function UnmarkPaidButton({ id }: { id: string }) {
+  const t = useTranslations("finance.vendorPayments");
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<FinanceFormState, FormData>(
+    unmarkVendorPaymentPaid.bind(null, id),
+    {},
+  );
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-[11px] text-muted-foreground hover:text-danger">
+        {t("unmarkPaid")}
+      </button>
+    );
+  }
+  return (
+    <form action={formAction} className="space-y-1">
+      <input name="reverseNote" placeholder={t("unmarkNotePlaceholder")} className="h-8 w-40 rounded-lg border border-border-strong bg-surface px-2 text-xs" />
+      <button
+        type="submit"
+        disabled={pending}
+        className="block rounded-lg border border-danger/40 px-2 py-1 text-[11px] font-medium text-danger hover:bg-danger-bg disabled:opacity-60"
+      >
+        {t("unmarkPaid")}
+      </button>
+      {state.error && (
+        <p className="text-[11px] text-danger" role="alert">
           {state.error}
         </p>
       )}

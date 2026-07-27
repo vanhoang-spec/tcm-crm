@@ -1,5 +1,7 @@
 import Link from "next/link";
 import {
+  Building2,
+  KeyRound,
   Users2,
   Tags,
   HandCoins,
@@ -40,6 +42,7 @@ export default async function SettingsPage() {
 
   const sections = [
     { href: "/settings/teams", icon: Users2, title: t("teamsTitle"), desc: t("teamsDesc") },
+    { href: "/settings/departments", icon: Building2, title: t("departmentsTitle"), desc: t("departmentsDesc") },
     { href: "/settings/staff", icon: UserPlus, title: t("staffTitle"), desc: t("staffDesc") },
     { href: "/settings/roles", icon: ShieldCheck, title: t("rolesTitle"), desc: t("rolesDesc") },
     { href: "/settings/options/industry", icon: Tags, title: t("industryTitle"), desc: t("industryDesc") },
@@ -74,6 +77,7 @@ export default async function SettingsPage() {
     { href: "/settings/shifts", icon: Clock, title: t("shiftsTitle"), desc: t("shiftsDesc") },
     { href: "/settings/timekeeping", icon: CalendarDays, title: t("timekeepingTitle"), desc: t("timekeepingDesc") },
     { href: "/settings/options/leave_type", icon: Plane, title: t("leaveTypeTitle"), desc: t("leaveTypeDesc") },
+    { href: "/settings/security", icon: KeyRound, title: t("securityTitle"), desc: t("securityDesc") },
   ];
 
   return (

@@ -114,7 +114,8 @@
     },
     "concentration": {
       "title": "Cảnh báo tập trung khách hàng (FR-11)",
-      "desc": "sẽ tự động bật khi module ④ Chi phí & Công nợ có dữ liệu doanh thu — hiện ngưỡng mặc định đề xuất là 40%/team."
+      "desc": "Các khách chiếm từ {pct}% doanh thu đã xuất hóa đơn của team trong năm {year}:",
+      "row": "{client} · Team {team} — {pct}% doanh thu team ({amount})"
     },
     "new": {
       "backToList": "Quay lại danh sách",
@@ -360,7 +361,11 @@
       "kpiTitle": "KPI & Lương hiệu suất",
       "kpiDesc": "Tiêu chí đánh giá, tham số quỹ 75/25, lương vị trí",
       "aiTitle": "Trợ lý AI",
-      "aiDesc": "Trạng thái kết nối DeepSeek và hướng dẫn cấu hình khoá API."
+      "aiDesc": "Trạng thái kết nối DeepSeek và hướng dẫn cấu hình khoá API.",
+      "departmentsTitle": "Phòng ban",
+      "departmentsDesc": "Trưởng phòng và prefix mã dòng chi phí CO/CE.",
+      "securityTitle": "Bảo mật",
+      "securityDesc": "Đổi mật khẩu chung cấp cho nhân sự mới."
     },
     "bidding": {
       "backToSettings": "Quay lại Thiết lập",
@@ -787,6 +792,33 @@
       "errorInvalid": "Giá trị không hợp lệ.",
       "errorDuplicate": "Mã tiêu chí đã tồn tại.",
       "saved": "Đã lưu."
+    },
+    "departments": {
+      "backToSettings": "Về Thiết lập",
+      "title": "Phòng ban",
+      "desc": "Trưởng phòng (người xếp lịch tuần, duyệt proposal Planning) và prefix mã dòng chi phí CO/CE. Mã phòng cố định, đổi phải qua migration.",
+      "prefixPlaceholder": "VD: ACC",
+      "leadLabel": "Trưởng phòng",
+      "leadNone": "— Chưa đặt —",
+      "active": "Đang hoạt động",
+      "errNameRequired": "Nhập tên phòng ban.",
+      "errPrefixFormat": "Prefix phải là 2–5 chữ cái viết hoa, không dấu.",
+      "errPrefixTaken": "Prefix này đã dùng cho phòng {name}.",
+      "errNotFound": "Không tìm thấy phòng ban."
+    },
+    "security": {
+      "backToSettings": "Về Thiết lập",
+      "title": "Bảo mật",
+      "desc": "Mật khẩu chung cấp cho nhân sự mới và khi admin cấp lại.",
+      "defaultPasswordTitle": "Mật khẩu chung của công ty",
+      "defaultPasswordHint": "Dùng cho nhân sự đăng nhập lần đầu hoặc khi được cấp lại — hệ thống bắt đổi ngay sau đó. Không ảnh hưởng người đã đặt mật khẩu riêng.",
+      "stillFactoryDefault": "Đang dùng mật khẩu mặc định xuất xưởng. Hãy đổi trước khi mở cho toàn công ty.",
+      "newPassword": "Mật khẩu chung mới",
+      "confirmPassword": "Nhập lại",
+      "saved": "Đã lưu.",
+      "errTooShort": "Mật khẩu phải từ {min} ký tự.",
+      "errMismatch": "Hai lần nhập không khớp.",
+      "usingDefaultCount": "Hiện có {count} nhân sự chưa đặt mật khẩu riêng — họ đang dùng mật khẩu chung này."
     }
   },
   "bidding": {
@@ -1722,7 +1754,13 @@
       "colNetAmount": "Thực trả",
       "colPaid": "Đã trả NCC",
       "netVsCoHint": "Số thực trả (trần chi). CO đã gross-up thuế: {co}đ — phần chênh là thuế công ty nộp hộ, không trao cho ai.",
-      "outdatedWarning": "Dữ liệu chi phí đang lấy từ bản CO/CE cũ (rev {synced}), trong khi CO/CE đã sang rev {current}. Số tiền từng dòng — và trần chi dựa trên đó — có thể sai. Bấm \"Làm mới\" để đồng bộ lại."
+      "outdatedWarning": "Dữ liệu chi phí đang lấy từ bản CO/CE cũ (rev {synced}), trong khi CO/CE đã sang rev {current}. Số tiền từng dòng — và trần chi dựa trên đó — có thể sai. Bấm \"Làm mới\" để đồng bộ lại.",
+      "errReverseReason": "Bắt buộc ghi lý do khi huỷ tạm ứng đã giải ngân.",
+      "errReverseWrongStatus": "Chỉ huỷ được tạm ứng đang ở trạng thái Đã chi.",
+      "errStaleLine": "Dòng chi phí này không còn trong bản CO/CE mới nhất — không thể tạm ứng.",
+      "errProjectNotExecuting": "Dự án không còn ở giai đoạn thực thi — không thể tạm ứng.",
+      "reverseBtn": "Huỷ (đã thu hồi tiền)",
+      "reverseNotePlaceholder": "Lý do huỷ tạm ứng đã chi…"
     },
     "vendorPayments": {
       "title": "Thanh toán cho Nhà cung cấp",
@@ -1759,7 +1797,11 @@
       "overCapNoteHint": "Chỉ bắt buộc khi khoản chi vượt trần của dự án, hoặc dự án chưa có dòng chi phí nào.",
       "overCapBadge": "Vượt trần",
       "projectRemaining": "Trần chi còn lại của dự án: {amount}",
-      "projectNoLines": "Dự án chưa có dòng chi phí — cần quyền duyệt vượt trần kèm lý do."
+      "projectNoLines": "Dự án chưa có dòng chi phí — cần quyền duyệt vượt trần kèm lý do.",
+      "errReverseReason": "Bắt buộc ghi lý do khi bỏ đánh dấu đã trả.",
+      "errReverseWrongStatus": "Phiếu này không ở trạng thái Đã trả.",
+      "unmarkPaid": "Bỏ đánh dấu đã trả",
+      "unmarkNotePlaceholder": "Lý do…"
     },
     "debt": {
       "title": "Công nợ khách hàng (AR)",
@@ -1786,7 +1828,12 @@
       "totalOutstanding": "Tổng công nợ",
       "errRequired": "Vui lòng chọn dự án, nhập số hóa đơn và số tiền hợp lệ.",
       "errOverPayment": "Số tiền thu vượt số còn lại của hóa đơn (còn {outstanding}).",
-      "defNote": "Tổng công nợ = toàn bộ hóa đơn còn dư, không giới hạn thời gian. Tuổi nợ tính theo hạn thanh toán; hóa đơn chưa nhập hạn thì lấy ngày hóa đơn. Trang Ước tính dòng tiền cho số khác vì ở đó mốc tiền về được cộng thêm 14 ngày trừ hao."
+      "defNote": "Tổng công nợ = toàn bộ hóa đơn còn dư, không giới hạn thời gian. Tuổi nợ tính theo hạn thanh toán; hóa đơn chưa nhập hạn thì lấy ngày hóa đơn. Trang Ước tính dòng tiền cho số khác vì ở đó mốc tiền về được cộng thêm 14 ngày trừ hao.",
+      "errVoidReason": "Bắt buộc ghi lý do khi huỷ hóa đơn.",
+      "errVoidHasPayments": "Hóa đơn đã có ghi nhận thu tiền — phải đảo khoản thu trước khi huỷ.",
+      "errAlreadyVoided": "Hóa đơn này đã huỷ.",
+      "voidBtn": "Huỷ hóa đơn",
+      "voidNotePlaceholder": "Lý do huỷ hóa đơn…"
     },
     "cashflow": {
       "title": "Ước tính Dòng tiền (toàn danh mục dự án)",

@@ -75,7 +75,7 @@ export async function getCashflowMtd(now: Date): Promise<CashflowMtd> {
 
   const [payments, unpaidInvoices, vendorPaymentsPaid, advancesDisbursed, vendorPaymentsScheduled, advancesRequested] = await Promise.all([
     prisma.clientPayment.findMany({ where: { paidDate: { gte: monthStart, lt: now } }, select: { amount: true } }),
-    prisma.clientInvoice.findMany({ select: { amount: true, invoiceDate: true, dueDate: true, payments: { select: { amount: true } } } }),
+    prisma.clientInvoice.findMany({ where: { voidedAt: null }, select: { amount: true, invoiceDate: true, dueDate: true, payments: { select: { amount: true } } } }),
     prisma.vendorPayment.findMany({ where: { status: "PAID", paidDate: { gte: monthStart, lt: now } }, select: { amount: true } }),
     prisma.advance.findMany({ where: { disbursedAt: { gte: monthStart, lt: now } }, select: { amount: true } }),
     // dueDate nullable và form cho để trống — Prisma/SQL loại NULL khỏi `lt` nên phiếu chưa có hạn

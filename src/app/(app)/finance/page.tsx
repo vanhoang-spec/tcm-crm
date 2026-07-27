@@ -69,7 +69,10 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
         select: { revNo: true },
       }),
     ]);
-    lastRevNo = lines.reduce((mx, l) => Math.max(mx, l.sourceRevNo), 0);
+    // MIN chứ không phải MAX: đồng bộ KHÔNG nằm trong transaction, hỏng giữa chừng thì một phần
+    // dòng mang revNo mới còn phần kia giữ trần cũ. Lấy MAX sẽ bằng revNo hiện tại và làm TẮT băng
+    // cảnh báo bên dưới — đúng lúc cần bật nhất. Lấy MIN: chỉ cần một dòng còn cũ là còn cảnh báo.
+    lastRevNo = lines.length > 0 ? lines.reduce((mn, l) => Math.min(mn, l.sourceRevNo), Infinity) : 0;
     currentRevNo = currentRev?.revNo ?? 0;
     const vendorOpts = vendors.map((v) => ({ id: v.id, label: v.name }));
     const staffOpts = staff.map((s) => ({ id: s.id, label: s.fullName }));

@@ -1392,6 +1392,11 @@ model Advance {
   settledById       String? // "Hoàn ứng" — giải phóng hạn mức
   settledAt         DateTime?
   settleNote        String?
+  /// Huỷ SAU KHI đã giải ngân = tiền đã chi ra nay thu hồi được (chi nhầm, đổi phương án).
+  /// Bắt buộc có lý do vì thao tác này trả lại trần chi cho dòng — không được làm im lặng.
+  canceledById      String?
+  canceledAt        DateTime?
+  cancelNote        String?
 
   financeCostLine FinanceCostLine @relation(fields: [financeCostLineId], references: [id], onDelete: Cascade)
   project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -1448,6 +1453,15 @@ model ClientInvoice {
   amount      BigInt
   dueDate     DateTime?
   note        String?
+  /// Lần gần nhất đã bắn nhắc nợ quá hạn. Chống spam: hóa đơn quá hạn 200 ngày mà nhắc mỗi 5 phút
+  /// thì không ai đọc chuông nữa. Chu kỳ nhắc lại lấy từ setting finance.ar_reminder_repeat_days.
+  arReminderSentAt DateTime?
+  /// Huỷ hóa đơn (xuất nhầm số/sai tiền). KHÔNG xoá bản ghi — số hóa đơn đã phát hành phải truy
+  /// được. Hóa đơn đã huỷ bị loại khỏi MỌI phép tính công nợ và khỏi điều kiện kết thúc dự án.
+  /// Chỉ huỷ được khi chưa ghi nhận lần thu nào (có thu rồi thì phải đảo khoản thu trước).
+  voidedById  String?
+  voidedAt    DateTime?
+  voidNote    String?
   createdById String?
   createdAt   DateTime  @default(now())
 

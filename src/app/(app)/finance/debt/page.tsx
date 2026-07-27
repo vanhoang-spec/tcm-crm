@@ -5,7 +5,7 @@ import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { arStatus, type ArAgingBucket } from "@/lib/ar";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
-import { CreateInvoiceForm, RecordPaymentForm } from "./invoice-forms";
+import { CreateInvoiceForm, RecordPaymentForm, VoidInvoiceButton } from "./invoice-forms";
 import { requirePermission } from "@/lib/permissions";
 
 export default async function DebtPage() {
@@ -16,6 +16,7 @@ export default async function DebtPage() {
     getTranslations("finance.common"),
     getLocale() as Promise<Locale>,
     prisma.clientInvoice.findMany({
+      where: { voidedAt: null },
       include: { client: true, project: true, payments: true },
       orderBy: { invoiceDate: "desc" },
     }),
@@ -100,6 +101,12 @@ export default async function DebtPage() {
             </div>
 
             {outstanding > 0 && <RecordPaymentForm invoiceId={inv.id} />}
+            {/* Chỉ cho huỷ khi chưa ghi nhận thu tiền — server chặn lại lần nữa. */}
+            {paid === 0 && (
+              <div className="mt-2 border-t border-border pt-2">
+                <VoidInvoiceButton invoiceId={inv.id} />
+              </div>
+            )}
           </div>
         ))}
         {rows.length === 0 && (

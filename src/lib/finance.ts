@@ -316,6 +316,7 @@ export async function getArOverdueItems(teamCode?: string): Promise<ArOverdueIte
   const today = arStartOfToday(now);
   const invoices = await prisma.clientInvoice.findMany({
     where: {
+      voidedAt: null,
       OR: [{ dueDate: { lt: today } }, { dueDate: null, invoiceDate: { lt: today } }],
       project: teamCode ? { ownerTeam: { code: teamCode } } : undefined,
     },

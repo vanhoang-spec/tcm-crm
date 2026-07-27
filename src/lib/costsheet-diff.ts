@@ -1,7 +1,13 @@
 // So sánh 2 phiên bản CO/CE (CostSheetRevision.snapshotJson) — item nào thêm/xóa/sửa, chênh bao nhiêu tiền.
-// Hàm thuần, dùng ở tab CO/CE (module ③). Khớp dòng theo (sectionCode, itemName).
+// Hàm thuần, dùng ở tab CO/CE (module ③).
+//
+// Khớp dòng theo `stableKey` — KHÔNG theo (mã hạng mục + tên): builder gán cứng mã "SECTION" cho
+// mọi hạng mục mới, nên hai dòng trùng tên ở hai hạng mục khác nhau sẽ chồng lên nhau và màn so
+// sánh báo sai chênh lệch. Snapshot cũ (trước khi có stableKey) rơi về khoá cũ để vẫn đọc được.
 
 export type SnapshotLine = {
+  /** Khoá bền của dòng. Rỗng ở snapshot cũ → rơi về khoá (mã hạng mục ‖ tên). */
+  stableKey?: string;
   itemName: string;
   lineType: string;
   quantity?: number | null;
@@ -71,7 +77,7 @@ function lineEqual(a: SnapshotLine, b: SnapshotLine): boolean {
 }
 
 /**
- * So sánh before → after. Khớp dòng theo key (sectionCode ‖ itemName).
+ * So sánh before → after. Khớp dòng theo `stableKey` (snapshot cũ: mã hạng mục ‖ tên).
  * added = chỉ có ở after; removed = chỉ có ở before; changed = khác giá trị; unchanged = giống hệt.
  */
 export function diffSnapshots(before: CostSheetSnapshot, after: CostSheetSnapshot): SnapshotDiff {
@@ -80,7 +86,8 @@ export function diffSnapshots(before: CostSheetSnapshot, after: CostSheetSnapsho
     const m = new Map<string, Entry>();
     for (const s of snap.sections) {
       for (const l of s.lines) {
-        m.set(`${s.code}‖${l.itemName}`, { sectionCode: s.code, sectionName: s.nameVi, line: l });
+        const key = l.stableKey ? `k:${l.stableKey}` : `n:${s.code}‖${l.itemName}`;
+        m.set(key, { sectionCode: s.code, sectionName: s.nameVi, line: l });
       }
     }
     return m;

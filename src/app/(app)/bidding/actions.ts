@@ -353,6 +353,18 @@ export async function saveCostSheet(
   const marginPct = computeMarginPct(ceTotal, coTotal);
   const staffId = await getCurrentStaffId();
 
+  // Khoá BỀN của từng dòng: nhận khoá builder gửi lên, chỉ sinh mới khi THIẾU (payload cũ) hoặc
+  // TRÙNG với dòng khác trong cùng bảng. Khử trùng là bắt buộc: hai dòng cùng khoá sẽ bị
+  // syncFinanceCostLines gộp làm một (Map theo lineKey) và tiền của một dòng biến mất im lặng.
+  // Chốt TRƯỚC khi dựng snapshot để bản snapshot và bản ghi DB dùng chung đúng một bộ khoá.
+  const usedStableKeys = new Set<string>();
+  const stableKeyOfLine = new Map<(typeof payload.lines)[number], string>();
+  for (const l of payload.lines) {
+    const key = l.stableKey && !usedStableKeys.has(l.stableKey) ? l.stableKey : randomUUID();
+    usedStableKeys.add(key);
+    stableKeyOfLine.set(l, key);
+  }
+
   // Snapshot bất biến cho CostSheetRevision (tracking version + diff từng dòng — xem lib/costsheet-diff.ts).
   // amount đã gross-up thuế (computeLineAmount) — khớp với số lưu ở CostLine.amount.
   const lineAmount = (l: (typeof payload.lines)[number]) =>
@@ -370,6 +382,10 @@ export async function saveCostSheet(
       lines: payload.lines
         .filter((l) => l.sectionKey === s.key)
         .map((l) => ({
+          // Khoá bền đi vào snapshot để màn SO SÁNH khớp dòng theo nó thay vì theo (mã hạng mục +
+          // tên): mã hạng mục do builder gán cứng "SECTION" nên hai dòng trùng tên ở hai hạng mục
+          // khác nhau sẽ chồng lên nhau — cùng lớp lỗi đã sửa cho module ④.
+          stableKey: stableKeyOfLine.get(l) ?? "",
           itemName: l.itemName,
           lineType: l.lineType,
           quantity: l.quantity,
@@ -475,17 +491,6 @@ export async function saveCostSheet(
     // rồi mới tra ngược khi ghi từng section.
     const itemCodeByLineIndex = assignItemCodes(payload.lines, prefixBySectionKey);
     const codeOfLine = new Map(payload.lines.map((l, i) => [l, itemCodeByLineIndex[i]]));
-
-    // Khoá BỀN của từng dòng: nhận khoá builder gửi lên, chỉ sinh mới khi THIẾU (payload cũ) hoặc
-    // TRÙNG với dòng khác trong cùng bảng. Khử trùng là bắt buộc: hai dòng cùng khoá sẽ bị
-    // syncFinanceCostLines gộp làm một (Map theo lineKey) và tiền của một dòng biến mất im lặng.
-    const usedStableKeys = new Set<string>();
-    const stableKeyOfLine = new Map<(typeof payload.lines)[number], string>();
-    for (const l of payload.lines) {
-      const key = l.stableKey && !usedStableKeys.has(l.stableKey) ? l.stableKey : randomUUID();
-      usedStableKeys.add(key);
-      stableKeyOfLine.set(l, key);
-    }
 
     for (const section of payload.sections) {
       const sectionId = idByKey.get(section.key)!;
@@ -959,7 +964,7 @@ export async function markFinished(
   const [project, contract, invoiceCount, finishedId] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, include: { status: true } }),
     prisma.contract.findUnique({ where: { projectId } }),
-    prisma.clientInvoice.count({ where: { projectId } }),
+    prisma.clientInvoice.count({ where: { projectId, voidedAt: null } }),
     getStatusId("FINISHED"),
   ]);
   if (!project) return { error: "not found" };

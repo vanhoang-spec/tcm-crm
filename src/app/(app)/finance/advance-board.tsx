@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn, formatNumber, formatDate } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { requestAdvance, confirmAdvanceDisbursed, settleAdvance, cancelAdvance, type FinanceFormState } from "./actions";
+import { requestAdvance, confirmAdvanceDisbursed, settleAdvance, cancelAdvance, reverseDisbursedAdvance, type FinanceFormState } from "./actions";
 
 type Opt = { id: string; label: string };
 type AdvanceData = {
@@ -209,15 +209,53 @@ function InstallmentCard({
           </>
         )}
         {adv.status === "DISBURSED" && (
-          <form action={settleAdvance.bind(null, adv.id)} className="flex items-center gap-1">
-            <input name="settleNote" placeholder={t("settleNote")} className="h-6 w-40 rounded border border-border-strong bg-surface px-1.5 text-[11px]" />
-            <button type="submit" className="rounded border border-border-strong px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-surface-2">
-              {t("settle")}
-            </button>
-          </form>
+          <>
+            <form action={settleAdvance.bind(null, adv.id)} className="flex items-center gap-1">
+              <input name="settleNote" placeholder={t("settleNote")} className="h-6 w-40 rounded border border-border-strong bg-surface px-1.5 text-[11px]" />
+              <button type="submit" className="rounded border border-border-strong px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-surface-2">
+                {t("settle")}
+              </button>
+            </form>
+            {/* Khác "Hoàn ứng": hoàn ứng = NV đã quyết toán xong. Cái này = chi NHẦM, tiền đã thu
+                hồi, trả lại trần chi cho dòng — nên bắt buộc có lý do. */}
+            <ReverseDisbursedForm advanceId={adv.id} t={t} />
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function ReverseDisbursedForm({ advanceId, t }: { advanceId: string; t: (k: string, v?: Record<string, string | number>) => string }) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<FinanceFormState, FormData>(
+    reverseDisbursedAdvance.bind(null, advanceId),
+    {},
+  );
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="rounded border border-border-strong px-2 py-0.5 text-[11px] text-muted-foreground hover:text-danger">
+        {t("reverseBtn")}
+      </button>
+    );
+  }
+  return (
+    <form action={formAction} className="flex flex-wrap items-center gap-1">
+      <input name="cancelNote" placeholder={t("reverseNotePlaceholder")} className="h-6 w-48 rounded border border-border-strong bg-surface px-1.5 text-[11px]" />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded border border-danger/40 px-2 py-0.5 text-[11px] font-medium text-danger hover:bg-danger-bg disabled:opacity-60"
+      >
+        {t("reverseBtn")}
+      </button>
+      {state.error && (
+        <span className="text-[11px] text-danger" role="alert">
+          {state.error}
+        </span>
+      )}
+    </form>
   );
 }
 

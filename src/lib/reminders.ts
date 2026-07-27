@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { getNumberSetting } from "./settings";
+import { getArOverdueItems } from "./finance";
 import { ORDER_DEPARTMENT_LABELS } from "./bidding";
 import { ACTIVE_TASK_STATUSES, isTaskLocked } from "./creative";
 import { ACTIVE_DEPARTMENT_TASK_STATUSES } from "./department-tasks";
@@ -552,5 +553,61 @@ export async function checkInventoryReturnReminders(): Promise<void> {
       });
       await prisma.stockDocument.update({ where: { id: doc.id }, data: { returnReminderSentAt: new Date() } });
     }
+  }
+}
+
+/**
+ * Nhắc CÔNG NỢ QUÁ HẠN — chạy bởi scheduler (src/instrumentation.ts).
+ *
+ * Trước đây nợ quá hạn chỉ là con số trên chuông và một danh sách ở /reminders: ai không mở trang
+ * thì không biết. Loại `AR_OVERDUE_REMINDER` đã khai trong schema nhưng KHÔNG chỗ nào tạo.
+ *
+ * Hai tham số chỉnh được trong Settings, không phải sửa code:
+ *  - finance.ar_reminder_after_days  (mặc định 7): quá hạn bao nhiêu ngày thì bắt đầu nhắc.
+ *  - finance.ar_reminder_repeat_days (mặc định 7): bao lâu nhắc lại một lần.
+ * Người nhận: phòng Kế toán (FIN) + PIC và Leader của dự án — kế toán là người đi đòi, Account là
+ * người có quan hệ với khách.
+ */
+export async function checkArOverdueReminders(): Promise<void> {
+  const [afterDays, repeatDays] = await Promise.all([
+    getNumberSetting("finance", "ar_reminder_after_days", 7),
+    getNumberSetting("finance", "ar_reminder_repeat_days", 7),
+  ]);
+  const now = new Date();
+  const overdue = await getArOverdueItems();
+  const due = overdue.filter((i) => i.daysOverdue >= afterDays);
+  if (due.length === 0) return;
+
+  const [invoices, finStaff] = await Promise.all([
+    prisma.clientInvoice.findMany({
+      where: { id: { in: due.map((i) => i.invoiceId) } },
+      select: { id: true, arReminderSentAt: true, project: { select: { ownerId: true, leaderId: true } } },
+    }),
+    prisma.staff.findMany({ where: { department: { code: "FIN" }, isActive: true }, select: { id: true } }),
+  ]);
+  const metaById = new Map(invoices.map((inv) => [inv.id, inv]));
+  const repeatMs = repeatDays * 24 * 3600 * 1000;
+
+  for (const item of due) {
+    const meta = metaById.get(item.invoiceId);
+    if (!meta) continue;
+    // Đã nhắc và chưa tới chu kỳ nhắc lại → bỏ qua.
+    if (meta.arReminderSentAt && now.getTime() - meta.arReminderSentAt.getTime() < repeatMs) continue;
+
+    const recipientIds = new Set<string>(finStaff.map((s) => s.id));
+    if (meta.project.ownerId) recipientIds.add(meta.project.ownerId);
+    if (meta.project.leaderId) recipientIds.add(meta.project.leaderId);
+    if (recipientIds.size === 0) continue; // không ai nhận thì ĐỪNG đốt cờ (xem 5 job trên)
+
+    await prisma.notification.createMany({
+      data: Array.from(recipientIds).map((recipientStaffId) => ({
+        recipientStaffId,
+        type: "AR_OVERDUE_REMINDER",
+        title: `Công nợ quá hạn ${item.daysOverdue} ngày — HĐ ${item.invoiceNo} (${item.clientName})`,
+        body: `Dự án ${item.projectCode}. Còn phải thu: ${item.outstanding.toLocaleString("vi-VN")}đ.`,
+        projectId: item.projectId,
+      })),
+    });
+    await prisma.clientInvoice.update({ where: { id: item.invoiceId }, data: { arReminderSentAt: now } });
   }
 }

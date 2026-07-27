@@ -5,6 +5,7 @@ import {
   checkCreativeTaskDeadlineReminders,
   checkDepartmentTaskDeadlineReminders,
   checkInventoryReturnReminders,
+  checkArOverdueReminders,
 } from "./reminders";
 import { checkSpecialOccasions } from "./occasions";
 import { checkChatReminders } from "./chat-reminders";
@@ -53,6 +54,7 @@ const JOBS: [string, () => Promise<unknown>][] = [
   ["creative-task-deadline", checkCreativeTaskDeadlineReminders],
   ["dept-task-deadline", checkDepartmentTaskDeadlineReminders],
   ["inventory-return", checkInventoryReturnReminders],
+  ["ar-overdue", checkArOverdueReminders],
   ["special-occasions", checkSpecialOccasions],
   ["chat-reminders", checkChatReminders],
 ];

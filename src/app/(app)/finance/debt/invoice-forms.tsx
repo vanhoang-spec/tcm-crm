@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { NumberField } from "@/components/ui/number-field";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createClientInvoice, recordClientPayment, type FinanceFormState } from "../actions";
+import { createClientInvoice, recordClientPayment, voidClientInvoice, type FinanceFormState } from "../actions";
 
 /**
  * Hai form của trang Công nợ, tách ra client để HIỆN LỖI từ server action.
@@ -66,6 +66,41 @@ export function CreateInvoiceForm({ projects }: { projects: { value: string; lab
       <div className="sm:col-span-3">
         <ErrorLine state={state} />
       </div>
+    </form>
+  );
+}
+
+/** Huỷ hóa đơn xuất sai. Ẩn sau một cú bấm — mở ra mới thấy ô lý do (lý do bắt buộc ở server). */
+export function VoidInvoiceButton({ invoiceId }: { invoiceId: string }) {
+  const t = useTranslations("finance.debt");
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<FinanceFormState, FormData>(
+    voidClientInvoice.bind(null, invoiceId),
+    {},
+  );
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-xs text-muted-foreground hover:text-danger">
+        {t("voidBtn")}
+      </button>
+    );
+  }
+  return (
+    <form action={formAction} className="flex flex-wrap items-center gap-2">
+      <input name="voidNote" placeholder={t("voidNotePlaceholder")} className={input + " w-56"} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="h-9 rounded-lg border border-danger/40 px-3 text-xs font-medium text-danger hover:bg-danger-bg disabled:opacity-60"
+      >
+        {t("voidBtn")}
+      </button>
+      {state.error && (
+        <p className="text-xs text-danger" role="alert">
+          {state.error}
+        </p>
+      )}
     </form>
   );
 }

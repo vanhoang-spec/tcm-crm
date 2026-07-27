@@ -40,7 +40,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       getBiddingReminders(),
       getPendingCostSheetApprovals(),
       getTimelineOverdueItems(),
-      getArOverdueItems(),
+      // Chỉ đếm công nợ vào chuông cho người có quyền tài chính — cùng lý do như khối AR ở
+      // /reminders: con số nợ cũng là dữ liệu tài chính.
+      navPermissions.includes("finance.view") ? getArOverdueItems() : Promise.resolve([]),
       // CHAT_MESSAGE có badge chưa đọc riêng trong module Chat — không cộng vào chuông nhắc việc.
       prisma.notification.count({
         where: { isRead: false, recipientStaffId: currentStaffId ?? "", type: { not: "CHAT_MESSAGE" } },

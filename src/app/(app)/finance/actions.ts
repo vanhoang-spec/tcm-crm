@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
 import { syncFinanceCostLines, lineDisbursement, projectDisbursement, getStaffAdvanceQuota } from "@/lib/finance";
+import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 
 export type FinanceFormState = { error?: string; success?: boolean; notice?: boolean };
@@ -62,8 +63,20 @@ export async function requestAdvance(
 ): Promise<FinanceFormState> {
   await requirePermission("finance.advance.request");
   const t = await getTranslations("finance.advances");
-  const line = await prisma.financeCostLine.findUnique({ where: { id: financeCostLineId }, include: { project: true } });
+  const line = await prisma.financeCostLine.findUnique({
+    where: { id: financeCostLineId },
+    include: { project: { include: { status: true } } },
+  });
   if (!line) return { error: t("errRequired") };
+  // Hai chốt chặn phía SERVER, không chỉ ẩn form: giao diện giấu nút trên dòng cũ nhưng một
+  // request dựng tay vẫn tới được đây.
+  //  - dòng cũ (isStale): dòng CO/CE đã bị đổi/xoá, ứng vào đây là ứng cho khoản không còn tồn tại
+  //    và dòng mới tương ứng vẫn còn nguyên trần → chi hai lần.
+  //  - dự án đã hủy/thua/kết thúc: không còn lý do chi thêm tiền.
+  if (line.isStale) return { error: t("errStaleLine") };
+  if (!EXECUTION_STATUS_CODES.includes(line.project.status.code as (typeof EXECUTION_STATUS_CODES)[number])) {
+    return { error: t("errProjectNotExecuting") };
+  }
 
   const amount = bigIntOrZero(formData.get("amount"));
   const advanceType = str(formData.get("advanceType")) === "VENDOR" ? "VENDOR" : "STAFF";
@@ -181,6 +194,92 @@ export async function cancelAdvance(advanceId: string) {
   await prisma.advance.update({ where: { id: advanceId }, data: { status: "CANCELED" } });
   await audit("advance", advanceId, "CANCEL", {});
   revalidateFinance();
+}
+
+// ── Đường ĐẢO ───────────────────────────────────────────
+// Trước đây mọi thao tác tiền đều một chiều: tạm ứng đã giải ngân không huỷ được, phiếu đã trả
+// không bỏ được, hóa đơn xuất sai không huỷ được. Sai một cái là phải sửa DB tay.
+// Cả 3 đường dưới đây đều: đòi LÝ DO, GIỮ bản ghi (không xoá), và ghi AuditLog.
+
+/**
+ * Huỷ tạm ứng ĐÃ GIẢI NGÂN — tiền đã chi nay thu hồi được (chi nhầm, đổi phương án).
+ * Trả lại trần chi cho dòng (lineDisbursement loại CANCELED) nên bắt buộc có lý do.
+ */
+export async function reverseDisbursedAdvance(
+  advanceId: string,
+  _prev: FinanceFormState,
+  formData: FormData,
+): Promise<FinanceFormState> {
+  await requirePermission("finance.advance.approve");
+  const t = await getTranslations("finance.advances");
+  const note = str(formData.get("cancelNote"));
+  if (!note) return { error: t("errReverseReason") };
+
+  const adv = await prisma.advance.findUnique({ where: { id: advanceId } });
+  if (!adv) return { error: t("errRequired") };
+  if (adv.status !== "DISBURSED") return { error: t("errReverseWrongStatus") };
+
+  await prisma.advance.update({
+    where: { id: advanceId },
+    data: { status: "CANCELED", canceledById: await getCurrentStaffId(), canceledAt: new Date(), cancelNote: note },
+  });
+  await audit("advance", advanceId, "REVERSE_DISBURSED", { amount: adv.amount.toString(), reason: note });
+  revalidateFinance();
+  return { success: true };
+}
+
+/** Bỏ đánh dấu "đã trả" của phiếu chi NCC (bấm nhầm, hoặc lệnh chuyển tiền bị trả về). */
+export async function unmarkVendorPaymentPaid(
+  id: string,
+  _prev: FinanceFormState,
+  formData: FormData,
+): Promise<FinanceFormState> {
+  await requirePermission("finance.vendor_payment.pay");
+  const t = await getTranslations("finance.vendorPayments");
+  const note = str(formData.get("reverseNote"));
+  if (!note) return { error: t("errReverseReason") };
+
+  // updateMany + guard PAID: 2 người cùng bấm thì chỉ một lượt có tác dụng.
+  const res = await prisma.vendorPayment.updateMany({
+    where: { id, status: "PAID" },
+    data: { status: "SCHEDULED", paidDate: null },
+  });
+  if (res.count === 0) return { error: t("errReverseWrongStatus") };
+  await audit("vendor_payment", id, "UNMARK_PAID", { reason: note });
+  revalidateFinance();
+  return { success: true };
+}
+
+/**
+ * Huỷ hóa đơn xuất sai. KHÔNG xoá bản ghi — số hóa đơn đã phát hành phải truy được.
+ * Chỉ huỷ khi CHƯA ghi nhận lần thu nào: có thu rồi thì phải đảo khoản thu trước, nếu không
+ * số đã thu sẽ treo vào một hóa đơn không còn tồn tại trên mọi báo cáo.
+ */
+export async function voidClientInvoice(
+  invoiceId: string,
+  _prev: FinanceFormState,
+  formData: FormData,
+): Promise<FinanceFormState> {
+  await requirePermission("finance.invoice.manage");
+  const t = await getTranslations("finance.debt");
+  const note = str(formData.get("voidNote"));
+  if (!note) return { error: t("errVoidReason") };
+
+  const inv = await prisma.clientInvoice.findUnique({
+    where: { id: invoiceId },
+    select: { voidedAt: true, invoiceNo: true, amount: true, _count: { select: { payments: true } } },
+  });
+  if (!inv) return { error: t("errRequired") };
+  if (inv.voidedAt) return { error: t("errAlreadyVoided") };
+  if (inv._count.payments > 0) return { error: t("errVoidHasPayments") };
+
+  await prisma.clientInvoice.update({
+    where: { id: invoiceId },
+    data: { voidedById: await getCurrentStaffId(), voidedAt: new Date(), voidNote: note },
+  });
+  await audit("client_invoice", invoiceId, "VOID", { invoiceNo: inv.invoiceNo, amount: inv.amount.toString(), reason: note });
+  revalidateFinance();
+  return { success: true };
 }
 
 // ── Thanh toán NCC ──

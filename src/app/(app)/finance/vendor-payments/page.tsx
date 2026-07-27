@@ -5,7 +5,7 @@ import { formatNumber, formatDate, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
 import { type PickerLine } from "./line-picker";
-import { CreateVendorPaymentForm, MarkPaidButton } from "./payment-forms";
+import { CreateVendorPaymentForm, MarkPaidButton, UnmarkPaidButton } from "./payment-forms";
 import { requirePermission } from "@/lib/permissions";
 
 export default async function VendorPaymentsPage() {
@@ -122,7 +122,7 @@ export default async function VendorPaymentsPage() {
                   </div>
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {p.status === "SCHEDULED" && <MarkPaidButton id={p.id} />}
+                  {p.status === "SCHEDULED" ? <MarkPaidButton id={p.id} /> : <UnmarkPaidButton id={p.id} />}
                 </td>
               </tr>
             ))}

@@ -93,6 +93,7 @@ export async function getCashflowForecast(): Promise<CashflowForecast> {
 
   const [invoices, vendorPayments, advances] = await Promise.all([
     prisma.clientInvoice.findMany({
+      where: { voidedAt: null },
       include: { client: true, project: { include: { ownerTeam: true, status: true } }, payments: { select: { amount: true } } },
     }),
     prisma.vendorPayment.findMany({

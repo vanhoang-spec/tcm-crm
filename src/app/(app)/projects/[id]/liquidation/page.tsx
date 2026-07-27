@@ -45,7 +45,7 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
       },
     }),
     prisma.clientInvoice.findMany({
-      where: { projectId: id },
+      where: { projectId: id, voidedAt: null },
       orderBy: { invoiceDate: "desc" },
       include: { payments: { select: { amount: true } } },
     }),

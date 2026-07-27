@@ -515,7 +515,7 @@ export async function createLiquidationInvoice(
   if (!project || !rev) return { error: t("errNoSentRev") };
 
   const billable = clientBillableTotal(toNum(rev.ceTotal), toNum(rev.chiHo));
-  const issuedAgg = await prisma.clientInvoice.aggregate({ where: { projectId }, _sum: { amount: true } });
+  const issuedAgg = await prisma.clientInvoice.aggregate({ where: { projectId, voidedAt: null }, _sum: { amount: true } });
   const remaining = billable - toNum(issuedAgg._sum.amount ?? BigInt(0));
   if (amount > remaining) return { error: t("errExceedBillable", { rev: rev.revNo, remaining }) };
 

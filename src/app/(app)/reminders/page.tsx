@@ -23,6 +23,7 @@ const DEPARTMENT_TAB_SEG: Record<string, string> = {
   PRO: "production",
 };
 import { getArOverdueItems } from "@/lib/finance";
+import { hasPermission } from "@/lib/permissions";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { markNotificationRead } from "./actions";
 
@@ -51,7 +52,9 @@ export default async function RemindersPage({
     getAcceptanceSignReminders(team),
     getCreativeOverdueTasks(team),
     getDepartmentTaskOverdueTasks(team),
-    getArOverdueItems(team),
+    // Công nợ là dữ liệu tài chính: trang /reminders cố ý KHÔNG gác quyền (ai cũng cần xem việc
+    // của mình), nên phải gác Ở ĐÂY — nếu không thì mọi nhân viên đọc được số nợ của mọi khách.
+    hasPermission("finance.view").then((ok) => (ok ? getArOverdueItems(team) : [])),
     getInventoryReturnReminders(team),
     // Chỉ thông báo CỦA người đang đăng nhập (body có thể chứa preview chat/nội dung riêng tư).
     // CHAT_MESSAGE có badge riêng trong module Chat — không lặp lại ở đây (khớp công thức chuông layout.tsx).
@@ -264,6 +267,8 @@ export default async function RemindersPage({
         </ul>
       </section>
 
+      {/* Ẩn hẳn khối khi không có quyền tài chính — hiện khối rỗng chỉ tổ gây hiểu nhầm "không có nợ". */}
+      {arItems.length > 0 && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("arSection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -283,9 +288,9 @@ export default async function RemindersPage({
               </Link>
             </li>
           ))}
-          {arItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("arEmpty")}</li>}
         </ul>
       </section>
+      )}
 
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("inventorySection")}</h2>

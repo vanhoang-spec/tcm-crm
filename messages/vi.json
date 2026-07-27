@@ -873,7 +873,9 @@
       "selectChannel": "— Chọn kênh —",
       "scope": "Scope / phạm vi",
       "venue": "Địa điểm",
-      "codeAuto": "Mã dự án tự sinh sau khi tạo"
+      "codeAuto": "Mã dự án tự sinh sau khi tạo",
+      "eventStartDate": "Ngày sự kiện — bắt đầu",
+      "eventEndDate": "Ngày kết thúc (nếu nhiều ngày)"
     },
     "detail": {
       "backToList": "Quay lại danh sách",
@@ -1111,7 +1113,8 @@
       "goNogoRequired": "Cần quyết định Go/No-Go (GO) trước khi dựng CO/CE.",
       "notFound": "Không tìm thấy dự án.",
       "invalidPayload": "Bảng CO/CE chưa hợp lệ: {detail}",
-      "overrideNotAllowed": "Bạn không có quyền hạ margin xuống dưới ngưỡng tối thiểu. Liên hệ người có quyền duyệt."
+      "overrideNotAllowed": "Bạn không có quyền hạ margin xuống dưới ngưỡng tối thiểu. Liên hệ người có quyền duyệt.",
+      "eventEndBeforeStart": "Ngày kết thúc phải từ ngày bắt đầu trở đi."
     }
   },
   "reminders": {

@@ -76,6 +76,8 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
     channelId: String(formData.get("channelId") ?? ""),
     scope: String(formData.get("scope") ?? ""),
     venue: String(formData.get("venue") ?? ""),
+    eventStartDate: String(formData.get("eventStartDate") ?? ""),
+    eventEndDate: String(formData.get("eventEndDate") ?? ""),
   });
   if (!parsed.success) {
     const fe: Record<string, string> = {};
@@ -116,6 +118,8 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
       channelId: toNullable(d.channelId ?? ""),
       scope: toNullable(d.scope ?? ""),
       venue: toNullable(d.venue ?? ""),
+      eventStartDate: d.eventStartDate ? new Date(d.eventStartDate) : null,
+      eventEndDate: d.eventEndDate ? new Date(d.eventEndDate) : null,
       fiscalYear,
     },
   });
@@ -156,6 +160,8 @@ export async function updateProject(
     channelId: String(formData.get("channelId") ?? ""),
     scope: String(formData.get("scope") ?? ""),
     venue: String(formData.get("venue") ?? ""),
+    eventStartDate: String(formData.get("eventStartDate") ?? ""),
+    eventEndDate: String(formData.get("eventEndDate") ?? ""),
   });
   if (!parsed.success) {
     const fe: Record<string, string> = {};
@@ -182,6 +188,8 @@ export async function updateProject(
       channelId: toNullable(d.channelId ?? ""),
       scope: toNullable(d.scope ?? ""),
       venue: toNullable(d.venue ?? ""),
+      eventStartDate: d.eventStartDate ? new Date(d.eventStartDate) : null,
+      eventEndDate: d.eventEndDate ? new Date(d.eventEndDate) : null,
     },
   });
   if (!before.ownerTeamId && ownerTeamId) {

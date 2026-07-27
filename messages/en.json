@@ -873,7 +873,9 @@
       "selectChannel": "— Select channel —",
       "scope": "Scope",
       "venue": "Venue",
-      "codeAuto": "Project code auto-generated after creation"
+      "codeAuto": "Project code auto-generated after creation",
+      "eventStartDate": "Event date — start",
+      "eventEndDate": "End date (if multi-day)"
     },
     "detail": {
       "backToList": "Back to list",
@@ -1111,7 +1113,8 @@
       "goNogoRequired": "A Go/No-Go (GO) decision is required before building CO/CE.",
       "notFound": "Project not found.",
       "invalidPayload": "Cost sheet is not valid: {detail}",
-      "overrideNotAllowed": "You do not have permission to set margin below the minimum floor. Contact an authorised approver."
+      "overrideNotAllowed": "You do not have permission to set margin below the minimum floor. Contact an authorised approver.",
+      "eventEndBeforeStart": "End date must be on or after the start date."
     }
   },
   "reminders": {

@@ -570,6 +570,10 @@ model Project {
   scope          String?
   scale          String?
   venue          String?
+  /// Ngày sự kiện — event 1 ngày chỉ nhập eventStartDate; nhiều ngày nhập cả hai. UTC-midnight
+  /// (HANDOVER §4.3). Lên khối thông tin của báo giá BM02 ("Ngày bắt đầu/Ngày kết thúc").
+  eventStartDate DateTime?
+  eventEndDate   DateTime?
   activity       String?
   failReasonId   String? // bắt buộc khi status=Failed (enforce app layer)
   failReasonNote String?

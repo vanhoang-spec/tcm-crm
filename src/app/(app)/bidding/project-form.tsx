@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
+import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,8 @@ export function ProjectForm({
     channelId?: string;
     scope?: string;
     venue?: string;
+    eventStartDate?: string;
+    eventEndDate?: string;
   };
   submitLabel: string;
 }) {
@@ -157,6 +160,15 @@ export function ProjectForm({
 
         <Field label={t("venue")} error={state.fieldErrors?.venue}>
           <input name="venue" defaultValue={defaultValues?.venue} className={inputClass(false)} />
+        </Field>
+
+        {/* Ngày sự kiện — 1 ngày chỉ nhập ngày bắt đầu; nhiều ngày nhập cả hai. Lên báo giá BM02. */}
+        <Field label={t("eventStartDate")} error={state.fieldErrors?.eventStartDate}>
+          <DateField name="eventStartDate" defaultValue={defaultValues?.eventStartDate} className={inputClass(false)} />
+        </Field>
+
+        <Field label={t("eventEndDate")} error={state.fieldErrors?.eventEndDate}>
+          <DateField name="eventEndDate" defaultValue={defaultValues?.eventEndDate} className={inputClass(false)} />
         </Field>
       </fieldset>
 

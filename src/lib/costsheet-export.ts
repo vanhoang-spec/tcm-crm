@@ -39,6 +39,8 @@ export async function loadQuotationSource(projectId: string): Promise<QuotationS
     clientName: project.client.name,
     picName: project.owner?.fullName ?? null,
     venue: project.venue ?? null,
+    eventStart: project.eventStartDate ?? null,
+    eventEnd: project.eventEndDate ?? null,
     ceTotal: toNum(sheet.ceTotal),
     vatPct: sheet.vatPct ?? 0,
     agencyFeePct: sheet.agencyFeePct ?? 0,

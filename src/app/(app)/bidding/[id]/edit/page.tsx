@@ -60,6 +60,8 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
             channelId: project.channelId ?? "",
             scope: project.scope ?? "",
             venue: project.venue ?? "",
+            eventStartDate: project.eventStartDate ? project.eventStartDate.toISOString().slice(0, 10) : "",
+            eventEndDate: project.eventEndDate ? project.eventEndDate.toISOString().slice(0, 10) : "",
           }}
           submitLabel={t("submit")}
         />

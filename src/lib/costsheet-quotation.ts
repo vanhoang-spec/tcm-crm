@@ -100,6 +100,9 @@ export type QuotationSource = {
   clientName: string;
   picName: string | null;
   venue: string | null;
+  /** Ngày sự kiện (UTC-midnight) — 1 ngày chỉ có eventStart; nhiều ngày có cả hai. */
+  eventStart: Date | null;
+  eventEnd: Date | null;
   ceTotal: number;
   vatPct: number;
   agencyFeePct: number;
@@ -306,14 +309,29 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
 
   const d = src.now;
   const dateLabel = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  // Ngày sự kiện lưu UTC-midnight (HANDOVER §4.3) → format theo phần UTC để không lệch ngày.
+  const fmtUtc = (x: Date) => `${String(x.getUTCDate()).padStart(2, "0")}/${String(x.getUTCMonth() + 1).padStart(2, "0")}/${x.getUTCFullYear()}`;
   const infoLeft: [string, string][] = [
     ["Dự án", src.projectName],
     ["Khách hàng", src.clientName],
     ...(src.picName ? ([["Nhân viên phụ trách", src.picName]] as [string, string][]) : []),
     ["Ngày báo giá", dateLabel],
   ];
+  // Nhiều ngày → "Ngày bắt đầu/Ngày kết thúc" như form DHG; 1 ngày → một dòng "Ngày sự kiện".
+  const start = src.eventStart;
+  const end = src.eventEnd;
+  const eventRows: [string, string][] =
+    start && end && fmtUtc(start) !== fmtUtc(end)
+      ? [
+          ["Ngày bắt đầu", fmtUtc(start)],
+          ["Ngày kết thúc", fmtUtc(end)],
+        ]
+      : start || end
+        ? [["Ngày sự kiện", fmtUtc((start ?? end)!)]]
+        : [];
   const infoRight: [string, string][] = [
     ["Mã dự án", src.projectCode],
+    ...eventRows,
     ...(src.venue ? ([["Địa điểm", src.venue]] as [string, string][]) : []),
   ];
 

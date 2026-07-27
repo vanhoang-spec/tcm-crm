@@ -12,6 +12,7 @@ import { STATUS_TONE } from "@/lib/bidding-ui";
 import type { Locale } from "@/i18n/locales";
 import { confirmClientAcceptance, setExpectedAcceptanceSignDate, sendCostSheetToLiquidation } from "../../actions";
 import { LiquidationInvoiceForm } from "./invoice-form";
+import { CollectionPlanPanel, type MilestoneRow } from "./collection-plan";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 
 function toDateInput(d: Date | null): string {
@@ -53,6 +54,14 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
     }),
     hasPermission("finance.invoice.manage"),
     hasPermission("projects.liquidation.send"),
+  ]);
+  const [milestones, canManagePlan] = await Promise.all([
+    prisma.collectionMilestone.findMany({
+      where: { projectId: id },
+      orderBy: { sort: "asc" },
+      include: { invoices: { where: { voidedAt: null }, select: { amount: true } } },
+    }),
+    hasPermission("bidding.contract.manage"),
   ]);
   if (!project) notFound();
 
@@ -102,6 +111,18 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
   const billable = sentRev ? clientBillableTotal(toNum(sentRev.ceTotal), toNum(sentRev.chiHo)) : 0;
   const issued = invoices.reduce((s, inv) => s + toNum(inv.amount), 0);
   const remainingBillable = billable - issued;
+
+  // C5 — kế hoạch thu: % ĐỘNG trên billable của bảng CO/CE SỐNG (khách cắt/thêm hạng mục thì số
+  // tiền đợt tự chạy theo); phần "đã xuất" là Σ hóa đơn chưa huỷ gắn đợt — bất biến vì đã phát hành.
+  const liveBillable = sheet ? clientBillableTotal(toNum(sheet.ceTotal), toNum(sheet.chiHo)) : 0;
+  const milestoneRows: MilestoneRow[] = milestones.map((m) => ({
+    id: m.id,
+    name: m.name,
+    pct: m.pct,
+    dueDate: m.dueDate ? m.dueDate.toISOString().slice(0, 10) : null,
+    planAmount: Math.round((liveBillable * m.pct) / 100),
+    invoicedAmount: m.invoices.reduce((s2, inv) => s2 + toNum(inv.amount), 0),
+  }));
 
   // Ngày mặc định trên form: hôm nay, và hạn = hôm nay + payment term (UTC, HANDOVER 4.3).
   // Hợp đồng chưa nhập điều khoản thì rơi về điều khoản của KHÁCH (Client.paymentTermDays, mặc
@@ -191,6 +212,15 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
                 )}
               </div>
             )}
+            {/* C6b: tải biên bản nghiệm thu (.docx) — số từ ĐÚNG bản đã chuyển. Mẫu đang là BẢN
+                NHÁP (templates/NGHIEMTHU-TEMPLATE-MAPPING.md) — thay mẫu thật trước khi ký khách. */}
+            <a
+              href={`/api/costsheet/${id}/acceptance`}
+              className="mt-3 inline-flex items-center gap-1 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-2"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" /> {t("acceptanceDocBtn", { rev: sentRev.revNo })}
+            </a>
+            <p className="mt-1 text-[11px] text-warning">{t("acceptanceDocDraftNote")}</p>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <SummaryCard label={t("coceRevLabel")} value={`v${sentRev.revNo}`} />
               <SummaryCard label={t("coTotal")} value={formatNumber(sentRev.coTotal, locale)} />
@@ -257,6 +287,8 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
       {/* Xuất hóa đơn — tạo ClientInvoice THẬT (một nguồn sự thật, dùng chung với /finance/debt) */}
       <section className="rounded-xl border border-border bg-surface p-5">
         <h3 className="text-sm font-semibold text-foreground">{t("invoiceTitle")}</h3>
+        {/* Kế hoạch thu (C5) lập từ lúc ký hợp đồng — hiện CẢ TRƯỚC khi chuyển nghiệm thu. */}
+        <CollectionPlanPanel projectId={id} rows={milestoneRows} canManage={canManagePlan} />
         {!sentRev ? (
           <p className="mt-2 text-sm text-muted-foreground">{t("invoiceNeedSentRev")}</p>
         ) : (
@@ -296,6 +328,7 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
             {canCreateInvoice && remainingBillable > 0 && (
               <LiquidationInvoiceForm
                 projectId={id}
+                milestones={milestoneRows.map((m) => ({ value: m.id, label: `${m.name} (${m.pct}%)` }))}
                 suggestedAmount={remainingBillable}
                 defaultInvoiceDate={todayIso}
                 defaultDueDate={dueIso}

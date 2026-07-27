@@ -482,6 +482,61 @@ export async function setExpectedAcceptanceSignDate(projectId: string, formData:
 
 export type LiquidationInvoiceState = { error?: string; success?: boolean };
 
+// ── C5: Kế hoạch thu theo đợt ────────────────────────────
+// Đợt = % trên TỔNG THANH TOÁN (billable của bảng CO/CE sống) — % ĐỘNG, không lưu tiền cứng
+// (bất biến #3). Gác bằng bidding.contract.manage: kế hoạch thu là điều khoản thoả thuận với
+// khách lúc ký hợp đồng, cùng người nhập hợp đồng.
+
+export type MilestoneFormState = { error?: string; success?: boolean };
+
+export async function saveCollectionMilestone(
+  projectId: string,
+  _prev: MilestoneFormState,
+  formData: FormData,
+): Promise<MilestoneFormState> {
+  await requirePermission("bidding.contract.manage");
+  const t = await getTranslations("projects.liquidation");
+  const name = str(formData.get("name"));
+  const pct = Number(str(formData.get("pct")));
+  if (!name || !Number.isFinite(pct) || pct <= 0 || pct > 100) return { error: t("msErrRequired") };
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) return { error: t("msErrRequired") };
+  const count = await prisma.collectionMilestone.count({ where: { projectId } });
+  await prisma.collectionMilestone.create({
+    data: {
+      projectId,
+      name,
+      pct,
+      dueDate: dateOrNull(formData.get("dueDate")),
+      note: nullable(formData.get("note")),
+      sort: count + 1,
+    },
+  });
+  revalidateProject(projectId);
+  revalidatePath("/finance/debt");
+  return { success: true };
+}
+
+export async function deleteCollectionMilestone(
+  milestoneId: string,
+  _prev: MilestoneFormState,
+  _formData: FormData,
+): Promise<MilestoneFormState> {
+  await requirePermission("bidding.contract.manage");
+  const t = await getTranslations("projects.liquidation");
+  const ms = await prisma.collectionMilestone.findUnique({
+    where: { id: milestoneId },
+    select: { projectId: true, _count: { select: { invoices: { where: { voidedAt: null } } } } },
+  });
+  if (!ms) return { error: t("msErrRequired") };
+  // Đợt đã có hóa đơn phát hành thì không xoá — xoá là mất dấu "hóa đơn này thuộc đợt nào".
+  if (ms._count.invoices > 0) return { error: t("msErrHasInvoices") };
+  await prisma.collectionMilestone.delete({ where: { id: milestoneId } });
+  revalidateProject(ms.projectId);
+  revalidatePath("/finance/debt");
+  return { success: true };
+}
+
 /**
  * Kế toán phát hành hóa đơn khách NGAY tại tab Nghiệm thu → tạo ClientInvoice THẬT (module ④).
  *
@@ -519,6 +574,13 @@ export async function createLiquidationInvoice(
   const rev = sheet?.sentToLiquidationRevision ?? null;
   if (!project || !rev) return { error: t("errNoSentRev") };
 
+  // Đợt thu (C5) — tuỳ chọn; có thì phải thuộc ĐÚNG dự án (không tin id từ client).
+  const milestoneId = nullable(formData.get("milestoneId"));
+  if (milestoneId) {
+    const ms = await prisma.collectionMilestone.findUnique({ where: { id: milestoneId }, select: { projectId: true } });
+    if (!ms || ms.projectId !== projectId) return { error: t("msErrRequired") };
+  }
+
   const billable = clientBillableTotal(toNum(rev.ceTotal), toNum(rev.chiHo));
   const issuedAgg = await prisma.clientInvoice.aggregate({ where: { projectId, voidedAt: null }, _sum: { amount: true } });
   const remaining = billable - toNum(issuedAgg._sum.amount ?? BigInt(0));
@@ -539,6 +601,7 @@ export async function createLiquidationInvoice(
         dateOrNull(formData.get("dueDate")) ??
         arDefaultDueDate(invoiceDate, contract?.paymentTermDays ?? project.client.paymentTermDays),
       note: nullable(formData.get("note")),
+      milestoneId,
       createdById: staffId,
     },
   });

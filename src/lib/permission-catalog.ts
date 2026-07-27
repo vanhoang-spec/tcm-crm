@@ -32,6 +32,7 @@ export const PERMISSION_MODULES = [
   "creative",
   "inventory",
   "finance",
+  "purchasing",
   "staff",
   "kpi",
   "payroll",
@@ -51,6 +52,7 @@ export const PERMISSION_MODULE_LABELS: Record<string, { labelVi: string; labelEn
   creative: { labelVi: "✦ Creative", labelEn: "✦ Creative" },
   inventory: { labelVi: "⑧ Kho", labelEn: "⑧ Inventory" },
   finance: { labelVi: "④ Chi phí & Công nợ", labelEn: "④ Finance & receivables" },
+  purchasing: { labelVi: "🛒 Thu mua (PO)", labelEn: "🛒 Purchasing (PO)" },
   staff: { labelVi: "⑤ Nhân sự & chấm công", labelEn: "⑤ Staff & timekeeping" },
   kpi: { labelVi: "⑥ KPI", labelEn: "⑥ KPI" },
   payroll: { labelVi: "⑦ Lương (chưa làm)", labelEn: "⑦ Payroll (not built)" },
@@ -104,6 +106,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "projects.liquidation.send", module: "projects", labelVi: "Chuyển CO/CE sang Nghiệm thu", labelEn: "Send cost sheet to liquidation", sensitive: true },
   { code: "projects.acceptance.confirm", module: "projects", labelVi: "Xác nhận khách nghiệm thu", labelEn: "Confirm client acceptance", sensitive: true },
   { code: "projects.guest.manage", module: "projects", labelVi: "Tạo / thu hồi link mời khách xem", labelEn: "Create / revoke guest invites" },
+  { code: "projects.pnl.view", module: "projects", labelVi: "Xem P&L dự án (kế hoạch vs thực chi vs thực thu)", labelEn: "View project P&L", sensitive: true },
 
   // ── ✦ Creative ──
   { code: "creative.view", module: "creative", labelVi: "Xem task board Creative", labelEn: "View creative task board" },
@@ -121,6 +124,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "inventory.transfer.cancel", module: "inventory", labelVi: "Huỷ phiếu chuyển kho", labelEn: "Cancel transfer", sensitive: true },
   { code: "inventory.item.manage", module: "inventory", labelVi: "Tạo / sửa mặt hàng", labelEn: "Create / edit items" },
   { code: "inventory.import_csv", module: "inventory", labelVi: "Nhập mặt hàng từ CSV", labelEn: "Import items from CSV" },
+
+  // ── 🛒 Thu mua (PO) ──
+  { code: "purchasing.po.manage", module: "purchasing", labelVi: "Tạo / huỷ đơn đặt hàng NCC (PO)", labelEn: "Create / cancel purchase orders" },
+  { code: "purchasing.po.receive", module: "purchasing", labelVi: "Xác nhận nhận hàng trên PO", labelEn: "Confirm goods received on POs" },
 
   // ── ④ Chi phí & Công nợ ──
   { code: "finance.view", module: "finance", labelVi: "Xem tài chính & công nợ", labelEn: "View finance & receivables", sensitive: true },
@@ -179,6 +186,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "settings.creative.manage", module: "settings", labelVi: "Sửa cấu hình Creative (quỹ lương, tỉ lệ phân bổ)", labelEn: "Creative settings", sensitive: true },
   { code: "settings.timekeeping.manage", module: "settings", labelVi: "Sửa cấu hình chấm công & ca", labelEn: "Timekeeping & shift settings" },
   { code: "settings.warehouses.manage", module: "settings", labelVi: "Sửa danh sách kho", labelEn: "Manage warehouses" },
+  { code: "settings.vendors.manage", module: "settings", labelVi: "Thêm / sửa nhà cung cấp", labelEn: "Manage vendors", sensitive: true },
   { code: "settings.templates.manage", module: "settings", labelVi: "Sửa mẫu CO/CE & mẫu timeline", labelEn: "Manage cost sheet & timeline templates" },
   { code: "settings.communication.manage", module: "settings", labelVi: "Sửa cấu hình chat", labelEn: "Chat settings" },
   { code: "settings.clients.manage", module: "settings", labelVi: "Sửa cấu hình Khách hàng", labelEn: "Client settings" },

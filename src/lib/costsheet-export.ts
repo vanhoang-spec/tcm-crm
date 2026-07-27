@@ -2,12 +2,21 @@ import "server-only";
 import fs from "fs/promises";
 import path from "path";
 import ExcelJS from "exceljs";
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
 import { prisma } from "./prisma";
 import { getStringSetting } from "./settings";
 import { toNum } from "./utils";
-import { buildQuotationModel, type QuotationModel, type QuotationRow, type QuotationSource } from "./costsheet-quotation";
+import {
+  buildQuotationModel,
+  buildAcceptanceModel,
+  type AcceptanceSource,
+  type QuotationModel,
+  type QuotationRow,
+  type QuotationSource,
+} from "./costsheet-quotation";
 
-export { buildQuotationModel };
+export { buildQuotationModel, buildAcceptanceModel };
 export type { QuotationModel, QuotationSource };
 
 /**
@@ -75,6 +84,90 @@ export async function loadQuotationSource(projectId: string): Promise<QuotationS
     company: { legalNameVi, signerName, signerTitle },
     now: new Date(),
   };
+}
+
+// ── C6b: Biên bản nghiệm thu (.docx) ─────────────────────
+
+/** Nạp dữ liệu biên bản — CHỈ khi đã "Chuyển sang Nghiệm thu" (sentToLiquidationRevision). */
+export async function loadAcceptanceSource(projectId: string): Promise<AcceptanceSource | null> {
+  const [project, sheet, legalNameVi, signerName, signerTitle] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, include: { client: true } }),
+    prisma.costSheet.findFirst({
+      where: { projectId, version: "CTRACT" },
+      orderBy: { createdAt: "desc" },
+      include: { sentToLiquidationRevision: true },
+    }),
+    getStringSetting("company", "legal_name_vi", "Công ty Cổ phần Tiếp thị Tân Cường Minh"),
+    getStringSetting("company", "signer_name", "NGUYỄN VĂN HOÀNG"),
+    getStringSetting("company", "signer_title", "CEO"),
+  ]);
+  const rev = sheet?.sentToLiquidationRevision ?? null;
+  if (!project || !sheet || !rev) return null;
+
+  // Snapshot là JSON bất biến của revision — đọc PHÒNG THỦ: bản cũ thiếu isSponsored.
+  let sections: AcceptanceSource["sections"] = [];
+  try {
+    const snap = JSON.parse(rev.snapshotJson) as {
+      sections?: { code: string; nameVi: string; isProxy: boolean; parentCode: string | null; lines?: { amount: number; isSponsored?: boolean }[] }[];
+    };
+    sections = (snap.sections ?? []).map((s) => ({
+      code: s.code,
+      nameVi: s.nameVi,
+      isProxy: !!s.isProxy,
+      parentCode: s.parentCode ?? null,
+      lines: (s.lines ?? []).map((l) => ({ amount: Number(l.amount) || 0, isSponsored: !!l.isSponsored })),
+    }));
+  } catch {
+    return null;
+  }
+
+  return {
+    projectCode: project.code,
+    projectName: project.name,
+    clientName: project.client.name,
+    clientAddress: project.client.address ?? null,
+    clientTaxCode: project.client.taxCode ?? null,
+    company: { legalNameVi, signerName, signerTitle },
+    revNo: rev.revNo,
+    ceTotal: toNum(rev.ceTotal),
+    chiHo: toNum(rev.chiHo),
+    vatPct: sheet.vatPct ?? 0,
+    agencyFeePct: sheet.agencyFeePct ?? 0,
+    sections,
+    now: new Date(),
+  };
+}
+
+const acceptMoneyFmt = (v: number) => new Intl.NumberFormat("vi-VN").format(v);
+
+/** Đổ model vào templates/nghiem-thu.docx — cùng cấu hình docxtemplater với fillCtvDocx. */
+export async function fillAcceptanceDocx(src: AcceptanceSource): Promise<Buffer> {
+  const m = buildAcceptanceModel(src);
+  const templateBuffer = await fs.readFile(path.join(process.cwd(), "templates", "nghiem-thu.docx"));
+  const zip = new PizZip(templateBuffer);
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => "" });
+  doc.render({
+    NgayLap: m.dateLabel,
+    MaDuAn: src.projectCode,
+    TenDuAn: src.projectName,
+    SoRev: src.revNo,
+    TenKhachHang: src.clientName,
+    DiaChiKH: src.clientAddress ?? "",
+    MSTKH: src.clientTaxCode ?? "",
+    TenCongTy: src.company.legalNameVi,
+    NguoiKy: src.company.signerName,
+    ChucDanh: src.company.signerTitle,
+    HangMuc: m.items.map((it) => ({ STT: it.stt, Ten: it.name, ThanhTien: acceptMoneyFmt(it.amount) })),
+    TongDichVu: acceptMoneyFmt(m.serviceSubtotal),
+    PhiAgencyPct: src.agencyFeePct,
+    PhiAgency: acceptMoneyFmt(m.feeAmt),
+    VatPct: src.vatPct,
+    ThueGTGT: acceptMoneyFmt(m.vatAmt),
+    TongGomVAT: acceptMoneyFmt(m.totalWithVat),
+    // Vòng điều kiện: không có Chi hộ thì cả khối biến mất.
+    CoChiHo: m.chiHoTotal > 0 ? [{ ChiHo: acceptMoneyFmt(m.chiHoTotal), TongThanhToan: acceptMoneyFmt(m.grandTotal) }] : [],
+  });
+  return doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
 // ── Excel (form BM02) ────────────────────────────────────

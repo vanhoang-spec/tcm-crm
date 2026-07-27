@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Building2,
+  Truck,
   KeyRound,
   Users2,
   Tags,
@@ -43,6 +44,7 @@ export default async function SettingsPage() {
   const sections = [
     { href: "/settings/teams", icon: Users2, title: t("teamsTitle"), desc: t("teamsDesc") },
     { href: "/settings/departments", icon: Building2, title: t("departmentsTitle"), desc: t("departmentsDesc") },
+    { href: "/settings/vendors", icon: Truck, title: t("vendorsTitle"), desc: t("vendorsDesc") },
     { href: "/settings/staff", icon: UserPlus, title: t("staffTitle"), desc: t("staffDesc") },
     { href: "/settings/roles", icon: ShieldCheck, title: t("rolesTitle"), desc: t("rolesDesc") },
     { href: "/settings/options/industry", icon: Tags, title: t("industryTitle"), desc: t("industryDesc") },

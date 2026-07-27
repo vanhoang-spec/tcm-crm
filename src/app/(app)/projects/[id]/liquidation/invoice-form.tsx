@@ -16,11 +16,14 @@ const input =
 
 export function LiquidationInvoiceForm({
   projectId,
+  milestones,
   suggestedAmount,
   defaultInvoiceDate,
   defaultDueDate,
 }: {
   projectId: string;
+  /** Đợt thu (C5) — rỗng thì ẩn ô chọn. */
+  milestones: { value: string; label: string }[];
   suggestedAmount: number;
   defaultInvoiceDate: string;
   defaultDueDate: string;
@@ -49,7 +52,18 @@ export function LiquidationInvoiceForm({
         <label className="mb-1 block text-xs font-medium text-foreground">{t("invoiceDueDateLabel")}</label>
         <DateField name="dueDate" defaultValue={defaultDueDate} className={input} />
       </div>
-      <div className="sm:col-span-2">
+      {milestones.length > 0 && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-foreground">{t("msPickLabel")}</label>
+          <select name="milestoneId" defaultValue="" className={input}>
+            <option value="">{t("msPickNone")}</option>
+            {milestones.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div className={milestones.length > 0 ? "" : "sm:col-span-2"}>
         <label className="mb-1 block text-xs font-medium text-foreground">{t("invoiceNoteLabel")}</label>
         <input name="note" className={input} />
       </div>

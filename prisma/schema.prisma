@@ -460,6 +460,7 @@ model Vendor {
   financeCostLines FinanceCostLine[]
   advancesReceived Advance[]         @relation("AdvanceRecipientVendor")
   vendorPayments   VendorPayment[]
+  purchaseOrders   PurchaseOrder[]
 
   @@map("vendor")
 }
@@ -611,6 +612,8 @@ model Project {
   vendorPayments    VendorPayment[]
   clientInvoices    ClientInvoice[]
   ctvBatches        CtvBatch[]
+  collectionMilestones CollectionMilestone[]
+  purchaseOrders    PurchaseOrder[]
   stockDocuments    StockDocument[]
   inventoryHoldings ProjectHolding[]
   planningJobs      PlanningJob[]
@@ -1395,6 +1398,7 @@ model FinanceCostLine {
   vendorPayments VendorPayment[]
   ctvRows     CtvContract[] @relation("CtvRowLine")
   ctvBatchesDefault CtvBatch[] @relation("CtvBatchDefaultLine")
+  purchaseOrderLines PurchaseOrderLine[]
 
   @@unique([projectId, lineKey])
   @@index([projectId])
@@ -1467,6 +1471,8 @@ model VendorPayment {
   /// Đợt CTV (BM08) sinh ra phiếu này qua "Đề xuất thanh toán CTV" — mỗi phiếu = tổng tiền các
   /// dòng CTV của MỘT dòng CO trong đợt. SetNull: xoá đợt không được xoá phiếu chi đã lập.
   ctvBatchId  String?
+  /// PO (C3) mà phiếu chi này thanh toán — chân thứ 3 của đối chiếu ĐẶT ↔ NHẬN ↔ CHI. SetNull.
+  purchaseOrderId String?
   createdById String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1478,13 +1484,37 @@ model VendorPayment {
   // chứng từ đã chi — khoản chi vẫn còn, chỉ mất liên kết dòng.
   financeCostLine FinanceCostLine? @relation(fields: [financeCostLineId], references: [id], onDelete: SetNull)
   ctvBatch  CtvBatch? @relation(fields: [ctvBatchId], references: [id], onDelete: SetNull)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
 
   @@index([vendorId, status])
   @@index([ctvBatchId])
+  @@index([purchaseOrderId])
   @@map("vendor_payment")
 }
 
 /// Hóa đơn khách hàng (công nợ AR) — hỗ trợ milestone billing (nhiều HĐ/dự án).
+/// C5 — Kế hoạch thu theo đợt (milestone billing) của MỘT dự án, vd "Tạm ứng 30% / Triển khai 40%
+/// / Nghiệm thu 30%". Đợt định nghĩa bằng % trên TỔNG THANH TOÁN (clientBillableTotal của bảng
+/// CO/CE sống) — % ĐỘNG: CE đổi thì số tiền đợt tự đổi theo, KHÔNG lưu số tiền cứng (bất biến #3);
+/// phần đã xuất hóa đơn là bất biến vì hóa đơn đã phát hành không tính lại. Hạn dự kiến nhập tay.
+model CollectionMilestone {
+  id        String    @id @default(cuid())
+  projectId String
+  name      String // "Tạm ứng ký hợp đồng"…
+  pct       Float // % trên tổng thanh toán
+  dueDate   DateTime? // hạn thu dự kiến (nhập tay, UTC-midnight)
+  sort      Int       @default(0)
+  note      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invoices ClientInvoice[]
+
+  @@index([projectId])
+  @@map("collection_milestone")
+}
+
 model ClientInvoice {
   id          String    @id @default(cuid())
   projectId   String
@@ -1494,6 +1524,9 @@ model ClientInvoice {
   amount      BigInt
   dueDate     DateTime?
   note        String?
+  /// Đợt thu (C5) mà hóa đơn này thuộc về — để theo dõi tiến độ thu theo kế hoạch. SetNull: xoá
+  /// đợt không được kéo đổ hóa đơn đã phát hành.
+  milestoneId String?
   /// Lần gần nhất đã bắn nhắc nợ quá hạn. Chống spam: hóa đơn quá hạn 200 ngày mà nhắc mỗi 5 phút
   /// thì không ai đọc chuông nữa. Chu kỳ nhắc lại lấy từ setting finance.ar_reminder_repeat_days.
   arReminderSentAt DateTime?
@@ -1514,9 +1547,63 @@ model ClientInvoice {
   client    Client          @relation(fields: [clientId], references: [id])
   createdBy Staff?          @relation("ClientInvoiceCreatedBy", fields: [createdById], references: [id])
   payments  ClientPayment[]
+  milestone CollectionMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@map("client_invoice")
+}
+
+/// C3 — Đơn đặt hàng NCC (PO). Trước đây Thu mua đặt hàng qua Zalo không chứng từ: hàng về không
+/// ai đối chiếu số lượng, phiếu chi không có nguồn gốc. PO KHÔNG ăn trần chi (trần vẫn chỉ tính
+/// tạm ứng + phiếu chi — tránh đếm tiền hai lần khi phiếu chi lập theo PO); nó là làn CAM KẾT để
+/// đối chiếu 3 chiều: ĐẶT (PO) ↔ NHẬN (receivedQty) ↔ CHI (VendorPayment gắn purchaseOrderId).
+model PurchaseOrder {
+  id        String    @id @default(cuid())
+  code      String    @unique // {project.code}-PO{n}
+  projectId String
+  vendorId  String
+  status    String    @default("OPEN") // OPEN | RECEIVED | CANCELED
+  note      String?
+  orderedById String?
+  orderedAt   DateTime  @default(now())
+  /// Huỷ PO đặt nhầm — giữ bản ghi + lý do (không xoá chứng từ). Chỉ huỷ khi CHƯA gắn phiếu chi.
+  canceledById String?
+  canceledAt   DateTime?
+  cancelNote   String?
+  updatedAt DateTime @updatedAt
+
+  project  Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor   Vendor              @relation(fields: [vendorId], references: [id])
+  lines    PurchaseOrderLine[]
+  payments VendorPayment[]
+
+  @@index([projectId])
+  @@map("purchase_order")
+}
+
+model PurchaseOrderLine {
+  id              String  @id @default(cuid())
+  purchaseOrderId String
+  /// Dòng CO/CE mà khoản đặt hàng này thuộc về — BẮT BUỘC lúc tạo (server validate; cột nullable
+  /// chỉ để SetNull: dòng CO biến mất ở bản mới không được kéo đổ chứng từ đặt hàng).
+  financeCostLineId String?
+  itemName  String
+  quantity  Float  @default(1)
+  unitPrice BigInt @default(0)
+  amount    BigInt @default(0) // = quantity × unitPrice, server tính lại — không tin client
+  /// Nhận hàng ghi NGAY TRÊN DÒNG (không dựng chứng từ nhập kho riêng — phần lớn hàng event giao
+  /// thẳng ra site): SL đã nhận + ai + lúc nào. Nhận thiếu nhìn thấy ngay ở receivedQty < quantity.
+  receivedQty  Float     @default(0)
+  receivedById String?
+  receivedAt   DateTime?
+  note String?
+
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  financeCostLine FinanceCostLine? @relation(fields: [financeCostLineId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseOrderId])
+  @@index([financeCostLineId])
+  @@map("purchase_order_line")
 }
 
 /// Thanh toán nhận từ khách cho 1 hóa đơn.

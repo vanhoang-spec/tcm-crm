@@ -30,17 +30,21 @@ function ErrorLine({ state }: { state: FinanceFormState }) {
 export function CreateInvoiceForm({
   projects,
   projectCaps,
+  milestonesByProject,
 }: {
   projects: { value: string; label: string }[];
   /** Trần còn được xuất theo dự án (CE + Chi hộ của CO/CE hiện hành trừ đã xuất) — null = chưa có
    *  CO/CE. Chỉ để HIỂN THỊ trước khi bấm lưu; server tính lại trong transaction. */
   projectCaps: Record<string, number | null>;
+  /** Đợt thu (C5) theo dự án — dự án chưa có kế hoạch thì ẩn ô chọn. */
+  milestonesByProject: Record<string, { value: string; label: string }[]>;
 }) {
   const t = useTranslations("finance.debt");
   const tc = useTranslations("finance.common");
   const [state, formAction, pending] = useActionState<FinanceFormStateWithValues, FormData>(createClientInvoice, {});
   const [projectId, setProjectId] = useState("");
   const cap = projectId ? projectCaps[projectId] : undefined;
+  const milestoneOpts = projectId ? milestonesByProject[projectId] ?? [] : [];
 
   return (
     <form action={formAction} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -72,6 +76,18 @@ export function CreateInvoiceForm({
         <DateField name="dueDate" className={input} />
         <span className="mt-1 block text-[11px] leading-snug">{t("dueDateHint")}</span>
       </label>
+      {milestoneOpts.length > 0 && (
+        <label className="text-xs text-muted-foreground">
+          {t("msPickLabel")}
+          {/* key theo projectId: đổi dự án thì select reset về "" thay vì giữ đợt của dự án cũ */}
+          <select key={projectId} name="milestoneId" defaultValue="" className={input}>
+            <option value="">{t("msPickNone")}</option>
+            {milestoneOpts.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="text-xs text-muted-foreground">
         {t("overCapNote")}
         <input name="overCapNote" defaultValue={state.values?.overCapNote ?? ""} className={input} />

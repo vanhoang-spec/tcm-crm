@@ -165,6 +165,98 @@ export function quotationChain(ceTotal: number, vatPct: number, agencyFeePct: nu
   return { serviceSubtotal, feeAmt, vatAmt: ceTotal - serviceSubtotal - feeAmt };
 }
 
+// ── C6b: Biên bản nghiệm thu (model thuần cho .docx) ─────
+// Số lấy từ BẢN ĐÃ CHUYỂN NGHIỆM THU (sentToLiquidationRevision) — đúng mốc pháp lý ký với khách,
+// không phải bảng sống. Bảng hạng mục = rollup MỤC CẤP 1, giá KHÁCH phân bổ từ serviceSubtotal
+// theo tỉ trọng CO trong snapshot (cùng nguyên tắc với báo giá; dòng TCM hỗ trợ không nhận phân
+// bổ). Chuỗi tổng đi qua quotationChain → TỔNG GỒM VAT = ceTotal của revision TUYỆT ĐỐI.
+
+export type AcceptanceSnapshotSection = {
+  code: string;
+  nameVi: string;
+  isProxy: boolean;
+  parentCode: string | null;
+  lines: { amount: number; isSponsored?: boolean }[];
+};
+
+export type AcceptanceSource = {
+  projectCode: string;
+  projectName: string;
+  clientName: string;
+  clientAddress: string | null;
+  clientTaxCode: string | null;
+  company: { legalNameVi: string; signerName: string; signerTitle: string };
+  revNo: number;
+  /** CE + Chi hộ của revision đã chuyển nghiệm thu. */
+  ceTotal: number;
+  chiHo: number;
+  vatPct: number;
+  agencyFeePct: number;
+  sections: AcceptanceSnapshotSection[];
+  now: Date;
+};
+
+export type AcceptanceModel = {
+  dateLabel: string;
+  items: { stt: number; name: string; amount: number }[];
+  chiHoItems: { stt: number; name: string; amount: number }[];
+  serviceSubtotal: number;
+  feeAmt: number;
+  vatAmt: number;
+  totalWithVat: number; // = ceTotal revision
+  chiHoTotal: number;
+  grandTotal: number; // = ceTotal + chiHo
+};
+
+export function buildAcceptanceModel(src: AcceptanceSource): AcceptanceModel {
+  const chain = quotationChain(src.ceTotal, src.vatPct, src.agencyFeePct);
+
+  // Gom line amount của cả cây con về mục CẤP 1 (parentCode null) — snapshot nối cha-con bằng code.
+  const childrenOf = new Map<string, AcceptanceSnapshotSection[]>();
+  for (const s of src.sections) {
+    if (s.parentCode) {
+      const list = childrenOf.get(s.parentCode) ?? [];
+      list.push(s);
+      childrenOf.set(s.parentCode, list);
+    }
+  }
+  const subtreeCo = (s: AcceptanceSnapshotSection): number => {
+    let sum = s.lines.reduce((acc, l) => acc + (l.isSponsored ? 0 : l.amount), 0);
+    for (const c of childrenOf.get(s.code) ?? []) sum += subtreeCo(c);
+    return sum;
+  };
+  const roots = src.sections.filter((s) => !s.parentCode);
+  const costRoots = roots.filter((s) => !s.isProxy).map((s) => ({ name: s.nameVi, co: subtreeCo(s) }));
+  const proxyRoots = roots.filter((s) => s.isProxy).map((s) => ({ name: s.nameVi, co: subtreeCo(s) }));
+
+  // Phân bổ serviceSubtotal theo tỉ trọng CO mục cấp 1; dư làm tròn dồn vào mục lớn nhất.
+  const coSum = costRoots.reduce((s, r) => s + r.co, 0);
+  let allocated = 0;
+  const items = costRoots.map((r, i) => {
+    const amount = coSum > 0 ? Math.round((r.co * chain.serviceSubtotal) / coSum) : 0;
+    allocated += amount;
+    return { stt: i + 1, name: r.name, amount };
+  });
+  const residual = chain.serviceSubtotal - allocated;
+  if (residual !== 0 && items.length > 0) {
+    const largest = items.reduce((a, b) => (a.amount >= b.amount ? a : b));
+    largest.amount += residual;
+  }
+
+  const d = src.now;
+  return {
+    dateLabel: `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`,
+    items,
+    chiHoItems: proxyRoots.map((r, i) => ({ stt: i + 1, name: r.name, amount: r.co })),
+    serviceSubtotal: chain.serviceSubtotal,
+    feeAmt: chain.feeAmt,
+    vatAmt: chain.vatAmt,
+    totalWithVat: src.ceTotal,
+    chiHoTotal: src.chiHo,
+    grandTotal: clientBillableTotal(src.ceTotal, src.chiHo),
+  };
+}
+
 export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): QuotationModel {
   // Tổng CO/Chi hộ đi qua ĐÚNG hàm chuẩn — không tự cộng.
   const flatNodes: SectionTreeNode[] = src.sections.map((s) => ({

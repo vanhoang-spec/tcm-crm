@@ -18,7 +18,7 @@ export default async function DebtPage() {
     getLocale() as Promise<Locale>,
     prisma.clientInvoice.findMany({
       where: { voidedAt: null },
-      include: { client: true, project: true, payments: true },
+      include: { client: true, project: true, payments: true, milestone: { select: { name: true, pct: true } } },
       orderBy: { invoiceDate: "desc" },
     }),
     prisma.project.findMany({ where: { status: { code: { in: [...EXECUTION_STATUS_CODES] } } }, orderBy: { updatedAt: "desc" } }),
@@ -35,6 +35,16 @@ export default async function DebtPage() {
     prisma.clientInvoice.groupBy({ by: ["projectId"], where: { voidedAt: null }, _sum: { amount: true } }),
   ]);
   const issuedBy = new Map(issuedByProject.map((r) => [r.projectId, toNum(r._sum.amount ?? BigInt(0))]));
+  // Đợt thu (C5) theo dự án — cho ô chọn của form tạo hóa đơn.
+  const milestonesRaw = await prisma.collectionMilestone.findMany({
+    where: { projectId: { in: projects.map((p) => p.id) } },
+    orderBy: { sort: "asc" },
+    select: { id: true, projectId: true, name: true, pct: true },
+  });
+  const milestonesByProject: Record<string, { value: string; label: string }[]> = {};
+  for (const m of milestonesRaw) {
+    (milestonesByProject[m.projectId] ??= []).push({ value: m.id, label: `${m.name} (${m.pct}%)` });
+  }
   const projectCaps: Record<string, number | null> = {};
   for (const p of projects) projectCaps[p.id] = null;
   for (const s of sheets) {
@@ -96,7 +106,7 @@ export default async function DebtPage() {
       {/* Create invoice */}
       <details className="rounded-xl border border-dashed border-border-strong p-4">
         <summary className="cursor-pointer text-sm font-medium text-brand-600">{t("createInvoice")}</summary>
-        <CreateInvoiceForm projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))} projectCaps={projectCaps} />
+        <CreateInvoiceForm projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))} projectCaps={projectCaps} milestonesByProject={milestonesByProject} />
       </details>
 
       {/* Invoices */}
@@ -111,6 +121,11 @@ export default async function DebtPage() {
                 {inv.overCapNote && (
                   <span className="ml-2" title={inv.overCapNote}>
                     <Badge tone="danger">{t("overCapBadge")}</Badge>
+                  </span>
+                )}
+                {inv.milestone && (
+                  <span className="ml-2">
+                    <Badge tone="neutral">{inv.milestone.name} ({inv.milestone.pct}%)</Badge>
                   </span>
                 )}
               </div>

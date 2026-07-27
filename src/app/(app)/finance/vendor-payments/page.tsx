@@ -16,7 +16,7 @@ export default async function VendorPaymentsPage() {
     getLocale() as Promise<Locale>,
     // Phiếu đã huỷ rời khỏi danh sách (bản ghi vẫn còn trong DB + AuditLog) — nhất quán với hóa
     // đơn đã huỷ ở trang Công nợ.
-    prisma.vendorPayment.findMany({ where: { status: { not: "CANCELED" } }, include: { vendor: true, project: true }, orderBy: { createdAt: "desc" } }),
+    prisma.vendorPayment.findMany({ where: { status: { not: "CANCELED" } }, include: { vendor: true, project: true, purchaseOrder: { select: { code: true } } }, orderBy: { createdAt: "desc" } }),
     prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { status: { code: { in: [...EXECUTION_STATUS_CODES] } } }, orderBy: { updatedAt: "desc" } }),
   ]);
@@ -71,6 +71,14 @@ export default async function VendorPaymentsPage() {
     };
   }
 
+  // PO còn sống — ô gắn phiếu chi vào PO (C3, đối chiếu ĐẶT / NHẬN / CHI). Server kiểm PO đúng dự án.
+  const openPos = await prisma.purchaseOrder.findMany({
+    where: { status: { not: "CANCELED" }, project: { status: { code: { in: [...EXECUTION_STATUS_CODES] } } } },
+    orderBy: { orderedAt: "desc" },
+    include: { vendor: { select: { name: true } } },
+  });
+  const poOptions = openPos.map((po) => ({ value: po.id, label: po.code + " — " + po.vendor.name }));
+
   const totalScheduled = payments.filter((p) => p.status === "SCHEDULED").reduce((s, p) => s + toNum(p.amount), 0);
   const totalPaid = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + toNum(p.amount), 0);
 
@@ -100,6 +108,7 @@ export default async function VendorPaymentsPage() {
           projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
           lines={pickerLines}
           projectCaps={projectCaps}
+          poOptions={poOptions}
         />
       </details>
 
@@ -112,6 +121,7 @@ export default async function VendorPaymentsPage() {
               <th className="px-3 py-2 text-right">{tc("amount")}</th>
               <th className="px-3 py-2">{t("dueDate")}</th>
               <th className="px-3 py-2">{t("invoiceNo")}</th>
+              <th className="px-3 py-2">PO</th>
               <th className="px-3 py-2">{tc("status")}</th>
               <th className="px-3 py-2" />
             </tr>
@@ -124,6 +134,7 @@ export default async function VendorPaymentsPage() {
                 <td className="px-3 py-2 text-right tabular-nums">{formatNumber(toNum(p.amount), locale)}</td>
                 <td className="px-3 py-2 text-muted-foreground">{p.dueDate ? formatDate(p.dueDate) : "—"}</td>
                 <td className="px-3 py-2 text-muted-foreground">{p.invoiceNo ?? "—"}</td>
+                <td className="px-3 py-2 text-muted-foreground">{p.purchaseOrder?.code ?? "—"}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap items-center gap-1">
                     <Badge tone={p.status === "PAID" ? "success" : "warning"}>{t(`status${p.status}`)}</Badge>
@@ -145,7 +156,7 @@ export default async function VendorPaymentsPage() {
             ))}
             {payments.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-sm text-muted-foreground">{t("empty")}</td>
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-muted-foreground">{t("empty")}</td>
               </tr>
             )}
           </tbody>

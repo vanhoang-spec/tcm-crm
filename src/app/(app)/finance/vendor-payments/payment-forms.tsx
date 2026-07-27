@@ -24,12 +24,15 @@ export function CreateVendorPaymentForm({
   projects,
   lines,
   projectCaps,
+  poOptions,
 }: {
   vendors: { value: string; label: string }[];
   projects: { value: string; label: string }[];
   lines: PickerLine[];
   /** Trần chi còn lại theo dự án — để người lập phiếu thấy trước khi bấm lưu, không phải đoán. */
   projectCaps: Record<string, { remaining: number; hasLines: boolean }>;
+  /** PO còn sống (C3) — gắn phiếu chi vào PO để đối chiếu ĐẶT / NHẬN / CHI. Rỗng thì ẩn ô. */
+  poOptions: { value: string; label: string }[];
 }) {
   const t = useTranslations("finance.vendorPayments");
   const tc = useTranslations("finance.common");
@@ -56,6 +59,17 @@ export function CreateVendorPaymentForm({
         {t("invoiceNo")}
         <input name="invoiceNo" defaultValue={state.values?.invoiceNo ?? ""} className={input} />
       </label>
+      {poOptions.length > 0 && (
+        <label className="text-xs text-muted-foreground">
+          {t("poLabel")}
+          <select name="purchaseOrderId" defaultValue="" className={input}>
+            <option value="">{t("poNone")}</option>
+            {poOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="text-xs text-muted-foreground">
         {t("note")}
         <input name="note" defaultValue={state.values?.note ?? ""} className={input} />

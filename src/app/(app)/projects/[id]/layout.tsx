@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { pickLabel } from "@/lib/utils";
 import { STATUS_TONE, TEAM_TONE } from "@/lib/bidding-ui";
 import type { Locale } from "@/i18n/locales";
+import { hasPermission } from "@/lib/permissions";
 import { WorkspaceNav } from "./workspace-nav";
 
 export default async function ProjectWorkspaceLayout({
@@ -31,6 +32,7 @@ export default async function ProjectWorkspaceLayout({
 
   const labels = {
     overview: tNav("overview"),
+    pnl: tNav("pnl"),
     timeline: tNav("timeline"),
     orders: tNav("orders"),
     coce: tNav("coce"),
@@ -65,7 +67,7 @@ export default async function ProjectWorkspaceLayout({
       </div>
 
       {/* Sub-module nav nằm ngang trên đầu (thay left-rail) để nhường chiều ngang cho nội dung (Master Timeline). */}
-      <WorkspaceNav projectId={id} labels={labels} />
+      <WorkspaceNav projectId={id} labels={labels} showPnl={await hasPermission("projects.pnl.view")} />
 
       <div className="min-w-0">{children}</div>
     </div>

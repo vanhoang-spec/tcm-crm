@@ -332,6 +332,12 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
   const keep = { invoiceNo: str(formData.get("invoiceNo")), note: str(formData.get("note")), overCapNote: str(formData.get("overCapNote")) };
   if (!vendorId || amount <= BigInt(0)) return { error: t("errRequired"), values: keep };
   const financeCostLineId = nullable(formData.get("financeCostLineId"));
+  // PO (C3) — tuỳ chọn; có thì phải còn sống và thuộc ĐÚNG dự án của phiếu (kiểm khi biết projectId).
+  const purchaseOrderId = nullable(formData.get("purchaseOrderId"));
+  const po = purchaseOrderId
+    ? await prisma.purchaseOrder.findUnique({ where: { id: purchaseOrderId }, select: { projectId: true, status: true } })
+    : null;
+  if (purchaseOrderId && (!po || po.status === "CANCELED")) return { error: t("errPoInvalid"), values: keep };
   const staffId = await getCurrentStaffId();
 
   // Gắn vào dòng chi phí thì phải chịu CHUNG trần với tạm ứng — nếu không, cùng một dòng có thể
@@ -345,6 +351,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
       await prisma.$transaction(async (tx) => {
         const line = await tx.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true, projectId: true } });
         if (!line) throw new Error("LINE_NOT_FOUND");
+        if (po && po.projectId !== line.projectId) throw new Error("PO_PROJECT_MISMATCH");
         const [advAgg, payAgg] = await Promise.all([
           tx.advance.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
           tx.vendorPayment.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
@@ -357,6 +364,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
             // Dòng chi phí đã buộc vào 1 dự án — lấy luôn projectId của nó, không tin ô chọn ở form.
             projectId: line.projectId,
             financeCostLineId,
+            purchaseOrderId,
             amount,
             dueDate: dateOrNull(formData.get("dueDate")),
             invoiceNo: nullable(formData.get("invoiceNo")),
@@ -370,6 +378,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
       // Trả lỗi RA GIAO DIỆN: trước đây return rỗng nên phiếu bị chặn mà kế toán tưởng đã lưu.
       if (code === "EXCEED_LINE") return { error: t("errExceedLine", { remaining: disb.remaining }), values: keep };
       if (code === "LINE_NOT_FOUND") return { error: t("errLineNotFound"), values: keep };
+      if (code === "PO_PROJECT_MISMATCH") return { error: t("errPoProject"), values: keep };
       throw e;
     }
   } else {
@@ -378,6 +387,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
     // án, trần = tổng số thực trả còn lại của dự án, vượt trần phải có quyền riêng + lý do.
     const projectId = nullable(formData.get("projectId"));
     if (!projectId) return { error: t("errProjectRequired"), values: keep };
+    if (po && po.projectId !== projectId) return { error: t("errPoProject"), values: keep };
 
     const disb = await projectDisbursement(projectId);
     const overCapNote = nullable(formData.get("overCapNote"));
@@ -415,6 +425,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
           data: {
             vendorId,
             projectId,
+            purchaseOrderId,
             amount,
             dueDate: dateOrNull(formData.get("dueDate")),
             invoiceNo: nullable(formData.get("invoiceNo")),
@@ -493,6 +504,13 @@ export async function createClientInvoice(_prev: FinanceFormStateWithValues, for
   ]);
   if (!project) return { error: t("errRequired"), values: keep };
 
+  // Đợt thu (C5) — tuỳ chọn; có thì phải thuộc ĐÚNG dự án (không tin id từ client).
+  const milestoneId = nullable(formData.get("milestoneId"));
+  if (milestoneId) {
+    const ms = await prisma.collectionMilestone.findUnique({ where: { id: milestoneId }, select: { projectId: true } });
+    if (!ms || ms.projectId !== projectId) return { error: t("errRequired"), values: keep };
+  }
+
   // Pre-check ngoài transaction để có số "còn lại" cho thông báo; check quyết định nằm trong tx.
   const billable = sheet ? clientBillableTotal(toNum(sheet.ceTotal), toNum(sheet.chiHo)) : null;
   const issuedAgg = await prisma.clientInvoice.aggregate({ where: { projectId, voidedAt: null }, _sum: { amount: true } });
@@ -532,6 +550,7 @@ export async function createClientInvoice(_prev: FinanceFormStateWithValues, for
           dueDate,
           note: nullable(formData.get("note")),
           overCapNote: overCap ? overCapNote : null,
+          milestoneId,
           createdById: staffId,
         },
       });

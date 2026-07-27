@@ -1969,6 +1969,8 @@ async function main() {
     code === "dashboard.all_teams" || // (2)
     code === "finance.vendor_payment.over_cap" || // vượt trần chi dự án — chỉ cấp exec, xem EXEC_EXTRA
     code === "finance.invoice.over_cap" || // hóa đơn vượt trần CO/CE — chỉ cấp exec, xem EXEC_EXTRA
+    code === "projects.pnl.view" || // P&L dự án — chỉ cấp exec, xem EXEC_EXTRA
+    code.startsWith("purchasing.") || // PO — chỉ nhóm Thu mua + BGĐ, xem extraByGroup
     code.startsWith("ai."); // (3)
 
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
@@ -1979,6 +1981,9 @@ async function main() {
     "ai.trend",
     "finance.vendor_payment.over_cap",
     "finance.invoice.over_cap",
+    "projects.pnl.view",
+    "purchasing.po.manage",
+    "purchasing.po.receive",
   ];
 
   /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
@@ -1989,6 +1994,7 @@ async function main() {
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
     HR: ["ai.brainstorm", "ai.content"],
     FINANCE: ["ai.costsheet"],
+    PURCHASING: ["purchasing.po.manage", "purchasing.po.receive"],
   };
   /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
   const extraByRole: Record<string, string[]> = {
@@ -2021,6 +2027,17 @@ async function main() {
     {
       key: "20260727_over_cap_exec",
       codes: ["finance.vendor_payment.over_cap", "finance.invoice.over_cap"],
+      roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO",
+    },
+    // 27/07/2026 đợt 3+4 — PO cho nhóm Thu mua + BGĐ; P&L cho BGĐ + CFO. Role khác BGĐ tick thêm.
+    {
+      key: "20260727_wave34_codes",
+      codes: ["purchasing.po.manage", "purchasing.po.receive"],
+      roleFilter: (r) => r.groupCode === "PURCHASING" || r.groupCode === "BOD",
+    },
+    {
+      key: "20260727_wave34_pnl",
+      codes: ["projects.pnl.view"],
       roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO",
     },
   ];

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 type Labels = {
   overview: string;
+  pnl: string;
   timeline: string;
   orders: string;
   coce: string;
@@ -25,6 +26,7 @@ const TABS: { key: keyof Labels; seg: string }[] = [
   { key: "operations", seg: "/operations" },
   { key: "production", seg: "/production" },
   { key: "purchasing", seg: "/purchasing" },
+  { key: "pnl", seg: "/pnl" },
   { key: "liquidation", seg: "/liquidation" },
 ];
 
@@ -33,13 +35,16 @@ const TABS: { key: keyof Labels; seg: string }[] = [
  * trên desktop), để nhường toàn bộ chiều ngang cho nội dung (Master Timeline cần bảng rộng).
  * Cuộn ngang trên mobile nếu không đủ chỗ.
  */
-export function WorkspaceNav({ projectId, labels }: { projectId: string; labels: Labels }) {
+export function WorkspaceNav({ projectId, labels, showPnl }: { projectId: string; labels: Labels; showPnl: boolean }) {
   const pathname = usePathname();
   const base = `/projects/${projectId}`;
+  // Ẩn tab P&L với người không có quyền — chỉ là TRANG TRÍ (HANDOVER 10.1), trang /pnl tự gác
+  // requirePermission("projects.pnl.view") ở câu lệnh đầu.
+  const tabs = TABS.filter((tab) => tab.key !== "pnl" || showPnl);
 
   return (
     <nav className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-2">
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const href = base + t.seg;
         const active = t.seg === "" ? pathname === base : pathname.startsWith(href);
         return (

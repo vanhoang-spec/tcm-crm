@@ -29,6 +29,8 @@ export const costLineSchema = z.object({
   vendorId: z.string().trim().optional().default(""),
   isLocked: z.boolean().default(false),
   maxMarkupPct: z.coerce.number().min(0).max(1000).nullable().optional(),
+  /** Cờ "TCM hỗ trợ" — báo giá hiện đơn giá nhưng không tính tiền dòng này (CE dòng = 0). */
+  isSponsored: z.boolean().default(false),
   note: z.string().trim().optional().default(""),
 });
 

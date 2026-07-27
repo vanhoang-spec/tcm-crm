@@ -48,6 +48,9 @@ export type LineData = {
   vendorId: string;
   isLocked: boolean;
   maxMarkupPct: string; // "" = không giới hạn
+  /** Cờ "TCM hỗ trợ" (form BM02): báo giá hiện đơn giá nhưng không tính tiền dòng này (CE dòng = 0).
+   *  Chỉ tác động cách TRÌNH BÀY bản xuất; CO của dòng vẫn tính bình thường. */
+  isSponsored: boolean;
   note: string;
 };
 
@@ -70,6 +73,8 @@ export type SectionData = {
 export type CostSheetData = {
   scenario: string;
   vatPct: number;
+  /** % phí agency trên báo giá (BM02) — chỉ trình bày bản xuất, không đụng margin. */
+  agencyFeePct: number;
   mgmtFeePct: number;
   contingencyPct: number;
   discountPct: number;
@@ -121,6 +126,7 @@ function blankLine(sectionKey: string): Line {
     vendorId: "",
     isLocked: false,
     maxMarkupPct: "",
+    isSponsored: false,
     note: "",
   };
 }
@@ -226,6 +232,7 @@ export function CostSheetBuilder({
   const initial = hydrate(data?.sections ?? []);
   const [scenario, setScenario] = useState(data?.scenario ?? "COST_UP");
   const [vatPct, setVatPct] = useState(data?.vatPct ?? 0);
+  const [agencyFeePct, setAgencyFeePct] = useState(data?.agencyFeePct ?? 10);
   const [mgmtFeePct, setMgmtFeePct] = useState(data?.mgmtFeePct ?? 0);
   const [contingencyPct, setContingencyPct] = useState(data?.contingencyPct ?? 0);
   const [discountPct, setDiscountPct] = useState(data?.discountPct ?? 0);
@@ -327,6 +334,7 @@ export function CostSheetBuilder({
       <input type="hidden" name="sectionsJson" value={JSON.stringify(payload)} />
       <input type="hidden" name="templateId" value={templateId} />
       <input type="hidden" name="vatPct" value={vatPct} />
+      <input type="hidden" name="agencyFeePct" value={agencyFeePct} />
       <input type="hidden" name="mgmtFeePct" value={mgmtFeePct} />
       <input type="hidden" name="contingencyPct" value={contingencyPct} />
       <input type="hidden" name="discountPct" value={discountPct} />
@@ -422,8 +430,8 @@ export function CostSheetBuilder({
         )}
       </div>
 
-      {/* Header settings: mgmt fee / contingency / discount / VAT */}
-      <div className="grid grid-cols-1 gap-3 rounded-lg border border-border p-4 sm:grid-cols-4">
+      {/* Header settings: mgmt fee / contingency / discount / VAT / phí agency (báo giá) */}
+      <div className="grid grid-cols-1 gap-3 rounded-lg border border-border p-4 sm:grid-cols-5">
         <PctField label={t("mgmtFeePct")} hint={t("mgmtFeePctHint")} value={mgmtFeePct} onChange={setMgmtFeePct} />
         <PctField label={t("contingencyPct")} hint={t("contingencyPctHint")} value={contingencyPct} onChange={setContingencyPct} />
         <PctField label={t("discountPct")} hint={t("discountPctHint")} value={discountPct} onChange={setDiscountPct} />
@@ -431,6 +439,7 @@ export function CostSheetBuilder({
           <label className="mb-1 block text-xs font-medium text-foreground">VAT (%)</label>
           <NumberField decimals={2} value={vatPct} onChange={setVatPct} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
         </div>
+        <PctField label={t("agencyFeePct")} hint={t("agencyFeePctHint")} value={agencyFeePct} onChange={setAgencyFeePct} />
       </div>
 
       {/* Totals + margin */}
@@ -715,6 +724,7 @@ function LinesTable({
             <th className="px-2 py-2">{t("colVendor")}</th>
             <th className="px-2 py-2 text-center">{t("colLock")}</th>
             <th className="px-2 py-2">{t("colMaxMarkup")}</th>
+            <th className="px-2 py-2 text-center" title={t("colSponsoredHint")}>{t("colSponsored")}</th>
             <th className="px-2 py-2" />
           </tr>
         </thead>
@@ -726,7 +736,7 @@ function LinesTable({
           })}
           {lines.length === 0 && (
             <tr>
-              <td colSpan={11} className="px-2 py-4 text-center text-muted-foreground">{t("none")}</td>
+              <td colSpan={12} className="px-2 py-4 text-center text-muted-foreground">{t("none")}</td>
             </tr>
           )}
         </tbody>
@@ -835,6 +845,11 @@ function LineRow({
       </td>
       <td className="px-1 py-1">
         <input type="number" step="any" placeholder="∞" value={l.maxMarkupPct} onChange={(e) => updateLine(l.key, { maxMarkupPct: e.target.value })} className={cn(cellInput, "w-14")} disabled={l.isLocked} />
+      </td>
+      {/* "TCM hỗ trợ": báo giá hiện đơn giá nhưng KHÔNG tính tiền dòng này (CE dòng = 0). Chỉ đổi
+          cách trình bày bản xuất — CO của dòng vẫn vào giá vốn bình thường. */}
+      <td className="px-1 py-1 text-center">
+        <input type="checkbox" checked={l.isSponsored} onChange={(e) => updateLine(l.key, { isSponsored: e.target.checked })} />
       </td>
       <td className="px-1 py-1 text-center">
         <button type="button" onClick={() => removeLine(l.key)} className="text-danger hover:text-danger/80">

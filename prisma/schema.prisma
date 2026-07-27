@@ -844,6 +844,11 @@ model CostSheet {
   coTotal                     BigInt    @default(0) // = directCo + percentLinesTotal + mgmtFeeAmt + contingencyAmt (tính app-side)
   chiHo                       BigInt    @default(0) // hạng mục Chi hộ (proxySubtotal + phí dịch vụ) — ngoài margin
   vatPct                      Float     @default(0)
+  /// % PHÍ AGENCY trên báo giá gửi khách (form BM02: Σ dòng dịch vụ → +phí agency → +VAT = tổng
+  /// cuối). CHỈ dùng để TRÌNH BÀY bản xuất — một phần của make-up từ CO sang CE mà không đụng
+  /// từng dòng; KHÔNG tham gia coTotal/ceTotal/margin (bất biến #3: ceTotal vẫn là số đã duyệt,
+  /// bản xuất chỉ suy ngược Σ dòng = ceTotal ÷ (1+VAT) ÷ (1+phí)).
+  agencyFeePct                Float     @default(10)
   mgmtFeePct                  Float     @default(0) // Phí quản lý dự án % — áp trên direct CO
   contingencyPct              Float     @default(0) // Dự phòng phát sinh % — áp trên direct CO
   discountPct                 Float     @default(0) // Chiết khấu tổng % — chỉ dùng khi suy ra CE gợi ý từ CO
@@ -958,6 +963,10 @@ model CostLine {
   vendorId     String?
   isLocked     Boolean @default(false)
   maxMarkupPct Float?
+  /// Cờ "TCM hỗ trợ" (form BM02: dòng tài trợ) — trên BÁO GIÁ dòng này hiện đơn giá nhưng Thành
+  /// tiền ĐỂ TRỐNG và không tính tiền khách (CE dòng = 0), kèm ghi chú "TCM hỗ trợ dự án này".
+  /// CHỈ tác động cách trình bày CE; CO của dòng vẫn tính bình thường (có thể có tiền hoặc 0).
+  isSponsored  Boolean @default(false)
   sort         Int     @default(0)
   note         String?
 

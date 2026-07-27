@@ -1029,7 +1029,11 @@
       "overrideNotePlaceholder": "Reason for approving below the margin floor…",
       "exportClientXlsx": "Export quotation (Excel)",
       "exportInternalXlsx": "Export internal CO/CE (Excel)",
-      "printView": "Print / PDF view"
+      "printView": "Print / PDF view",
+      "agencyFeePct": "Agency fee (%) — quotation",
+      "agencyFeePctHint": "Presentation-only on the exported quotation (lines → +fee → +VAT). Does not affect margin.",
+      "colSponsored": "Sponsored",
+      "colSponsoredHint": "Quotation shows the unit price but charges nothing for this line (line CE = 0). CO still counts."
     },
     "rounds": {
       "title": "Deal rounds",

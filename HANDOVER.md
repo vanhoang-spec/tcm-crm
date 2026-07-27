@@ -135,6 +135,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 - **"Chi hộ"** (`Section.isProxy`) = tiền chi hộ khách, **nằm hoàn toàn ngoài margin**, có phí dịch vụ riêng. Section con nằm dưới section Chi hộ tự kế thừa tính chất này.
 - **Thuế theo từng dòng:** `VAT` (khấu trừ, không cộng vào CO) · `TNCN` (÷0,9) · `TNDN` (÷0,8) · `OTHER` (nhập tay số tiền thuế, không gross-up %).
 - **Dòng âm tiền** được phép (đơn giá/số tiền cố định âm) — dùng cho khoản giảm trừ, thu hồi thanh lý.
+- **Phí agency % + cờ "TCM hỗ trợ"** (27/07/2026, theo form BM02 thật): `CostSheet.agencyFeePct` và `CostLine.isSponsored` CHỈ phục vụ TRÌNH BÀY bản xuất báo giá (chuỗi Σ dòng → +phí → +VAT = ceTotal; dòng tài trợ hiện đơn giá nhưng không tính tiền) — KHÔNG tham gia coTotal/ceTotal/margin/trần hóa đơn. Bộ xuất: `lib/costsheet-quotation.ts` (thuần, một nguồn số cho cả Excel lẫn trang in /projects/[id]/co-ce/print).
 - Mỗi lần lưu tạo 1 `CostSheetRevision` bất biến (snapshot JSON) → tab "So sánh" diff từng dòng giữa 2 phiên bản.
 
 ### Bất biến không được phá

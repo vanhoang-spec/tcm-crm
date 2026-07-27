@@ -292,6 +292,8 @@ export async function saveCostSheet(
 
   const scenario = String(formData.get("scenario") ?? "COST_UP");
   const vatPct = Number(formData.get("vatPct") ?? 0) || 0;
+  // % phí agency trên BÁO GIÁ (form BM02) — chỉ trình bày bản xuất, không tham gia margin/tổng.
+  const agencyFeePct = Number(formData.get("agencyFeePct") ?? 10) || 0;
   const mgmtFeePct = Number(formData.get("mgmtFeePct") ?? 0) || 0;
   const contingencyPct = Number(formData.get("contingencyPct") ?? 0) || 0;
   const discountPct = Number(formData.get("discountPct") ?? 0) || 0;
@@ -395,6 +397,7 @@ export async function saveCostSheet(
           percentVal: l.percentVal ?? null,
           taxType: l.taxType,
           customTaxAmount: l.customTaxAmount ?? null,
+          isSponsored: l.isSponsored,
           amount: lineAmount(l),
         })),
     })),
@@ -434,6 +437,7 @@ export async function saveCostSheet(
     coTotal: BigInt(coTotal),
     chiHo: BigInt(chiHo),
     vatPct,
+    agencyFeePct,
     mgmtFeePct,
     contingencyPct,
     discountPct,
@@ -524,6 +528,7 @@ export async function saveCostSheet(
               vendorId: l.vendorId || null,
               isLocked: l.isLocked,
               maxMarkupPct: l.maxMarkupPct ?? null,
+              isSponsored: l.isSponsored,
               sort: idx,
               note: l.note || null,
             };

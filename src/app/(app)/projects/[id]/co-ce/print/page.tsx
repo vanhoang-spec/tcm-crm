@@ -2,15 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { formatNumber } from "@/lib/utils";
-import { loadQuotationSource, buildQuotationModel, type QuotationRow } from "@/lib/costsheet-export";
+import { loadQuotationSource, buildQuotationModel } from "@/lib/costsheet-export";
+import type { QuotationRow } from "@/lib/costsheet-quotation";
 import { requirePermission } from "@/lib/permissions";
 import type { Locale } from "@/i18n/locales";
 import { PrintButton } from "./print-button";
 
 /**
- * Bản in báo giá (A4) — Ctrl+P / nút In → "Save as PDF" là có file PDF gửi khách, KHÔNG cần thư
- * viện PDF nào. Render từ CÙNG buildQuotationModel với file Excel nên hai bản không bao giờ lệch số.
- * ?mode=client (mặc định) | internal.
+ * Bản in báo giá theo form BM02/QT.TCM.15 (A4 dọc) — Ctrl+P / nút In → "Save as PDF" là có file
+ * PDF gửi khách, KHÔNG cần thư viện PDF. Render từ CÙNG buildQuotationModel với file Excel nên hai
+ * bản không bao giờ lệch số. ?mode=client (mặc định) | internal.
  */
 export default async function CostSheetPrintPage({
   params,
@@ -36,7 +37,7 @@ export default async function CostSheetPrintPage({
   const renderRows = (rows: QuotationRow[]) =>
     rows.map((r, i) =>
       r.kind === "section" ? (
-        <tr key={`s${i}`} className={r.depth === 1 ? "bg-neutral-100 font-bold" : "bg-neutral-50 font-semibold"}>
+        <tr key={`s${i}`} className={r.depth === 1 ? "bg-[#FFF2CC] font-bold" : "bg-neutral-50 font-semibold"}>
           <td colSpan={m.columns.length - (r.subtotal != null ? 2 : 0)} className="border border-neutral-400 px-2 py-1" style={{ paddingLeft: `${8 + (r.depth - 1) * 16}px` }}>
             {r.label}
           </td>
@@ -58,9 +59,10 @@ export default async function CostSheetPrintPage({
           <td className="border border-neutral-400 px-2 py-1 text-center">{r.unit ?? ""}</td>
           <td className={`border border-neutral-400 px-2 py-1 ${moneyCls}`}>{r.qty ?? ""}</td>
           <td className={`border border-neutral-400 px-2 py-1 ${moneyCls}`}>{r.unitPrice != null ? formatNumber(r.unitPrice, locale) : ""}</td>
-          <td className={`border border-neutral-400 px-2 py-1 ${moneyCls}`}>{formatNumber(r.total, locale)}</td>
+          {/* Dòng "TCM hỗ trợ": Thành tiền ĐỂ TRỐNG (total=null) — đúng form thật. */}
+          <td className={`border border-neutral-400 px-2 py-1 ${moneyCls}`}>{r.total != null ? formatNumber(r.total, locale) : ""}</td>
           {m.mode === "internal" && <td className="border border-neutral-400 px-2 py-1 text-center">{r.taxLabel ?? ""}</td>}
-          <td className="border border-neutral-400 px-2 py-1">{r.note ?? ""}</td>
+          <td className="border border-neutral-400 px-2 py-1 whitespace-pre-wrap">{r.note ?? ""}</td>
         </tr>
       ),
     );
@@ -68,7 +70,7 @@ export default async function CostSheetPrintPage({
   const headerRow = (
     <tr>
       {m.columns.map((c) => (
-        <th key={c} className="border border-neutral-400 bg-neutral-200 px-2 py-1.5 text-center font-semibold">
+        <th key={c} className="border border-neutral-400 bg-neutral-600 px-2 py-1.5 text-center font-semibold text-white">
           {c}
         </th>
       ))}
@@ -78,7 +80,7 @@ export default async function CostSheetPrintPage({
   return (
     // Nền trắng chữ đen cố định cho bản in — không theo dark mode.
     <div className="min-h-screen bg-white text-black">
-      {/* Thanh công cụ — biến mất khi in */}
+      {/* Thanh công cụ — biến mất khi in (nằm ngoài #costsheet-print-area) */}
       <div className="flex items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50 px-6 py-3 print:hidden">
         <div className="flex items-center gap-3 text-sm">
           <Link href={`/projects/${id}/co-ce`} className="text-brand-600 hover:underline">
@@ -96,27 +98,41 @@ export default async function CostSheetPrintPage({
       </div>
 
       <div id="costsheet-print-area" className="mx-auto max-w-[1100px] px-8 py-6 text-[12px] leading-snug print:max-w-none print:px-0 print:py-0">
-        {/* Đầu trang công ty */}
-        <div className="mb-4">
-          <p className="text-[15px] font-bold">{m.company.name}</p>
-          {m.company.address && <p>{m.company.address}</p>}
-          {(m.company.taxCode || m.company.phone || m.company.email) && (
-            <p className="text-neutral-600">
-              {[m.company.taxCode && `MST: ${m.company.taxCode}`, m.company.phone && `ĐT: ${m.company.phone}`, m.company.email]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
+        {/* Đầu trang: letterhead PNG (đủ tên EN + địa chỉ + MST) trái · khối ISO phải — form BM02 */}
+        <div className="mb-3 flex items-start justify-between gap-4">
+          {m.useLetterhead ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- ảnh tĩnh cho bản in, không cần tối ưu next/image */
+            <img src="/tcm-letterhead.png" alt={m.companyFallbackName} className="h-[72px] w-auto" />
+          ) : (
+            <p className="text-[15px] font-bold">{m.companyFallbackName}</p>
+          )}
+          {m.iso && (
+            <div className="shrink-0 text-right text-[10px] leading-tight text-neutral-700">
+              <p>Số hiệu: {m.iso.formNo}</p>
+              <p>Ngày BH: {m.iso.issuedDate}</p>
+              <p>Lần BH/SĐ: {m.iso.revision}</p>
+              <p>Số trang: {m.iso.pages}</p>
+            </div>
           )}
         </div>
 
         <h1 className="text-center text-xl font-bold uppercase">{m.title}</h1>
-        <p className="text-center">{m.projectCode} — {m.projectName}</p>
-        <p className="mb-4 text-center text-neutral-600">{m.dateLabel}</p>
 
-        <div className="mb-3">
-          <p className="font-semibold">Kính gửi: {m.clientName}</p>
-          {m.clientAddress && <p>Địa chỉ: {m.clientAddress}</p>}
-          {m.clientTaxCode && <p>MST: {m.clientTaxCode}</p>}
+        <div className="mt-3 mb-3 grid grid-cols-2 gap-x-8 gap-y-0.5">
+          <div>
+            {m.infoLeft.map(([label, value]) => (
+              <p key={label}>
+                <span className="font-semibold">{label}:</span> {value}
+              </p>
+            ))}
+          </div>
+          <div>
+            {m.infoRight.map(([label, value]) => (
+              <p key={label}>
+                <span className="font-semibold">{label}:</span> {value}
+              </p>
+            ))}
+          </div>
         </div>
 
         <table className="w-full border-collapse">
@@ -134,9 +150,13 @@ export default async function CostSheetPrintPage({
           </>
         )}
 
-        <div className="mt-4 ml-auto w-full max-w-md">
+        {/* Chuỗi footer BM02 — dòng đậm nền xanh 0D81FF chữ trắng như form thật */}
+        <div className="mt-3">
           {m.footer.map((f) => (
-            <div key={f.label} className={`flex items-baseline justify-between gap-4 py-0.5 ${f.strong ? "border-t border-neutral-400 text-[13px] font-bold" : ""}`}>
+            <div
+              key={f.label}
+              className={`flex items-baseline justify-between gap-4 px-2 py-1 ${f.strong && m.mode === "client" ? "bg-[#0D81FF] font-bold text-white" : f.strong ? "border-t border-neutral-400 font-bold" : ""}`}
+            >
               <span>{f.label}</span>
               {f.amount != null && <span className={moneyCls}>{formatNumber(f.amount, locale)}</span>}
             </div>
@@ -145,21 +165,32 @@ export default async function CostSheetPrintPage({
 
         {m.marginOverrideNote && <p className="mt-3 italic">Lý do duyệt margin dưới sàn: {m.marginOverrideNote}</p>}
 
-        <div className="mt-4 space-y-0.5 text-[10px] italic text-neutral-600">
-          {m.notes.map((n) => (
-            <p key={n}>• {n}</p>
+        <div className="mt-4 space-y-0.5 text-[11px]">
+          {m.terms.map((term) => (
+            <p key={term}>{term}</p>
           ))}
         </div>
 
-        <div className="mt-10 grid grid-cols-2 gap-4 text-center">
-          {m.signatures.map((s) => (
-            <div key={s}>
-              <p className="font-bold">{s}</p>
-              <p className="text-[10px] italic text-neutral-600">(Ký, ghi rõ họ tên)</p>
+        {m.signature.length === 1 ? (
+          <div className="mt-8 flex justify-end">
+            <div className="text-center">
+              <p className="font-bold">{m.signature[0].company}</p>
               <div className="h-20" />
+              <p className="font-bold">{m.signature[0].name}</p>
+              <p>{m.signature[0].title}</p>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-10 grid grid-cols-2 gap-4 text-center">
+            {m.signature.map((s) => (
+              <div key={s.title}>
+                <p className="font-bold">{s.title}</p>
+                <p className="text-[10px] italic text-neutral-600">(Ký, ghi rõ họ tên)</p>
+                <div className="h-20" />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

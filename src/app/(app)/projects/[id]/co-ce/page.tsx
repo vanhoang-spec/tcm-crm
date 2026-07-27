@@ -84,6 +84,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
           vendorId: "",
           isLocked: l.isLocked,
           maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
+          isSponsored: false, // template không mang cờ tài trợ — tick khi dựng sheet thật
           note: "",
         })),
       })),
@@ -96,6 +97,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
     ? {
         scenario: sheet.scenario,
         vatPct: sheet.vatPct,
+        agencyFeePct: sheet.agencyFeePct,
         mgmtFeePct: sheet.mgmtFeePct,
         contingencyPct: sheet.contingencyPct,
         discountPct: sheet.discountPct,
@@ -131,6 +133,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
             vendorId: l.vendorId ?? "",
             isLocked: l.isLocked,
             maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
+            isSponsored: l.isSponsored,
             note: l.note ?? "",
           })),
         })),

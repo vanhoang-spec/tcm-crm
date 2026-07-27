@@ -133,6 +133,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           vendorId: "",
           isLocked: l.isLocked,
           maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
+          isSponsored: false, // template không mang cờ tài trợ — tick khi dựng sheet thật
           note: "",
         })),
       })),
@@ -146,6 +147,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     ? {
         scenario: sheet.scenario,
         vatPct: sheet.vatPct,
+        agencyFeePct: sheet.agencyFeePct,
         mgmtFeePct: sheet.mgmtFeePct,
         contingencyPct: sheet.contingencyPct,
         discountPct: sheet.discountPct,
@@ -181,6 +183,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
             vendorId: l.vendorId ?? "",
             isLocked: l.isLocked,
             maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
+            isSponsored: l.isSponsored,
             note: l.note ?? "",
           })),
         })),

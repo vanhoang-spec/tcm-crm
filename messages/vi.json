@@ -1029,7 +1029,11 @@
       "overrideNotePlaceholder": "Lý do duyệt dưới ngưỡng margin…",
       "exportClientXlsx": "Xuất báo giá (Excel)",
       "exportInternalXlsx": "Xuất CO/CE nội bộ (Excel)",
-      "printView": "Bản in / PDF"
+      "printView": "Bản in / PDF",
+      "agencyFeePct": "Phí agency (%) — báo giá",
+      "agencyFeePctHint": "Chỉ dùng để trình bày bản xuất báo giá (Σ dòng → +phí → +VAT). Không tham gia margin.",
+      "colSponsored": "TCM hỗ trợ",
+      "colSponsoredHint": "Báo giá hiện đơn giá nhưng KHÔNG tính tiền dòng này (CE dòng = 0). CO vẫn tính bình thường."
     },
     "rounds": {
       "title": "Vòng deal giá",

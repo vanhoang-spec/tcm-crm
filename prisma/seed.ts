@@ -148,10 +148,14 @@ async function main() {
   const staffByFullName = new Map<string, Awaited<ReturnType<typeof prisma.staff.upsert>>>();
   for (const row of STAFF_ROWS) {
     const teamCode = TEAM_MAP[row.deptExcel];
-    const created = await prisma.staff.upsert({
-      where: { email: row.email },
-      update: {},
-      create: {
+    // KHÔNG upsert theo email đơn thuần: từ 28/07 admin sửa được tài khoản đăng nhập
+    // (updateStaffLogin), email đổi thì seed không nhận ra người cũ, đòi tạo mới và nổ P2002.
+    // Nhận diện bằng email HOẶC mã nhân viên (36/42 người chưa có mã nên mã không dùng một mình được).
+    const found = await prisma.staff.findFirst({
+      where: { OR: [{ email: row.email }, ...(row.code ? [{ code: row.code }] : [])] },
+    });
+    const created = found ?? (await prisma.staff.create({
+      data: {
         fullName: row.fullName,
         email: row.email,
         code: row.code,
@@ -164,7 +168,7 @@ async function main() {
         dateOfBirth: new Date(row.dob[2], row.dob[1] - 1, row.dob[0]),
         firstWorkDate: new Date(row.firstWorkDate[2], row.firstWorkDate[1] - 1, row.firstWorkDate[0]),
       },
-    });
+    }));
     staffByFullName.set(row.fullName, created);
   }
   // Vòng 2: gán managerId (người quản lý trực tiếp thật, dùng dựng org chart) — Chairman không có
@@ -173,7 +177,8 @@ async function main() {
     if (!row.managerName) continue;
     const manager = staffByFullName.get(row.managerName);
     if (!manager) throw new Error(`Seed lỗi: không tìm thấy manager "${row.managerName}" cho "${row.fullName}"`);
-    await prisma.staff.update({ where: { email: row.email }, data: { managerId: manager.id } });
+    const self = staffByFullName.get(row.fullName);
+    if (self) await prisma.staff.update({ where: { id: self.id }, data: { managerId: manager.id } });
   }
 
   // ── Alias sang tên biến cũ — phần còn lại của file KHÔNG đổi, chỉ nguồn dữ liệu đổi sang người thật ──
@@ -1876,8 +1881,11 @@ async function main() {
   // (roleId null) — re-seed KHÔNG ghi đè chỉnh sửa tay của admin ở /settings/roles (bất biến từ AF-5).
   for (const row of STAFF_ROWS) {
     const roleCode = ROLE_MAP[row.roleText];
+    // Khoá theo ID người đã nhận diện ở Vòng 1 (email sửa được từ 28/07, code thì 36/42 người còn trống).
+    const self = staffByFullName.get(row.fullName);
+    if (!self) continue;
     await prisma.staff.updateMany({
-      where: { email: row.email, roleId: null },
+      where: { id: self.id, roleId: null },
       data: { roleId: roleByCode[roleCode].id },
     });
   }
@@ -2065,6 +2073,14 @@ async function main() {
       key: "20260728_kho_k2_keeper",
       codes: ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"],
       roleFilter: (r) => r.groupCode === "WAREHOUSE" || r.code === "OPERATIONS_MANAGER",
+    },
+    // 28/07/2026 Kho v2 K3 — duyệt giữ chỗ tồn kho để đưa vào CO với đơn giá 0.
+    // Chủ dự án chốt: "Kế toán và/hoặc HR Manager" — MỘT trong hai duyệt là đủ, nên cùng một mã
+    // quyền cấp cho cả hai nhóm (ai bấm trước thắng nhờ claim idempotent trong action).
+    {
+      key: "20260728_kho_k3_reserve_approve",
+      codes: ["inventory.reservation.approve"],
+      roleFilter: (r) => r.groupCode === "FINANCE" || r.code === "HR_MANAGER" || r.groupCode === "BOD",
     },
   ];
   for (const bf of backfills) {

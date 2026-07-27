@@ -989,6 +989,17 @@ model CostLine {
   /// tiền ĐỂ TRỐNG và không tính tiền khách (CE dòng = 0), kèm ghi chú "TCM hỗ trợ dự án này".
   /// CHỈ tác động cách trình bày CE; CO của dòng vẫn tính bình thường (có thể có tiền hoặc 0).
   isSponsored  Boolean @default(false)
+  /// K3 — dòng thuộc CẶP "hàng lấy từ kho + hàng mua bù". Giá trị = `StockRequestLine.id` của đề
+  /// xuất GIỮ CHỖ đã duyệt, đặt trên CẢ HAI dòng của cặp → cũng là khoá GỘP khi in báo giá BM02
+  /// (2 dòng nội bộ thành 1 dòng khách nhìn). CỐ Ý không unique (hai dòng cùng khoá là đúng ý) và
+  /// không khai quan hệ Prisma — giữ đúng nếp `FinanceCostLine.lineKey`: cột phải sống sót qua
+  /// vòng xoá-tạo-lại của saveCostSheet.
+  stockResvLineId   String?
+  /// K3 — ĐƠN GIÁ THAM CHIẾU của dòng lấy từ kho. Hàng này đã tính tiền ở hợp đồng trước nên
+  /// `unitPrice = 0` (CO = 0 do SỐ HỌC, không do nhánh if). Giá tham chiếu CHỈ dùng ở tầng trình
+  /// bày: (a) trọng số chia tiền khách trên báo giá, (b) gợi ý make-up trong builder.
+  /// KHÔNG vào coTotal / ceTotal / margin / trần chi. Khác null = đây LÀ dòng lấy từ kho.
+  stockRefUnitPrice BigInt?
   sort         Int     @default(0)
   note         String?
 

@@ -80,7 +80,7 @@ Nếu DB hỏng/muốn làm lại sạch: `npx prisma migrate reset --force` r�
 - **Enum "mềm" đi qua `OptionSet`/`OptionItem`** để admin tự sửa trong Settings (trạng thái dự án, loại task, nhóm hàng...). Chỉ hard-code khi state machine phụ thuộc (`code` cố định, label lấy từ DB qua `pickLabel`).
 
 ### 4.2 i18n — luật cứng
-- Mọi chuỗi hiển thị đều qua `next-intl`. **`messages/vi.json` và `messages/en.json` phải khớp key tuyệt đối** (hiện 2731 key mỗi bên).
+- Mọi chuỗi hiển thị đều qua `next-intl`. **`messages/vi.json` và `messages/en.json` phải khớp key tuyệt đối** (hiện 2751 key mỗi bên).
 - Kiểm tra trước mỗi lần giao việc:
 ```bash
 node -e "const vi=require('./messages/vi.json'),en=require('./messages/en.json');function f(o,p=''){let k=[];for(const x in o){const q=p?p+'.'+x:x;if(o[x]&&typeof o[x]==='object')k=k.concat(f(o[x],q));else k.push(q)}return k}const V=new Set(f(vi)),E=new Set(f(en));console.log('only vi:',[...V].filter(k=>!E.has(k)).length,'only en:',[...E].filter(k=>!V.has(k)).length)"
@@ -114,7 +114,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
-| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, chuyển kho 2 bước, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) — K3–K4 chưa làm, xem mục 10.11 |
+| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, chuyển kho 2 bước, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) — K4 chưa làm, xem mục 10.11 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
@@ -228,7 +228,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
    - **Role mới `WAREHOUSE_KEEPER`** (nhóm `WAREHOUSE`) + 6 mã quyền (**107 mã**): `inventory.request.create` (mọi role) · `.approve` (Account + BGĐ) · `.approve_any` (AD/AM + BGĐ) · `issue.confirm` + `intake.confirm` + `lot.convert` + `destroy` (Thủ kho; **OPERATIONS_MANAGER giữ tạm** tới khi chủ dự án gán người thật ở `/settings/staff` rồi bỏ tick).
    - Xuất kho 1 bước cũ **đã gỡ** (`createIssueDoc` + `/documents/new/issue`); nhập kho trực tiếp `/documents/new/import` nay gác `inventory.intake.confirm` (chỉ thủ kho, dùng cho kiểm kê/tồn đầu kỳ).
    - ⚠ Dự án **chưa gán PIC/Leader** thì chỉ người có `approve_any` duyệt được — cố ý (21 dự án cũ đang trống PIC; gán ở form sửa dự án).
-   **CHƯA LÀM:** K3 (giữ chỗ tồn kho → dòng CO giá 0 khóa SL + trần xuất của OPE + gộp cặp dòng trên báo giá BM02, duyệt = Kế toán HOẶC HR Manager), K4 (kỳ chiến dịch ≤15 ngày + điều chuyển có duyệt + chuyển holding dự án A→B + thang cảnh báo date vàng 90/cam 60/đỏ 30 vào bộ nhắc việc). OptionSet `inventory_category` cũ deprecated (cột `categoryId` còn trong DB, không ai ghi).
+   **K3 ĐÃ XONG** (migration `20260728140000_kho_v2_k3_costline_stock_link`): đề xuất GIỮ CHỖ dùng lại bảng StockRequest với `type="RESERVE"` (mã GC, vòng đời dừng ở APPROVED, KHÔNG đụng sổ cái); CostLine +2 cột `stockResvLineId` (khoá cặp, đặt trên CẢ HAI dòng) + `stockRefUnitPrice` (giá tham chiếu, khác null = dòng kho). Dòng kho có `unitPrice=0` THẬT (CO=0 do số học) — saveCostSheet CHUẨN HOÁ lại phía server (ép QTY_PRICE/VAT, xoá customTaxAmount) vì taxType OTHER vẫn cộng tiền vào base; chặn dòng kho nằm trong Chi hộ. Báo giá BM02: trọng số chia tiền khách = CO + giá tham chiếu (`lineWeight`), cặp dòng GỘP thành một dòng khách nhìn — chứng minh Σ dòng in = serviceSubtotal và TỔNG = ceTotal tuyệt đối (test thuần: 193.500.000 → 212.850.000 → 229.878.000). Trần xuất kho của OPE = SL giữ chỗ − phần đã đòi, CHỈ áp cho item CÓ giữ chỗ (item khác giữ nguyên hành vi cũ, tránh chặn đứng 21 dự án chưa từng giữ chỗ). Tồn khả dụng trừ giữ chỗ CÒN TRỐNG của dự án KHÁC (`availableToRequest` 3 tham số + `remainingReserve`). Dòng kho KHÔNG sinh FinanceCostLine (trần chi 0 sẽ làm phiếu chi báo "vượt trần" oan). Quyền mới `inventory.reservation.approve` (**108 mã**) backfill FINANCE + HR_MANAGER + BGĐ — "một trong hai duyệt là đủ" đạt bằng cùng một mã quyền. ⚠ GIỮ CHỖ LÀ MỀM: phiếu ADJUST/TRANSFER/DESTROY/CONVERT vẫn rút được hàng đã giữ chỗ. **CHƯA LÀM:** K4 (kỳ chiến dịch ≤15 ngày + điều chuyển có duyệt + chuyển holding dự án A→B + thang cảnh báo date vàng 90/cam 60/đỏ 30 vào bộ nhắc việc). OptionSet `inventory_category` cũ deprecated (cột `categoryId` còn trong DB, không ai ghi).
 
 ---
 

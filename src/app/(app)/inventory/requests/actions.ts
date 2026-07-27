@@ -15,7 +15,14 @@ import {
   expiryLevel,
   nextDocCode,
 } from "@/lib/inventory";
-import { buildRequestCode, canApproveIssue, confirmableStatus, type RequestType } from "@/lib/inventory-request";
+import {
+  availableToRequest,
+  buildRequestCode,
+  canApproveIssue,
+  confirmableStatus,
+  remainingReserve,
+  type RequestType,
+} from "@/lib/inventory-request";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 
 export type RequestFormState = { error?: string; success?: boolean };
@@ -114,6 +121,218 @@ async function approvedNotIssuedByItem(warehouseId: string, itemIds: string[]): 
   return map;
 }
 
+/**
+ * Giữ chỗ K3 CÒN TRỐNG theo (kho, item), tách theo dự án: `mine` = của dự án đang xét,
+ * `others` = tổng của các dự án khác.
+ *
+ * "Còn trống" = SL đã duyệt giữ chỗ − SL dự án đó đã đòi qua lệnh xuất (PROPOSED + APPROVED +
+ * đã xuất thật). Trừ như vậy để KHÔNG đếm trùng với `approvedNotIssuedByItem`: phần giữ chỗ đã
+ * biến thành lệnh xuất được trừ ở đây trước, còn lệnh xuất thì đã nằm trong hàm kia.
+ */
+async function reserveFreeByItem(
+  warehouseId: string,
+  itemIds: string[],
+  forProjectId: string | null
+): Promise<{ mine: Map<string, number>; others: Map<string, number> }> {
+  const [reserved, used] = await Promise.all([
+    prisma.stockRequestLine.findMany({
+      where: { itemId: { in: itemIds }, request: { type: "RESERVE", status: "APPROVED", warehouseId } },
+      select: { itemId: true, quantity: true, request: { select: { projectId: true } } },
+    }),
+    prisma.stockRequestLine.findMany({
+      where: {
+        itemId: { in: itemIds },
+        request: { type: "ISSUE", status: { in: ["PROPOSED", "APPROVED", "DONE"] }, warehouseId },
+      },
+      select: { itemId: true, quantity: true, confirmedQuantity: true, request: { select: { projectId: true, status: true } } },
+    }),
+  ]);
+
+  const key = (projectId: string | null, itemId: string) => `${projectId ?? ""}|${itemId}`;
+  const reservedBy = new Map<string, number>();
+  for (const r of reserved) {
+    const k = key(r.request.projectId, r.itemId);
+    reservedBy.set(k, (reservedBy.get(k) ?? 0) + r.quantity);
+  }
+  const usedBy = new Map<string, number>();
+  for (const u of used) {
+    const k = key(u.request.projectId, u.itemId);
+    // Đã xuất thật thì lấy số thực xuất; còn treo thì lấy số đang đòi.
+    const q = u.request.status === "DONE" ? (u.confirmedQuantity ?? u.quantity) : u.quantity;
+    usedBy.set(k, (usedBy.get(k) ?? 0) + q);
+  }
+
+  const mine = new Map<string, number>();
+  const others = new Map<string, number>();
+  for (const [k, qty] of reservedBy) {
+    const [projectId, itemId] = k.split("|");
+    const free = remainingReserve(qty, usedBy.get(k) ?? 0);
+    if (free <= 0) continue;
+    const target = forProjectId && projectId === forProjectId ? mine : others;
+    target.set(itemId, (target.get(itemId) ?? 0) + free);
+  }
+  return { mine, others };
+}
+
+// ── GIỮ CHỖ TỒN KHO ĐỂ ĐƯA VÀO CO/CE (workflow b — K3) ────
+// Account tìm hàng tái sử dụng còn tồn → xin giữ một số lượng cho dự án sắp chạy → Kế toán HOẶC
+// HR Manager duyệt → số duyệt vào CO với đơn giá 0 và trở thành TRẦN xuất kho của OPE.
+// Vòng đời dừng ở APPROVED: giữ chỗ KHÔNG đụng sổ cái, không sinh phiếu kho.
+
+export async function createReserveRequest(_prev: RequestFormState, formData: FormData): Promise<RequestFormState> {
+  await requirePermission("inventory.request.create");
+  const t = await getTranslations("inventory.requests");
+  const warehouseId = String(formData.get("warehouseId") ?? "");
+  const projectId = String(formData.get("projectId") ?? "");
+  const note = String(formData.get("note") ?? "").trim() || null;
+  if (!warehouseId || !projectId) return { error: t("errorInvalid") };
+  const { lines, error } = await parseLines(formData);
+  if (error) return { error };
+
+  // Giữ chỗ xảy ra lúc DỰNG CO/CE (dự án còn đang chào giá) nên KHÔNG dùng EXECUTION_STATUS_CODES;
+  // chỉ loại dự án đã thua thầu / đã huỷ.
+  const project = await prisma.project.findUnique({ where: { id: projectId }, include: { status: true } });
+  if (!project || ["LOST", "CANCELED"].includes(project.status.code)) return { error: t("errorProjectRequired") };
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { id: { in: lines.map((l) => l.itemId) } },
+    select: { id: true, code: true, statusCode: true, expiryDate: true, ownerClientId: true, boundProjectId: true },
+  });
+  const byId = new Map(items.map((i) => [i.id, i]));
+
+  // Chỉ hàng "sẵn sàng dùng" mới tái sử dụng được cho dự án mới (spec workflow b).
+  const notReady = items.filter((i) => i.statusCode !== "R");
+  if (notReady.length > 0) return { error: t("errorNotReadyToUse", { items: notReady.map((i) => i.code).join(", ") }) };
+  const expired = items.filter((i) => expiryLevel(i.expiryDate, new Date()) === "EXPIRED");
+  if (expired.length > 0) return { error: t("errorExpired", { items: expired.map((i) => i.code).join(", ") }) };
+  const wrongProject = items.filter((i) => i.boundProjectId && i.boundProjectId !== projectId);
+  if (wrongProject.length > 0) return { error: t("errorBoundOtherProject", { items: wrongProject.map((i) => i.code).join(", ") }) };
+  const wrongClient = items.filter((i) => i.ownerClientId && i.ownerClientId !== project.clientId);
+  if (wrongClient.length > 0) return { error: t("errorOtherClientGoods", { items: wrongClient.map((i) => i.code).join(", ") }) };
+
+  const itemIds = lines.map((l) => l.itemId);
+  const [balances, approvedNotIssued, free] = await Promise.all([
+    prisma.stockBalance.findMany({ where: { warehouseId, itemId: { in: itemIds } } }),
+    approvedNotIssuedByItem(warehouseId, itemIds),
+    reserveFreeByItem(warehouseId, itemIds, projectId),
+  ]);
+  const balByItem = new Map(balances.map((b) => [b.itemId, b.quantity]));
+  // Giữ chỗ của CHÍNH dự án này cũng phải trừ — xin thêm lần hai không được hứa lại cùng số hàng.
+  const short = lines.filter(
+    (l) =>
+      l.quantity >
+      availableToRequest(
+        balByItem.get(l.itemId) ?? 0,
+        approvedNotIssued.get(l.itemId) ?? 0,
+        (free.others.get(l.itemId) ?? 0) + (free.mine.get(l.itemId) ?? 0)
+      )
+  );
+  if (short.length > 0) return { error: t("errorInsufficientAvailable", { items: short.map((l) => byId.get(l.itemId)?.code ?? "").join(", ") }) };
+
+  const staffId = await getCurrentStaffId();
+  let reqId = "";
+  let reqCode = "";
+  await withRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const code = await nextRequestCode(tx, "RESERVE", new Date());
+      const req = await tx.stockRequest.create({
+        data: {
+          code,
+          type: "RESERVE",
+          status: "PROPOSED",
+          warehouseId,
+          projectId,
+          note,
+          createdById: staffId,
+          lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note, sort: i })) },
+        },
+      });
+      reqId = req.id;
+      reqCode = req.code;
+    })
+  );
+  await audit(reqId, "CREATE");
+  await notifyByPermission(
+    "inventory.reservation.approve",
+    "INVENTORY_RESERVE_PENDING",
+    `Đề xuất giữ chỗ kho ${reqCode} chờ duyệt`,
+    `${project.code} — ${lines.length} dòng hàng`,
+    projectId
+  );
+  revalidate();
+  redirect(`/inventory/requests/${reqId}`);
+}
+
+/** Kế toán HOẶC HR Manager duyệt — cùng một mã quyền, ai bấm trước thắng (claim idempotent). */
+export async function approveReserveRequest(requestId: string, _prev: RequestFormState, _formData: FormData): Promise<RequestFormState> {
+  await requirePermission("inventory.reservation.approve");
+  const t = await getTranslations("inventory.requests");
+  const req = await prisma.stockRequest.findUnique({
+    where: { id: requestId },
+    include: { project: { select: { id: true, code: true } }, lines: true },
+  });
+  if (!req || req.type !== "RESERVE" || !req.projectId) return { error: t("errorInvalid") };
+
+  // Kiểm lại tồn ở thời điểm DUYỆT — đề xuất lập từ hôm trước có thể đã lỗi thời.
+  const itemIds = req.lines.map((l) => l.itemId);
+  const [balances, approvedNotIssued, free] = await Promise.all([
+    prisma.stockBalance.findMany({ where: { warehouseId: req.warehouseId, itemId: { in: itemIds } } }),
+    approvedNotIssuedByItem(req.warehouseId, itemIds),
+    reserveFreeByItem(req.warehouseId, itemIds, req.projectId),
+  ]);
+  const balByItem = new Map(balances.map((b) => [b.itemId, b.quantity]));
+  const short = req.lines.filter(
+    (l) =>
+      l.quantity >
+      availableToRequest(
+        balByItem.get(l.itemId) ?? 0,
+        approvedNotIssued.get(l.itemId) ?? 0,
+        (free.others.get(l.itemId) ?? 0) + (free.mine.get(l.itemId) ?? 0)
+      )
+  );
+  if (short.length > 0) {
+    const codes = await prisma.inventoryItem.findMany({ where: { id: { in: short.map((l) => l.itemId) } }, select: { code: true } });
+    return { error: t("errorInsufficientAvailable", { items: codes.map((c) => c.code).join(", ") }) };
+  }
+
+  const staffId = await getCurrentStaffId();
+  const done = await prisma.stockRequest.updateMany({
+    where: { id: requestId, status: "PROPOSED" },
+    data: { status: "APPROVED", approvedById: staffId, approvedAt: new Date() },
+  });
+  if (done.count === 0) return { error: t("errorAlreadyProcessed") };
+  await audit(requestId, "UPDATE", "approve reserve");
+  await notifyStaff(
+    [req.createdById],
+    "INVENTORY_RESERVE_APPROVED",
+    `Giữ chỗ kho ${req.code} đã duyệt — chèn được vào CO/CE`,
+    `${req.project?.code ?? ""} — ${req.lines.length} dòng hàng`,
+    req.projectId
+  );
+  revalidate();
+  return { success: true };
+}
+
+export async function rejectReserveRequest(requestId: string, _prev: RequestFormState, formData: FormData): Promise<RequestFormState> {
+  await requirePermission("inventory.reservation.approve");
+  const t = await getTranslations("inventory.requests");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: t("errorReasonRequired") };
+  const req = await prisma.stockRequest.findUnique({ where: { id: requestId }, select: { type: true, code: true, createdById: true, projectId: true } });
+  if (!req || req.type !== "RESERVE") return { error: t("errorInvalid") };
+
+  const staffId = await getCurrentStaffId();
+  const done = await prisma.stockRequest.updateMany({
+    where: { id: requestId, status: "PROPOSED" },
+    data: { status: "REJECTED", rejectedById: staffId, rejectedAt: new Date(), rejectReason: reason },
+  });
+  if (done.count === 0) return { error: t("errorAlreadyProcessed") };
+  await audit(requestId, "UPDATE", `reject reserve: ${reason}`);
+  await notifyStaff([req.createdById], "INVENTORY_RESERVE_REJECTED", `Đề xuất giữ chỗ kho ${req.code} bị từ chối`, reason, req.projectId);
+  revalidate();
+  return { success: true };
+}
+
 // ── ĐỀ XUẤT XUẤT KHO (workflow a) ─────────────────────────
 
 export async function createIssueRequest(_prev: RequestFormState, formData: FormData): Promise<RequestFormState> {
@@ -145,13 +364,30 @@ export async function createIssueRequest(_prev: RequestFormState, formData: Form
   const wrongClient = items.filter((i) => i.ownerClientId && i.ownerClientId !== project.clientId);
   if (wrongClient.length > 0) return { error: t("errorOtherClientGoods", { items: wrongClient.map((i) => i.code).join(", ") }) };
 
-  const [balances, reserved] = await Promise.all([
-    prisma.stockBalance.findMany({ where: { warehouseId, itemId: { in: lines.map((l) => l.itemId) } } }),
-    approvedNotIssuedByItem(warehouseId, lines.map((l) => l.itemId)),
+  const itemIds = lines.map((l) => l.itemId);
+  const [balances, reserved, free] = await Promise.all([
+    prisma.stockBalance.findMany({ where: { warehouseId, itemId: { in: itemIds } } }),
+    approvedNotIssuedByItem(warehouseId, itemIds),
+    reserveFreeByItem(warehouseId, itemIds, projectId),
   ]);
   const balByItem = new Map(balances.map((b) => [b.itemId, b.quantity]));
-  const short = lines.filter((l) => l.quantity > Math.max(0, (balByItem.get(l.itemId) ?? 0) - (reserved.get(l.itemId) ?? 0)));
+  // Hàng dự án KHÁC đang giữ chỗ thì không đụng tới được; giữ chỗ của chính dự án này thì được dùng.
+  const short = lines.filter(
+    (l) => l.quantity > availableToRequest(balByItem.get(l.itemId) ?? 0, reserved.get(l.itemId) ?? 0, free.others.get(l.itemId) ?? 0)
+  );
   if (short.length > 0) return { error: t("errorInsufficientAvailable", { items: short.map((l) => byId.get(l.itemId)?.code ?? "").join(", ") }) };
+
+  // TRẦN K3: item nào ĐÃ được duyệt giữ chỗ cho dự án này thì OPE chỉ được đòi trong phạm vi còn
+  // lại của giữ chỗ đó. Item KHÔNG có giữ chỗ giữ nguyên hành vi cũ (Account PIC duyệt là cửa
+  // kiểm soát) — nếu áp trần cho mọi item thì 21 dự án cũ chưa từng giữ chỗ sẽ không xuất được gì.
+  const overCap = lines.filter((l) => free.mine.has(l.itemId) && l.quantity > (free.mine.get(l.itemId) ?? 0));
+  if (overCap.length > 0) {
+    return {
+      error: t("errorOverReserveCap", {
+        items: overCap.map((l) => `${byId.get(l.itemId)?.code ?? ""} (còn ${free.mine.get(l.itemId) ?? 0})`).join(", "),
+      }),
+    };
+  }
 
   const hasReusable = lines.some((l) => byId.get(l.itemId)?.isReusable);
   const expectedReturnAt = expectedReturnRaw ? new Date(expectedReturnRaw) : null;
@@ -207,15 +443,32 @@ export async function approveIssueRequest(requestId: string, _prev: RequestFormS
   if (!canApproveIssue(req.project, staffId, approveAny)) return { error: t("errorNotPic") };
 
   // Tồn phải còn đủ ở thời điểm DUYỆT (đề xuất cũ có thể đã lỗi thời)
-  const balances = await prisma.stockBalance.findMany({
-    where: { warehouseId: req.warehouseId, itemId: { in: req.lines.map((l) => l.itemId) } },
-  });
-  const reserved = await approvedNotIssuedByItem(req.warehouseId, req.lines.map((l) => l.itemId));
+  const issueItemIds = req.lines.map((l) => l.itemId);
+  const [balances, reserved, freeAtApprove] = await Promise.all([
+    prisma.stockBalance.findMany({ where: { warehouseId: req.warehouseId, itemId: { in: issueItemIds } } }),
+    approvedNotIssuedByItem(req.warehouseId, issueItemIds),
+    reserveFreeByItem(req.warehouseId, issueItemIds, req.projectId),
+  ]);
   const balByItem = new Map(balances.map((b) => [b.itemId, b.quantity]));
-  const short = req.lines.filter((l) => l.quantity > Math.max(0, (balByItem.get(l.itemId) ?? 0) - (reserved.get(l.itemId) ?? 0)));
+  const short = req.lines.filter(
+    (l) => l.quantity > availableToRequest(balByItem.get(l.itemId) ?? 0, reserved.get(l.itemId) ?? 0, freeAtApprove.others.get(l.itemId) ?? 0)
+  );
   if (short.length > 0) {
     const codes = await prisma.inventoryItem.findMany({ where: { id: { in: short.map((l) => l.itemId) } }, select: { code: true } });
     return { error: t("errorInsufficientAvailable", { items: codes.map((c) => c.code).join(", ") }) };
+  }
+  // Trần giữ chỗ kiểm lại lần hai: `free.mine` ở đây ĐÃ trừ chính đề xuất đang duyệt (nó đang ở
+  // trạng thái PROPOSED), nên cộng ngược phần của nó vào trước khi so.
+  const ownUsed = new Map<string, number>();
+  for (const l of req.lines) ownUsed.set(l.itemId, (ownUsed.get(l.itemId) ?? 0) + l.quantity);
+  const overCapAtApprove = req.lines.filter((l) => {
+    if (!freeAtApprove.mine.has(l.itemId) && !ownUsed.has(l.itemId)) return false;
+    const capLeft = (freeAtApprove.mine.get(l.itemId) ?? 0) + (ownUsed.get(l.itemId) ?? 0);
+    return freeAtApprove.mine.has(l.itemId) && l.quantity > capLeft;
+  });
+  if (overCapAtApprove.length > 0) {
+    const codes = await prisma.inventoryItem.findMany({ where: { id: { in: overCapAtApprove.map((l) => l.itemId) } }, select: { code: true } });
+    return { error: t("errorOverReserveCap", { items: codes.map((c) => c.code).join(", ") }) };
   }
 
   const done = await prisma.stockRequest.updateMany({

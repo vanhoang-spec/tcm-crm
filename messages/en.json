@@ -1102,7 +1102,16 @@
       "agencyFeePct": "Agency fee (%) — quotation",
       "agencyFeePctHint": "Presentation-only on the exported quotation (lines → +fee → +VAT). Does not affect margin.",
       "colSponsored": "Sponsored",
-      "colSponsoredHint": "Quotation shows the unit price but charges nothing for this line (line CE = 0). CO still counts."
+      "colSponsoredHint": "Quotation shows the unit price but charges nothing for this line (line CE = 0). CO still counts.",
+      "stockPanelTitle": "Reserved stock",
+      "stockPanelHint": "Stock approved for this project. Inserting it into a section creates two lines: the stock line (zero unit price, quantity locked) and a top-up purchase line. On the client quotation the pair prints as a single line.",
+      "stockPanelApproved": "approved {qty} {unit}",
+      "stockPanelInsertInto": "Insert into section…",
+      "stockPanelInserted": "Inserted",
+      "untitledSection": "(untitled section)",
+      "stockLineBadge": "Stock",
+      "stockQtyLocked": "Quantity is locked to the approved reservation — cancel the reservation to change it.",
+      "stockRefPriceHint": "REFERENCE unit price for stock taken from the warehouse: excluded from cost, used only to allocate the client price on the quotation and to suggest make-up."
     },
     "rounds": {
       "title": "Deal rounds",
@@ -1181,7 +1190,11 @@
       "notFound": "Project not found.",
       "invalidPayload": "Cost sheet is not valid: {detail}",
       "overrideNotAllowed": "You do not have permission to set margin below the minimum floor. Contact an authorised approver.",
-      "eventEndBeforeStart": "End date must be on or after the start date."
+      "eventEndBeforeStart": "End date must be on or after the start date.",
+      "stockResvNotFound": "Line “{item}” links to a reservation that is no longer valid (cancelled or from another project).",
+      "stockResvOverCap": "Line “{item}” exceeds the approved reservation ({approved}).",
+      "stockResvInProxy": "Stock line “{item}” cannot sit inside a client-disbursement section.",
+      "stockResvDuplicate": "Each reservation allows only one stock line — “{item}” is duplicated."
     }
   },
   "reminders": {
@@ -2623,7 +2636,14 @@
       "errorReasonRequired": "A rejection reason is required.",
       "errorNothingIssued": "No issued quantity above 0 was entered.",
       "errorNothingReceived": "No received quantity above 0 was entered.",
-      "errorInvalidPo": "Invalid or canceled purchase order."
+      "errorInvalidPo": "Invalid or canceled purchase order.",
+      "typeRESERVE": "Stock reservation",
+      "newReserveRequest": "Reserve stock for a project",
+      "newReserveBtn": "Reserve for project",
+      "reserveFlowHint": "Hold existing stock for an upcoming project so it enters the cost sheet at zero unit price (already paid for under an earlier contract). Accounting or the HR Manager approves — either one is enough. Stock levels do NOT change at this step.",
+      "errorNotReadyToUse": "Only lots marked “Ready to use” can be reserved: {items}",
+      "errorOverReserveCap": "Exceeds the quantity reserved and approved for this project: {items}",
+      "reserveApprovedHint": "Approved — open the project's cost sheet tab and use the “Reserved stock” panel to insert it."
     }
   },
   "staff": {

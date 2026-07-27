@@ -2335,3 +2335,87 @@ Sửa tài khoản: gõ `baove.binh` → lưu `baove.binh@tcm.local`, audit ghi 
 `lnchau@tcmbtl.com` → "Email đã tồn tại". Chặn tên miền lạ: `binh@gmail.com` → báo lỗi đúng. Sau 2 lần
 thử sai DB KHÔNG đổi (42 nhân sự, email giữ nguyên). Nhóm "Kho" hiện đúng trong danh sách phân quyền.
 tsc/eslint/build sạch; i18n 0/0 (2731 key).
+
+---
+
+# BATCH: Kho v2 — K3 (giữ chỗ tồn kho → dòng CO giá 0 · trần xuất OPE · gộp dòng BM02) — 28/07/2026
+
+Workflow b của spec 27/07. Khảo sát 5 mũi + tổng hợp thiết kế trước khi code (kết quả ở
+tasks/wsrx03vw0.output). 4 câu hỏi mở của bản thiết kế được chọn theo khuyến nghị, báo chủ dự án sau.
+
+## 5 quyết định kiến trúc
+
+1. **KHÔNG tạo bảng StockReservation** — dùng lại `StockRequest` với `type="RESERVE"` (mã GC). Đã có
+   sẵn sinh mã + retry, cặp duyệt/từ chối/huỷ, audit, notify, trang list/detail. RESERVE không đụng
+   sổ cái: vòng đời dừng ở APPROVED, không sinh StockDocument.
+2. **2 cột nullable trên CostLine**: `stockResvLineId` (khoá liên kết VÀ khoá gộp báo giá, đặt trên
+   CẢ HAI dòng của cặp) + `stockRefUnitPrice` (giá tham chiếu, khác null = đây là dòng kho).
+   Không dùng `stableKey` làm khoá cặp: đã bị `@@unique([costSheetId, stableKey])`, hai dòng cùng
+   khoá là nổ P2002. Không dùng `CostLine.id`: saveCostSheet xoá-tạo-lại nên id đổi mỗi lần lưu.
+3. **Dòng kho có unitPrice = 0 THẬT** (CO = 0 do số học, không do nhánh if). Giá tham chiếu chỉ sống
+   ở tầng trình bày. KHÔNG chạm computeLineAmount/computeCostSheetTotals — bất biến #3.
+4. **Trần OPE lấy từ ĐỀ XUẤT GIỮ CHỖ, không lấy từ dòng CO**: dòng CO bị xoá-tạo-lại mỗi lần lưu và
+   có thể mất tạm thời trong lúc Account sửa bảng; để trần bám theo nó thì OPE bị chặn ngẫu nhiên.
+5. **Không thêm cột nào cho builder**: ô "Đơn giá" của dòng kho đổi sang bind giá tham chiếu, ô SL
+   disabled — khỏi phải sửa 12 <th> + colSpan.
+
+## An toàn tiền — 4 chốt chặn phía server (không tin client)
+
+- `saveCostSheet` CHUẨN HOÁ dòng kho trước khi tính: ép `unitPrice=0`, `lineType=QTY_PRICE`,
+  `taxType=VAT`, xoá `customTaxAmount`, `isSponsored=false`. Bắt buộc vì `taxType="OTHER"` +
+  customTaxAmount VẪN cộng tiền vào base (bidding.ts) — "dòng giá 0" mà ra tiền.
+- Chặn dòng kho nằm trong hạng mục Chi hộ (kế thừa xuống mọi cấp con): nhánh proxy in đúng chi phí
+  thực, không qua phân bổ → khách sẽ thấy số 0.
+- Kiểm quyền sở hữu: khoá giữ chỗ phải APPROVED và thuộc ĐÚNG dự án đang lưu; SL ≤ SL đã duyệt;
+  mỗi khoá chỉ MỘT dòng kho. Chạy NGOÀI transaction (SQLite single-writer).
+- `syncFinanceCostLines` BỎ QUA dòng kho: trần chi của nó bằng 0, để vào thì dự án có "dòng chi phí"
+  trần 0 và phiếu chi cấp dự án báo "vượt trần" thay vì "chưa có dòng chi phí".
+
+## Báo giá BM02 — trọng số + gộp cặp
+
+Phân bổ tiền khách vốn dùng CO làm trọng số; dòng kho CO = 0 nên cặp chỉ được trả tiền phần mua bù →
+đơn giá in ra thấp giả tạo. Sửa bằng `lineWeight = lineCo + quantity × stockRefUnitPrice` (chỉ ở
+costsheet-quotation, KHÔNG vào coTotal/margin). Dòng cũ có stockRefUnitPrice null → lineWeight ≡
+lineCo → bản xuất giống hệt từng đồng.
+`groupLines()` gộp cặp CHỈ ở bản khách, trong CÙNG hạng mục: SL = tổng, thành tiền = CỘNG các số ĐÃ
+phân bổ (tuyệt đối không gộp CO rồi chia lại — sẽ lệch residual), đơn giá = tiền ÷ SL. Bản nội bộ giữ
+2 dòng, dòng kho hiện 0 kèm nhãn "(lấy từ kho)".
+
+Kiểm bằng script thuần (scratchpad/k3test): cặp kho 60 ref 1tr + mua bù 40×1tr + Booth 2×50tr →
+bản khách in 2 dòng: "Áo PG SL 100 ĐG 967.500 TT 96.750.000" và "Booth SL 2 TT 96.750.000";
+Σ dòng = 193.500.000 = serviceSubtotal; chuỗi 193.500.000 → +10% 19.350.000 → 212.850.000 → +8% VAT
+17.028.000 → **229.878.000 = ceTotal TUYỆT ĐỐI**. Bản nội bộ: 3 dòng, dòng kho = 0.
+
+## Tồn khả dụng + trần OPE
+
+`availableToRequest(tồn, đãDuyệtChưaXuất, giữChỗCònTrốngCủaDựÁnKHÁC)` + `remainingReserve(đãDuyệt,
+đãĐòi)`. Không đếm trùng: phần giữ chỗ đã thành lệnh xuất bị trừ ở remainingReserve trước khi cộng vào.
+Trần OPE = giữ chỗ còn lại, CHỈ áp cho item CÓ giữ chỗ của dự án đó — áp cho mọi item sẽ chặn đứng 21
+dự án cũ chưa từng giữ chỗ. Kiểm ở cả lúc đề xuất và lúc duyệt.
+
+## Quyền
+
+`inventory.reservation.approve` (mã thứ 108, sensitive) backfill FINANCE + HR_MANAGER + BGĐ —
+"Kế toán và/hoặc HR Manager, một trong hai là đủ" đạt được bằng cùng MỘT mã quyền, ai bấm trước thắng
+nhờ claim idempotent `updateMany({ status: "PROPOSED" })`.
+
+## Kiểm chứng (browser thật, số cụ thể, dọn sạch sau)
+
+Lô 100 áo trạng thái R → T005 (BIDDING) giữ chỗ 60, duyệt → **tồn vật lý vẫn 100** (giữ chỗ không đụng
+sổ cái) → form xuất kho cho dự án khác hiện **khả dụng 40** (không bán trùng) → T013 giữ thêm 20,
+duyệt → form xuất kho T013 hiện **40** (20 tự do + 20 của chính nó) → OPE xin xuất **21 bị chặn**:
+"Vượt số đã được duyệt giữ chỗ cho dự án này: C.R.B.TCM.001 (còn 20)" → xin **20 thì qua** (DX-2607-001).
+Gates: tsc/eslint sạch, i18n 0/0 (2751 key), build sạch + route /inventory/requests/new/reserve.
+Dọn test: về baseline 327 dòng CO/CE, 42 nhân sự, cây 19 node, kho trống.
+
+## Sự cố kèm theo — seed nổ vì email không còn ổn định
+
+Sau khi cho sửa tài khoản đăng nhập (28/07 sáng), seed upsert theo `email` không nhận ra người đã đổi
+email → đòi tạo mới → P2002 trên `code`. Đổi sang nhận diện bằng **email HOẶC mã nhân viên**, rồi
+vòng 2/3 dùng `id`. KHÔNG dùng `code` một mình: 36/42 nhân sự đang có code null.
+
+## Còn lại
+
+K4 (kỳ chiến dịch ≤15 ngày + điều chuyển có duyệt + holding A→B + thang cảnh báo date). ⚠ Giữ chỗ K3
+là MỀM: phiếu ADJUST/TRANSFER/DESTROY/CONVERT vẫn rút được hàng đã giữ chỗ — chặn cứng cần conditional
+updateMany trên bảng giữ chỗ + đường release, để K4.

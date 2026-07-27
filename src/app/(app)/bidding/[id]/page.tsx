@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Flag, Check, X, Link2, FileSpreadsheet, Printer } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
+import { getApprovedReservations } from "@/lib/stock-reservation";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
@@ -83,7 +84,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     getNumberSetting("bidding", "order_response_days", 4),
   ]);
 
-  const [matchingTemplatesRaw, allTemplatesRaw, teams, activeStaff, costDepartments, vendors, failReasonSet, auditEntries] = await Promise.all([
+  const [matchingTemplatesRaw, allTemplatesRaw, teams, activeStaff, costDepartments, vendors, failReasonSet, auditEntries, stockReservations] = await Promise.all([
     project.projectTypeId
       ? prisma.costsheetTemplate.findMany({
           where: { isActive: true, projectTypeId: project.projectTypeId },
@@ -100,6 +101,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.optionSet.findUnique({ where: { code: "fail_reason" }, include: { items: { where: { isActive: true }, orderBy: { sort: "asc" } } } }),
     prisma.auditLog.findMany({ where: { entityType: "project", entityId: project.id }, orderBy: { changedAt: "desc" }, take: 8 }),
+    getApprovedReservations(project.id),
   ]);
 
   function toTemplateOption(tp: (typeof allTemplatesRaw)[number]): TemplateOption {
@@ -134,6 +136,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           isLocked: l.isLocked,
           maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
           isSponsored: false, // template không mang cờ tài trợ — tick khi dựng sheet thật
+          stockResvLineId: null, // template không mang liên kết kho — chèn từ panel "Kho đã duyệt"
+          stockRefUnitPrice: null,
           note: "",
         })),
       })),
@@ -184,6 +188,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
             isLocked: l.isLocked,
             maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
             isSponsored: l.isSponsored,
+            stockResvLineId: l.stockResvLineId,
+            stockRefUnitPrice: l.stockRefUnitPrice == null ? null : Number(l.stockRefUnitPrice),
             note: l.note ?? "",
           })),
         })),
@@ -403,6 +409,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
               matchingTemplates={matchingTemplates}
               allTemplates={allTemplates}
               vendors={vendors.map((v) => ({ id: v.id, label: v.name }))}
+              stockReservations={stockReservations}
             />
           </div>
         )}

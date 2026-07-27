@@ -81,6 +81,10 @@ export type QuotationLine = CostLineCalcInput & {
   unit: string | null;
   note: string | null;
   isSponsored: boolean;
+  /** K3 — khoá GỘP cặp dòng (kho + mua bù) khi in báo giá khách. */
+  stockResvLineId?: string | null;
+  /** K3 — đơn giá tham chiếu hàng lấy từ kho; > 0 = dòng kho, dùng làm TRỌNG SỐ chia tiền khách. */
+  stockRefUnitPrice?: number | null;
 };
 
 export type QuotationSection = {
@@ -182,6 +186,17 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
   // Đi qua ĐÚNG computeLineAmount của builder (bất biến #3 — không chép lại công thức gross-up).
   const lineCo = (l: QuotationLine): number => computeLineAmount(l, totals.directCo);
 
+  /**
+   * TRỌNG SỐ chia tiền khách (K3) = CO thật + giá tham chiếu của hàng LẤY TỪ KHO.
+   *
+   * Hàng lấy từ kho có CO = 0 (đã trả tiền ở hợp đồng trước) nhưng khách VẪN mua hạng mục đó, nên
+   * nếu chia theo CO thuần thì cặp dòng chỉ được trả tiền cho phần mua bù → đơn giá in ra thấp giả
+   * tạo. Trọng số này CHỈ chia phần của `serviceSubtotal` đã chốt; KHÔNG vào coTotal/ceTotal/margin.
+   * Dòng cũ có `stockRefUnitPrice` null → trọng số ≡ lineCo, bản xuất không đổi một đồng nào.
+   */
+  const lineWeight = (l: QuotationLine): number =>
+    lineCo(l) + (l.stockRefUnitPrice ? Math.round(l.quantity * l.stockRefUnitPrice) : 0);
+
   const chain = quotationChain(src.ceTotal, src.vatPct, src.agencyFeePct);
 
   // Phân bổ serviceSubtotal theo tỉ trọng CO của các dòng non-proxy KHÔNG-tài-trợ; dư làm tròn dồn
@@ -189,7 +204,7 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
   // (cùng hệ số) nhưng Thành tiền trống.
   const nonProxy: { line: QuotationLine; co: number }[] = [];
   const collect = (n: TreeNode) => {
-    if (!n.effectiveProxy) for (const l of n.lines) nonProxy.push({ line: l, co: lineCo(l) });
+    if (!n.effectiveProxy) for (const l of n.lines) nonProxy.push({ line: l, co: lineWeight(l) });
     n.children.forEach(collect);
   };
   tree.forEach(collect);
@@ -234,12 +249,60 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
     for (const c of n.children) sum += subtreeTotal(c);
     return sum;
   };
+  /**
+   * Gộp CẶP "hàng lấy từ kho + hàng mua bù" thành MỘT dòng khách nhìn (K3) — khách chỉ thấy tổng
+   * số lượng và đơn giá đã make-up, không thấy dòng 0 đồng. Chỉ gộp ở bản KHÁCH, trong CÙNG một
+   * hạng mục, và chỉ dòng QTY_PRICE không tài trợ. Bản nội bộ giữ nguyên 2 dòng để kế toán đối chiếu.
+   */
+  const groupLines = (lines: QuotationLine[]): QuotationLine[][] => {
+    if (mode !== "client") return lines.map((l) => [l]);
+    const out: QuotationLine[][] = [];
+    const at = new Map<string, number>();
+    for (const l of lines) {
+      const k = l.stockResvLineId;
+      if (!k || l.lineType !== "QTY_PRICE" || l.isSponsored) {
+        out.push([l]);
+        continue;
+      }
+      const i = at.get(k);
+      if (i == null) {
+        at.set(k, out.length);
+        out.push([l]);
+      } else {
+        out[i].push(l);
+      }
+    }
+    return out;
+  };
+
   const walk = (n: TreeNode, depth: number, label: string, into: QuotationRow[]) => {
     into.push({ kind: "section", depth, label: `${label}. ${n.nameVi}`, subtotal: depth === 1 ? subtreeTotal(n) : null });
-    for (const l of n.lines) {
+    for (const g of groupLines(n.lines)) {
+      const l = g[0];
       stt++;
       const total = lineTotal(l, n.effectiveProxy);
       const sponsoredNote = mode === "client" && l.isSponsored && !l.note ? SPONSORED_NOTE : null;
+      if (g.length > 1) {
+        // CỘNG các số ĐÃ phân bổ của từng dòng — tuyệt đối không gộp CO rồi chia lại (sẽ lệch
+        // residual). Tổng in ra vì thế vẫn đúng bằng serviceSubtotal.
+        const qty = g.reduce((s, m) => s + m.quantity, 0);
+        const merged = g.reduce((s, m) => s + (lineTotal(m, n.effectiveProxy) ?? 0), 0);
+        into.push({
+          kind: "line",
+          depth,
+          stt,
+          itemCode: l.itemCode,
+          name: l.itemName,
+          specs: l.specs,
+          unit: l.unit,
+          qty,
+          unitPrice: qty > 0 ? Math.round(merged / qty) : null,
+          total: merged,
+          taxLabel: null,
+          note: l.note,
+        });
+        continue;
+      }
       into.push({
         kind: "line",
         depth,
@@ -248,7 +311,8 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
         name:
           l.itemName +
           (l.lineType === "PERCENT_OF_TOTAL" ? ` (${l.percentVal ?? 0}%)` : "") +
-          (mode === "internal" && l.isSponsored ? " (TCM hỗ trợ)" : ""),
+          (mode === "internal" && l.isSponsored ? " (TCM hỗ trợ)" : "") +
+          (mode === "internal" && l.stockRefUnitPrice != null ? " (lấy từ kho)" : ""),
         specs: l.specs,
         unit: l.unit,
         qty: l.lineType === "QTY_PRICE" ? l.quantity : null,

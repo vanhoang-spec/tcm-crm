@@ -6,7 +6,7 @@ import { Minus, Plus, X } from "lucide-react";
 import { NumberField } from "@/components/ui/number-field";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createIntakeRequest, createIssueRequest, type RequestFormState } from "./actions";
+import { createIntakeRequest, createIssueRequest, createReserveRequest, type RequestFormState } from "./actions";
 
 const input =
   "h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
@@ -26,23 +26,29 @@ export type PoOption = { id: string; label: string };
 
 type Line = { itemId: string; quantity: number; note: string };
 
+const ACTION_BY_KIND = {
+  ISSUE: createIssueRequest,
+  INTAKE: createIntakeRequest,
+  RESERVE: createReserveRequest,
+} as const;
+
 export function RequestForm({
   kind,
   warehouses,
   items,
   projects,
   purchaseOrders,
+  reservedFree,
 }: {
-  kind: "ISSUE" | "INTAKE";
+  kind: "ISSUE" | "INTAKE" | "RESERVE";
   warehouses: WarehouseOption[];
   items: RequestPickerItem[];
   projects?: ProjectOption[];
   purchaseOrders?: PoOption[];
+  /** `${kho}|${item}|${dự án}` → giữ chỗ CÒN TRỐNG; cộng lại cho đúng dự án đang chọn. */
+  reservedFree?: Record<string, number>;
 }) {
-  const [state, formAction, pending] = useActionState<RequestFormState, FormData>(
-    kind === "ISSUE" ? createIssueRequest : createIntakeRequest,
-    {}
-  );
+  const [state, formAction, pending] = useActionState<RequestFormState, FormData>(ACTION_BY_KIND[kind], {});
   const t = useTranslations("inventory.requests");
 
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
@@ -53,12 +59,20 @@ export function RequestForm({
   const [search, setSearch] = useState("");
 
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
+  // Số hiển thị = khả dụng chung + phần giữ chỗ CÒN TRỐNG của chính dự án đang chọn (hàng đó vẫn
+  // dùng được cho dự án đó). Chỉ là con số cho người dùng nhìn — server kiểm lại lần cuối.
+  const availableFor = useMemo(
+    () => (itemId: string) =>
+      (items.find((x) => x.id === itemId)?.available[warehouseId] ?? 0) +
+      (projectId ? (reservedFree?.[`${warehouseId}|${itemId}|${projectId}`] ?? 0) : 0),
+    [items, warehouseId, projectId, reservedFree]
+  );
   const pickerRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items
       .filter((it) => !q || it.code.toLowerCase().includes(q) || it.name.toLowerCase().includes(q))
-      .map((it) => ({ ...it, qty: it.available[warehouseId] ?? 0 }));
-  }, [search, items, warehouseId]);
+      .map((it) => ({ ...it, qty: availableFor(it.id) }));
+  }, [search, items, availableFor]);
 
   const hasReusableLine = kind === "ISSUE" && lines.some((l) => itemById.get(l.itemId)?.isReusable);
 
@@ -81,7 +95,7 @@ export function RequestForm({
             ))}
           </select>
         </label>
-        {kind === "ISSUE" && (
+        {(kind === "ISSUE" || kind === "RESERVE") && (
           <>
             <label className="space-y-1 text-xs text-muted-foreground">
               {t("formProject")}
@@ -93,11 +107,13 @@ export function RequestForm({
                 options={(projects ?? []).map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
               />
             </label>
-            <label className="space-y-1 text-xs text-muted-foreground">
-              {t("formExpectedReturn")}
-              <DateField name="expectedReturnAt" required={hasReusableLine} className={input + " w-full"} />
-              <span className="block text-[11px] leading-snug">{t("reusableHint")}</span>
-            </label>
+            {kind === "ISSUE" && (
+              <label className="space-y-1 text-xs text-muted-foreground">
+                {t("formExpectedReturn")}
+                <DateField name="expectedReturnAt" required={hasReusableLine} className={input + " w-full"} />
+                <span className="block text-[11px] leading-snug">{t("reusableHint")}</span>
+              </label>
+            )}
           </>
         )}
         {kind === "INTAKE" && (
@@ -120,14 +136,14 @@ export function RequestForm({
       </div>
 
       <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">
-        {kind === "ISSUE" ? t("issueFlowHint") : t("intakeFlowHint")}
+        {kind === "ISSUE" ? t("issueFlowHint") : kind === "RESERVE" ? t("reserveFlowHint") : t("intakeFlowHint")}
       </p>
 
       <div className="space-y-2">
         {lines.map((l) => {
           const info = itemById.get(l.itemId);
           if (!info) return null;
-          const avail = info.available[warehouseId] ?? 0;
+          const avail = availableFor(l.itemId);
           return (
             <div key={l.itemId} className="rounded-xl border border-border bg-surface p-3">
               <div className="flex items-start justify-between gap-2">
@@ -135,7 +151,7 @@ export function RequestForm({
                   <p className="truncate text-sm font-medium text-foreground">{info.name}</p>
                   <p className="font-mono text-xs text-muted-foreground">
                     {info.code}
-                    {kind === "ISSUE" && <span className="ml-2">{t("availableAt", { count: avail })}</span>}
+                    {kind !== "INTAKE" && <span className="ml-2">{t("availableAt", { count: avail })}</span>}
                   </p>
                 </div>
                 <button

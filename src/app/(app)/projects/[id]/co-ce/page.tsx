@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight, FileSpreadsheet, Gavel, Printer } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
+import { getApprovedReservations } from "@/lib/stock-reservation";
 import { formatNumber, formatPercent, formatDateTime, toNum } from "@/lib/utils";
 import { computeMarginPct } from "@/lib/bidding";
 import { getNumberSetting } from "@/lib/settings";
@@ -23,7 +24,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
   });
   if (!project) notFound();
 
-  const [t, locale, minMargin, sheet, matchingTemplatesRaw, allTemplatesRaw, costDepartments, vendors] = await Promise.all([
+  const [t, locale, minMargin, sheet, matchingTemplatesRaw, allTemplatesRaw, costDepartments, vendors, stockReservations] = await Promise.all([
     getTranslations("projects.coce"),
     getLocale() as Promise<Locale>,
     getNumberSetting("bidding", "min_margin_pct", 31),
@@ -51,6 +52,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
     }),
     prisma.department.findMany({ where: { costPrefix: { not: null }, isActive: true }, select: { code: true, name: true, costPrefix: true }, orderBy: { code: "asc" } }),
     prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    getApprovedReservations(id),
   ]);
 
   function toTemplateOption(tp: (typeof allTemplatesRaw)[number]): TemplateOption {
@@ -85,6 +87,8 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
           isLocked: l.isLocked,
           maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
           isSponsored: false, // template không mang cờ tài trợ — tick khi dựng sheet thật
+          stockResvLineId: null,
+          stockRefUnitPrice: null,
           note: "",
         })),
       })),
@@ -134,6 +138,8 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
             isLocked: l.isLocked,
             maxMarkupPct: l.maxMarkupPct == null ? "" : String(l.maxMarkupPct),
             isSponsored: l.isSponsored,
+            stockResvLineId: l.stockResvLineId,
+            stockRefUnitPrice: l.stockRefUnitPrice == null ? null : Number(l.stockRefUnitPrice),
             note: l.note ?? "",
           })),
         })),
@@ -211,6 +217,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
                 matchingTemplates={matchingTemplates}
                 allTemplates={allTemplates}
                 vendors={vendors.map((v) => ({ id: v.id, label: v.name }))}
+                stockReservations={stockReservations}
               />
             )}
           </section>

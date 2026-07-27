@@ -40,15 +40,19 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
   if (!req) notFound();
 
   const isIssue = req.type === "ISSUE";
+  const isReserve = req.type === "RESERVE";
+  // Giữ chỗ: Kế toán HOẶC HR Manager duyệt (một mã quyền, không ràng PIC dự án như lệnh xuất).
+  const showApproveReserve = isReserve && req.status === "PROPOSED" && perms.has("inventory.reservation.approve");
   const showApprove =
     isIssue &&
     req.status === "PROPOSED" &&
     perms.has("inventory.request.approve") &&
     !!req.project &&
     canApproveIssue(req.project, staffId, perms.has("inventory.request.approve_any"));
+  // Giữ chỗ KHÔNG có bước xác nhận: vòng đời dừng ở APPROVED, tồn kho không đổi.
   const showConfirm =
     (isIssue && req.status === "APPROVED" && perms.has("inventory.issue.confirm")) ||
-    (!isIssue && req.status === "PROPOSED" && perms.has("inventory.intake.confirm"));
+    (req.type === "INTAKE" && req.status === "PROPOSED" && perms.has("inventory.intake.confirm"));
   const showCancel =
     ["PROPOSED", "APPROVED"].includes(req.status) &&
     (req.createdById === staffId || perms.has("inventory.request.approve_any"));
@@ -141,6 +145,7 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
 
       {blockedByPic && <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("notPicHint")}</p>}
       {showApprove && <ApproveForm requestId={req.id} />}
+      {showApproveReserve && <ApproveForm requestId={req.id} kind="RESERVE" />}
       {showConfirm && (
         <ConfirmForm
           requestId={req.id}

@@ -70,6 +70,8 @@ export async function loadQuotationSource(projectId: string): Promise<QuotationS
         unit: l.unit,
         note: l.note ?? null,
         isSponsored: l.isSponsored,
+        stockResvLineId: l.stockResvLineId,
+        stockRefUnitPrice: l.stockRefUnitPrice == null ? null : toNum(l.stockRefUnitPrice),
       })),
     })),
     company: { legalNameVi, signerName, signerTitle },

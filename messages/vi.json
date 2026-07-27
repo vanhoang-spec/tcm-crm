@@ -1102,7 +1102,16 @@
       "agencyFeePct": "Phí agency (%) — báo giá",
       "agencyFeePctHint": "Chỉ dùng để trình bày bản xuất báo giá (Σ dòng → +phí → +VAT). Không tham gia margin.",
       "colSponsored": "TCM hỗ trợ",
-      "colSponsoredHint": "Báo giá hiện đơn giá nhưng KHÔNG tính tiền dòng này (CE dòng = 0). CO vẫn tính bình thường."
+      "colSponsoredHint": "Báo giá hiện đơn giá nhưng KHÔNG tính tiền dòng này (CE dòng = 0). CO vẫn tính bình thường.",
+      "stockPanelTitle": "Kho đã duyệt",
+      "stockPanelHint": "Hàng đã được duyệt giữ chỗ. Chèn vào một hạng mục sẽ tạo 2 dòng: dòng lấy từ kho (đơn giá 0, số lượng khoá) và dòng mua bù phần còn thiếu. Trên báo giá khách hai dòng này in gộp thành một.",
+      "stockPanelApproved": "đã duyệt {qty} {unit}",
+      "stockPanelInsertInto": "Chèn vào hạng mục…",
+      "stockPanelInserted": "Đã chèn",
+      "untitledSection": "(hạng mục chưa đặt tên)",
+      "stockLineBadge": "Kho",
+      "stockQtyLocked": "Số lượng khoá theo mức đã duyệt giữ chỗ — sửa bằng cách huỷ đề xuất và làm lại.",
+      "stockRefPriceHint": "Đơn giá THAM CHIẾU của hàng lấy từ kho: không tính vào giá vốn, chỉ dùng để chia tiền khách trên báo giá và gợi ý make-up."
     },
     "rounds": {
       "title": "Vòng deal giá",
@@ -1181,7 +1190,11 @@
       "notFound": "Không tìm thấy dự án.",
       "invalidPayload": "Bảng CO/CE chưa hợp lệ: {detail}",
       "overrideNotAllowed": "Bạn không có quyền hạ margin xuống dưới ngưỡng tối thiểu. Liên hệ người có quyền duyệt.",
-      "eventEndBeforeStart": "Ngày kết thúc phải từ ngày bắt đầu trở đi."
+      "eventEndBeforeStart": "Ngày kết thúc phải từ ngày bắt đầu trở đi.",
+      "stockResvNotFound": "Dòng “{item}” gắn giữ chỗ kho không còn hiệu lực (đã huỷ hoặc thuộc dự án khác).",
+      "stockResvOverCap": "Dòng “{item}” vượt số đã duyệt giữ chỗ ({approved}).",
+      "stockResvInProxy": "Dòng “{item}” lấy từ kho không được đặt trong hạng mục Chi hộ.",
+      "stockResvDuplicate": "Mỗi mục giữ chỗ chỉ được một dòng lấy từ kho — “{item}” đang bị lặp."
     }
   },
   "reminders": {
@@ -2623,7 +2636,14 @@
       "errorReasonRequired": "Phải ghi lý do từ chối.",
       "errorNothingIssued": "Chưa nhập số thực xuất nào lớn hơn 0.",
       "errorNothingReceived": "Chưa nhập số thực nhận nào lớn hơn 0.",
-      "errorInvalidPo": "Đơn đặt hàng không hợp lệ hoặc đã huỷ."
+      "errorInvalidPo": "Đơn đặt hàng không hợp lệ hoặc đã huỷ.",
+      "typeRESERVE": "Giữ chỗ kho",
+      "newReserveRequest": "Đề xuất giữ chỗ tồn kho",
+      "newReserveBtn": "Giữ chỗ cho dự án",
+      "reserveFlowHint": "Giữ hàng còn tồn cho dự án sắp chạy để đưa vào CO với đơn giá 0 (hàng đã tính tiền ở hợp đồng trước). Kế toán hoặc Trưởng phòng Nhân sự duyệt — một trong hai là đủ. Tồn kho KHÔNG đổi ở bước này.",
+      "errorNotReadyToUse": "Chỉ hàng trạng thái “Sẵn sàng dùng” mới giữ chỗ được: {items}",
+      "errorOverReserveCap": "Vượt số đã được duyệt giữ chỗ cho dự án này: {items}",
+      "reserveApprovedHint": "Đã duyệt — mở tab CO/CE của dự án, panel “Kho đã duyệt” để chèn vào bảng."
     }
   },
   "staff": {

@@ -83,6 +83,10 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
         skippedNoKey++;
         continue;
       }
+      // K3: dòng LẤY TỪ KHO không sinh dòng chi phí — hàng đã trả tiền ở hợp đồng trước, trần chi
+      // của nó bằng 0. Để nó vào đây thì dự án có "dòng chi phí" với trần 0, và phiếu chi cấp dự án
+      // báo "vượt trần" thay vì "chưa có dòng chi phí". Phần phải mua nằm ở dòng mua bù cùng cặp.
+      if (l.stockRefUnitPrice != null) continue;
       liveLines.set(financeLineKey(l.stableKey), {
         itemCode: l.itemCode,
         sectionCode: s.code,

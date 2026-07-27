@@ -3,14 +3,7 @@
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { NumberField } from "@/components/ui/number-field";
-import {
-  approveIssueRequest,
-  cancelRequest,
-  confirmIntakeRequest,
-  confirmIssueRequest,
-  rejectIssueRequest,
-  type RequestFormState,
-} from "./actions";
+import { approveIssueRequest, cancelRequest, confirmIntakeRequest, confirmIssueRequest, rejectIssueRequest, type RequestFormState, approveReserveRequest, rejectReserveRequest } from "./actions";
 
 const input =
   "h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 sm:h-9";
@@ -18,10 +11,13 @@ const input =
 export type ConfirmLine = { id: string; code: string; name: string; unit: string | null; quantity: number };
 
 /** Duyệt / từ chối — chỉ hiện với PIC dự án hoặc người có quyền duyệt mọi dự án (page đã lọc). */
-export function ApproveForm({ requestId }: { requestId: string }) {
+/** Dùng chung cho lệnh XUẤT (PIC dự án duyệt) và GIỮ CHỖ (Kế toán/HR Manager duyệt). */
+export function ApproveForm({ requestId, kind = "ISSUE" }: { requestId: string; kind?: "ISSUE" | "RESERVE" }) {
   const t = useTranslations("inventory.requests");
-  const [approveState, approveAction, approving] = useActionState<RequestFormState, FormData>(approveIssueRequest.bind(null, requestId), {});
-  const [rejectState, rejectAction, rejecting] = useActionState<RequestFormState, FormData>(rejectIssueRequest.bind(null, requestId), {});
+  const approveFn = kind === "RESERVE" ? approveReserveRequest : approveIssueRequest;
+  const rejectFn = kind === "RESERVE" ? rejectReserveRequest : rejectIssueRequest;
+  const [approveState, approveAction, approving] = useActionState<RequestFormState, FormData>(approveFn.bind(null, requestId), {});
+  const [rejectState, rejectAction, rejecting] = useActionState<RequestFormState, FormData>(rejectFn.bind(null, requestId), {});
   const [showReject, setShowReject] = useState(false);
 
   return (

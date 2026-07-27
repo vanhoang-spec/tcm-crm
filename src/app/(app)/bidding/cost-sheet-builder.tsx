@@ -51,6 +51,10 @@ export type LineData = {
   /** Cờ "TCM hỗ trợ" (form BM02): báo giá hiện đơn giá nhưng không tính tiền dòng này (CE dòng = 0).
    *  Chỉ tác động cách TRÌNH BÀY bản xuất; CO của dòng vẫn tính bình thường. */
   isSponsored: boolean;
+  /** K3 — id dòng giữ chỗ kho đã duyệt; đặt trên CẢ HAI dòng của cặp (kho + mua bù). */
+  stockResvLineId: string | null;
+  /** K3 — đơn giá tham chiếu của hàng lấy từ kho. Khác null = DÒNG KHO: SL khoá, đơn giá thật = 0. */
+  stockRefUnitPrice: number | null;
   note: string;
 };
 
@@ -68,6 +72,17 @@ export type SectionData = {
   proxyFeeType: string | null;
   proxyFeeVal: number | null;
   lines: LineData[];
+};
+
+export type StockReservationOption = {
+  /** StockRequestLine.id — khoá liên kết đặt lên cả hai dòng của cặp. */
+  resvLineId: string;
+  requestCode: string;
+  itemCode: string;
+  itemName: string;
+  unit: string | null;
+  approvedQty: number;
+  warehouseName: string;
 };
 
 export type CostSheetData = {
@@ -127,8 +142,36 @@ function blankLine(sectionKey: string): Line {
     isLocked: false,
     maxMarkupPct: "",
     isSponsored: false,
+    stockResvLineId: null,
+    stockRefUnitPrice: null,
     note: "",
   };
+}
+
+/** Cặp dòng cho một mục giữ chỗ kho đã duyệt: dòng LẤY TỪ KHO (đơn giá 0) + dòng MUA BÙ phần thiếu. */
+function stockPairLines(
+  sectionKey: string,
+  resv: { resvLineId: string; itemName: string; unit: string | null; approvedQty: number }
+): [Line, Line] {
+  const base = blankLine(sectionKey);
+  const stockLine: Line = {
+    ...base,
+    itemName: resv.itemName,
+    unit: resv.unit ?? "",
+    quantity: resv.approvedQty,
+    unitPrice: 0, // hàng đã tính tiền ở hợp đồng trước — CO của dòng này bằng 0
+    stockResvLineId: resv.resvLineId,
+    stockRefUnitPrice: 0, // Account gõ giá tham chiếu; 0 = chưa gõ
+  };
+  const buyLine: Line = {
+    ...blankLine(sectionKey),
+    itemName: resv.itemName,
+    unit: resv.unit ?? "",
+    quantity: 0, // Account nhập số phải mua thêm
+    stockResvLineId: resv.resvLineId,
+    stockRefUnitPrice: null, // null = dòng mua bù, tính tiền như dòng thường
+  };
+  return [stockLine, buyLine];
 }
 
 /** parentKey=null → mục gốc. Mục Chi hộ (isProxy) luôn ở gốc — không truyền parentKey cho isProxy=true.
@@ -213,6 +256,7 @@ export function CostSheetBuilder({
   allTemplates,
   vendors,
   departments,
+  stockReservations = [],
 }: {
   projectId: string;
   minMarginPct: number;
@@ -222,6 +266,8 @@ export function CostSheetBuilder({
   vendors: { id: string; label: string }[];
   /** Phòng ban có prefix mã chi phí — nguồn cho ô chọn ở đầu mỗi hạng mục. */
   departments: { code: string; name: string; costPrefix: string }[];
+  /** K3 — các mục GIỮ CHỖ KHO đã duyệt của dự án này, chèn được vào bảng dưới dạng cặp dòng. */
+  stockReservations?: StockReservationOption[];
 }) {
   const t = useTranslations("bidding.costsheet");
   const tCommon = useTranslations("common");
@@ -292,6 +338,11 @@ export function CostSheetBuilder({
   }
   function removeLine(key: string) {
     setLines((ls) => ls.filter((l) => l.key !== key));
+  }
+  /** Chèn CẶP dòng cho một mục giữ chỗ kho đã duyệt (K3) — dựng ngoài updater, cùng lý do addLine. */
+  function insertStockPair(sectionKey: string, resv: StockReservationOption) {
+    const pair = stockPairLines(sectionKey, resv);
+    setLines((ls) => [...ls, ...pair]);
   }
   function loadTemplate() {
     const tpl = templates.find((x) => x.id === templateId);
@@ -402,6 +453,55 @@ export function CostSheetBuilder({
         <Plus className="h-3.5 w-3.5" />
         {t("addSection")}
       </button>
+
+      {/* K3 — Kho đã duyệt: chèn CẶP dòng (hàng lấy từ kho giá 0 + hàng mua bù) vào một hạng mục. */}
+      {stockReservations.length > 0 && (
+        <section className="space-y-2 rounded-xl border border-border bg-surface p-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">{t("stockPanelTitle")}</h3>
+            <p className="text-[11px] text-muted-foreground">{t("stockPanelHint")}</p>
+          </div>
+          <ul className="space-y-1.5">
+            {stockReservations.map((r) => {
+              const used = lines.some((l) => l.stockResvLineId === r.resvLineId);
+              const targets = sections.filter((s) => !s.isProxy);
+              return (
+                <li key={r.resvLineId} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-2">
+                  <span className="font-mono text-xs text-muted-foreground">{r.itemCode}</span>
+                  <span className="flex-1 text-xs font-medium text-foreground">{r.itemName}</span>
+                  <Badge tone="neutral">
+                    {t("stockPanelApproved", { qty: formatNumber(r.approvedQty, locale), unit: r.unit ?? "" })}
+                  </Badge>
+                  <span className="text-[11px] text-muted-foreground">
+                    {r.requestCode} · {r.warehouseName}
+                  </span>
+                  {used ? (
+                    <Badge tone="success">{t("stockPanelInserted")}</Badge>
+                  ) : (
+                    <select
+                      defaultValue=""
+                      aria-label={t("stockPanelInsertInto")}
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        insertStockPair(e.target.value, r);
+                        e.target.value = "";
+                      }}
+                      className="h-8 rounded-lg border border-border-strong bg-surface px-2 text-xs"
+                    >
+                      <option value="">{t("stockPanelInsertInto")}</option>
+                      {targets.map((s) => (
+                        <option key={s.key} value={s.key}>
+                          {s.nameVi || t("untitledSection")}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* Proxy section (Chi hộ) — tách riêng cuối bảng */}
       <div className="space-y-2 rounded-lg border border-dashed border-border-strong p-3">
@@ -766,11 +866,14 @@ function LineRow({
 }) {
   const amount = lineAmount(l, percentBase);
   const availableTypes = hidePercent ? LINE_TYPES.filter((lt) => lt !== "PERCENT_OF_TOTAL") : LINE_TYPES;
+  // K3 — dòng LẤY TỪ KHO: số lượng khoá theo mức đã duyệt, ô đơn giá nhập GIÁ THAM CHIẾU (giá thật
+  // luôn = 0 nên Thành tiền hiện 0). Loại dòng/thuế/khoá/markup/tài trợ đều không áp dụng.
+  const isStock = l.stockRefUnitPrice != null;
 
   return (
     <tr>
       <td className="px-1 py-1">
-        <select value={l.lineType} onChange={(e) => updateLine(l.key, { lineType: e.target.value })} className={cn(cellInput, "min-w-[110px]")}>
+        <select value={l.lineType} onChange={(e) => updateLine(l.key, { lineType: e.target.value })} disabled={isStock} className={cn(cellInput, "min-w-[110px]")}>
           {availableTypes.map((lt) => (
             <option key={lt} value={lt}>
               {t(lineTypeLabelKey(lt as LineType))}
@@ -780,17 +883,27 @@ function LineRow({
       </td>
       <td className="px-1 py-1">
         <input value={l.itemName} onChange={(e) => updateLine(l.key, { itemName: e.target.value })} className={cn(cellInput, "min-w-[130px]")} />
+        {isStock && <Badge tone="brand">{t("stockLineBadge")}</Badge>}
       </td>
       {l.lineType === "QTY_PRICE" ? (
         <>
           <td className="px-1 py-1">
-            <NumberField decimals={2} value={l.quantity} onChange={(v) => updateLine(l.key, { quantity: v })} className={cn(cellInput, "w-16")} />
+            <NumberField decimals={2} value={l.quantity} onChange={(v) => updateLine(l.key, { quantity: v })} disabled={isStock} title={isStock ? t("stockQtyLocked") : undefined} className={cn(cellInput, "w-16")} />
           </td>
           <td className="px-1 py-1">
             <input value={l.unit} onChange={(e) => updateLine(l.key, { unit: e.target.value })} className={cn(cellInput, "w-16")} />
           </td>
           <td className="px-1 py-1">
-            <NumberField value={l.unitPrice} onChange={(v) => updateLine(l.key, { unitPrice: v })} className={cn(cellInput, "w-28 text-right")} />
+            {isStock ? (
+              <NumberField
+                value={l.stockRefUnitPrice ?? 0}
+                onChange={(v) => updateLine(l.key, { stockRefUnitPrice: v })}
+                title={t("stockRefPriceHint")}
+                className={cn(cellInput, "w-28 text-right italic")}
+              />
+            ) : (
+              <NumberField value={l.unitPrice} onChange={(v) => updateLine(l.key, { unitPrice: v })} className={cn(cellInput, "w-28 text-right")} />
+            )}
           </td>
         </>
       ) : l.lineType === "FIXED" ? (

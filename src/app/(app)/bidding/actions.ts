@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit, toNum } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
-import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, DEFAULT_COST_PREFIX } from "@/lib/bidding";
+import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
 import { syncFinanceCostLines } from "@/lib/finance";
 import { lockCreativeTasksForProject } from "@/lib/creative";
@@ -323,6 +323,55 @@ export async function saveCostSheet(
   if (!parsed) return { error: t("notFound") };
   if (!parsed.success) return { error: t("invalidPayload", { detail: parsed.error.issues[0]?.message ?? "" }) };
   const payload = parsed.data;
+
+  // ── K3: dòng lấy từ kho — kiểm quyền sở hữu + chuẩn hoá TRƯỚC khi tính tiền ──
+  // Chạy ngoài transaction (SQLite single-writer, transaction lưu bảng đã dài). Lỗi ở đây là lỗi
+  // người dùng sửa được → trả { error }, builder giữ nguyên state, không mất bảng.
+  const stockLines = payload.lines.filter((l) => l.stockRefUnitPrice != null);
+  if (stockLines.length > 0) {
+    const resvIds = [...new Set(payload.lines.map((l) => l.stockResvLineId).filter((x): x is string => !!x))];
+    const resvRows = await prisma.stockRequestLine.findMany({
+      where: { id: { in: resvIds }, request: { type: "RESERVE", status: "APPROVED", projectId } },
+      select: { id: true, quantity: true, item: { select: { code: true } } },
+    });
+    const approvedById = new Map(resvRows.map((r) => [r.id, r]));
+
+    // Chi hộ kế thừa xuống mọi cấp con (bất biến #2) — leo ngược lên tổ tiên như flattenSectionTree.
+    const secByKey = new Map(payload.sections.map((s) => [s.key, s]));
+    const isProxyKey = (key: string): boolean => {
+      let cur = secByKey.get(key);
+      for (let hop = 0; cur && hop <= MAX_SECTION_DEPTH; hop++) {
+        if (cur.isProxy) return true;
+        cur = cur.parentKey ? secByKey.get(cur.parentKey) : undefined;
+      }
+      return false;
+    };
+
+    for (const l of stockLines) {
+      const resv = l.stockResvLineId ? approvedById.get(l.stockResvLineId) : null;
+      if (!resv) return { error: t("stockResvNotFound", { item: l.itemName }) };
+      if (l.quantity > resv.quantity) {
+        return { error: t("stockResvOverCap", { item: l.itemName, approved: resv.quantity }) };
+      }
+      // Chi hộ nằm NGOÀI margin và in đúng chi phí thực (bất biến #2) — dòng kho giá 0 lọt vào đó
+      // sẽ hiện 0 đồng trên báo giá khách.
+      if (isProxyKey(l.sectionKey)) return { error: t("stockResvInProxy", { item: l.itemName }) };
+      // Mỗi mục giữ chỗ chỉ được MỘT dòng kho (dòng còn lại của cặp là dòng mua bù).
+      if (stockLines.filter((x) => x.stockResvLineId === l.stockResvLineId).length > 1) {
+        return { error: t("stockResvDuplicate", { item: l.itemName }) };
+      }
+      // Chuẩn hoá — không tin client: dòng kho PHẢI ra tiền 0. Đặc biệt taxType OTHER +
+      // customTaxAmount vẫn cộng tiền vào base (xem computeLineAmount) nên phải ép về VAT.
+      l.unitPrice = 0;
+      l.fixedAmount = null;
+      l.percentVal = null;
+      l.lineType = "QTY_PRICE";
+      l.taxType = "VAT";
+      l.customTaxAmount = null;
+      l.isSponsored = false;
+    }
+  }
+
   // Tính lại toàn bộ ở server — không tin số từ client. Cây section N-cấp (Mục→Nhóm→Sub-nhóm→...)
   // được làm phẳng trước (flattenSectionTree) — isProxy kế thừa từ tổ tiên, xem lib/bidding.ts.
   const sectionTree = payload.sections.map((s) => ({
@@ -406,6 +455,8 @@ export async function saveCostSheet(
           taxType: l.taxType,
           customTaxAmount: l.customTaxAmount ?? null,
           isSponsored: l.isSponsored,
+          stockResvLineId: l.stockResvLineId ?? null,
+          stockRefUnitPrice: l.stockRefUnitPrice ?? null,
           amount: lineAmount(l),
         })),
     })),
@@ -537,6 +588,8 @@ export async function saveCostSheet(
               isLocked: l.isLocked,
               maxMarkupPct: l.maxMarkupPct ?? null,
               isSponsored: l.isSponsored,
+              stockResvLineId: l.stockResvLineId ?? null,
+              stockRefUnitPrice: l.stockRefUnitPrice == null ? null : BigInt(Math.round(l.stockRefUnitPrice)),
               sort: idx,
               note: l.note || null,
             };

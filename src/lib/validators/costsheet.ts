@@ -31,6 +31,13 @@ export const costLineSchema = z.object({
   maxMarkupPct: z.coerce.number().min(0).max(1000).nullable().optional(),
   /** Cờ "TCM hỗ trợ" — báo giá hiện đơn giá nhưng không tính tiền dòng này (CE dòng = 0). */
   isSponsored: z.boolean().default(false),
+  /**
+   * K3 — id dòng đề xuất GIỮ CHỖ kho đã duyệt, đặt trên CẢ HAI dòng của cặp (hàng lấy từ kho +
+   * hàng mua bù). Server kiểm lại quyền sở hữu/số lượng trước khi lưu (không tin client).
+   */
+  stockResvLineId: z.string().trim().nullable().optional().default(null),
+  /** K3 — đơn giá tham chiếu của dòng lấy từ kho; khác null = dòng kho (unitPrice bị ép về 0). */
+  stockRefUnitPrice: z.coerce.number().nullable().optional().default(null),
   note: z.string().trim().optional().default(""),
 });
 

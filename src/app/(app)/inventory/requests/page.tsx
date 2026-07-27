@@ -47,6 +47,7 @@ export default async function StockRequestsPage({
       ? [
           { href: "/inventory/requests/new/issue", label: t("newIssueRequest") },
           { href: "/inventory/requests/new/intake", label: t("newIntakeRequest") },
+          { href: "/inventory/requests/new/reserve", label: t("newReserveRequest") },
         ]
       : []),
   ];

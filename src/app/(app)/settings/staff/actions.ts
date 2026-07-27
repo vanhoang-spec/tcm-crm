@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId, isAdminStaff } from "@/lib/current-staff";
-import { createPasswordResetToken, RESET_TOKEN_TTL_MIN } from "@/lib/auth-session";
+import { createPasswordResetToken, isAllowedLoginDomain, normalizeLoginId, RESET_TOKEN_TTL_MIN } from "@/lib/auth-session";
 import { isMailConfigured, resetPasswordUrl, sendPasswordResetEmail } from "@/lib/mailer";
 import { requirePermission } from "@/lib/permissions";
 
@@ -53,14 +53,20 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
   await requirePermission("settings.staff.manage");
   const t = await getTranslations("settings.staff");
   const fullName = String(formData.get("fullName") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  // Gõ "thukho" → thành "thukho@tcm.local" (tài khoản vận hành không có hộp thư).
+  const email = normalizeLoginId(String(formData.get("email") ?? ""));
   const title = String(formData.get("title") ?? "").trim();
   const departmentId = String(formData.get("departmentId") ?? "").trim();
   const teamId = String(formData.get("teamId") ?? "").trim();
+  const roleId = String(formData.get("roleId") ?? "").trim();
+  const payrollExempt = formData.get("payrollExempt") === "on";
   const dobRaw = String(formData.get("dateOfBirth") ?? "").trim();
   const firstWorkDateRaw = String(formData.get("firstWorkDate") ?? "").trim();
 
   if (!fullName || !email) return { error: t("errorRequired") };
+  // Chặn tại nguồn: trước đây tạo được tài khoản email lạ rồi người đó vĩnh viễn không đăng nhập
+  // được (login chỉ nhận email công ty / tài khoản nội bộ) mà không có cảnh báo nào.
+  if (!isAllowedLoginDomain(email)) return { error: t("errorLoginDomain") };
 
   const dob = parseDob(dobRaw);
   if (!dob) return { error: t("errorDobFormat") };
@@ -71,6 +77,11 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
   const existing = await prisma.staff.findUnique({ where: { email } });
   if (existing) return { error: t("errorEmailExists", { email }) };
 
+  if (roleId) {
+    const role = await prisma.role.findUnique({ where: { id: roleId }, select: { id: true } });
+    if (!role) return { error: t("errorRequired") };
+  }
+
   const staffId = await getCurrentStaffId();
   const staff = await prisma.staff.create({
     data: {
@@ -79,6 +90,9 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
       title: title || null,
       departmentId: departmentId || null,
       teamId: teamId || null,
+      // Không gán nhóm quyền = tập quyền RỖNG, người đó đăng nhập vào không mở được trang nào.
+      roleId: roleId || null,
+      payrollExempt,
       dateOfBirth: dob,
       firstWorkDate,
     },

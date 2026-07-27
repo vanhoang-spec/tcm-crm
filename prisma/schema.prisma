@@ -102,6 +102,13 @@ model Staff {
   firstWorkDate DateTime? // nullable ở DB (legacy) — form tạo mới BẮT BUỘC nhập (DD/MM/YYYY); "ngày đi làm đầu tiên" thật,
   // CÓ THỂ khác createdAt (ngày được add vào CRM) — dùng cho tin nhắn Work Anniversary (xem lib/occasions.ts)
   isActive      Boolean   @default(true)
+  /// TCM KHÔNG trả lương cho người này (thủ kho/bảo vệ điểm kho do bên thứ ba trả — quyết định chủ
+  /// dự án 28/07/2026). VẪN xếp ca và hiện trên bảng công để THAM CHIẾU, nhưng bị loại khỏi mọi
+  /// chỗ tiêu tiền: quỹ KPI 75/25 (lib/kpi.ts), quỹ lương Creative (lib/creative-cost.ts) và
+  /// phép năm (lib/timekeeping.ts — phép là phúc lợi có lương).
+  /// ⚠ ĐỪNG thay bằng cách nhập lương 0 ở PositionSalary: 0 ≠ null nên người đó vẫn nằm trong
+  /// nhóm đủ điều kiện và VẪN ĂN share thật của quỹ KPI (xem kpi.ts, nhánh `salary == null`).
+  payrollExempt Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

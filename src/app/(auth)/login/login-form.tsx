@@ -19,11 +19,12 @@ export function LoginForm() {
           <label htmlFor="email" className="mb-1 block text-xs font-medium text-foreground">
             {t("emailLabel")}
           </label>
+          {/* type="text" chứ KHÔNG phải "email": tài khoản vận hành nội bộ (thủ kho, bảo vệ) gõ
+              tên tài khoản ngắn không có "@", trình duyệt sẽ chặn ngay tại ô nếu để type email. */}
           <input
             id="email"
             name="email"
-            type="email"
-            inputMode="email"
+            type="text"
             autoComplete="username"
             autoCapitalize="none"
             spellCheck={false}

@@ -1839,10 +1839,18 @@ async function main() {
     {
       code: "WAREHOUSE_KEEPER",
       name: "Thủ kho (Warehouse Keeper)",
-      description: "Soạn hàng và xác nhận số thực xuất / thực nhập; lập phiếu chuyển đổi lô và xuất hủy.",
+      description: "Soạn hàng và xác nhận số thực xuất / thực nhập; lập phiếu chuyển đổi lô và xuất hủy. CHỈ module Kho.",
       groupCode: "WAREHOUSE",
       parentCode: null,
       sort: 85,
+    },
+    {
+      code: "SECURITY_GUARD",
+      name: "Bảo vệ (Security Guard)",
+      description: "Tài khoản vận hành tại điểm kho — chỉ liên lạc nội bộ và xem tài liệu. Không có nghiệp vụ trong app.",
+      groupCode: "WAREHOUSE",
+      parentCode: null,
+      sort: 86,
     },
     { code: "IT_STAFF", name: "Nhân viên IT", groupCode: "IT", parentCode: null, sort: 90 },
   ];
@@ -1945,13 +1953,69 @@ async function main() {
     OPERATIONS_MANAGER: WAREHOUSE_EXTRA,
   };
 
+  /**
+   * Role VẬN HÀNH HẸP: KHÔNG nhận baseGrantCodes, chỉ đúng danh sách liệt kê ở đây.
+   *
+   * Nguyên tắc "grant mặc định = quyền mọi người ĐANG có" (khối trên) đúng với các phòng ban cũ —
+   * họ vốn dùng cả app trước khi bật ma trận. Nhưng áp cho tài khoản mới chỉ làm một việc thì thành
+   * ra cấp thừa: thủ kho nhận nguyên 66 mã, gồm duyệt tạm ứng, phát hành hoá đơn khách, ghi đè
+   * margin. Hai role này sinh ra SAU khi có ma trận nên không có "quyền cũ" nào để bảo toàn.
+   */
+  const EXPLICIT_GRANTS: Record<string, string[]> = {
+    WAREHOUSE_KEEPER: [
+      "inventory.view",
+      "inventory.doc.create",
+      "inventory.item.manage", // tạo lô mới khi hàng từ site về (khai lại trạng thái/tình trạng)
+      "inventory.import_csv",
+      "inventory.transfer.create",
+      "inventory.transfer.confirm",
+      "inventory.transfer.cancel",
+      "inventory.request.create",
+      "inventory.issue.confirm",
+      "inventory.intake.confirm",
+      "inventory.lot.convert",
+      "inventory.destroy",
+      "chat.use", // liên lạc với OPE/Account khi soạn hàng
+      // CỐ Ý KHÔNG có inventory.request.approve*: Account duyệt đề xuất — tách vai của Kho v2 K2.
+    ],
+    SECURITY_GUARD: ["chat.use", "kb.view"],
+  };
+
   const baseGrantCodes = PERMISSION_CODES.filter((c) => !isRestricted(c));
+  const grantCodesFor = (r: (typeof roleSeeds)[number]) =>
+    EXPLICIT_GRANTS[r.code]
+      ? new Set(EXPLICIT_GRANTS[r.code])
+      : new Set([...baseGrantCodes, ...(extraByGroup[r.groupCode] ?? []), ...(extraByRole[r.code] ?? [])]);
+
   for (const r of roleSeeds) {
     if (r.code === "ADMIN") continue; // ADMIN là sàn cứng trong code — không cần (và không nên) có dòng grant
     const roleId = roleByCode[r.code].id;
     if ((await prisma.rolePermission.count({ where: { roleId } })) > 0) continue; // đã cấu hình tay → không đụng
-    const codes = new Set([...baseGrantCodes, ...(extraByGroup[r.groupCode] ?? []), ...(extraByRole[r.code] ?? [])]);
-    await prisma.rolePermission.createMany({ data: [...codes].map((permissionCode) => ({ roleId, permissionCode })) });
+    await prisma.rolePermission.createMany({
+      data: [...grantCodesFor(r)].map((permissionCode) => ({ roleId, permissionCode })),
+    });
+  }
+
+  // ── Vòng 4c: SIẾT LẠI role vận hành hẹp — chạy đúng MỘT lần ──
+  // Vòng 4 bỏ qua role đã có grant, nên WAREHOUSE_KEEPER (tạo ở K2, nhận nguyên 66 mã base) sẽ
+  // không bao giờ tự gọn lại. Đây là lần reset duy nhất; sau đó BGĐ toàn quyền chỉnh trong ma trận
+  // (marker trong bảng setting bảo đảm re-seed không đè chỉnh sửa tay).
+  const NARROW_RESET_KEY = "20260728_narrow_roles_reset";
+  const narrowMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: NARROW_RESET_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!narrowMarker) {
+    for (const code of Object.keys(EXPLICIT_GRANTS)) {
+      const role = roleByCode[code];
+      if (!role) continue;
+      await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
+      await prisma.rolePermission.createMany({
+        data: EXPLICIT_GRANTS[code].map((permissionCode) => ({ roleId: role.id, permissionCode })),
+      });
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: NARROW_RESET_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify(new Date().toISOString()) },
+    });
   }
 
   // ── Vòng 4b: backfill mã quyền MỚI cho role ĐÃ có grant (mỗi đợt chạy đúng MỘT lần) ──

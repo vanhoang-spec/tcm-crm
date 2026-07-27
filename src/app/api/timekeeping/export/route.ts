@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
 
   const fixedHead = ["Mã NV", "Họ tên", "Bộ phận", "Team"];
   const dayHead = daysInMonth.map((d) => String(d.getDate()));
+  // Cột "Ghi chú" cuối bảng nay mang nhãn cho người TCM không trả lương — kế toán nhìn file Excel
+  // là biết dòng nào chỉ để tham chiếu, không đưa vào bảng lương.
   const totalHead = ["Tổng giờ KH", "Tổng giờ thực", "Phép (ngày)", "Ốm (ngày)", "Không lương (ngày)", "Vắng (ngày)", "Khác (ngày)", "Ghi chú"];
   const header = [...fixedHead, ...dayHead, ...totalHead];
   sheet.addRow(header);
@@ -80,7 +82,7 @@ export async function GET(req: NextRequest) {
       r.leaveDays["UNPAID"] ?? 0,
       r.leaveDays["ABSENT"] ?? 0,
       otherDays,
-      "",
+      r.payrollExempt ? "TCM không trả lương — ca chỉ để tham chiếu" : "",
     ]);
   }
 

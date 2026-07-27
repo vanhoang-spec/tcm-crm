@@ -192,6 +192,8 @@ export type TimesheetRow = {
   plannedHours: number;
   workedHours: number;
   leaveDays: Record<string, number>; // leaveType.code → số ngày (ca × 0.5)
+  /** TCM không trả lương người này — dòng chỉ để THAM CHIẾU (ca trực điểm kho), không vào quỹ nào. */
+  payrollExempt: boolean;
 };
 
 /** Bảng công tháng cho MỌI staff active — nguồn chung cho trang Chấm công + Excel export. */
@@ -222,6 +224,7 @@ export async function getMonthlyTimesheet(ym: string): Promise<TimesheetRow[] | 
       plannedHours: 0,
       workedHours: 0,
       leaveDays: {},
+      payrollExempt: s.payrollExempt,
     });
   }
   for (const a of assignments) {
@@ -244,7 +247,9 @@ export async function getLeaveBalances(year: number) {
   const settings = await getTimekeepingSettings();
   const [staff, leaveShifts] = await Promise.all([
     prisma.staff.findMany({
-      where: { isActive: true },
+      // Phép năm là phúc lợi CÓ LƯƠNG → người TCM không trả lương không tích phép
+      // (quyết định chủ dự án 28/07/2026). Họ vẫn có mặt ở bảng công tháng để tham chiếu.
+      where: { isActive: true, payrollExempt: false },
       include: { department: { select: { name: true } } },
       orderBy: [{ department: { code: "asc" } }, { fullName: "asc" }],
     }),

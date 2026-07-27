@@ -6,6 +6,7 @@ import {
   getBiddingReminders,
   getCareOverdueClients,
   getPendingCostSheetApprovals,
+  getStockRequestReminders,
   getTimelineOverdueItems,
 } from "@/lib/reminders";
 import { getArOverdueItems } from "@/lib/finance";
@@ -34,14 +35,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // ĐANG THAO TÁC, nên admin đang "act as" nhân viên thường sẽ thấy đúng menu của nhân viên đó.
   // Set không serialize được sang client component → truyền mảng.
   const navPermissions = [...(await getMyPermissions())];
-  const [careItems, biddingItems, pendingApprovals, timelineItems, arItems, unreadNotifications, staffRows] =
+  // Chuông đếm ĐÚNG những khối người này xem được ở /reminders — nếu không, tài khoản hẹp quyền
+  // (thủ kho, bảo vệ) thấy con số của việc họ không mở ra được, bấm vào thì trang trống.
+  const [careItems, biddingItems, pendingApprovals, timelineItems, stockRequestItems, arItems, unreadNotifications, staffRows] =
     await Promise.all([
-      getCareOverdueClients(),
-      getBiddingReminders(),
-      getPendingCostSheetApprovals(),
-      getTimelineOverdueItems(),
-      // Chỉ đếm công nợ vào chuông cho người có quyền tài chính — cùng lý do như khối AR ở
-      // /reminders: con số nợ cũng là dữ liệu tài chính.
+      navPermissions.includes("clients.view") ? getCareOverdueClients() : Promise.resolve([]),
+      navPermissions.includes("bidding.view") ? getBiddingReminders() : Promise.resolve([]),
+      navPermissions.includes("bidding.view") ? getPendingCostSheetApprovals() : Promise.resolve([]),
+      navPermissions.includes("projects.view") ? getTimelineOverdueItems() : Promise.resolve([]),
+      navPermissions.includes("inventory.view") ? getStockRequestReminders() : Promise.resolve([]),
       navPermissions.includes("finance.view") ? getArOverdueItems() : Promise.resolve([]),
       // CHAT_MESSAGE có badge chưa đọc riêng trong module Chat — không cộng vào chuông nhắc việc.
       prisma.notification.count({
@@ -58,7 +60,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // tránh đếm kép. Các nguồn thuần computed (care/bidding/approvals/timeline/AR) vẫn cộng trực tiếp.
   // Trang /reminders vẫn tự query đầy đủ các danh sách để hiển thị.
   const reminderCount =
-    careItems.length + biddingItems.length + pendingApprovals.length + timelineItems.length + arItems.length + unreadNotifications;
+    careItems.length +
+    biddingItems.length +
+    pendingApprovals.length +
+    timelineItems.length +
+    stockRequestItems.length +
+    arItems.length +
+    unreadNotifications;
   const actAsStaff = staffRows.map((s) => ({
     id: s.id,
     fullName: s.fullName,

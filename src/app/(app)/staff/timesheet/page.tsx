@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { formatNumber } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import type { Locale } from "@/i18n/locales";
 import { getMonthlyTimesheet } from "@/lib/timekeeping";
 import { requirePermission } from "@/lib/permissions";
@@ -72,7 +73,11 @@ export default async function TimesheetPage({ searchParams }: { searchParams: Pr
           <tbody>
             {rows.map((r) => (
               <tr key={r.staffId} className="border-b border-border last:border-0">
-                <td className="px-3 py-2 font-medium text-foreground">{r.fullName}</td>
+                <td className="px-3 py-2 font-medium text-foreground">
+                  {r.fullName}
+                  {/* Vẫn liệt kê để tham chiếu ca trực, nhưng phải nhìn ra ngay là không vào bảng lương. */}
+                  {r.payrollExempt && <Badge tone="neutral">{t("payrollExemptBadge")}</Badge>}
+                </td>
                 <td className="px-3 py-2 text-muted-foreground">{r.departmentName ?? "—"}</td>
                 <td className="px-3 py-2 text-muted-foreground">{r.teamCode ?? "—"}</td>
                 <td className="px-3 py-2 text-right">{formatNumber(r.plannedHours, locale)}</td>

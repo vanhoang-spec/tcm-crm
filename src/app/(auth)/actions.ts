@@ -10,7 +10,9 @@ import {
   consumeResetTokenLookup,
   createPasswordResetToken,
   getAuthenticatedStaffId,
-  isAllowedEmailDomain,
+  isAllowedLoginDomain,
+  isMailableDomain,
+  normalizeLoginId,
   RESET_TOKEN_TTL_MIN,
   setAuthSession,
 } from "@/lib/auth-session";
@@ -37,11 +39,12 @@ async function policyMessage(issues: PasswordIssue[]): Promise<string> {
 
 export async function loginAction(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const t = await getTranslations("auth.errors");
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  // Người dùng có thể gõ email công ty ĐẦY ĐỦ hoặc chỉ tên tài khoản nội bộ ("thukho").
+  const email = normalizeLoginId(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
 
   if (!email || !password) return { error: t("required") };
-  if (!isAllowedEmailDomain(email)) return { error: t("domain") };
+  if (!isAllowedLoginDomain(email)) return { error: t("domain") };
 
   const result = await attemptLogin(email, password);
   if (!result.ok) {
@@ -109,7 +112,9 @@ export async function forgotPasswordAction(_prev: AuthFormState, formData: FormD
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
 
   if (!email) return { error: tErr("required") };
-  if (!isAllowedEmailDomain(email)) return { error: tErr("domain") };
+  // Chỉ tài khoản có hộp thư thật mới tự đặt lại được. Tài khoản nội bộ (thủ kho, bảo vệ) không có
+  // hộp thư → nhờ admin cấp lại ở /settings/staff, tránh tạo token rác rồi bắt người ta chờ mail.
+  if (!isMailableDomain(email)) return { error: tErr("noMailbox") };
 
   const staff = await prisma.staff.findUnique({ where: { email }, select: { id: true, fullName: true, isActive: true } });
   if (staff?.isActive) {

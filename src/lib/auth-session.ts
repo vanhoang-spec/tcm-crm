@@ -26,10 +26,42 @@ export const RESET_TOKEN_TTL_MIN = 60;
 export const MAX_FAILED_LOGINS = 8;
 export const LOCKOUT_MINUTES = 15;
 
-/** Chỉ email công ty mới đăng nhập được. */
+/** Email công ty — tài khoản có hộp thư thật, dùng được "Quên mật khẩu". */
 export const ALLOWED_EMAIL_DOMAIN = "tcmbtl.com";
 
-export function isAllowedEmailDomain(email: string): boolean {
+/**
+ * Tên miền NỘI BỘ cho tài khoản vận hành KHÔNG có hộp thư (thủ kho, bảo vệ — quyết định chủ dự án
+ * 28/07/2026). `Staff.email` ở hệ này vốn là TÊN ĐĂNG NHẬP chứ không phải hộp thư, nên không cần
+ * cột mới: người dùng gõ tên tài khoản ngắn ("thukho"), hệ thống tự ghép đuôi này phía sau.
+ * `tcm.internal` giữ lại vì seed cũ đã sinh placeholder dạng đó cho nhân sự không có email.
+ */
+export const INTERNAL_LOGIN_DOMAINS = ["tcm.local", "tcm.internal"] as const;
+
+/** Đuôi mặc định khi người dùng chỉ gõ tên tài khoản, không gõ "@…". */
+export const DEFAULT_INTERNAL_DOMAIN = INTERNAL_LOGIN_DOMAINS[0];
+
+/**
+ * Chuẩn hoá thứ người dùng gõ ở ô đăng nhập thành `Staff.email`:
+ * "thukho" → "thukho@tcm.local"; có sẵn "@" thì giữ nguyên (chỉ hạ chữ thường + bỏ khoảng trắng).
+ * Nhờ vậy lookup vẫn là findUnique theo cột email — không đẻ đường tra cứu thứ hai.
+ */
+export function normalizeLoginId(input: string): string {
+  const raw = input.trim().toLowerCase();
+  if (!raw || raw.includes("@")) return raw;
+  return `${raw}@${DEFAULT_INTERNAL_DOMAIN}`;
+}
+
+/** Tài khoản được phép ĐĂNG NHẬP: email công ty hoặc tài khoản nội bộ. */
+export function isAllowedLoginDomain(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  return e.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`) || INTERNAL_LOGIN_DOMAINS.some((d) => e.endsWith(`@${d}`));
+}
+
+/**
+ * Tài khoản có HỘP THƯ thật — chỉ nhóm này dùng được "Quên mật khẩu".
+ * Tài khoản nội bộ không có hộp thư: admin cấp lại mật khẩu ở /settings/staff (xem HANDOVER).
+ */
+export function isMailableDomain(email: string): boolean {
   return email.trim().toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`);
 }
 

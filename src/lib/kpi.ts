@@ -308,7 +308,10 @@ export async function getKpiReport(periodCode: string): Promise<{ report: KpiRep
 
   const [staff, salaries, scores, finishedProjects, periodRows] = await Promise.all([
     prisma.staff.findMany({
-      where: { isActive: true, department: { code: { in: [...KPI_DEPT_CODES] } } },
+      // payrollExempt: TCM không trả lương người này (thủ kho/bảo vệ điểm kho) → không có phần
+      // lương nào để tách 75/25, cũng không được chia quỹ của người khác. Loại từ đầu để không
+      // đẻ cảnh báo "thiếu lương cho vị trí" mỗi kỳ (xem schema.prisma model Staff).
+      where: { isActive: true, payrollExempt: false, department: { code: { in: [...KPI_DEPT_CODES] } } },
       select: { id: true, fullName: true, title: true, firstWorkDate: true, department: { select: { code: true } }, team: { select: { code: true, name: true } } },
       orderBy: { fullName: "asc" },
     }),

@@ -13,6 +13,7 @@ import {
   getCreativeOverdueTasks,
   getDepartmentTaskOverdueTasks,
   getInventoryReturnReminders,
+  getStockRequestReminders,
 } from "@/lib/reminders";
 
 /** Route tab workspace dự án tương ứng mỗi bộ phận có DepartmentTask board. */
@@ -23,7 +24,7 @@ const DEPARTMENT_TAB_SEG: Record<string, string> = {
   PRO: "production",
 };
 import { getArOverdueItems } from "@/lib/finance";
-import { hasPermission } from "@/lib/permissions";
+import { getMyPermissions } from "@/lib/permissions";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { markNotificationRead } from "./actions";
 
@@ -40,22 +41,33 @@ export default async function RemindersPage({
 }) {
   const { team } = await searchParams;
   const meId = await getCurrentStaffId();
-  const [t, tClients, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, notifications] = await Promise.all([
+  // Trang này cố ý KHÔNG requirePermission ở đầu (ai cũng cần xem việc CỦA MÌNH), nên phải gác
+  // TỪNG KHỐI: mỗi khối là dữ liệu của một module. Không có quyền → không query luôn, không chỉ ẩn.
+  // Từ khi có tài khoản vận hành hẹp quyền (thủ kho, bảo vệ) đây là hàng rào thật, không phải trang trí.
+  const perms = await getMyPermissions();
+  const can = {
+    clients: perms.has("clients.view"),
+    bidding: perms.has("bidding.view"),
+    projects: perms.has("projects.view"),
+    creative: perms.has("creative.view"),
+    finance: perms.has("finance.view"),
+    inventory: perms.has("inventory.view"),
+  };
+  const [t, tClients, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, stockRequestItems, notifications] = await Promise.all([
     getTranslations("reminders"),
     getTranslations("clients.list"),
     getLocale() as Promise<Locale>,
     prisma.team.findMany({ orderBy: { code: "asc" } }),
-    getCareOverdueClients(team),
-    getBiddingReminders(team),
-    getPendingCostSheetApprovals(team),
-    getTimelineOverdueItems(team),
-    getAcceptanceSignReminders(team),
-    getCreativeOverdueTasks(team),
-    getDepartmentTaskOverdueTasks(team),
-    // Công nợ là dữ liệu tài chính: trang /reminders cố ý KHÔNG gác quyền (ai cũng cần xem việc
-    // của mình), nên phải gác Ở ĐÂY — nếu không thì mọi nhân viên đọc được số nợ của mọi khách.
-    hasPermission("finance.view").then((ok) => (ok ? getArOverdueItems(team) : [])),
-    getInventoryReturnReminders(team),
+    can.clients ? getCareOverdueClients(team) : [],
+    can.bidding ? getBiddingReminders(team) : [],
+    can.bidding ? getPendingCostSheetApprovals(team) : [],
+    can.projects ? getTimelineOverdueItems(team) : [],
+    can.projects ? getAcceptanceSignReminders(team) : [],
+    can.creative ? getCreativeOverdueTasks(team) : [],
+    can.projects ? getDepartmentTaskOverdueTasks(team) : [],
+    can.finance ? getArOverdueItems(team) : [],
+    can.inventory ? getInventoryReturnReminders(team) : [],
+    can.inventory ? getStockRequestReminders(team) : [],
     // Chỉ thông báo CỦA người đang đăng nhập (body có thể chứa preview chat/nội dung riêng tư).
     // CHAT_MESSAGE có badge riêng trong module Chat — không lặp lại ở đây (khớp công thức chuông layout.tsx).
     prisma.notification.findMany({
@@ -92,6 +104,7 @@ export default async function RemindersPage({
         )}
       </div>
 
+      {can.clients && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("careSection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -116,7 +129,9 @@ export default async function RemindersPage({
           {careItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("careEmpty")}</li>}
         </ul>
       </section>
+      )}
 
+      {can.bidding && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("biddingSection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -142,7 +157,9 @@ export default async function RemindersPage({
           {biddingItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("biddingEmpty")}</li>}
         </ul>
       </section>
+      )}
 
+      {can.bidding && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("pendingCostsheetTitle")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -171,7 +188,9 @@ export default async function RemindersPage({
           {pendingApprovals.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("pendingCostsheetEmpty")}</li>}
         </ul>
       </section>
+      )}
 
+      {can.projects && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("timelineSection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -194,7 +213,9 @@ export default async function RemindersPage({
           {timelineItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("timelineEmpty")}</li>}
         </ul>
       </section>
+      )}
 
+      {can.creative && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("creativeSection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -217,7 +238,9 @@ export default async function RemindersPage({
           {creativeItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("creativeEmpty")}</li>}
         </ul>
       </section>
+      )}
 
+      {can.projects && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("deptTaskSection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -243,7 +266,9 @@ export default async function RemindersPage({
           {deptTaskItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("deptTaskEmpty")}</li>}
         </ul>
       </section>
+      )}
 
+      {can.projects && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("acceptanceSection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -266,6 +291,7 @@ export default async function RemindersPage({
           {acceptanceItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("acceptanceEmpty")}</li>}
         </ul>
       </section>
+      )}
 
       {/* Ẩn hẳn khối khi không có quyền tài chính — hiện khối rỗng chỉ tổ gây hiểu nhầm "không có nợ". */}
       {arItems.length > 0 && (
@@ -292,6 +318,7 @@ export default async function RemindersPage({
       </section>
       )}
 
+      {can.inventory && (
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("inventorySection")}</h2>
         <ul className="mt-3 divide-y divide-border">
@@ -314,6 +341,42 @@ export default async function RemindersPage({
           {inventoryItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("inventoryEmpty")}</li>}
         </ul>
       </section>
+      )}
+
+      {/* Việc kho đang treo — thủ kho thấy lệnh đã duyệt chờ mình chốt số thực xuất/thực nhập. */}
+      {can.inventory && (
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("stockRequestSection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {stockRequestItems.map((item) => (
+            <li key={item.requestId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <Link href={`/inventory/requests/${item.requestId}`} className="text-sm font-medium text-foreground hover:text-brand-600">
+                  {item.code}
+                  {item.projectCode ? ` · ${item.projectCode}` : ""}
+                </Link>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge tone={item.waitingFor === "CONFIRM" ? "warning" : "neutral"}>
+                    {t(item.waitingFor === "CONFIRM" ? "stockRequestWaitConfirm" : "stockRequestWaitApprove")}
+                  </Badge>
+                  <span>
+                    {t("stockRequestItem", {
+                      warehouse: item.warehouseName,
+                      lines: formatNumber(item.lineCount, locale),
+                      days: formatNumber(item.daysWaiting, locale),
+                    })}
+                  </span>
+                </div>
+              </div>
+              <Link href={`/inventory/requests/${item.requestId}`} className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {t("goToInventory")}
+              </Link>
+            </li>
+          ))}
+          {stockRequestItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("stockRequestEmpty")}</li>}
+        </ul>
+      </section>
+      )}
 
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("notificationsTitle")}</h2>

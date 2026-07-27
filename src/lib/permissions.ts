@@ -59,9 +59,31 @@ export async function staffHasPermission(staffId: string, code: string): Promise
   return (await permissionsOf(staffId)).has(code);
 }
 
-/** Chặn cứng theo quyền — không có → đẩy về Dashboard. Dùng cho page VÀ server action. */
+/**
+ * Trang hạ cánh an toàn khi bị từ chối, xét theo quyền NGƯỜI ĐÓ THẬT SỰ CÓ.
+ *
+ * KHÔNG hard-code "/" được: chính trang "/" cũng gác `dashboard.view`, nên người thiếu mã đó
+ * (tài khoản vận hành hẹp quyền: thủ kho, bảo vệ) sẽ bị đá "/" → "/" → vòng lặp 307 vô hạn,
+ * không còn đường nào vào app. Thứ tự dưới đây = thứ tự ưu tiên trang chính của từng vai.
+ */
+const SAFE_LANDING: [permission: string, href: string][] = [
+  ["dashboard.view", "/"],
+  ["inventory.view", "/inventory"],
+  ["projects.view", "/projects"],
+  ["clients.view", "/clients"],
+  ["finance.view", "/finance"],
+  ["creative.view", "/creative"],
+  ["staff.view", "/staff"],
+  ["chat.use", "/chat"],
+  ["kb.view", "/kb"],
+  ["settings.view", "/settings"],
+];
+
+/** Chặn cứng theo quyền — không có → đẩy về trang hạ cánh hợp với vai. Dùng cho page VÀ server action. */
 export async function requirePermission(code: string): Promise<void> {
-  if (!(await hasPermission(code))) redirect("/");
+  const perms = await getMyPermissions();
+  if (perms.has(code)) return;
+  redirect(SAFE_LANDING.find(([p]) => perms.has(p))?.[1] ?? "/no-access");
 }
 
 // ─────────────────────────────────────────────────────────

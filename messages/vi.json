@@ -621,7 +621,7 @@
       "desc": "Danh sách nhân sự TCM — tạo tài khoản mới bắt buộc nhập ngày sinh và ngày đi làm đầu tiên.",
       "addStaff": "Thêm nhân sự",
       "fullNamePlaceholder": "Họ và tên",
-      "emailPlaceholder": "Email",
+      "emailPlaceholder": "Email công ty hoặc tên tài khoản",
       "titlePlaceholder": "Chức danh",
       "dobHint": "Ngày sinh — định dạng DD/MM/YYYY (VD: 05/03/1998)",
       "firstWorkDateHint": "Ngày đi làm đầu tiên tại TCM — định dạng DD/MM/YYYY (có thể khác ngày tạo tài khoản CRM)",
@@ -653,7 +653,13 @@
       "deleteConfirmPlaceholder": "Nhập chính xác họ tên để xác nhận",
       "errorCannotDeactivateSelf": "Không thể ngừng hoạt động chính tài khoản đang đăng nhập.",
       "errorCannotDeleteSelf": "Không thể xóa chính tài khoản đang đăng nhập.",
-      "errorLastAdmin": "Đây là Admin cuối cùng còn hoạt động — không thể ngừng/xóa."
+      "errorLastAdmin": "Đây là Admin cuối cùng còn hoạt động — không thể ngừng/xóa.",
+      "loginIdHint": "Người có email công ty thì nhập đầy đủ ten@tcmbtl.com. Nhân sự vận hành không có email (thủ kho, bảo vệ) chỉ cần nhập tên tài khoản, ví dụ thukho — hệ thống tự thêm đuôi nội bộ.",
+      "noRole": "— Chưa gán nhóm quyền —",
+      "roleHint": "Chưa gán nhóm quyền thì người này đăng nhập vào sẽ không mở được mục nào. Có thể đổi sau ở Phân quyền.",
+      "payrollExemptLabel": "TCM không trả lương",
+      "payrollExemptHint": "Tick khi TCM không trả lương người này (thủ kho, bảo vệ điểm kho do bên thứ ba trả). Vẫn xếp ca và hiện trên bảng công để tham chiếu, nhưng không vào quỹ KPI, quỹ lương Creative và không tích phép năm.",
+      "errorLoginDomain": "Tài khoản đăng nhập phải là email @tcmbtl.com hoặc tên tài khoản nội bộ."
     },
     "warehouses": {
       "title": "Kho & địa điểm",
@@ -1215,7 +1221,12 @@
     "deptTaskSection": "Task nội bộ quá hạn (Planning/Purchasing/Operations/Production)",
     "deptTaskItem": "[{department}] {title} · quá hạn {days} ngày",
     "deptTaskEmpty": "Không có task nội bộ nào quá hạn.",
-    "goToDeptTask": "Mở tab →"
+    "goToDeptTask": "Mở tab →",
+    "stockRequestSection": "Việc kho đang chờ xử lý",
+    "stockRequestWaitApprove": "Chờ Account duyệt",
+    "stockRequestWaitConfirm": "Chờ thủ kho xác nhận",
+    "stockRequestItem": "{warehouse} · {lines} dòng hàng · treo {days} ngày",
+    "stockRequestEmpty": "Không có đề xuất kho nào đang chờ."
   },
   "projects": {
     "list": {
@@ -2664,7 +2675,8 @@
       "colAbsent": "Vắng (ngày)",
       "colOther": "Khác (ngày)",
       "exportExcel": "Xuất Excel (HR)",
-      "empty": "Tháng này chưa có công nào (chưa có tuần confirm)."
+      "empty": "Tháng này chưa có công nào (chưa có tuần confirm).",
+      "payrollExemptBadge": "Không tính lương"
     },
     "leave": {
       "title": "Phép năm",
@@ -2747,8 +2759,8 @@
     "login": {
       "title": "Đăng nhập",
       "subtitle": "Dùng email công ty @tcmbtl.com của bạn.",
-      "emailLabel": "Email công ty",
-      "emailPlaceholder": "ten.ban@tcmbtl.com",
+      "emailLabel": "Email công ty hoặc tên tài khoản",
+      "emailPlaceholder": "ten@tcmbtl.com hoặc thukho",
       "passwordLabel": "Mật khẩu",
       "passwordPlaceholder": "Nhập mật khẩu",
       "submit": "Đăng nhập",
@@ -2761,7 +2773,7 @@
     "logout": "Đăng xuất",
     "errors": {
       "required": "Vui lòng nhập đầy đủ email và mật khẩu.",
-      "domain": "Chỉ email công ty @tcmbtl.com mới đăng nhập được.",
+      "domain": "Chỉ email công ty @tcmbtl.com hoặc tài khoản nội bộ mới đăng nhập được.",
       "invalidCredentials": "Email hoặc mật khẩu không đúng.",
       "inactive": "Tài khoản đã ngưng hoạt động. Liên hệ phòng Nhân sự.",
       "locked": "Sai mật khẩu quá nhiều lần. Vui lòng thử lại sau {minutes} phút.",
@@ -2770,7 +2782,8 @@
       "mismatch": "Hai ô mật khẩu mới không khớp nhau.",
       "sameAsOld": "Mật khẩu mới phải khác mật khẩu đang dùng.",
       "tokenInvalid": "Link đặt lại mật khẩu không hợp lệ hoặc đã được dùng.",
-      "tokenExpired": "Link đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu link mới."
+      "tokenExpired": "Link đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu link mới.",
+      "noMailbox": "Tài khoản nội bộ không có hộp thư — nhờ quản trị cấp lại mật khẩu giúp."
     },
     "change": {
       "title": "Đổi mật khẩu",
@@ -2955,5 +2968,10 @@
     "aiTool_board": "Báo cáo BGĐ",
     "aiTool_trend": "Xu hướng ngành",
     "resize": "Kéo để đổi kích thước"
+  },
+  "noAccess": {
+    "title": "Tài khoản chưa được cấp quyền",
+    "body": "Bạn đăng nhập được nhưng chưa được gán nhóm quyền nào, nên chưa mở được mục nào trong hệ thống. Báo quản trị (phòng Nhân sự hoặc IT) gán nhóm quyền giúp bạn.",
+    "logout": "Đăng xuất"
   }
 }

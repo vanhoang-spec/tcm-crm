@@ -205,7 +205,9 @@ export async function getCreativeCostReport(periodCode: string): Promise<CostRep
     prisma.creativeSalaryBudget.findMany({ where: { periodCode } }),
     prisma.creativeAllocationRatio.findMany({ where: { periodCode } }),
     prisma.optionSet.findUnique({ where: { code: "creative_task_type" }, include: { items: { where: { isActive: true }, orderBy: { sort: "asc" } } } }),
-    prisma.staff.findMany({ where: { department: { code: "CREATIVE" }, isActive: true }, select: { id: true, title: true } }),
+    // payrollExempt bị loại khỏi headcount: quỹ lương vị trí = lương/tháng × số NGƯỜI ĐƯỢC TRẢ,
+    // đếm cả người TCM không trả lương sẽ thổi quỹ lên nguyên một suất và làm sai cost-per-task.
+    prisma.staff.findMany({ where: { department: { code: "CREATIVE" }, isActive: true, payrollExempt: false }, select: { id: true, title: true } }),
     prisma.creativeTask.findMany({
       where: { status: "DELIVERED", deliveredAt: { gte: parsed.start, lt: parsed.end } },
       select: { taskTypeId: true, hoursSpent: true, assignee: { select: { title: true } } },

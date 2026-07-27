@@ -621,7 +621,7 @@
       "desc": "TCM staff directory — new accounts require a date of birth and first work date.",
       "addStaff": "Add staff",
       "fullNamePlaceholder": "Full name",
-      "emailPlaceholder": "Email",
+      "emailPlaceholder": "Company email or account name",
       "titlePlaceholder": "Title",
       "dobHint": "Date of birth — DD/MM/YYYY format (e.g. 05/03/1998)",
       "firstWorkDateHint": "First work date at TCM — DD/MM/YYYY format (can differ from the CRM account creation date)",
@@ -653,7 +653,13 @@
       "deleteConfirmPlaceholder": "Type the full name exactly to confirm",
       "errorCannotDeactivateSelf": "You cannot deactivate the account you're currently signed in as.",
       "errorCannotDeleteSelf": "You cannot delete the account you're currently signed in as.",
-      "errorLastAdmin": "This is the last active Admin — cannot deactivate/delete."
+      "errorLastAdmin": "This is the last active Admin — cannot deactivate/delete.",
+      "loginIdHint": "Staff with company email: enter the full name@tcmbtl.com. Operations staff without email (warehouse keeper, security guard): just enter an account name such as thukho — the internal domain is added automatically.",
+      "noRole": "— No permission group —",
+      "roleHint": "Without a permission group this person can sign in but cannot open anything. It can be changed later under Roles.",
+      "payrollExemptLabel": "Not paid by TCM",
+      "payrollExemptHint": "Tick when TCM does not pay this person (warehouse keeper or guard paid by a third party). They are still scheduled and listed on the timesheet for reference, but stay out of the KPI pool, the Creative salary pool, and accrue no annual leave.",
+      "errorLoginDomain": "The login must be a @tcmbtl.com email or an internal account name."
     },
     "warehouses": {
       "title": "Warehouses & locations",
@@ -1215,7 +1221,12 @@
     "deptTaskSection": "Overdue internal tasks (Planning/Purchasing/Operations/Production)",
     "deptTaskItem": "[{department}] {title} · {days} days overdue",
     "deptTaskEmpty": "No overdue internal tasks.",
-    "goToDeptTask": "Open tab →"
+    "goToDeptTask": "Open tab →",
+    "stockRequestSection": "Stock requests awaiting action",
+    "stockRequestWaitApprove": "Awaiting Account approval",
+    "stockRequestWaitConfirm": "Awaiting keeper confirmation",
+    "stockRequestItem": "{warehouse} · {lines} lines · waiting {days} days",
+    "stockRequestEmpty": "No stock requests are waiting."
   },
   "projects": {
     "list": {
@@ -2664,7 +2675,8 @@
       "colAbsent": "Absent (days)",
       "colOther": "Other (days)",
       "exportExcel": "Export Excel (HR)",
-      "empty": "No timesheet data this month (no confirmed weeks)."
+      "empty": "No timesheet data this month (no confirmed weeks).",
+      "payrollExemptBadge": "Unpaid by TCM"
     },
     "leave": {
       "title": "Annual leave",
@@ -2747,8 +2759,8 @@
     "login": {
       "title": "Sign in",
       "subtitle": "Use your @tcmbtl.com company email.",
-      "emailLabel": "Company email",
-      "emailPlaceholder": "your.name@tcmbtl.com",
+      "emailLabel": "Company email or account name",
+      "emailPlaceholder": "name@tcmbtl.com or thukho",
       "passwordLabel": "Password",
       "passwordPlaceholder": "Enter your password",
       "submit": "Sign in",
@@ -2761,7 +2773,7 @@
     "logout": "Sign out",
     "errors": {
       "required": "Enter both email and password.",
-      "domain": "Only @tcmbtl.com company emails can sign in.",
+      "domain": "Only company email @tcmbtl.com or an internal account can sign in.",
       "invalidCredentials": "Incorrect email or password.",
       "inactive": "This account is inactive. Contact HR.",
       "locked": "Too many failed attempts. Try again in {minutes} minutes.",
@@ -2770,7 +2782,8 @@
       "mismatch": "The two new password fields don't match.",
       "sameAsOld": "New password must differ from your current one.",
       "tokenInvalid": "This reset link is invalid or already used.",
-      "tokenExpired": "This reset link has expired. Request a new one."
+      "tokenExpired": "This reset link has expired. Request a new one.",
+      "noMailbox": "Internal accounts have no mailbox — ask an administrator to reset your password."
     },
     "change": {
       "title": "Change password",
@@ -2955,5 +2968,10 @@
     "aiTool_board": "Board report",
     "aiTool_trend": "Industry trends",
     "resize": "Drag to resize"
+  },
+  "noAccess": {
+    "title": "Account has no permissions yet",
+    "body": "You are signed in, but no permission group has been assigned yet, so nothing is open to you. Ask an administrator (HR or IT) to assign your permission group.",
+    "logout": "Sign out"
   }
 }

@@ -11,9 +11,11 @@ const inputClass =
 export function StaffCreateForm({
   departments,
   teams,
+  roles,
 }: {
   departments: { id: string; name: string }[];
   teams: { id: string; name: string }[];
+  roles: { id: string; name: string }[];
 }) {
   const [state, formAction, pending] = useActionState<StaffFormState, FormData>(createStaff, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -31,7 +33,8 @@ export function StaffCreateForm({
       <p className="text-xs font-medium text-muted-foreground">{t("addStaff")}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input name="fullName" placeholder={t("fullNamePlaceholder")} required className={inputClass} />
-        <input name="email" type="email" placeholder={t("emailPlaceholder")} required className={inputClass} />
+        {/* type="text": tài khoản vận hành nội bộ gõ tên ngắn không có "@" (xem normalizeLoginId). */}
+        <input name="email" type="text" autoCapitalize="none" spellCheck={false} placeholder={t("emailPlaceholder")} required className={inputClass} />
         <input name="title" placeholder={t("titlePlaceholder")} className={inputClass} />
         <input
           name="dateOfBirth"
@@ -61,7 +64,20 @@ export function StaffCreateForm({
             <option key={tm.id} value={tm.id}>{tm.name}</option>
           ))}
         </select>
+        <select name="roleId" defaultValue="" className={inputClass}>
+          <option value="">{t("noRole")}</option>
+          {roles.map((r) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
+        </select>
+        <label className="flex h-9 items-center gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" name="payrollExempt" className="h-4 w-4 rounded border-border-strong" />
+          {t("payrollExemptLabel")}
+        </label>
       </div>
+      <p className="text-[11px] text-muted-foreground">{t("loginIdHint")}</p>
+      <p className="text-[11px] text-muted-foreground">{t("roleHint")}</p>
+      <p className="text-[11px] text-muted-foreground">{t("payrollExemptHint")}</p>
       <p className="text-[11px] text-muted-foreground">{t("dobHint")}</p>
       <p className="text-[11px] text-muted-foreground">{t("firstWorkDateHint")}</p>
       <div className="flex items-center gap-3">

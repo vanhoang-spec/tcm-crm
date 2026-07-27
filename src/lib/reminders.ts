@@ -487,6 +487,50 @@ export type InventoryReturnReminderItem = {
   daysOverdue: number;
 };
 
+export type StockRequestReminderItem = {
+  requestId: string;
+  code: string;
+  type: string; // ISSUE | INTAKE
+  /** APPROVE = chờ Account duyệt · CONFIRM = chờ thủ kho chốt số thực tế */
+  waitingFor: "APPROVE" | "CONFIRM";
+  projectCode: string | null;
+  warehouseName: string;
+  lineCount: number;
+  createdAt: Date;
+  daysWaiting: number;
+};
+
+/**
+ * Đề xuất kho đang treo (Kho v2 K2) — mỗi vai nhìn thấy phần việc của mình:
+ * ISSUE PROPOSED chờ Account duyệt · ISSUE APPROVED + INTAKE PROPOSED chờ thủ kho xác nhận thực tế.
+ * Thuần computed cho /reminders; notification riêng đã bắn lúc chuyển trạng thái.
+ */
+export async function getStockRequestReminders(teamCode?: string): Promise<StockRequestReminderItem[]> {
+  const now = new Date();
+  const requests = await prisma.stockRequest.findMany({
+    where: {
+      OR: [
+        { type: "ISSUE", status: { in: ["PROPOSED", "APPROVED"] } },
+        { type: "INTAKE", status: "PROPOSED" },
+      ],
+      ...(teamCode ? { project: { ownerTeam: { code: teamCode } } } : {}),
+    },
+    include: { warehouse: { select: { name: true } }, project: { select: { code: true } }, lines: { select: { id: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return requests.map((r) => ({
+    requestId: r.id,
+    code: r.code,
+    type: r.type,
+    waitingFor: r.type === "ISSUE" && r.status === "PROPOSED" ? "APPROVE" : "CONFIRM",
+    projectCode: r.project?.code ?? null,
+    warehouseName: r.warehouse.name,
+    lineCount: r.lines.length,
+    createdAt: r.createdAt,
+    daysWaiting: Math.floor((now.getTime() - r.createdAt.getTime()) / (24 * 3600 * 1000)),
+  }));
+}
+
 /** Phiếu XUẤT EVENT quá hạn trả mà dự án còn đồ tái sử dụng ở hiện trường — thuần computed cho /reminders + bell. */
 export async function getInventoryReturnReminders(teamCode?: string): Promise<InventoryReturnReminderItem[]> {
   const now = new Date();

@@ -2199,3 +2199,108 @@ i18n 0/0 (2709 key); build sạch +3 route requests; đối chiếu catalog↔đ
 
 K3 (giữ chỗ tồn kho → CO giá 0 + trần OPE + gộp dòng BM02), K4 (kỳ chiến dịch ≤15 ngày, điều chuyển có
 duyệt, holding A→B, thang cảnh báo hạn dùng vào job-runner).
+
+---
+
+# BATCH: Tài khoản vận hành không email, không lương (thủ kho / bảo vệ) — 28/07/2026
+
+Chủ dự án hỏi: thủ kho và bảo vệ điểm kho sẽ là user KHÔNG CÓ EMAIL, chỉ vào module kho; TCM KHÔNG
+trả lương nên xếp ca được nhưng ca chỉ để tham chiếu. Khảo sát 46 mũi + vòng phản biện trước khi code
+(kết quả đầy đủ ở tasks/wh5x73xym.output). Chủ dự án chốt 7 điểm, thực thi ngay trong ngày.
+
+## 7 quyết định chủ dự án (28/07/2026)
+
+1. Không bắt gõ email — ô đăng nhập nhận tên tài khoản ngắn, hệ thống tự ghép đuôi nội bộ.
+2. MỘT tài khoản dùng CHUNG nhiều ca (quản lý 24/7 tại điểm kho) — chấp nhận mất truy vết cá nhân.
+3. Bảo vệ mới KHÔNG lương. Anh Bình (TCM-0040) hiện CÓ lương, nghỉ cuối T9/2026; kho mới + người mới
+   không lương từ T10/2026 → KHÔNG đụng hồ sơ anh Bình, cờ chỉ áp cho người tạo mới.
+4. Không lương thì cũng KHÔNG tính phép năm.
+5. Thủ kho thuộc phòng OPE quản lý.
+6. Thủ kho VẪN thấy nhắc việc liên quan kho (lệnh đã duyệt chờ mình xác nhận).
+7. Giữ mật khẩu mặc định + ép đổi lần đầu — không đụng.
+
+## Vì sao KHÔNG cần cột username / không cần đổi DB
+
+`Staff.email` ở hệ này vốn là TÊN ĐĂNG NHẬP chứ không phải hộp thư: SMTP là tuỳ chọn và chưa cấu
+hình, seed đã có tiền lệ sinh placeholder `@tcm.internal` cho nhân sự không email. Thêm cột `username`
+là dựng đường tra cứu THỨ HAI cho việc đường thứ nhất đã làm được — phải sửa `attemptLogin`
+(findUnique → findFirst OR), mất bảo đảm unique-lookup, và đụng form đăng nhập của cả 42 người.
+Chọn: `normalizeLoginId()` ghép đuôi khi chuỗi nhập không có `@`. 0 migration cho phần đăng nhập.
+
+Tách 2 hàm có chủ đích: `isAllowedLoginDomain` (đăng nhập được: tcmbtl.com + tcm.local + tcm.internal)
+và `isMailableDomain` (chỉ tcmbtl.com) gác "Quên mật khẩu" — tài khoản nội bộ không có hộp thư thì tạo
+token chỉ làm người ta chờ vô ích; admin cấp lại ở /settings/staff (đường này đã có sẵn, trả link thô
+khi chưa cấu hình SMTP). Ô đăng nhập đổi `type="email"` → `type="text"`, nếu không trình duyệt chặn
+tên không có `@` ngay tại ô, không tới được server.
+
+## Hai bẫy CHẶN phát hiện khi khảo sát (không sửa thì mọi tài khoản hẹp quyền đều chết)
+
+1. **Vòng lặp chuyển hướng.** `requirePermission()` luôn `redirect("/")`, mà chính `/` gác
+   `dashboard.view` → ai thiếu mã đó bị `/` → `/` → 307 vô hạn. Đúng thao tác "siết quyền cho thủ kho"
+   sẽ kích hoạt. Sửa: `SAFE_LANDING` — chọn trang đầu tiên người đó CÓ quyền (Kho → Dự án → Khách…),
+   cuối cùng là `/no-access` (trang này cố ý KHÔNG gọi requirePermission — gác ở đó là dựng lại đúng
+   vòng lặp vừa phá).
+2. **`createStaff` không gán roleId** và form không có ô chọn nhóm quyền → user mới 0 quyền → rơi
+   thẳng vào bẫy 1. Sửa: thêm ô nhóm quyền + ô "TCM không trả lương" vào form, validate roleId tồn tại.
+
+## Hai phát hiện an ninh (tự xác minh bằng SQL trên dev.db)
+
+- Role `WAREHOUSE_KEEPER` tạo ở K2 đang có **66 quyền, chỉ 12 là kho** — thừa `finance.advance.approve`,
+  `finance.invoice.manage`, `bidding.margin_override`, `creative.cost.view`. Nguyên nhân: seed vòng 4
+  cấp `baseGrantCodes` cho MỌI role mới. Nguyên tắc "grant mặc định = quyền mọi người đang có" đúng với
+  phòng ban CŨ (họ vốn dùng cả app trước khi bật ma trận), nhưng role sinh ra SAU khi có ma trận thì
+  không có quyền cũ nào để bảo toàn. Sửa: `EXPLICIT_GRANTS` + **vòng 4c** reset một lần (marker
+  `20260728_narrow_roles_reset`) → 13 mã (12 kho + chat.use). An toàn: 0 người giữ role này.
+- `NGUYỄN THANH BÌNH` (TCM-0040, title "Security Guard", phòng HR) đang mang role `ADMIN_STAFF`
+  **63 quyền** gồm xem tài chính + duyệt tạm ứng, và email `@tcm.internal` nên HIỆN KHÔNG đăng nhập
+  được. Không đụng hồ sơ (anh ấy còn lương tới T9/2026) — báo chủ dự án quyết.
+- `/reminders` chỉ gác riêng khối công nợ; khách quá hạn chăm sóc, hồ sơ thầu, CO/CE chờ duyệt hiện
+  với MỌI người đăng nhập. Với nhân viên chính thức thì không sao, thêm tài khoản bảo vệ thì thành
+  vấn đề thật → gác TỪNG KHỐI theo quyền, và không query khi không có quyền (không chỉ ẩn).
+
+## Cờ không tính lương: `Staff.payrollExempt` (migration additive)
+
+Loại 4 cách "miễn phí": `isActive=false` chặn luôn việc xếp ca (mâu thuẫn yêu cầu); `title=null` đẻ
+cảnh báo KPI mỗi kỳ + mất chức danh; "không tạo dòng PositionSalary" không tách được MỘT người (khoá
+unique theo vị trí) và lương carry-forward `lte periodCode`; đổi phòng ban ra ngoài KPI_DEPT_CODES là
+mượn phòng ban làm cờ lương, vỡ khi BGĐ mở KPI cho phòng đó.
+
+⚠ Bẫy phải tránh: **đừng nhập lương 0** để dập cảnh báo — `kpi.ts` chỉ loại khi `salary == null`, nên
+0 ≠ null → người đó vẫn `eligible` và VẪN ĂN share thật của quỹ do đồng đội đóng góp.
+
+Điểm lọc: `kpi.ts` (pool), `creative-cost.ts` (headcount quỹ lương vị trí — đếm cả người không được
+trả sẽ thổi quỹ lên nguyên một suất), `timekeeping.ts` getLeaveBalances (phép năm). GIỮ NGUYÊN ở bảng
+công tháng + Excel, kèm nhãn "Không tính lương" / cột ghi chú — đúng ý "ca chỉ để tham chiếu".
+
+## Nhắc việc cho thủ kho
+
+Thêm `getStockRequestReminders()`: ISSUE PROPOSED = chờ Account duyệt · ISSUE APPROVED + INTAKE
+PROPOSED = chờ thủ kho chốt số thực tế. Lên cả /reminders (khối mới) lẫn con số chuông ở layout —
+chuông cũng đổi sang đếm ĐÚNG khối người đó xem được, nếu không tài khoản hẹp quyền thấy số của việc
+họ mở ra không được.
+
+## Bộ quyền chốt
+
+THỦ KHO 13 mã: inventory.view · doc.create · item.manage (tạo lô mới khi hàng site về) · import_csv ·
+transfer.create/confirm/cancel · request.create · issue.confirm · intake.confirm · lot.convert ·
+destroy · chat.use. **KHÔNG có request.approve*** — Account duyệt, giữ đúng tách vai K2.
+BẢO VỆ 2 mã: chat.use + kb.view. Lưu ý: hệ thống KHÔNG có nghiệp vụ bảo vệ (0/87 model, 0/107 quyền
+cho sổ ra vào) — tài khoản chỉ để có mặt: xếp ca tham chiếu, nhận thông báo, xem tài liệu.
+
+## Kiểm chứng (browser thật, act-as, dọn sạch sau)
+
+Tạo qua form: gõ `kho.test` → lưu thành `kho.test@tcm.local`, role Thủ kho, payrollExempt=1, phòng OPE.
+Act-as tài khoản đó: vào `/` → **hạ cánh /inventory, KHÔNG lặp**; sidebar chỉ còn Trao đổi/AI/Kho/Sơ đồ;
+gõ tay `/finance` → đá về /inventory; `/reminders` chỉ có 2 khối kho + thông báo riêng, **không lộ tên
+khách hàng**; đề xuất DN-2607-001 hiện đúng "Chờ thủ kho xác nhận · 1 dòng hàng · treo 0 ngày".
+Đối chiếu số: bảng công **43 dòng** (có, kèm nhãn "Không tính lương") vs phép năm **42 dòng** (không) —
+chênh đúng 1 người; KPI không có tài khoản đó và không đẻ cảnh báo thiếu lương.
+Gates: tsc/eslint sạch · i18n 0/0 (2725 key) · build sạch +1 route `/no-access` · catalog↔guard 107 mã
+(chỉ payroll ×2 + system.impersonate thiếu guard như đã biết). Dọn: 42 nhân sự thật, kho trống, 1307
+grant + cây 19 node giữ nguyên. Backup DB trước migration rebuild bảng staff (D:/TCM/backup-dev-db).
+
+## Việc còn lại cho chủ dự án
+
+Gán role Thủ kho/Bảo vệ cho người thật khi có; đổi role anh Bình khỏi ADMIN_STAFF; quyết thời điểm
+T10/2026 tạo tài khoản mới; cân nhắc thêm đường SỬA email sau khi tạo (hiện gõ sai là vĩnh viễn không
+sửa được trong app — chưa làm vì ngoài phạm vi 7 câu đã chốt).

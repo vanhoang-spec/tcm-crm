@@ -8,6 +8,7 @@ import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   createAdjustDoc,
+  createDestroyDoc,
   createImportDoc,
   createIssueDoc,
   createReturnDoc,
@@ -15,7 +16,7 @@ import {
   type DocFormState,
 } from "./actions";
 
-export type DocKind = "IMPORT" | "ADJUST" | "TRANSFER" | "ISSUE" | "RETURN";
+export type DocKind = "IMPORT" | "ADJUST" | "TRANSFER" | "ISSUE" | "RETURN" | "DESTROY";
 
 export type PickerItem = {
   id: string;
@@ -40,6 +41,7 @@ const ACTIONS: Record<DocKind, (prev: DocFormState, fd: FormData) => Promise<Doc
   TRANSFER: createTransferDoc,
   ISSUE: createIssueDoc,
   RETURN: createReturnDoc,
+  DESTROY: createDestroyDoc,
 };
 
 const input =
@@ -116,7 +118,7 @@ export function DocForm({
       <input type="hidden" name="linesJson" value={JSON.stringify(lines.map((l) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note || undefined })))} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {(kind === "TRANSFER" || kind === "ISSUE") && (
+        {(kind === "TRANSFER" || kind === "ISSUE" || kind === "DESTROY") && (
           <label className="space-y-1 text-xs text-muted-foreground">
             {t("formFromWarehouse")}
             <select name="fromWarehouseId" value={fromWarehouseId} onChange={(e) => setFromWarehouseId(e.target.value)} className={input + " w-full"}>
@@ -164,13 +166,14 @@ export function DocForm({
           </label>
         )}
         <label className="space-y-1 text-xs text-muted-foreground sm:col-span-2">
-          {t("formNote")}
-          <input name="note" className={input + " w-full"} />
+          {kind === "DESTROY" ? t("formReason") : t("formNote")}
+          <input name="note" required={kind === "DESTROY"} className={input + " w-full"} />
         </label>
       </div>
 
       {kind === "ADJUST" && <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("adjustHint")}</p>}
       {kind === "RETURN" && <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("returnHint")}</p>}
+      {kind === "DESTROY" && <p className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger">{t("destroyHint")}</p>}
 
       {/* Dòng hàng */}
       <div className="space-y-2">

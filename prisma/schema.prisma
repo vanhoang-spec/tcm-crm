@@ -378,6 +378,7 @@ model Client {
   projects  Project[]
   careNotes CareNote[]
   invoices  ClientInvoice[]
+  inventoryItemsOwned InventoryItem[] @relation("InventoryItemOwnerClient")
 
   @@map("client")
 }
@@ -616,6 +617,7 @@ model Project {
   purchaseOrders    PurchaseOrder[]
   stockDocuments    StockDocument[]
   inventoryHoldings ProjectHolding[]
+  inventoryItemsBound InventoryItem[] @relation("InventoryItemBoundProject")
   planningJobs      PlanningJob[]
   files             ProjectFile[]
 
@@ -1900,19 +1902,54 @@ model Warehouse {
   @@map("warehouse")
 }
 
+/// Kho v2 (spec 27/07/2026): cây danh mục ≤3 cấp thay OptionSet "inventory_category" phẳng (deprecated,
+/// giữ dữ liệu cũ). Node GỐC mang code 1 ký tự (P/E/G/C/L/M/O — admin thêm bớt) + cờ isClientOwned
+/// (nhóm hàng khách gửi: item bắt buộc gắn khách, có hạn dùng + số phiếu xuất kho của khách).
+/// KHÔNG xóa node (mã item đã sinh theo ký tự gốc) — chỉ isActive. Item gắn vào node bất kỳ.
+model InventoryCategory {
+  id            String   @id @default(cuid())
+  parentId      String?
+  code          String? // CHỈ node gốc: 1 ký tự A-Z, unique giữa các gốc (validate app layer)
+  name          String
+  isClientOwned Boolean  @default(false) // chỉ đặt trên node gốc — con/cháu kế thừa khi kiểm tra
+  sort          Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  parent   InventoryCategory?  @relation("InventoryCategoryTree", fields: [parentId], references: [id])
+  children InventoryCategory[] @relation("InventoryCategoryTree")
+  items    InventoryItem[]     @relation("InventoryItemCatNode")
+
+  @@index([parentId])
+  @@map("inventory_category_node")
+}
+
 /// Danh mục vật tư. partCount>=2 = "bộ tách phần" (KHÔNG stockable — chỉ các phần con mang tồn kho).
 /// Quy tắc duy nhất: stockable ⇔ partCount === 1. Phần con: parentItemId set, partNo 1..N,
 /// code = `${cha}-${partNo}`. partCount BẤT BIẾN sau khi tạo (đổi cấu trúc = vô hiệu bộ cũ, tạo bộ mới).
+/// Kho v2: mỗi item = một LÔ đồng nhất, mã 5 khối `{G}.{ST}.{TT}.{KH3}.{seq3}` sinh ở lib/inventory.ts
+/// (buildItemCode; phần con giữ hậu tố `-N`). Trạng thái/tình trạng KHÔNG sửa tay — đổi qua phiếu
+/// CHUYỂN ĐỔI LÔ (CONVERT) chạy số lượng giữa 2 mã. Item cũ (trước v2) để các cột mới null.
 model InventoryItem {
   id           String   @id @default(cuid())
   code         String   @unique
   name         String
-  categoryId   String? // option_set "inventory_category"
+  categoryId   String? // DEPRECATED (kho v2 dùng catNodeId) — option_set "inventory_category", giữ cột không dùng
   unit         String? // ĐVT free text (cái, bộ, cuộn...)
   isReusable   Boolean  @default(true) // true = Tái sử dụng (phải trả về kho) | false = Dùng một lần
   partCount    Int      @default(1) // 1 = item thường/phần con; 2..4 = bộ cha (không stockable)
   parentItemId String?
   partNo       Int?
+  // ── Kho v2 — thuộc tính lô (nullable: item trước v2 không có) ──
+  catNodeId      String? // node cây danh mục v2 (nhóm gốc cho ký tự đầu của mã)
+  statusCode     String? // R|P|C|W|L|D — xem ITEM_STATUS_CODES lib/inventory.ts; đổi qua phiếu CONVERT
+  conditionCode  String? // B|P|S — brand new / mới một phần / second hand; đổi qua phiếu CONVERT
+  ownerClientId  String? // null = hàng TCM (segment mã "TCM"); BẮT BUỘC khi node gốc isClientOwned
+  boundProjectId String? // bắt buộc app-layer khi statusCode=P (hàng theo chính xác dự án)
+  expiryDate     DateTime? // hàng khách có date — hết hạn: chặn xuất dùng, chỉ còn phiếu DESTROY
+  clientDocNo    String? // số phiếu xuất kho của KHÁCH khi gửi hàng (nhóm isClientOwned)
+  seq            Int? // số thứ tự 001–999 trong tổ hợp mã (suy lại được từ code — lưu để đọc nhanh)
   isActive     Boolean  @default(true)
   note         String?
   createdAt    DateTime @default(now())
@@ -1921,23 +1958,32 @@ model InventoryItem {
   category OptionItem?     @relation("InventoryItemCategory", fields: [categoryId], references: [id], onDelete: SetNull)
   parent   InventoryItem?  @relation("InventoryItemParts", fields: [parentItemId], references: [id], onDelete: Cascade)
   parts    InventoryItem[] @relation("InventoryItemParts")
+  catNode      InventoryCategory? @relation("InventoryItemCatNode", fields: [catNodeId], references: [id], onDelete: SetNull)
+  ownerClient  Client?            @relation("InventoryItemOwnerClient", fields: [ownerClientId], references: [id], onDelete: SetNull)
+  boundProject Project?           @relation("InventoryItemBoundProject", fields: [boundProjectId], references: [id], onDelete: SetNull)
 
   balances StockBalance[]
   lines    StockDocumentLine[]
   holdings ProjectHolding[]
+  convertLinesIn StockDocumentLine[] @relation("StockLineConvertTo")
 
   @@index([parentItemId])
   @@index([categoryId])
+  @@index([catNodeId])
+  @@index([ownerClientId])
+  @@index([statusCode])
   @@map("inventory_item")
 }
 
 /// Phiếu kho — sổ cái bất biến. Kho theo type: IMPORT/ADJUST/RETURN → toWarehouseId;
-/// ISSUE → fromWarehouseId; TRANSFER → cả hai. Sửa sai phiếu COMPLETED = tạo phiếu ADJUST bù
-/// (note tham chiếu mã phiếu), KHÔNG edit/xóa. CANCELED chỉ cho TRANSFER đang PENDING (hoàn tồn nguồn).
+/// ISSUE/DESTROY → fromWarehouseId; TRANSFER → cả hai; CONVERT (chuyển đổi lô, kho v2) →
+/// fromWarehouseId (trừ lô nguồn + cộng lô đích TRONG CÙNG kho đó, dòng mang convertToItemId).
+/// Sửa sai phiếu COMPLETED = tạo phiếu ADJUST bù (note tham chiếu mã phiếu), KHÔNG edit/xóa.
+/// CANCELED chỉ cho TRANSFER đang PENDING (hoàn tồn nguồn).
 model StockDocument {
   id                   String    @id @default(cuid())
-  code                 String    @unique // {NK|DC|CK|XE|TH}-{YYMM}-{seq3}, retry P2002 khi trùng
-  type                 String // IMPORT | ADJUST | TRANSFER | ISSUE | RETURN
+  code                 String    @unique // {NK|DC|CK|XE|TH|CD|XH}-{YYMM}-{seq3}, retry P2002 khi trùng
+  type                 String // IMPORT | ADJUST | TRANSFER | ISSUE | RETURN | CONVERT | DESTROY
   status               String    @default("COMPLETED") // PENDING (chỉ TRANSFER) | COMPLETED | CANCELED
   fromWarehouseId      String?
   toWarehouseId        String?
@@ -1973,11 +2019,13 @@ model StockDocumentLine {
   itemId           String
   quantity         Int // luôn > 0; riêng ADJUST cho phép âm (điều chỉnh giảm), khác 0
   receivedQuantity Int? // TRANSFER — bên nhận ghi thực nhận (≤ quantity); chênh lệch hiển thị vĩnh viễn
+  convertToItemId  String? // CONVERT (kho v2): lô ĐÍCH nhận số lượng — itemId là lô nguồn bị trừ
   note             String?
   sort             Int     @default(0)
 
-  document StockDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  item     InventoryItem @relation(fields: [itemId], references: [id])
+  document      StockDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  item          InventoryItem  @relation(fields: [itemId], references: [id])
+  convertToItem InventoryItem? @relation("StockLineConvertTo", fields: [convertToItemId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, itemId]) // 1 item / 1 dòng — giữ toán tồn kho đơn giản
   @@map("stock_document_line")

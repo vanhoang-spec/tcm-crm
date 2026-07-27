@@ -2048,3 +2048,77 @@ Toàn bộ là nạp dữ liệu dev + rename 1 project — không sửa schema/
 
 ### File tham chiếu (khi build)
 [src/lib/clients-import.ts](D:\TCM\TCM_AI_CRM\TCM_CRM\src\lib\clients-import.ts) · [src/app/(app)/clients/import/actions.ts](D:\TCM\TCM_AI_CRM\TCM_CRM\src\app\(app)\clients\import\actions.ts) · [import-client-form.tsx](D:\TCM\TCM_AI_CRM\TCM_CRM\src\app\(app)\clients\import\import-client-form.tsx) · [src/lib/bidding.ts](D:\TCM\TCM_AI_CRM\TCM_CRM\src\lib\bidding.ts) · [src/lib/validators/costsheet.ts](D:\TCM\TCM_AI_CRM\TCM_CRM\src\lib\validators\costsheet.ts) · [bidding/actions.ts saveCostSheet](D:\TCM\TCM_AI_CRM\TCM_CRM\src\app\(app)\bidding\actions.ts) · [cost-sheet-builder.tsx](D:\TCM\TCM_AI_CRM\TCM_CRM\src\app\(app)\bidding\cost-sheet-builder.tsx).
+
+
+---
+
+# BATCH: Kho v2 — K1 (nền lô/mã/cây danh mục) — 27/07/2026
+
+Spec chủ dự án 27/07 (4 phần: I nhóm hàng · II mã item · III chỉ số lượng · IV workflow a–e) thay đổi lớn
+module ⑧. Flow chart thiết kế + 7 quyết định đã chốt với chủ dự án TRƯỚC khi code (artifact
+"Kho v2 — Flow chart thiết kế"). Thực thi chia 4 đợt K1→K4; đây là K1.
+
+## 7 quyết định chủ dự án đã chốt (27/07/2026)
+
+1. **Khối "Loại" trong mã = 1 KÝ TỰ nhóm gốc** → mã chuẩn `P.R.B.DHG.001` (đúng dòng format mẫu
+   `X.X.X.XXX.001`; câu chữ "3 ký tự đầu" trong spec bị loại). Nhóm con KHÔNG nằm trong mã — chỉ là
+   thuộc tính lọc theo cây.
+2. **Tách lô:** brand new / second-hand không bao giờ chung một mã. Đổi trạng thái/tình trạng = PHIẾU
+   CHUYỂN ĐỔI chạy số lượng giữa 2 mã (mã luôn nói đúng sự thật về hàng; dùng lại nguyên guard chống âm).
+3. **Duyệt giữ chỗ kho → CO:** MỘT trong hai (Kế toán hoặc HR Manager) là đủ; gắn qua ma trận quyền,
+   không hardcode tên người.
+4. **Dòng CO giá 0 chèn QUA BUILDER** (panel "Kho đã duyệt" + nút chèn, SL khóa theo mức duyệt) — vì
+   saveCostSheet xóa-tạo-lại toàn bộ dòng, hệ thống tự ghi ngoài builder sẽ mất dòng khi lưu tiếp.
+5. **Báo giá BM02 gộp cặp dòng** (kho giá 0 + mua bù) thành MỘT dòng khách nhìn: SL tổng, thành tiền =
+   phân bổ make-up của cặp, đơn giá = thành tiền ÷ SL tổng. Khách không thấy dòng 0 đồng.
+6. **Hàng mua giao thẳng site KHÔNG nhập kho lúc mua.** Hết event mang về mới nhập — thủ kho khai đúng
+   trạng thái/tình trạng THỰC TẾ lúc về (mã lô mới). Nguyên tắc áp chung cho mọi lần đồ quay về kho.
+7. **Điều chuyển:** có phiếu chuyển holding trực tiếp hiện trường dự án A → B (2 bước gửi/nhận); duyệt =
+   PIC/AD-AM khi gắn dự án, OPE Manager khi kho ↔ kho thuần.
+
+Mặc định kèm theo: hàng TCM mang khối `TCM`; seq 001–999 đếm riêng theo từng tổ hợp 5 khối; kỳ chiến
+dịch quá 15 ngày chặn mở ngày mới; cảnh báo date vàng ≤90 / cam ≤60 / đỏ ≤30 ngày, hết hạn chặn xuất
+dùng chỉ còn xuất hủy; role mới THỦ KHO (K2).
+
+## K1 đã làm (nguyên tắc: tầng mới đặt LÊN sổ cái bất biến, toán tồn kho giữ nguyên 100%)
+
+- **Schema** (migration `20260727230000_kho_v2_k1_category_tree_lot_fields`, additive): bảng
+  `inventory_category_node` (cây ≤3 cấp, code 1 ký tự CHỈ ở gốc, isClientOwned ở gốc, không xóa — chỉ
+  isActive); InventoryItem +8 cột lô (catNodeId, statusCode, conditionCode, ownerClientId,
+  boundProjectId, expiryDate, clientDocNo, seq — đều nullable); StockDocumentLine +convertToItemId;
+  StockDocument nhận 2 type mới CONVERT/DESTROY. `categoryId` (OptionItem) deprecated giữ cột.
+- **lib/inventory-lot.ts** (thuần, không import — tách khỏi inventory.ts để CSV parser không kéo prisma):
+  ITEM_STATUS_CODES R/P/C/W/L/D · ITEM_CONDITION_CODES B/P/S · buildItemCode/itemCodePrefix ·
+  expiryLevel (UTC-midnight; EXPIRED khi qua ngày). inventory.ts re-export + nextItemSeq (max seq của
+  tổ hợp đọc từ code, retry P2002, >999 = SEQ_FULL) + resolveRootCategory + getCategoryTree.
+- **Phiếu CONVERT (CD):** đổi trạng thái/tình trạng; lô đích tự match (tên+node+khách+dự án ràng+hạn
+  dùng+partCount, isActive) hoặc tạo mới với seq kế tiếp; bộ tách phần chọn CẤP CHA chuyển cả bộ (mỗi
+  phần một dòng ledger, số lượng = số bộ); debit nguồn + credit đích CÙNG kho trong 1 transaction.
+- **Phiếu DESTROY (XH):** 1 bước, bắt buộc lý do — đường ra duy nhất cho hàng hết hạn/trạng thái D.
+  createIssueDoc CHẶN item có expiryDate đã qua (errorExpired liệt kê mã).
+- **UI:** form item = form LÔ (chọn node cây → hiện điều kiện: gốc isClientOwned bắt buộc khách + hiện
+  expiry/số phiếu KH; trạng thái C bắt buộc khách; P bắt buộc dự án; preview mã live); edit khóa các
+  khối nằm trong mã; trang items + tồn kho lọc theo nhánh cây/trạng thái/tình trạng/khách + badge date;
+  /settings/inventory-categories CRUD cây (code gốc bất biến, chặn tắt node còn con active, không xóa).
+- **CSV import viết lại theo LÔ:** bỏ cột "Mã"; cột mới Nhóm (code gốc hoặc tên node) / Trạng thái /
+  Tình trạng / Mã KH / Hạn dùng / Số phiếu KH; các dòng cùng lô ở nhiều kho GOM về một mã (lotKey),
+  mỗi kho một phiếu NK; trạng thái P không cho qua CSV (cần gắn dự án — nhập tay). All-or-nothing giữ nguyên.
+- **Seed:** BỎ item + phiếu demo format cũ (thành rác trên scheme mới); thêm cây 7 nhóm đúng spec
+  (P: Booth[cụm/sàn/backdrop/standee]/Kệ/Cổng chào · E: LED-TV/Âm thanh/Ánh sáng · G · C · L ·
+  M[hàng project/quà tặng, isClientOwned] · O) — idempotent theo (parentId, name), 19 node.
+
+## Verify K1 (browser thật, dọn sạch sau)
+
+Tạo lô UI → `C.R.B.TCM.001` đúng seq; lô khách DHG + date → `M.C.B.DHG.001` (expiry UTC midnight,
+PXK-TEST-1); CSV 2 dòng cùng lô 2 kho → MỘT mã `M.C.B.DHG.002` + 2 phiếu NK (HCM 10 / ĐN 5); phiếu NK
+UI +50; ISSUE hàng hết hạn bị chặn đúng thông báo; CONVERT B→S sinh `C.R.S.TCM.001`, tồn 49/1, phiếu
+CD ghi `nguồn → đích`; DESTROY 10 thùng hết hạn (XH-2607-001) tồn HCM về 0, ĐN giữ 5. Trang Settings
+đếm "2 lô" đúng theo node. tsc/eslint sạch; i18n 0/0 (2625 key); build sạch +3 route (convert, destroy,
+settings/inventory-categories). Dọn test: items/phiếu/tồn về 0, cây 19 node giữ.
+
+## Còn lại (K2 → K4, task #32–34)
+
+K2 role THỦ KHO + quyền mới + lệnh xuất đề xuất→duyệt→xác nhận + phiếu nhập chờ thủ kho (3 nguồn:
+PO C3, khách gửi, đồ thẳng site quay về) + siết CONVERT/DESTROY về thủ kho. K3 giữ chỗ tồn kho → CO
+giá 0 (quyết định 3/4/5) + trần OPE + cảnh báo lệch. K4 kỳ chiến dịch ≤15 ngày + điều chuyển có duyệt
++ holding A→B + thang cảnh báo date vào job-runner.

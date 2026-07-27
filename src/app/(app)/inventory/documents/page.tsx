@@ -41,6 +41,8 @@ export default async function InventoryDocumentsPage({
     { href: "/inventory/documents/new/return", label: t("newReturn") },
     { href: "/inventory/documents/new/import", label: t("newImport") },
     { href: "/inventory/documents/new/adjust", label: t("newAdjust") },
+    { href: "/inventory/documents/new/convert", label: t("newConvert") },
+    { href: "/inventory/documents/new/destroy", label: t("newDestroy") },
   ];
 
   return (

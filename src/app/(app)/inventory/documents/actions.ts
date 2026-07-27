@@ -8,13 +8,24 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import {
+  ITEM_CONDITION_CODES,
+  ITEM_STATUS_CODES,
   InsufficientStockError,
+  TCM_OWNER_SEG,
+  buildItemCode,
   creditBalance,
   creditHolding,
   debitBalance,
   debitHolding,
+  expiryLevel,
+  itemCodePrefix,
   nextDocCode,
+  nextItemSeq,
+  partItemCode,
+  resolveRootCategory,
   type DocType,
+  type ItemConditionCode,
+  type ItemStatusCode,
 } from "@/lib/inventory";
 import { requirePermission } from "@/lib/permissions";
 
@@ -276,8 +287,11 @@ export async function createIssueDoc(_prev: DocFormState, formData: FormData): P
 
   const items = await prisma.inventoryItem.findMany({
     where: { id: { in: lines.map((l) => l.itemId) } },
-    select: { id: true, isReusable: true },
+    select: { id: true, isReusable: true, code: true, expiryDate: true },
   });
+  // Hàng hết hạn dùng: CHẶN xuất dùng — chỉ còn đường phiếu XUẤT HỦY (spec nhóm M-a)
+  const expired = items.filter((i) => expiryLevel(i.expiryDate, new Date()) === "EXPIRED");
+  if (expired.length > 0) return { error: t("errorExpired", { items: expired.map((i) => i.code).join(", ") }) };
   const reusableIds = new Set(items.filter((i) => i.isReusable).map((i) => i.id));
   const hasReusable = lines.some((l) => reusableIds.has(l.itemId));
   const expectedReturnAt = expectedReturnRaw ? new Date(expectedReturnRaw) : null;
@@ -355,6 +369,217 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
     );
   } catch (e) {
     if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
+    throw e;
+  }
+  await audit(docId, "CREATE");
+  revalidate();
+  redirect(`/inventory/documents/${docId}`);
+}
+
+// ── KHO V2: XUẤT HỦY (DESTROY) — 1 bước, bắt buộc lý do ──
+// Đường ra DUY NHẤT cho hàng hết hạn / trạng thái D. K2 siết về quyền thủ kho riêng.
+
+export async function createDestroyDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.doc.create");
+  const t = await getTranslations("inventory.documents");
+  const fromWarehouseId = String(formData.get("fromWarehouseId") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  if (!fromWarehouseId) return { error: t("errorInvalid") };
+  if (!note) return { error: t("errorReasonRequired") };
+  const { lines, error } = await parseLines(formData, { allowNegative: false });
+  if (error) return { error };
+
+  const staffId = await getCurrentStaffId();
+  let docId = "";
+  try {
+    await createDocWithRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const code = await nextDocCode(tx, "DESTROY", new Date());
+        const doc = await tx.stockDocument.create({
+          data: {
+            code,
+            type: "DESTROY",
+            status: "COMPLETED",
+            fromWarehouseId,
+            note,
+            createdById: staffId,
+            lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note, sort: i })) },
+          },
+        });
+        for (const l of lines) await debitBalance(tx, fromWarehouseId, l.itemId, l.quantity);
+        docId = doc.id;
+      })
+    );
+  } catch (e) {
+    if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
+    throw e;
+  }
+  await audit(docId, "CREATE", note);
+  revalidate();
+  redirect(`/inventory/documents/${docId}`);
+}
+
+// ── KHO V2: CHUYỂN ĐỔI LÔ (CONVERT) — đổi trạng thái/tình trạng = chạy số lượng giữa 2 mã ──
+// Quyết định Câu 2 (27/07): mỗi mã là một LÔ đồng nhất; brand new / second hand không chung mã.
+// Lô đích tự tìm theo (tên, node, khách, dự án ràng, hạn dùng, partCount) hoặc tạo mới với seq kế tiếp.
+// Nguồn là BỘ tách phần → chuyển cả bộ: mỗi phần một dòng ledger, số lượng = số bộ.
+
+type ConvertLineInput = {
+  itemId: string;
+  quantity: number;
+  toStatus: ItemStatusCode;
+  toCond: ItemConditionCode;
+  note?: string;
+};
+
+export async function createConvertDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
+  await requirePermission("inventory.doc.create");
+  const t = await getTranslations("inventory.documents");
+  const warehouseId = String(formData.get("fromWarehouseId") ?? "");
+  const note = String(formData.get("note") ?? "").trim() || null;
+  if (!warehouseId) return { error: t("errorInvalid") };
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(String(formData.get("linesJson") ?? "[]"));
+  } catch {
+    return { error: t("errorInvalid") };
+  }
+  if (!Array.isArray(raw) || raw.length === 0) return { error: t("errorNoLines") };
+  const inputs: ConvertLineInput[] = [];
+  const seen = new Set<string>();
+  for (const l of raw) {
+    const itemId = typeof l?.itemId === "string" ? l.itemId : "";
+    const quantity = Number(l?.quantity);
+    const toStatus = String(l?.toStatus ?? "");
+    const toCond = String(l?.toCond ?? "");
+    const lineNote = typeof l?.note === "string" && l.note.trim() !== "" ? l.note.trim() : undefined;
+    if (
+      !itemId || seen.has(itemId) || !Number.isInteger(quantity) || quantity <= 0 ||
+      !(ITEM_STATUS_CODES as readonly string[]).includes(toStatus) ||
+      !(ITEM_CONDITION_CODES as readonly string[]).includes(toCond)
+    ) {
+      return { error: t("errorInvalid") };
+    }
+    seen.add(itemId);
+    inputs.push({ itemId, quantity, toStatus: toStatus as ItemStatusCode, toCond: toCond as ItemConditionCode, note: lineNote });
+  }
+
+  const sources = await prisma.inventoryItem.findMany({
+    where: { id: { in: inputs.map((l) => l.itemId) } },
+    include: { parts: { orderBy: { partNo: "asc" } }, ownerClient: { select: { code: true } } },
+  });
+  const srcById = new Map(sources.map((s) => [s.id, s]));
+  for (const input of inputs) {
+    const src = srcById.get(input.itemId);
+    if (!src || !src.isActive) return { error: t("errorInvalid") };
+    // Chỉ lô v2 (đủ node + trạng thái + tình trạng); phần con phải chuyển từ item cha (cả bộ)
+    if (src.parentItemId) return { error: t("errorConvertPart", { item: src.code }) };
+    if (!src.catNodeId || !src.statusCode || !src.conditionCode) return { error: t("errorConvertLegacy", { item: src.code }) };
+    if (src.statusCode === input.toStatus && src.conditionCode === input.toCond) {
+      return { error: t("errorConvertSame", { item: src.code }) };
+    }
+  }
+  // Ký tự nhóm gốc cho từng nguồn (cây ≤3 cấp, ngoài transaction — cây không đổi trong lúc lập phiếu)
+  const rootBySrc = new Map<string, string>();
+  for (const src of sources) {
+    const root = await resolveRootCategory(src.catNodeId!);
+    if (!root?.code) return { error: t("errorInvalid") };
+    rootBySrc.set(src.id, root.code);
+  }
+
+  const staffId = await getCurrentStaffId();
+  let docId = "";
+  try {
+    await createDocWithRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const ledger: { itemId: string; convertToItemId: string; quantity: number; note?: string }[] = [];
+        for (const input of inputs) {
+          const src = srcById.get(input.itemId)!;
+          const lotWhere = {
+            parentItemId: null,
+            name: src.name,
+            catNodeId: src.catNodeId,
+            statusCode: input.toStatus,
+            conditionCode: input.toCond,
+            ownerClientId: src.ownerClientId,
+            boundProjectId: src.boundProjectId,
+            expiryDate: src.expiryDate,
+            partCount: src.partCount,
+            isActive: true,
+          };
+          let target = await tx.inventoryItem.findFirst({ where: lotWhere, include: { parts: { orderBy: { partNo: "asc" } } } });
+          if (!target) {
+            const clientSeg = src.ownerClient?.code ?? TCM_OWNER_SEG;
+            const prefix = itemCodePrefix(rootBySrc.get(src.id)!, input.toStatus, input.toCond, clientSeg);
+            const seq = await nextItemSeq(tx, prefix);
+            const code = buildItemCode(rootBySrc.get(src.id)!, input.toStatus, input.toCond, clientSeg, seq);
+            const lotData = {
+              name: src.name,
+              catNodeId: src.catNodeId,
+              unit: src.unit,
+              isReusable: src.isReusable,
+              statusCode: input.toStatus,
+              conditionCode: input.toCond,
+              ownerClientId: src.ownerClientId,
+              boundProjectId: src.boundProjectId,
+              expiryDate: src.expiryDate,
+              clientDocNo: src.clientDocNo,
+              seq,
+            };
+            target = await tx.inventoryItem.create({
+              data: { code, partCount: src.partCount, ...lotData },
+              include: { parts: true },
+            });
+            if (src.partCount > 1) {
+              for (const p of src.parts) {
+                await tx.inventoryItem.create({
+                  data: {
+                    code: partItemCode(code, p.partNo!),
+                    ...lotData,
+                    name: p.name,
+                    unit: p.unit,
+                    parentItemId: target.id,
+                    partNo: p.partNo,
+                  },
+                });
+              }
+              target = (await tx.inventoryItem.findUnique({ where: { id: target.id }, include: { parts: { orderBy: { partNo: "asc" } } } }))!;
+            }
+          }
+          if (src.partCount > 1) {
+            const tgtByNo = new Map(target.parts.map((p) => [p.partNo, p]));
+            for (const p of src.parts) {
+              const tp = tgtByNo.get(p.partNo);
+              if (!tp) throw new Error("CONVERT_TARGET_PARTS");
+              ledger.push({ itemId: p.id, convertToItemId: tp.id, quantity: input.quantity, note: input.note });
+            }
+          } else {
+            ledger.push({ itemId: src.id, convertToItemId: target.id, quantity: input.quantity, note: input.note });
+          }
+        }
+        const code = await nextDocCode(tx, "CONVERT", new Date());
+        const doc = await tx.stockDocument.create({
+          data: {
+            code,
+            type: "CONVERT",
+            status: "COMPLETED",
+            fromWarehouseId: warehouseId,
+            note,
+            createdById: staffId,
+            lines: { create: ledger.map((l, i) => ({ ...l, sort: i })) },
+          },
+        });
+        for (const l of ledger) {
+          await debitBalance(tx, warehouseId, l.itemId, l.quantity);
+          await creditBalance(tx, warehouseId, l.convertToItemId, l.quantity);
+        }
+        docId = doc.id;
+      })
+    );
+  } catch (e) {
+    if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
+    if (e instanceof Error && e.message === "SEQ_FULL") return { error: t("errorSeqFull") };
     throw e;
   }
   await audit(docId, "CREATE");

@@ -74,7 +74,7 @@ export default async function SettingsPage() {
     { href: "/settings/ai", icon: Sparkles, title: t("aiTitle"), desc: t("aiDesc") },
     { href: "/settings/creative", icon: Coins, title: t("creativeCostTitle"), desc: t("creativeCostDesc") },
     { href: "/settings/warehouses", icon: Warehouse, title: t("warehousesTitle"), desc: t("warehousesDesc") },
-    { href: "/settings/options/inventory_category", icon: Boxes, title: t("inventoryCategoryTitle"), desc: t("inventoryCategoryDesc") },
+    { href: "/settings/inventory-categories", icon: Boxes, title: t("inventoryCategoryTitle"), desc: t("inventoryCategoryDesc") },
     { href: "/settings/kpi", icon: Award, title: t("kpiTitle"), desc: t("kpiDesc") },
     { href: "/settings/shifts", icon: Clock, title: t("shiftsTitle"), desc: t("shiftsDesc") },
     { href: "/settings/timekeeping", icon: CalendarDays, title: t("timekeepingTitle"), desc: t("timekeepingDesc") },

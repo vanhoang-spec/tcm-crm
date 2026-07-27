@@ -25,7 +25,7 @@ export default async function StockDocumentDetailPage({ params }: { params: Prom
       createdBy: { select: { fullName: true } },
       confirmedBy: { select: { fullName: true } },
       canceledBy: { select: { fullName: true } },
-      lines: { include: { item: true }, orderBy: { sort: "asc" } },
+      lines: { include: { item: true, convertToItem: { select: { code: true, name: true } } }, orderBy: { sort: "asc" } },
     },
   });
   if (!doc) notFound();
@@ -82,6 +82,7 @@ export default async function StockDocumentDetailPage({ params }: { params: Prom
                   <p className="truncate text-sm font-medium text-foreground">{l.item.name}</p>
                   <p className="font-mono text-xs text-muted-foreground">
                     {l.item.code}
+                    {l.convertToItem ? ` → ${l.convertToItem.code}` : ""}
                     {l.note ? ` · ${l.note}` : ""}
                   </p>
                 </div>

@@ -4,34 +4,76 @@ import { ArrowLeftRight, PackageOpen, Undo2, Inbox } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
-import { pickLabel, formatNumber } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { getStockOverview, getProjectHoldings, getInTransitQuantities } from "@/lib/inventory";
+import { getStockOverview, getProjectHoldings, getInTransitQuantities, getCategoryTree } from "@/lib/inventory";
+import { ITEM_CONDITION_CODES, ITEM_STATUS_CODES, expiryLevel } from "@/lib/inventory-lot";
 import { requirePermission } from "@/lib/permissions";
+
+const sel = "h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm sm:h-9";
 
 export default async function InventoryStockPage({
   searchParams,
 }: {
-  searchParams: Promise<{ wh?: string; cat?: string; q?: string }>;
+  searchParams: Promise<{ wh?: string; node?: string; status?: string; cond?: string; q?: string }>;
 }) {
   await requirePermission("inventory.view");
-  const { wh, cat, q } = await searchParams;
-  const [t, locale] = await Promise.all([getTranslations("inventory.stock"), getLocale() as Promise<Locale>]);
+  const { wh, node, status, cond, q } = await searchParams;
+  const [t, ti, locale] = await Promise.all([
+    getTranslations("inventory.stock"),
+    getTranslations("inventory.items"),
+    getLocale() as Promise<Locale>,
+  ]);
 
-  const [warehouses, categorySet, pendingCount] = await Promise.all([
+  const [warehouses, tree, pendingCount] = await Promise.all([
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: [{ isMain: "desc" }, { code: "asc" }] }),
-    prisma.optionSet.findUnique({
-      where: { code: "inventory_category" },
-      include: { items: { where: { isActive: true }, orderBy: { sort: "asc" } } },
-    }),
+    getCategoryTree(),
     prisma.stockDocument.count({ where: { type: "TRANSFER", status: "PENDING" } }),
   ]);
+  // Lọc theo node = cả nhánh con
+  const subtreeIds = (rootId: string): string[] => {
+    const ids = [rootId];
+    for (let i = 0; i < ids.length; i++) {
+      for (const n of tree) if (n.parentId === ids[i]) ids.push(n.id);
+    }
+    return ids;
+  };
   const [rows, holdings, inTransit] = await Promise.all([
-    getStockOverview({ warehouseId: wh || undefined, categoryId: cat || undefined, q }),
+    getStockOverview({
+      warehouseId: wh || undefined,
+      catNodeIds: node ? subtreeIds(node) : undefined,
+      statusCode: status || undefined,
+      conditionCode: cond || undefined,
+      q,
+    }),
     getProjectHoldings(),
     getInTransitQuantities(),
   ]);
   const inTransitTotal = Array.from(inTransit.values()).reduce((s, v) => s + v, 0);
+  const now = new Date();
+
+  const expiryBadge = (expiry: Date | null) => {
+    const level = expiryLevel(expiry, now);
+    if (!level || !expiry) return null;
+    if (level === "EXPIRED") return <Badge tone="danger">{ti("expiryExpired")}</Badge>;
+    const days = Math.floor(
+      (Date.UTC(expiry.getUTCFullYear(), expiry.getUTCMonth(), expiry.getUTCDate()) -
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 86_400_000
+    );
+    return <Badge tone={level === "RED" ? "danger" : "warning"}>{ti("expiryDays", { days })}</Badge>;
+  };
+  const lotBadges = (r: { statusCode: string | null; conditionCode: string | null; clientCode: string | null; expiryDate: Date | null }) => (
+    <>
+      {r.statusCode && (
+        <Badge tone={r.statusCode === "R" ? "success" : r.statusCode === "L" || r.statusCode === "D" ? "danger" : "neutral"}>
+          {ti(`status${r.statusCode}` as Parameters<typeof ti>[0])}
+        </Badge>
+      )}
+      {r.conditionCode && <Badge tone="neutral">{ti(`cond${r.conditionCode}` as Parameters<typeof ti>[0])}</Badge>}
+      {r.clientCode && <Badge tone="brand">{r.clientCode}</Badge>}
+      {expiryBadge(r.expiryDate)}
+    </>
+  );
 
   const quickActions = [
     { href: "/inventory/documents/new/transfer", icon: ArrowLeftRight, label: t("quickTransfer"), badge: 0 },
@@ -67,13 +109,8 @@ export default async function InventoryStockPage({
       </div>
 
       {/* Filters */}
-      <form className="flex flex-col gap-2 sm:flex-row sm:items-center" action="/inventory" method="get">
-        <select
-          name="wh"
-          defaultValue={wh ?? ""}
-          aria-label={t("filterWarehouse")}
-          className="h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm sm:h-9"
-        >
+      <form className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center" action="/inventory" method="get">
+        <select name="wh" defaultValue={wh ?? ""} aria-label={t("filterWarehouse")} className={sel}>
           <option value="">{t("allWarehouses")}</option>
           {warehouses.map((w) => (
             <option key={w.id} value={w.id}>
@@ -81,25 +118,31 @@ export default async function InventoryStockPage({
             </option>
           ))}
         </select>
-        <select
-          name="cat"
-          defaultValue={cat ?? ""}
-          aria-label={t("filterCategory")}
-          className="h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm sm:h-9"
-        >
+        <select name="node" defaultValue={node ?? ""} aria-label={t("filterCategory")} className={sel}>
           <option value="">{t("allCategories")}</option>
-          {(categorySet?.items ?? []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {pickLabel(c, locale)}
+          {tree.map((n) => (
+            <option key={n.id} value={n.id}>
+              {`${"  ".repeat(n.depth)}${n.depth > 0 ? "· " : `${n.rootCode ?? "?"} — `}${n.name}`}
             </option>
           ))}
         </select>
-        <input
-          name="q"
-          defaultValue={q ?? ""}
-          placeholder={t("searchPlaceholder")}
-          className="h-11 flex-1 rounded-lg border border-border-strong bg-surface px-2.5 text-sm sm:h-9"
-        />
+        <select name="status" defaultValue={status ?? ""} aria-label={ti("formStatus")} className={sel}>
+          <option value="">{ti("allStatuses")}</option>
+          {ITEM_STATUS_CODES.map((c) => (
+            <option key={c} value={c}>
+              {c} — {ti(`status${c}` as Parameters<typeof ti>[0])}
+            </option>
+          ))}
+        </select>
+        <select name="cond" defaultValue={cond ?? ""} aria-label={ti("formCondition")} className={sel}>
+          <option value="">{ti("allConditions")}</option>
+          {ITEM_CONDITION_CODES.map((c) => (
+            <option key={c} value={c}>
+              {c} — {ti(`cond${c}` as Parameters<typeof ti>[0])}
+            </option>
+          ))}
+        </select>
+        <input name="q" defaultValue={q ?? ""} placeholder={t("searchPlaceholder")} className={sel + " flex-1"} />
         <button type="submit" className="h-11 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white sm:h-9">
           OK
         </button>
@@ -131,10 +174,9 @@ export default async function InventoryStockPage({
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {r.isSet && <Badge tone="brand">{t("setBadge", { count: r.parts.length })}</Badge>}
+              {lotBadges(r)}
               <Badge tone={r.isReusable ? "success" : "neutral"}>{r.isReusable ? t("reusableYes") : t("reusableNo")}</Badge>
-              {r.categoryLabelVi && (
-                <Badge tone="neutral">{locale === "en" && r.categoryLabelEn ? r.categoryLabelEn : r.categoryLabelVi}</Badge>
-              )}
+              {r.catNodeName && <Badge tone="neutral">{r.catNodeName}</Badge>}
             </div>
             {r.isSet && (
               <ul className="mt-2 space-y-1 border-t border-border pt-2">
@@ -153,11 +195,12 @@ export default async function InventoryStockPage({
       {/* Desktop table */}
       <div className="hidden rounded-xl border border-border bg-surface sm:block">
         <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="sticky top-0 z-10 border-b border-border bg-surface text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-2.5">{t("colItem")}</th>
                 <th className="px-4 py-2.5">{t("colCategory")}</th>
+                <th className="px-4 py-2.5">{t("colLot")}</th>
                 <th className="px-4 py-2.5">{t("colUnit")}</th>
                 <th className="px-4 py-2.5">{t("colReusable")}</th>
                 <th className="px-4 py-2.5 text-right">{t("colQty")}</th>
@@ -166,7 +209,7 @@ export default async function InventoryStockPage({
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
                     {t("empty")}
                   </td>
                 </tr>
@@ -180,8 +223,9 @@ export default async function InventoryStockPage({
                       </p>
                       <p className="font-mono text-xs text-muted-foreground">{r.code}</p>
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {r.categoryLabelVi ? (locale === "en" && r.categoryLabelEn ? r.categoryLabelEn : r.categoryLabelVi) : "—"}
+                    <td className="px-4 py-2.5 text-muted-foreground">{r.catNodeName ?? "—"}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="inline-flex flex-wrap items-center gap-1">{lotBadges(r)}</span>
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{r.unit ?? "—"}</td>
                     <td className="px-4 py-2.5">
@@ -198,7 +242,7 @@ export default async function InventoryStockPage({
                           <span className="font-mono text-xs text-muted-foreground">{p.code}</span>{" "}
                           <span className="text-xs text-muted-foreground">{p.name}</span>
                         </td>
-                        <td colSpan={3} />
+                        <td colSpan={4} />
                         <td className="px-4 py-1.5 text-right text-xs font-medium text-foreground">{formatNumber(p.quantity, locale)}</td>
                       </tr>
                     ))}

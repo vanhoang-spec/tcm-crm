@@ -80,7 +80,7 @@ Nếu DB hỏng/muốn làm lại sạch: `npx prisma migrate reset --force` r�
 - **Enum "mềm" đi qua `OptionSet`/`OptionItem`** để admin tự sửa trong Settings (trạng thái dự án, loại task, nhóm hàng...). Chỉ hard-code khi state machine phụ thuộc (`code` cố định, label lấy từ DB qua `pickLabel`).
 
 ### 4.2 i18n — luật cứng
-- Mọi chuỗi hiển thị đều qua `next-intl`. **`messages/vi.json` và `messages/en.json` phải khớp key tuyệt đối** (hiện 2253 key mỗi bên).
+- Mọi chuỗi hiển thị đều qua `next-intl`. **`messages/vi.json` và `messages/en.json` phải khớp key tuyệt đối** (hiện 2625 key mỗi bên).
 - Kiểm tra trước mỗi lần giao việc:
 ```bash
 node -e "const vi=require('./messages/vi.json'),en=require('./messages/en.json');function f(o,p=''){let k=[];for(const x in o){const q=p?p+'.'+x:x;if(o[x]&&typeof o[x]==='object')k=k.concat(f(o[x],q));else k.push(q)}return k}const V=new Set(f(vi)),E=new Set(f(en));console.log('only vi:',[...V].filter(k=>!E.has(k)).length,'only en:',[...E].filter(k=>!V.has(k)).length)"
@@ -114,7 +114,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
-| ⑧ | Kho | `/inventory` | Xong (ledger, chuyển kho 2 bước, xuất/trả event, CSV import) |
+| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, chuyển kho 2 bước, xuất/trả event) + **Kho v2 đợt K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) — K2–K4 chưa làm, xem mục 10.10 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
@@ -215,6 +215,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 7. **CO/CE chỉ có CE tổng ở cấp bảng**, chưa có CE theo từng dòng (Phase 2 đã bàn: CE-per-line + gom N dòng CO → 1 dòng CE + make-up theo dòng + AI gợi ý markup — **chưa làm**).
 8. SQLite single-writer: giữ transaction ngắn, fan-out notification **sau** commit.
 9. **Nhắc việc nay có bộ hẹn giờ thật** (`src/instrumentation.ts` + `src/lib/job-runner.ts`) — không còn phụ thuộc "có người mở app". Hạn chế còn lại: tick 5 phút chứ không phải cron theo giờ chính xác; nếu pm2 chạy cluster thì mỗi instance có một timer, nhưng "vé chạy" (bảng `setting`, module `jobs`) bảo đảm mỗi chu kỳ chỉ một lượt chạy thật. Layout render vẫn gọi `runDueJobs()` làm lưới an toàn.
+10. **Kho v2 đang làm theo ĐỢT** (spec + 7 quyết định chủ dự án chốt 27/07/2026 — chi tiết ở PLAN-HISTORY, mục "Kho v2 — K1"). **K1 ĐÃ XONG:** cây danh mục 7 nhóm (`inventory_category_node`, node gốc mang 1 ký tự đi vào mã; admin sửa ở `/settings/inventory-categories`); item = **LÔ đồng nhất** với mã `{Nhóm}.{TrạngThái}.{TìnhTrạng}.{KH 3 ký tự}.{seq 3 số}` sinh tự động (phần thuần ở `lib/inventory-lot.ts`, seq theo tổ hợp qua `nextItemSeq`); trạng thái R/P/C/W/L/D + tình trạng B/P/S **không sửa tay** — đổi bằng phiếu CHUYỂN ĐỔI LÔ (`CONVERT`/CD, chạy số lượng giữa 2 mã, lô đích tự tìm/tạo, bộ tách phần chuyển cả bộ); phiếu XUẤT HỦY (`DESTROY`/XH, bắt buộc lý do) là đường ra duy nhất cho hàng hết hạn — ISSUE chặn hàng quá `expiryDate`; CSV import gom dòng theo lô (1 mã nhiều kho), không còn cột "Mã". **CHƯA LÀM:** K2 (role THỦ KHO + lệnh xuất đề xuất→PIC/AD-AM duyệt→thủ kho xác nhận + phiếu nhập chờ thủ kho 3 nguồn), K3 (giữ chỗ tồn kho → dòng CO giá 0 khóa SL + trần xuất của OPE + gộp cặp dòng trên báo giá BM02, duyệt = Kế toán HOẶC HR Manager), K4 (kỳ chiến dịch ≤15 ngày + điều chuyển có duyệt + chuyển holding dự án A→B + thang cảnh báo date vàng 90/cam 60/đỏ 30 vào bộ nhắc việc). Tạm thời mọi phiếu vẫn 1 bước gác `inventory.doc.create` như cũ. OptionSet `inventory_category` cũ deprecated (cột `categoryId` còn trong DB, không ai ghi).
 
 ---
 

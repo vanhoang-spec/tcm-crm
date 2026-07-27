@@ -6,11 +6,24 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { saveChatAttachment } from "@/lib/chat-storage";
-import { partItemCode, nextDocCode, creditBalance } from "@/lib/inventory";
-import { parseInventoryCsv, type CsvRowError } from "@/lib/inventory-csv";
+import {
+  ITEM_CONDITION_CODES,
+  ITEM_STATUS_CODES,
+  TCM_OWNER_SEG,
+  buildItemCode,
+  creditBalance,
+  itemCodePrefix,
+  nextDocCode,
+  nextItemSeq,
+  partItemCode,
+  resolveRootCategory,
+  type ItemConditionCode,
+  type ItemStatusCode,
+} from "@/lib/inventory";
+import { lotKey, parseInventoryCsv, type CsvRowError, type ParsedInventoryRow } from "@/lib/inventory-csv";
 import { requirePermission } from "@/lib/permissions";
 
-export type ItemFormState = { error?: string; success?: boolean };
+export type ItemFormState = { error?: string; success?: boolean; createdCode?: string };
 export type ImportFormState = {
   error?: string;
   rowErrors?: CsvRowError[];
@@ -33,60 +46,142 @@ function revalidate() {
   revalidatePath("/inventory/documents");
 }
 
+/** Trường lô chung cha + phần con (kho v2) — phần con copy nguyên để guard/filter chạy ở cấp stockable. */
+type LotFields = {
+  catNodeId: string;
+  statusCode: ItemStatusCode;
+  conditionCode: ItemConditionCode;
+  ownerClientId: string | null;
+  boundProjectId: string | null;
+  expiryDate: Date | null;
+  clientDocNo: string | null;
+  seq: number;
+};
+
+/**
+ * Tạo item = tạo LÔ: mã sinh tự động từ tổ hợp (nhóm gốc, trạng thái, tình trạng, khách) + seq.
+ * Người dùng KHÔNG tự đặt mã (quyết định Câu 1+2, 27/07).
+ */
 export async function createItem(_prev: ItemFormState, formData: FormData): Promise<ItemFormState> {
   await requirePermission("inventory.item.manage");
   const t = await getTranslations("inventory.items");
-  const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const name = String(formData.get("name") ?? "").trim();
-  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  const catNodeId = String(formData.get("catNodeId") ?? "").trim();
+  const statusCode = String(formData.get("statusCode") ?? "").trim().toUpperCase();
+  const conditionCode = String(formData.get("conditionCode") ?? "").trim().toUpperCase();
+  const ownerClientId = String(formData.get("ownerClientId") ?? "").trim() || null;
+  const boundProjectId = String(formData.get("boundProjectId") ?? "").trim() || null;
+  const expiryRaw = String(formData.get("expiryDate") ?? "").trim();
+  const clientDocNo = String(formData.get("clientDocNo") ?? "").trim() || null;
   const unit = String(formData.get("unit") ?? "").trim() || null;
   const isReusable = formData.get("isReusable") === "on";
   const partCount = Number(formData.get("partCount") ?? 1);
   const note = String(formData.get("note") ?? "").trim() || null;
-  if (!code || !name || !Number.isInteger(partCount) || partCount < 1 || partCount > 4) return { error: t("errorInvalid") };
 
+  if (
+    !name || !catNodeId ||
+    !(ITEM_STATUS_CODES as readonly string[]).includes(statusCode) ||
+    !(ITEM_CONDITION_CODES as readonly string[]).includes(conditionCode) ||
+    !Number.isInteger(partCount) || partCount < 1 || partCount > 4
+  ) {
+    return { error: t("errorInvalid") };
+  }
+  const expiryDate = expiryRaw ? new Date(expiryRaw) : null;
+  if (expiryDate && Number.isNaN(expiryDate.getTime())) return { error: t("errorInvalid") };
+
+  const node = await prisma.inventoryCategory.findUnique({ where: { id: catNodeId }, select: { isActive: true } });
+  if (!node?.isActive) return { error: t("errorInvalid") };
+  const root = await resolveRootCategory(catNodeId);
+  if (!root?.code) return { error: t("errorRootNoCode") };
+  if (root.isClientOwned && !ownerClientId) return { error: t("errorClientRequired") };
+  if (statusCode === "C" && !ownerClientId) return { error: t("errorClientRequired") };
+  if (statusCode === "P" && !boundProjectId) return { error: t("errorBoundProjectRequired") };
+
+  let clientSeg = TCM_OWNER_SEG;
+  if (ownerClientId) {
+    const client = await prisma.client.findUnique({ where: { id: ownerClientId }, select: { code: true } });
+    if (!client) return { error: t("errorInvalid") };
+    clientSeg = client.code;
+  }
+  if (boundProjectId) {
+    const project = await prisma.project.findUnique({ where: { id: boundProjectId }, select: { id: true } });
+    if (!project) return { error: t("errorInvalid") };
+  }
+
+  const lot: Omit<LotFields, "seq"> = {
+    catNodeId,
+    statusCode: statusCode as ItemStatusCode,
+    conditionCode: conditionCode as ItemConditionCode,
+    ownerClientId,
+    boundProjectId: statusCode === "P" ? boundProjectId : null,
+    expiryDate,
+    clientDocNo,
+  };
+
+  let createdCode = "";
   try {
-    const created = await prisma.$transaction(async (tx) => {
-      const parent = await tx.inventoryItem.create({ data: { code, name, categoryId, unit, isReusable, partCount, note } });
-      if (partCount > 1) {
-        for (let n = 1; n <= partCount; n++) {
-          await tx.inventoryItem.create({
-            data: {
-              code: partItemCode(code, n),
-              name: `${name} — Phần ${n}`,
-              categoryId,
-              unit,
-              isReusable,
-              parentItemId: parent.id,
-              partNo: n,
-            },
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          const prefix = itemCodePrefix(root.code!, statusCode, conditionCode, clientSeg);
+          const seq = await nextItemSeq(tx, prefix);
+          const code = buildItemCode(root.code!, statusCode, conditionCode, clientSeg, seq);
+          const parent = await tx.inventoryItem.create({
+            data: { code, name, unit, isReusable, partCount, note, ...lot, seq },
           });
-        }
+          for (let n = 1; n <= (partCount > 1 ? partCount : 0); n++) {
+            await tx.inventoryItem.create({
+              data: {
+                code: partItemCode(code, n),
+                name: `${name} — Phần ${n}`,
+                unit,
+                isReusable,
+                parentItemId: parent.id,
+                partNo: n,
+                ...lot,
+                seq,
+              },
+            });
+          }
+          createdCode = code;
+          await tx.auditLog.create({
+            data: { entityType: "inventory_item", entityId: parent.id, field: "*", action: "CREATE", changedBy: await getCurrentStaffId() },
+          });
+        });
+        break;
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && attempt < 2) continue;
+        throw e;
       }
-      return parent;
-    });
-    await audit(created.id, "CREATE");
+    }
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return { error: t("errorCodeExists") };
+    if (e instanceof Error && e.message === "SEQ_FULL") return { error: t("errorSeqFull") };
     throw e;
   }
   revalidate();
-  return { success: true };
+  return { success: true, createdCode };
 }
 
+/**
+ * Sửa lô: CHỈ các trường không nằm trong mã (tên, ĐVT, tái sử dụng, hạn dùng, số phiếu KH, note, active).
+ * Trạng thái/tình trạng đổi qua phiếu CHUYỂN ĐỔI LÔ; nhóm/khách cố định theo mã đã sinh.
+ */
 export async function updateItem(itemId: string, _prev: ItemFormState, formData: FormData): Promise<ItemFormState> {
   await requirePermission("inventory.item.manage");
   const t = await getTranslations("inventory.items");
   const name = String(formData.get("name") ?? "").trim();
-  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
   const unit = String(formData.get("unit") ?? "").trim() || null;
   const isReusable = formData.get("isReusable") === "on";
   const isActive = formData.get("isActive") === "on";
+  const expiryRaw = String(formData.get("expiryDate") ?? "").trim();
+  const clientDocNo = String(formData.get("clientDocNo") ?? "").trim() || null;
   const note = String(formData.get("note") ?? "").trim() || null;
   if (!name) return { error: t("errorInvalid") };
+  const expiryDate = expiryRaw ? new Date(expiryRaw) : null;
+  if (expiryDate && Number.isNaN(expiryDate.getTime())) return { error: t("errorInvalid") };
 
   const item = await prisma.inventoryItem.findUnique({ where: { id: itemId }, include: { parts: { select: { id: true } } } });
-  if (!item) return { error: t("errorInvalid") };
+  if (!item || item.parentItemId) return { error: t("errorInvalid") };
 
   const affectedIds = [itemId, ...item.parts.map((p) => p.id)];
   // Lật isReusable khi còn đồ ở hiện trường sẽ làm holding mất nghĩa; ngưng dùng khi còn tồn cũng vậy → chặn
@@ -103,12 +198,12 @@ export async function updateItem(itemId: string, _prev: ItemFormState, formData:
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.inventoryItem.update({ where: { id: itemId }, data: { name, categoryId, unit, isReusable, isActive, note } });
+    await tx.inventoryItem.update({ where: { id: itemId }, data: { name, unit, isReusable, isActive, expiryDate, clientDocNo, note } });
     if (item.parts.length > 0) {
-      // Lan thuộc tính danh mục xuống phần con (tên phần giữ nguyên — có thể đã sửa tay)
+      // Lan thuộc tính lô xuống phần con (tên phần giữ nguyên — có thể đã sửa tay)
       await tx.inventoryItem.updateMany({
         where: { parentItemId: itemId },
-        data: { categoryId, isReusable, isActive },
+        data: { isReusable, isActive, expiryDate, clientDocNo },
       });
     }
   });
@@ -117,6 +212,10 @@ export async function updateItem(itemId: string, _prev: ItemFormState, formData:
   return { success: true };
 }
 
+/**
+ * Import CSV kiểm kê (kho v2): mỗi dòng = (lô × kho); các dòng cùng lô gom thành MỘT item,
+ * mã sinh tự động; mỗi kho một phiếu NK. All-or-nothing như cũ.
+ */
 export async function importItemsCsv(_prev: ImportFormState, formData: FormData): Promise<ImportFormState> {
   await requirePermission("inventory.import_csv");
   const t = await getTranslations("inventory.items");
@@ -127,77 +226,154 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
   const { rows, errors } = parseInventoryCsv(buffer);
   if (rows.length > MAX_CSV_ROWS) return { error: t("errorInvalid") };
 
-  // Validate mức DB: mã đã tồn tại (kể cả mã phần con sẽ sinh ra), kho không tồn tại
   const rowErrors: CsvRowError[] = [...errors];
+  type ResolvedRow = ParsedInventoryRow & { catNodeId: string; rootCode: string; rootClientOwned: boolean; clientId: string | null };
+  const resolved: ResolvedRow[] = [];
   if (rows.length > 0) {
-    const allCodes = rows.flatMap((r) =>
-      r.partCount > 1 ? [r.code, ...Array.from({ length: r.partCount }, (_, i) => partItemCode(r.code, i + 1))] : [r.code]
-    );
-    const [existing, warehouses] = await Promise.all([
-      prisma.inventoryItem.findMany({ where: { code: { in: allCodes } }, select: { code: true } }),
+    const [nodes, clients, warehouses] = await Promise.all([
+      prisma.inventoryCategory.findMany({ where: { isActive: true } }),
+      prisma.client.findMany({ where: { isActive: true }, select: { id: true, code: true } }),
       prisma.warehouse.findMany({ where: { isActive: true }, select: { id: true, code: true } }),
     ]);
-    const existingCodes = new Set(existing.map((e) => e.code));
+    const roots = new Map(nodes.filter((n) => !n.parentId && n.code).map((n) => [n.code!.toUpperCase(), n]));
+    const byName = new Map<string, typeof nodes>();
+    for (const n of nodes) {
+      const key = n.name.toLowerCase();
+      const list = byName.get(key) ?? [];
+      list.push(n);
+      byName.set(key, list);
+    }
+    const parentById = new Map(nodes.map((n) => [n.id, n.parentId] as const));
+    const rootOf = (id: string): (typeof nodes)[number] | null => {
+      let cur: string | null = id;
+      for (let hop = 0; cur && hop < 4; hop++) {
+        const parent: string | null = parentById.get(cur) ?? null;
+        if (!parent) return nodes.find((n) => n.id === cur) ?? null;
+        cur = parent;
+      }
+      return null;
+    };
+    const clientByCode = new Map(clients.map((c) => [c.code.toUpperCase(), c.id]));
     const whByCode = new Map(warehouses.map((w) => [w.code, w.id]));
+
     for (const r of rows) {
-      if (existingCodes.has(r.code) || (r.partCount > 1 && Array.from({ length: r.partCount }, (_, i) => partItemCode(r.code, i + 1)).some((c) => existingCodes.has(c)))) {
-        rowErrors.push({ line: r.line, message: "CODE_EXISTS" });
-      } else if (!whByCode.has(r.warehouseCode)) {
+      // Nhóm: khớp code node gốc trước, sau đó tên node bất kỳ (trùng tên → bắt ghi rõ hơn)
+      let node = roots.get(r.categoryRef.toUpperCase()) ?? null;
+      if (!node) {
+        const matches = byName.get(r.categoryRef.toLowerCase()) ?? [];
+        if (matches.length > 1) {
+          rowErrors.push({ line: r.line, message: "AMBIGUOUS_CATEGORY" });
+          continue;
+        }
+        node = matches[0] ?? null;
+      }
+      if (!node) {
+        rowErrors.push({ line: r.line, message: "UNKNOWN_CATEGORY" });
+        continue;
+      }
+      const root = rootOf(node.id);
+      if (!root?.code) {
+        rowErrors.push({ line: r.line, message: "UNKNOWN_CATEGORY" });
+        continue;
+      }
+      if (r.statusCode === "P") {
+        // Lô theo chính xác dự án cần gắn dự án — CSV không có cột này, nhập tay qua form
+        rowErrors.push({ line: r.line, message: "STATUS_P_NOT_SUPPORTED" });
+        continue;
+      }
+      let clientId: string | null = null;
+      if (r.clientCode) {
+        clientId = clientByCode.get(r.clientCode) ?? null;
+        if (!clientId) {
+          rowErrors.push({ line: r.line, message: "UNKNOWN_CLIENT" });
+          continue;
+        }
+      } else if (root.isClientOwned || r.statusCode === "C") {
+        rowErrors.push({ line: r.line, message: "MISSING_CLIENT" });
+        continue;
+      }
+      if (!whByCode.has(r.warehouseCode)) {
         rowErrors.push({ line: r.line, message: "UNKNOWN_WAREHOUSE" });
+        continue;
+      }
+      resolved.push({ ...r, catNodeId: node.id, rootCode: root.code, rootClientOwned: root.isClientOwned, clientId });
+    }
+
+    // Gom lô + kiểm nhất quán trong nhóm (ĐVT / tái sử dụng / số phần / node phải trùng nhau)
+    const groups = new Map<string, ResolvedRow[]>();
+    for (const r of resolved) {
+      const key = lotKey(r);
+      const list = groups.get(key) ?? [];
+      list.push(r);
+      groups.set(key, list);
+    }
+    for (const list of groups.values()) {
+      const first = list[0];
+      const seenWh = new Set<string>();
+      for (const r of list) {
+        if (r.unit !== first.unit || r.isReusable !== first.isReusable || r.partCount !== first.partCount || r.catNodeId !== first.catNodeId) {
+          rowErrors.push({ line: r.line, message: "INCONSISTENT_LOT" });
+        } else if (seenWh.has(r.warehouseCode)) {
+          rowErrors.push({ line: r.line, message: "DUPLICATE_ROW" });
+        }
+        seenWh.add(r.warehouseCode);
       }
     }
   }
-  if (rowErrors.length > 0 || rows.length === 0) {
+  if (rowErrors.length > 0 || resolved.length === 0) {
     return { rowErrors: rowErrors.sort((a, b) => a.line - b.line) };
   }
 
-  // Resolve nhóm hàng theo code / labelVi / labelEn (không khớp → categoryId null, không chặn)
-  const categories = await prisma.optionItem.findMany({ where: { set: { code: "inventory_category" }, isActive: true } });
-  const catLookup = new Map<string, string>();
-  for (const c of categories) {
-    catLookup.set(c.code.toUpperCase(), c.id);
-    catLookup.set(c.labelVi.toLowerCase(), c.id);
-    if (c.labelEn) catLookup.set(c.labelEn.toLowerCase(), c.id);
-  }
   const warehouses = await prisma.warehouse.findMany({ where: { isActive: true }, select: { id: true, code: true } });
   const whByCode = new Map(warehouses.map((w) => [w.code, w.id]));
   const staffId = await getCurrentStaffId();
   const sourceFileKey = await saveChatAttachment(buffer, "text/csv");
   const now = new Date();
 
+  const groups = new Map<string, ResolvedRow[]>();
+  for (const r of resolved) {
+    const key = lotKey(r);
+    const list = groups.get(key) ?? [];
+    list.push(r);
+    groups.set(key, list);
+  }
+
   let importedDocs = 0;
-  // Retry P2002 (max 3) mirror createDocWithRetry ở documents/actions.ts: nextDocCode count-based có thể
-  // đụng mã phiếu NK tạo đồng thời từ request khác trong cùng tháng — retry tính lại seq mới.
-  // (P2002 do trùng mã ITEM thì retry cũng fail y hệt → ném ra như cũ, all-or-nothing giữ nguyên.)
+  // Retry P2002 (max 3): nextDocCode count-based + nextItemSeq đều có race với request khác — retry tính lại.
   const runImport = async () => await prisma.$transaction(async (tx) => {
     importedDocs = 0;
-    // 1) Tạo item (+ phần con); gom stockable id theo kho để nhập
     const byWarehouse = new Map<string, { itemId: string; quantity: number }[]>();
-    for (const r of rows) {
-      const categoryId = catLookup.get(r.categoryLabel.toUpperCase()) ?? catLookup.get(r.categoryLabel.toLowerCase()) ?? null;
+    for (const list of groups.values()) {
+      const g = list[0];
+      const clientSeg = g.clientCode || TCM_OWNER_SEG;
+      const prefix = itemCodePrefix(g.rootCode, g.statusCode, g.conditionCode, clientSeg);
+      const seq = await nextItemSeq(tx, prefix);
+      const code = buildItemCode(g.rootCode, g.statusCode, g.conditionCode, clientSeg, seq);
+      const lot = {
+        catNodeId: g.catNodeId,
+        statusCode: g.statusCode,
+        conditionCode: g.conditionCode,
+        ownerClientId: g.clientId,
+        boundProjectId: null,
+        expiryDate: g.expiryRaw ? new Date(g.expiryRaw) : null,
+        clientDocNo: g.clientDocNo || null,
+        seq,
+      };
       const parent = await tx.inventoryItem.create({
-        data: {
-          code: r.code,
-          name: r.name,
-          categoryId,
-          unit: r.unit || null,
-          isReusable: r.isReusable,
-          partCount: r.partCount,
-          note: r.note || null,
-        },
+        data: { code, name: g.name, unit: g.unit || null, isReusable: g.isReusable, partCount: g.partCount, note: g.note || null, ...lot },
       });
       const stockables: string[] = [];
-      if (r.partCount > 1) {
-        for (let n = 1; n <= r.partCount; n++) {
+      if (g.partCount > 1) {
+        for (let n = 1; n <= g.partCount; n++) {
           const part = await tx.inventoryItem.create({
             data: {
-              code: partItemCode(r.code, n),
-              name: `${r.name} — Phần ${n}`,
-              categoryId,
-              unit: r.unit || null,
-              isReusable: r.isReusable,
+              code: partItemCode(code, n),
+              name: `${g.name} — Phần ${n}`,
+              unit: g.unit || null,
+              isReusable: g.isReusable,
               parentItemId: parent.id,
               partNo: n,
+              ...lot,
             },
           });
           stockables.push(part.id);
@@ -205,16 +381,16 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
       } else {
         stockables.push(parent.id);
       }
-      if (r.quantity > 0) {
+      for (const r of list) {
+        if (r.quantity <= 0) continue;
         const whId = whByCode.get(r.warehouseCode)!;
-        const list = byWarehouse.get(whId) ?? [];
+        const linesForWh = byWarehouse.get(whId) ?? [];
         // Dòng bộ: Số lượng = số BỘ đủ → credit số đó cho TỪNG phần
-        for (const itemId of stockables) list.push({ itemId, quantity: r.quantity });
-        byWarehouse.set(whId, list);
+        for (const itemId of stockables) linesForWh.push({ itemId, quantity: r.quantity });
+        byWarehouse.set(whId, linesForWh);
       }
     }
-    // 2) Mỗi kho 1 phiếu NHẬP COMPLETED + credit tồn
-    for (const [warehouseId, lines] of byWarehouse.entries()) {
+    for (const [warehouseId, docLines] of byWarehouse.entries()) {
       const code = await nextDocCode(tx, "IMPORT", now);
       await tx.stockDocument.create({
         data: {
@@ -224,21 +400,26 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
           toWarehouseId: warehouseId,
           note: `Import CSV: ${file.name}`,
           createdById: staffId,
-          lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, sort: i })) },
+          lines: { create: docLines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, sort: i })) },
         },
       });
-      for (const l of lines) await creditBalance(tx, warehouseId, l.itemId, l.quantity);
+      for (const l of docLines) await creditBalance(tx, warehouseId, l.itemId, l.quantity);
       importedDocs++;
     }
   });
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await runImport();
-      break;
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && attempt < 2) continue;
-      throw e;
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await runImport();
+        break;
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && attempt < 2) continue;
+        throw e;
+      }
     }
+  } catch (e) {
+    if (e instanceof Error && e.message === "SEQ_FULL") return { error: t("errorSeqFull") };
+    throw e;
   }
 
   await prisma.auditLog.create({
@@ -248,9 +429,9 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
       field: "*",
       action: "CREATE",
       changedBy: staffId,
-      newValue: JSON.stringify({ file: file.name, rows: rows.length, docs: importedDocs }),
+      newValue: JSON.stringify({ file: file.name, lots: groups.size, docs: importedDocs }),
     },
   });
   revalidate();
-  return { success: true, importedItems: rows.length, importedDocs };
+  return { success: true, importedItems: groups.size, importedDocs };
 }

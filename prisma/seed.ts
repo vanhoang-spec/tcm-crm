@@ -1674,130 +1674,44 @@ async function main() {
     { code: "TOOL", labelVi: "Dụng cụ thi công", labelEn: "Tools" },
     { code: "CONSUMABLE", labelVi: "Vật tư tiêu hao", labelEn: "Consumables" },
   ]);
-  const invCat = async (code: string) =>
-    (await prisma.optionItem.findFirst({ where: { set: { code: "inventory_category" }, code } }))?.id ?? null;
-
-  const whHcm = await prisma.warehouse.upsert({
+  await prisma.warehouse.upsert({
     where: { code: "HCM" },
     update: {},
     create: { code: "HCM", name: "Kho tổng HCM", location: "TP. Hồ Chí Minh", isMain: true },
   });
-  const whDn = await prisma.warehouse.upsert({
+  await prisma.warehouse.upsert({
     where: { code: "DN" },
     update: {},
     create: { code: "DN", name: "Kho phụ Đà Nẵng", location: "Đà Nẵng" },
   });
 
-  const bandroll = await prisma.inventoryItem.upsert({
-    where: { code: "BANDROLL" },
-    update: {},
-    create: { code: "BANDROLL", name: "Bandroll sự kiện", categoryId: await invCat("CONSUMABLE"), unit: "cái", isReusable: false },
-  });
-  const barie = await prisma.inventoryItem.upsert({
-    where: { code: "BARIE01" },
-    update: {},
-    create: { code: "BARIE01", name: "Hàng rào barie", categoryId: await invCat("TOOL"), unit: "cái", isReusable: true },
-  });
-  const boothSet = await prisma.inventoryItem.upsert({
-    where: { code: "BOOTH01" },
-    update: {},
-    create: { code: "BOOTH01", name: "Booth sampling 3x3", categoryId: await invCat("BOOTH"), unit: "bộ", isReusable: true, partCount: 3 },
-  });
-  const boothParts: { id: string }[] = [];
-  for (let n = 1; n <= 3; n++) {
-    boothParts.push(
-      await prisma.inventoryItem.upsert({
-        where: { code: `BOOTH01-${n}` },
-        update: {},
-        create: {
-          code: `BOOTH01-${n}`,
-          name: `Booth sampling 3x3 — Phần ${n}`,
-          categoryId: await invCat("BOOTH"),
-          unit: "kiện",
-          isReusable: true,
-          parentItemId: boothSet.id,
-          partNo: n,
-        },
-      })
-    );
-  }
-
-  // Phiếu mẫu + số dư — chỉ tạo 1 lần (sổ cái bất biến, số dư phải khớp phiếu)
-  const invProject = createdProjects["T002DIA26A2"];
-  if ((await prisma.stockDocument.count()) === 0 && invProject) {
-    const ym = `${String(new Date().getFullYear()).slice(2)}${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-    // NK-001: nhập kho tổng HCM
-    await prisma.stockDocument.create({
-      data: {
-        code: `NK-${ym}-001`,
-        type: "IMPORT",
-        status: "COMPLETED",
-        toWarehouseId: whHcm.id,
-        note: "Nhập tồn đầu kỳ",
-        createdById: ceo.id,
-        lines: {
-          create: [
-            { itemId: bandroll.id, quantity: 100, sort: 0 },
-            { itemId: barie.id, quantity: 20, sort: 1 },
-            ...boothParts.map((p, i) => ({ itemId: p.id, quantity: 5, sort: 2 + i })),
-          ],
-        },
-      },
-    });
-    // NK-002: nhập kho phụ ĐN
-    await prisma.stockDocument.create({
-      data: {
-        code: `NK-${ym}-002`,
-        type: "IMPORT",
-        status: "COMPLETED",
-        toWarehouseId: whDn.id,
-        createdById: ceo.id,
-        lines: { create: [{ itemId: barie.id, quantity: 4, sort: 0 }] },
-      },
-    });
-    // CK-001: chuyển HCM→ĐN đang vận chuyển (PENDING — đã trừ nguồn)
-    await prisma.stockDocument.create({
-      data: {
-        code: `CK-${ym}-001`,
-        type: "TRANSFER",
-        status: "PENDING",
-        fromWarehouseId: whHcm.id,
-        toWarehouseId: whDn.id,
-        note: "Chuẩn bị event miền Trung",
-        createdById: ceo.id,
-        lines: { create: [{ itemId: barie.id, quantity: 5, sort: 0 }] },
-      },
-    });
-    // XE-001: xuất cho event T002 — quá hạn trả (demo reminder)
-    await prisma.stockDocument.create({
-      data: {
-        code: `XE-${ym}-001`,
-        type: "ISSUE",
-        status: "COMPLETED",
-        fromWarehouseId: whHcm.id,
-        projectId: invProject.id,
-        expectedReturnAt: new Date(Date.now() - 24 * 3600 * 1000),
-        note: "Đồ activation Diageo Tết",
-        createdById: ceo.id,
-        lines: {
-          create: [
-            { itemId: barie.id, quantity: 3, sort: 0 },
-            { itemId: bandroll.id, quantity: 30, sort: 1 },
-          ],
-        },
-      },
-    });
-    // Số dư khớp toàn bộ phiếu trên: HCM barie 20−5(CK)−3(XE)=12, bandroll 100−30=70; ĐN barie 4; holding T002 barie 3
-    await prisma.stockBalance.createMany({
-      data: [
-        { warehouseId: whHcm.id, itemId: bandroll.id, quantity: 70 },
-        { warehouseId: whHcm.id, itemId: barie.id, quantity: 12 },
-        ...boothParts.map((p) => ({ warehouseId: whHcm.id, itemId: p.id, quantity: 5 })),
-        { warehouseId: whDn.id, itemId: barie.id, quantity: 4 },
-      ],
-    });
-    await prisma.projectHolding.create({ data: { projectId: invProject.id, itemId: barie.id, quantity: 3 } });
-  }
+  // ── Kho v2 (spec 27/07/2026): cây danh mục 7 nhóm — idempotent theo (parentId, name).
+  // KHÔNG seed item/phiếu mẫu nữa (gỡ 27/07): mã lô sinh theo tổ hợp thật, dữ liệu thật
+  // nhập bằng kiểm kê + CSV lúc go-live; item demo format cũ sẽ thành rác trên scheme mới.
+  const catRoot = async (code: string, name: string, sort: number, isClientOwned = false) => {
+    const found = await prisma.inventoryCategory.findFirst({ where: { parentId: null, code } });
+    if (found) return found;
+    return prisma.inventoryCategory.create({ data: { code, name, sort, isClientOwned } });
+  };
+  const catChild = async (parentId: string, name: string, sort: number) => {
+    const found = await prisma.inventoryCategory.findFirst({ where: { parentId, name } });
+    if (found) return found;
+    return prisma.inventoryCategory.create({ data: { parentId, name, sort } });
+  };
+  const catP = await catRoot("P", "POSM", 0);
+  const catBooth = await catChild(catP.id, "Booth", 0);
+  for (const [i, n] of ["Cụm booth", "Sàn", "Backdrop", "Standee"].entries()) await catChild(catBooth.id, n, i);
+  await catChild(catP.id, "Kệ trưng bày", 1);
+  await catChild(catP.id, "Cổng chào", 2);
+  const catE = await catRoot("E", "Thiết bị điện tử", 1);
+  for (const [i, n] of ["LED, TV", "Âm thanh", "Ánh sáng"].entries()) await catChild(catE.id, n, i);
+  await catRoot("G", "Thiết bị games / trò chơi", 2);
+  await catRoot("C", "Đồng phục", 3);
+  await catRoot("L", "In ấn", 4);
+  const catM = await catRoot("M", "Hàng hóa / quà tặng khách gửi", 5, true);
+  await catChild(catM.id, "Hàng hóa chạy project", 0);
+  await catChild(catM.id, "Quà tặng", 1);
+  await catRoot("O", "Vật tư / vật dụng khác", 6);
 
   // ── MODULE ⑤ Chấm công & Ca làm việc — lead bộ phận + danh mục ca + loại nghỉ + tuần mẫu ──
   const deptLeads: Record<string, string> = {

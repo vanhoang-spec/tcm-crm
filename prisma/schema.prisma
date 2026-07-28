@@ -2070,7 +2070,10 @@ model StockDocumentLine {
   item          InventoryItem  @relation(fields: [itemId], references: [id])
   convertToItem InventoryItem? @relation("StockLineConvertTo", fields: [convertToItemId], references: [id], onDelete: SetNull)
 
-  @@unique([documentId, itemId]) // 1 item / 1 dòng — giữ toán tồn kho đơn giản
+  // K5 đã BỎ @@unique([documentId, itemId]): một lô ra hiện trường có thể về kho thành nhiều
+  // tình trạng (2 dòng cùng itemId nguồn, khác convertToItemId đích). Chống trùng nay ở parseLines
+  // — theo CẶP (item, trạng thái đích, tình trạng đích) với phiếu trả, theo item với phiếu khác.
+  @@index([documentId, itemId])
   @@map("stock_document_line")
 }
 

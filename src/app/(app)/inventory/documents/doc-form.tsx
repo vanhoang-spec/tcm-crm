@@ -10,12 +10,11 @@ import {
   createDestroyDoc,
   createImportDoc,
   createLossDoc,
-  createReturnDoc,
   type DocFormState,
 } from "./actions";
 
 /** Chuyển kho + xuất kho cho dự án KHÔNG còn ở đây — cả hai đi qua đề xuất + duyệt (inventory/requests). */
-export type DocKind = "IMPORT" | "ADJUST" | "RETURN" | "DESTROY" | "LOSS";
+export type DocKind = "IMPORT" | "ADJUST" | "DESTROY" | "LOSS";
 
 export type PickerItem = {
   id: string;
@@ -29,15 +28,26 @@ export type PickerItem = {
 
 export type WarehouseOption = { id: string; name: string };
 export type ProjectOption = { id: string; code: string; name: string };
-/** RETURN: đồ đang giữ theo dự án */
-export type HoldingItem = { itemId: string; code: string; name: string; unit: string | null; quantity: number };
+/** Đồ đang giữ theo dự án — phiếu BÁO MẤT chọn từ đây (phiếu TRẢ dùng return-form.tsx riêng). */
+export type HoldingItem = {
+  itemId: string;
+  code: string;
+  name: string;
+  unit: string | null;
+  quantity: number;
+  /** K5 — dữ liệu lô để form trả đồ khai lại trạng thái/tình trạng lúc về; phiếu báo mất bỏ qua. */
+  statusCode: string | null;
+  conditionCode: string | null;
+  isPart: boolean;
+  rootCode: string | null;
+  clientSeg: string;
+};
 
 type Line = { itemId: string; quantity: number; note: string };
 
 const ACTIONS: Record<DocKind, (prev: DocFormState, fd: FormData) => Promise<DocFormState>> = {
   IMPORT: createImportDoc,
   ADJUST: createAdjustDoc,
-  RETURN: createReturnDoc,
   DESTROY: createDestroyDoc,
   LOSS: createLossDoc,
 };
@@ -68,10 +78,10 @@ export function DocForm({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Nguồn hiển thị tồn: DESTROY = kho nguồn; IMPORT/ADJUST = kho đích; RETURN/LOSS = holding của dự án
+  // Nguồn hiển thị tồn: DESTROY = kho nguồn; IMPORT/ADJUST = kho đích; LOSS = holding của dự án
   const sourceWarehouseId = kind === "IMPORT" || kind === "ADJUST" ? toWarehouseId : fromWarehouseId;
   const holdings = useMemo(
-    () => (kind === "RETURN" || kind === "LOSS" ? (holdingsByProject?.[projectId] ?? []) : null),
+    () => (kind === "LOSS" ? (holdingsByProject?.[projectId] ?? []) : null),
     [kind, holdingsByProject, projectId]
   );
 
@@ -126,11 +136,11 @@ export function DocForm({
             </select>
           </label>
         )}
-        {(kind === "RETURN" || kind === "IMPORT" || kind === "ADJUST") && (
+        {(kind === "IMPORT" || kind === "ADJUST") && (
           <label className="space-y-1 text-xs text-muted-foreground">
-            {kind === "RETURN" ? t("formToWarehouse") : t("formWarehouse")}
+            {t("formWarehouse")}
             <select
-              name={kind === "IMPORT" || kind === "ADJUST" ? "warehouseId" : "toWarehouseId"}
+              name="warehouseId"
               value={toWarehouseId}
               onChange={(e) => setToWarehouseId(e.target.value)}
               className={input + " w-full"}
@@ -143,7 +153,7 @@ export function DocForm({
             </select>
           </label>
         )}
-        {(kind === "RETURN" || kind === "LOSS") && (
+        {kind === "LOSS" && (
           <label className="space-y-1 text-xs text-muted-foreground">
             {t("formProject")}
             <SearchableSelect
@@ -161,7 +171,6 @@ export function DocForm({
       </div>
 
       {kind === "ADJUST" && <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("adjustHint")}</p>}
-      {kind === "RETURN" && <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("returnHint")}</p>}
       {kind === "DESTROY" && <p className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger">{t("destroyHint")}</p>}
       {kind === "LOSS" && <p className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger">{t("lossHint")}</p>}
 
@@ -180,7 +189,7 @@ export function DocForm({
                     {info.code}
                     {kind !== "IMPORT" && kind !== "ADJUST" && (
                       <span className="ml-2">
-                        {kind === "RETURN" || kind === "LOSS" ? t("holdingAt", { count: info.available }) : t("balanceAt", { count: info.available })}
+                        {kind === "LOSS" ? t("holdingAt", { count: info.available }) : t("balanceAt", { count: info.available })}
                       </span>
                     )}
                   </p>
@@ -270,7 +279,7 @@ export function DocForm({
                         <span className="font-mono text-xs text-muted-foreground">{r.code}</span>
                       </span>
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        {kind === "RETURN" || kind === "LOSS" ? t("holdingAt", { count: r.available }) : t("balanceAt", { count: r.available })}
+                        {kind === "LOSS" ? t("holdingAt", { count: r.available }) : t("balanceAt", { count: r.available })}
                         {r.unit ? ` ${r.unit}` : ""}
                       </span>
                     </button>

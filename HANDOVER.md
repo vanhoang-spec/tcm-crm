@@ -114,7 +114,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
-| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) — K5 chưa làm, xem mục 10.11 |
+| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
@@ -237,7 +237,51 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
    - **BẢNG TIÊU HAO** `/inventory/consumption/[projectId]`, tính LẠI TỪ SỔ CÁI: tiêu hao thật = giao − trả − chuyển đi − mất − còn ở site. Trừ cả "mất" và "còn ở site" là cố ý; hàng dùng một lần không có holding nên hai khoản đó = 0 và công thức rút về (giao − trả − chuyển đi).
    - ⚠ **BUG NGÀY ĐÃ VÁ (đọc trước khi viết code có ngày)**: `utcMidnightToday()` và `utcDayDiff()` từng đọc `getUTCDate()`. Mốc UTC-midnight của app khi xem ở Asia/Saigon là **07:00 đúng ngày đó**, còn `new Date()` lúc 0–7h sáng lại rơi vào ngày UTC HÔM TRƯỚC → mọi so sánh với "bây giờ" trong khung giờ đó lệch đúng 1 ngày (bắt được lúc verify: kỳ chiến dịch mở lúc 02:41 sáng 28/07 bị đóng dấu 27/07). Nay cả hai đọc thành phần ĐỊA PHƯƠNG. Server bắt buộc `TZ=Asia/Ho_Chi_Minh` — xem mục 8.
 
-   **CHƯA LÀM:** K5 (khai lại trạng thái/tình trạng lô khi đồ từ site quay về kho). Đã cân nhắc và CẮT khỏi K4 theo nguyên tắc "không thêm thứ không ai yêu cầu": tiêu hao quy ra tiền, model `Campaign` riêng, nhận thiếu trên phiếu CH, ngưỡng 90/60/30 cấu hình được, khoá cứng giữ chỗ trước ADJUST/DESTROY/CONVERT, tự sinh dòng CO cho dự án nhận, chặn `markFinished` khi holding > 0. OptionSet `inventory_category` cũ deprecated (cột `categoryId` còn trong DB, không ai ghi).
+   **K5 ĐÃ XONG — KHO V2 HOÀN TẤT** (migration `20260730000000_kho_v2_k5`): hiện thực hoá quyết định Câu 6
+   ("hết event mang về mới nhập — thủ kho khai đúng trạng thái/tình trạng THỰC TẾ lúc về, MÃ LÔ MỚI").
+   - **Phiếu TRẢ VỀ KHO (TH) nay khai lại được từng dòng.** Dòng nào khai khác lúc xuất thì số lượng cộng vào
+     LÔ ĐÍCH (tìm-hoặc-tạo theo tổ hợp, mã kế tiếp) chứ không quay lại mã cũ — đúng Câu 2, không sửa trạng thái
+     tại chỗ. Khai trùng trạng thái nguồn = trả nguyên lô, hành vi y hệt trước K5.
+   - ⚠ **BẤT BIẾN SỐNG CÒN: `StockDocumentLine.itemId` LUÔN là lô NGUỒN, lô đích ghi ở `convertToItemId`.**
+     Ba hệ thống hạ nguồn khoá cứng vào đó và sẽ sai THẦM LẶNG nếu ai đó đảo hai vế: (a) nhả trần giữ chỗ K3
+     (`reserveFreeByItem` trừ dòng RETURN theo cặp dự án+itemId — đảo vế thì trần cạn vĩnh viễn, OPE bị chặn
+     xuất vòng hai dù hàng đầy kho); (b) cột "đã trả kho" của bảng tiêu hao K4 (`getProjectConsumption` gom
+     theo itemId — đảo vế thì lô nguồn báo tiêu hao 100% còn lô đích báo âm); (c) `debitHolding` khoá theo
+     (dự án, itemId). Cả ba đã verify bằng số sau khi K5 chạy: giữ chỗ 50 → xuất 50 → trả 30 nguyên + 20 khai
+     lại ⇒ trần nhả đủ 50, tiêu hao "giao 50 · trả 50 · tiêu hao 0".
+   - **Quyền: KHÔNG có mã mới (vẫn 109).** `createReturnDoc` giữ `requirePermission("inventory.doc.create")` ở
+     đầu — đường TRẢ NGUYÊN LÔ phải mở cho mọi vai vì đó là lối thoát kỳ chiến dịch 15 ngày và người bị nhắc
+     quá hạn phải tự bấm được. Riêng phần ĐỔI LÔ kiểm thêm `hasPermission("inventory.lot.convert")` BÊN TRONG
+     action (mirror mẫu `finance.vendor_payment.over_cap`, xem mục 10.1). Không làm vậy là nới ngầm đặc quyền
+     phân loại lại của thủ kho từ 2 vai lên 21 vai và biến phiếu chuyển đổi thành trang trí. Đã verify: đóng vai
+     Account Staff, nhét tay `toStatus/toCond` vào payload → server chặn, sổ cái không đụng; cùng vai đó trả
+     nguyên lô vẫn chạy bình thường.
+   - ⚠ **Đã BỎ `@@unique([documentId, itemId])` trên `stock_document_line`** (thay bằng `@@index`). Ca dùng
+     chính của K5 là MỘT lô về thành NHIỀU tình trạng = nhiều dòng cùng itemId nguồn, ràng buộc cũ chặn thẳng.
+     Chống trùng chuyển lên `parseLines`: theo CẶP (item, trạng thái đích, tình trạng đích) với phiếu trả, theo
+     item với mọi phiếu khác — chặt hơn ràng buộc cũ ở ca mới, y hệt ở ca cũ. Đừng khôi phục ràng buộc này.
+   - **`resolveTargetLot()` là MỘT nguồn sự thật** cho việc tìm-hoặc-tạo lô đích: phiếu CD (tồn→tồn cùng kho)
+     và phiếu TH (holding→tồn) cùng gọi. Tách ra từ khối inline cũ trong `createConvertDoc` (hồi quy đã verify:
+     CD vẫn sinh lô đích mới và chạy số đúng). Sửa quy tắc sinh mã thì sửa đúng một chỗ.
+   - **Giới hạn CỐ Ý:** phần con của bộ tách phần (`parentItemId != null`) KHÔNG khai lại lẻ được — phải chuyển
+     cả bộ bằng phiếu CD, giống guard sẵn có của CONVERT. Form hiện nhắc rõ thay vì im lặng.
+   - **Form trả đồ tách thành `return-form.tsx`** (đúng tiền lệ `convert-form.tsx` của K1); `doc-form.tsx` nay
+     chỉ còn IMPORT/ADJUST/DESTROY/LOSS và GỌN HƠN trước.
+
+   **HAI THỨ CÒN NỢ, ĐÃ BÁO CHỦ DỰ ÁN (không thuộc phạm vi K5):**
+   1. `confirmIntakeRequest` (báo hàng về DN) chỉ `creditBalance`, KHÔNG `debitHolding`. Ai còn làm theo quy
+      trình cũ ("đồ site quay về = tạo lô mới ở tab Danh mục rồi báo hàng về") sẽ cộng tồn lên lô mới trong khi
+      holding lô cũ treo vĩnh viễn → sau 15 ngày dự án bị khoá xuất. **Từ K5, đồ từ site về PHẢI đi phiếu TH;**
+      DN chỉ dùng cho hàng PO / hàng khách gửi / tồn đầu kỳ.
+   2. `requests/load.ts` (màn hình lập đề xuất) KHÔNG trừ phiếu RETURN khi tính tồn khả dụng, trong khi
+      `requests/actions.ts` (server) CÓ trừ — lệch có từ K3, không phải do K5. Hệ quả: form hiện số khả dụng
+      rộng hơn thực tế rồi server mới báo lỗi. Nên gom hai bên về một hàm dùng chung.
+
+   **Kho v2 KHÔNG CÒN đợt nào.** Những thứ đã cân nhắc và CẮT theo nguyên tắc "không thêm thứ không ai yêu
+   cầu" (muốn làm phải xin chủ dự án trước): tiêu hao quy ra tiền, model `Campaign` riêng, nhận thiếu trên
+   phiếu CH, ngưỡng 90/60/30 cấu hình được, khoá cứng giữ chỗ trước ADJUST/DESTROY/CONVERT, tự sinh dòng CO
+   cho dự án nhận, chặn `markFinished` khi holding > 0. OptionSet `inventory_category` cũ deprecated (cột
+   `categoryId` còn trong DB, không ai ghi).
 
 ---
 

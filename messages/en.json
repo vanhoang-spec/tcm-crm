@@ -2483,7 +2483,14 @@
       "errorSameProject": "Sending and receiving projects must differ",
       "errorBoundOtherProject": "Lot is bound to another project: {items}",
       "errorOtherClientGoods": "Goods belong to another client, cannot be cross-used: {items}",
-      "formLossReason": "Loss / damage reason"
+      "formLossReason": "Loss / damage reason",
+      "toStatus": "Status on return",
+      "toCondition": "Condition on return",
+      "redeclareHint": "Declare the ACTUAL status/condition as the goods come back. If it differs from when they left, the quantity moves to a new lot code — the old code is never edited. One lot returning in several conditions: add one line per condition.",
+      "redeclareNoPermHint": "You can only return goods under their original lot. Re-declaring status/condition on return requires the lot-conversion permission (warehouse keeper).",
+      "redeclarePartHint": "Part of a split set: re-declaring must move the whole set via a lot-conversion document, not one part at a time.",
+      "errorOverHolding": "Lines total more than the quantity on site: {item}",
+      "errorRedeclareForbidden": "You may not re-declare lot status/condition. Remove the re-declaration or ask the keeper to file the document."
     },
     "items": {
       "title": "Item catalog",

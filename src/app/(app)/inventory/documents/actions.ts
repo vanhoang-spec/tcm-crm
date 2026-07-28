@@ -29,11 +29,18 @@ import {
   type ItemConditionCode,
   type ItemStatusCode,
 } from "@/lib/inventory";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 
 export type DocFormState = { error?: string; success?: boolean };
 
-type LineInput = { itemId: string; quantity: number; note?: string };
+type LineInput = {
+  itemId: string;
+  quantity: number;
+  note?: string;
+  /** K5 — phiếu trả về kho: trạng thái/tình trạng THỰC TẾ lúc hàng về, khác nguồn thì sinh lô đích. */
+  toStatus?: ItemStatusCode;
+  toCond?: ItemConditionCode;
+};
 
 async function audit(entityId: string, action: string, reason?: string) {
   const staffId = await getCurrentStaffId();
@@ -49,7 +56,7 @@ function revalidate() {
 /** Parse + validate dòng hàng chung: item tồn tại, active, stockable, không trùng; qty nguyên ≠ 0 (âm chỉ cho ADJUST). */
 async function parseLines(
   formData: FormData,
-  opts: { allowNegative: boolean }
+  opts: { allowNegative: boolean; allowRedeclare?: boolean }
 ): Promise<{ lines: LineInput[]; error?: string }> {
   const t = await getTranslations("inventory.documents");
   let raw: unknown;
@@ -66,17 +73,34 @@ async function parseLines(
     const itemId = typeof l?.itemId === "string" ? l.itemId : "";
     const quantity = Number(l?.quantity);
     const note = typeof l?.note === "string" && l.note.trim() !== "" ? l.note.trim() : undefined;
-    if (!itemId || seen.has(itemId) || !Number.isInteger(quantity) || quantity === 0 || (!opts.allowNegative && quantity < 0)) {
+    // K5: phiếu trả cho phép MỘT lô nguồn về thành NHIỀU tình trạng, nên khoá chống trùng là CẶP
+    // (item, trạng thái đích, tình trạng đích). Phiếu khác giữ nguyên khoá theo item như trước.
+    const toStatus = opts.allowRedeclare && typeof l?.toStatus === "string" ? l.toStatus : "";
+    const toCond = opts.allowRedeclare && typeof l?.toCond === "string" ? l.toCond : "";
+    if (toStatus !== "" || toCond !== "") {
+      if (!(ITEM_STATUS_CODES as readonly string[]).includes(toStatus) || !(ITEM_CONDITION_CODES as readonly string[]).includes(toCond)) {
+        return { lines: [], error: t("errorInvalid") };
+      }
+    }
+    const key = opts.allowRedeclare ? `${itemId}|${toStatus}|${toCond}` : itemId;
+    if (!itemId || seen.has(key) || !Number.isInteger(quantity) || quantity === 0 || (!opts.allowNegative && quantity < 0)) {
       return { lines: [], error: t("errorInvalid") };
     }
-    seen.add(itemId);
-    lines.push({ itemId, quantity, note });
+    seen.add(key);
+    lines.push({
+      itemId,
+      quantity,
+      note,
+      ...(toStatus ? { toStatus: toStatus as ItemStatusCode, toCond: toCond as ItemConditionCode } : {}),
+    });
   }
+  // Đếm theo item PHÂN BIỆT: cùng một lô có thể xuất hiện trên nhiều dòng (K5, mỗi dòng một tình trạng đích).
+  const distinctIds = [...new Set(lines.map((l) => l.itemId))];
   const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: lines.map((l) => l.itemId) } },
+    where: { id: { in: distinctIds } },
     select: { id: true, isActive: true, partCount: true },
   });
-  if (items.length !== lines.length || items.some((i) => !i.isActive || i.partCount !== 1)) {
+  if (items.length !== distinctIds.length || items.some((i) => !i.isActive || i.partCount !== 1)) {
     return { lines: [], error: t("errorInvalid") };
   }
   return { lines };
@@ -217,6 +241,23 @@ export async function cancelTransfer(docId: string, _prev: DocFormState, _formDa
 
 // ── TRẢ VỀ KHO — 1 bước, gắn dự án ───────────────────────
 // XUẤT KHO nay đi qua tầng đề xuất (K2): inventory/requests — thủ kho xác nhận mới sinh phiếu XE.
+//
+// K5 — KHAI LẠI TRẠNG THÁI/TÌNH TRẠNG LÚC VỀ (quyết định Câu 6): hàng ra hiện trường xong hiếm khi
+// về nguyên như lúc đi. Mỗi dòng khai được trạng thái + tình trạng THỰC TẾ; khác nguồn thì số lượng
+// chạy sang LÔ ĐÍCH (mã mới) thay vì quay lại mã cũ — đúng nguyên tắc Câu 2 "mã luôn nói đúng sự
+// thật về hàng", không sửa trạng thái tại chỗ.
+//
+// ⚠ BẤT BIẾN KHÔNG ĐƯỢC PHÁ: `line.itemId` LUÔN là lô NGUỒN, lô đích ghi ở `convertToItemId`.
+// Ba hệ thống hạ nguồn khoá cứng vào đó và sẽ sai THẦM LẶNG nếu đảo hai vế:
+//   · nhả trần giữ chỗ K3 (reserveFreeByItem, requests/actions.ts) khoá theo (dự án, itemId)
+//   · cột "đã trả kho" của bảng tiêu hao K4 (getProjectConsumption) gom theo itemId
+//   · debitHolding khoá theo (dự án, itemId) — truyền lô đích là ném InsufficientStockError
+//
+// Ai được khai lại: giữ `inventory.doc.create` ở đầu để đường TRẢ NGUYÊN LÔ vẫn mở cho mọi vai —
+// đó là lối thoát kỳ chiến dịch 15 ngày, người bị nhắc quá hạn phải tự bấm được. Riêng phần ĐỔI LÔ
+// đòi thêm `inventory.lot.convert` kiểm bằng hasPermission BÊN TRONG action (mirror mẫu
+// finance.vendor_payment.over_cap, HANDOVER mục 10.1) — không thì đặc quyền phân loại lại của thủ
+// kho bị nới ngầm từ 2 vai lên 21 vai và phiếu chuyển đổi thành trang trí.
 
 export async function createReturnDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
   await requirePermission("inventory.doc.create");
@@ -225,14 +266,57 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
   const projectId = String(formData.get("projectId") ?? "");
   const note = String(formData.get("note") ?? "").trim() || null;
   if (!toWarehouseId || !projectId) return { error: t("errorInvalid") };
-  const { lines, error } = await parseLines(formData, { allowNegative: false });
+  const { lines, error } = await parseLines(formData, { allowNegative: false, allowRedeclare: true });
   if (error) return { error };
+
+  // Dòng nào thật sự ĐỔI lô? (khai trùng trạng thái+tình trạng nguồn = trả nguyên lô, không đổi gì)
+  const sources = await prisma.inventoryItem.findMany({
+    where: { id: { in: [...new Set(lines.map((l) => l.itemId))] } },
+    include: { parts: { orderBy: { partNo: "asc" } }, ownerClient: { select: { code: true } } },
+  });
+  const srcById = new Map(sources.map((s) => [s.id, s]));
+  const redeclared = lines.filter((l) => {
+    const src = srcById.get(l.itemId);
+    return !!l.toStatus && !!src && (src.statusCode !== l.toStatus || src.conditionCode !== l.toCond);
+  });
+
+  if (redeclared.length > 0) {
+    if (!(await hasPermission("inventory.lot.convert"))) return { error: t("errorRedeclareForbidden") };
+    for (const l of redeclared) {
+      const src = srcById.get(l.itemId)!;
+      // Phần con của bộ tách phần: khai lại phải chạy cả bộ, không lẻ từng phần (guard giống phiếu CD)
+      if (src.parentItemId) return { error: t("errorConvertPart", { item: src.code }) };
+      if (!src.catNodeId || !src.statusCode || !src.conditionCode) return { error: t("errorConvertLegacy", { item: src.code }) };
+    }
+  }
+  // Ký tự nhóm gốc — đọc ngoài transaction, cây danh mục không đổi trong lúc lập phiếu
+  const rootBySrc = new Map<string, string>();
+  for (const l of redeclared) {
+    const src = srcById.get(l.itemId)!;
+    if (rootBySrc.has(src.id)) continue;
+    const root = await resolveRootCategory(src.catNodeId!);
+    if (!root?.code) return { error: t("errorInvalid") };
+    rootBySrc.set(src.id, root.code);
+  }
+  const redeclaredSet = new Set(redeclared);
 
   const staffId = await getCurrentStaffId();
   let docId = "";
   try {
     await createDocWithRetry(() =>
       prisma.$transaction(async (tx) => {
+        // Lô đích giải trước, để dòng phiếu ghi được convertToItemId ngay lúc tạo
+        const ledger: { itemId: string; convertToItemId: string | null; quantity: number; note?: string }[] = [];
+        for (const l of lines) {
+          if (!redeclaredSet.has(l)) {
+            ledger.push({ itemId: l.itemId, convertToItemId: null, quantity: l.quantity, note: l.note });
+            continue;
+          }
+          const src = srcById.get(l.itemId)!;
+          const target = await resolveTargetLot(tx, src, l.toStatus!, l.toCond!, rootBySrc.get(src.id)!);
+          ledger.push({ itemId: l.itemId, convertToItemId: target.id, quantity: l.quantity, note: l.note });
+        }
+
         const code = await nextDocCode(tx, "RETURN", new Date());
         const doc = await tx.stockDocument.create({
           data: {
@@ -243,12 +327,12 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
             projectId,
             note,
             createdById: staffId,
-            lines: { create: lines.map((l, i) => ({ itemId: l.itemId, quantity: l.quantity, note: l.note, sort: i })) },
+            lines: { create: ledger.map((l, i) => ({ ...l, sort: i })) },
           },
         });
-        for (const l of lines) {
+        for (const l of ledger) {
           await debitHolding(tx, projectId, l.itemId, l.quantity); // guard: không trả quá số đang giữ
-          await creditBalance(tx, toWarehouseId, l.itemId, l.quantity);
+          await creditBalance(tx, toWarehouseId, l.convertToItemId ?? l.itemId, l.quantity);
         }
         await closeCampaignIfSettled(tx, projectId); // K4 — hàng về hết thì kỳ chiến dịch đóng
         docId = doc.id;
@@ -256,6 +340,7 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
     );
   } catch (e) {
     if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
+    if (e instanceof Error && e.message === "SEQ_FULL") return { error: t("errorSeqFull") };
     throw e;
   }
   await audit(docId, "CREATE");
@@ -491,6 +576,81 @@ type ConvertLineInput = {
   note?: string;
 };
 
+/**
+ * TÌM HOẶC TẠO lô đích cho một lần đổi trạng thái/tình trạng (quyết định Câu 2: mã luôn nói đúng
+ * sự thật về hàng, đổi trạng thái = chạy số lượng sang mã khác chứ KHÔNG sửa tại chỗ).
+ *
+ * Lô đích = cùng mọi thuộc tính nhận dạng của lô nguồn, chỉ khác trạng thái + tình trạng. Có sẵn
+ * thì dùng lại (gộp về một mã, không đẻ mã rác); chưa có thì sinh mã mới theo tổ hợp và nhân bản
+ * đủ phần con nếu nguồn là bộ tách phần.
+ *
+ * Dùng chung cho phiếu CHUYỂN ĐỔI (CD, chạy trên tồn kho) và phiếu TRẢ VỀ KHO có khai lại (TH, K5
+ * — chạy từ holding sang tồn kho). Tách ra vì K5 cần đúng khối này; để hai bản sao thì lần sau sửa
+ * quy tắc sinh mã sẽ lệch một bên.
+ */
+type LotSource = Prisma.InventoryItemGetPayload<{ include: { parts: true; ownerClient: { select: { code: true } } } }>;
+type LotTarget = Prisma.InventoryItemGetPayload<{ include: { parts: true } }>;
+
+async function resolveTargetLot(
+  tx: Prisma.TransactionClient,
+  src: LotSource,
+  toStatus: ItemStatusCode,
+  toCond: ItemConditionCode,
+  rootCode: string
+): Promise<LotTarget> {
+  const lotWhere = {
+    parentItemId: null,
+    name: src.name,
+    catNodeId: src.catNodeId,
+    statusCode: toStatus,
+    conditionCode: toCond,
+    ownerClientId: src.ownerClientId,
+    boundProjectId: src.boundProjectId,
+    expiryDate: src.expiryDate,
+    partCount: src.partCount,
+    isActive: true,
+  };
+  const found = await tx.inventoryItem.findFirst({ where: lotWhere, include: { parts: { orderBy: { partNo: "asc" } } } });
+  if (found) return found;
+
+  const clientSeg = src.ownerClient?.code ?? TCM_OWNER_SEG;
+  const prefix = itemCodePrefix(rootCode, toStatus, toCond, clientSeg);
+  const seq = await nextItemSeq(tx, prefix);
+  const code = buildItemCode(rootCode, toStatus, toCond, clientSeg, seq);
+  const lotData = {
+    name: src.name,
+    catNodeId: src.catNodeId,
+    unit: src.unit,
+    isReusable: src.isReusable,
+    statusCode: toStatus,
+    conditionCode: toCond,
+    ownerClientId: src.ownerClientId,
+    boundProjectId: src.boundProjectId,
+    expiryDate: src.expiryDate,
+    clientDocNo: src.clientDocNo,
+    seq,
+  };
+  const created = await tx.inventoryItem.create({
+    data: { code, partCount: src.partCount, ...lotData },
+    include: { parts: true },
+  });
+  if (src.partCount <= 1) return created;
+
+  for (const p of src.parts) {
+    await tx.inventoryItem.create({
+      data: {
+        code: partItemCode(code, p.partNo!),
+        ...lotData,
+        name: p.name,
+        unit: p.unit,
+        parentItemId: created.id,
+        partNo: p.partNo,
+      },
+    });
+  }
+  return (await tx.inventoryItem.findUnique({ where: { id: created.id }, include: { parts: { orderBy: { partNo: "asc" } } } }))!;
+}
+
 export async function createConvertDoc(_prev: DocFormState, formData: FormData): Promise<DocFormState> {
   await requirePermission("inventory.lot.convert");
   const t = await getTranslations("inventory.documents");
@@ -555,57 +715,7 @@ export async function createConvertDoc(_prev: DocFormState, formData: FormData):
         const ledger: { itemId: string; convertToItemId: string; quantity: number; note?: string }[] = [];
         for (const input of inputs) {
           const src = srcById.get(input.itemId)!;
-          const lotWhere = {
-            parentItemId: null,
-            name: src.name,
-            catNodeId: src.catNodeId,
-            statusCode: input.toStatus,
-            conditionCode: input.toCond,
-            ownerClientId: src.ownerClientId,
-            boundProjectId: src.boundProjectId,
-            expiryDate: src.expiryDate,
-            partCount: src.partCount,
-            isActive: true,
-          };
-          let target = await tx.inventoryItem.findFirst({ where: lotWhere, include: { parts: { orderBy: { partNo: "asc" } } } });
-          if (!target) {
-            const clientSeg = src.ownerClient?.code ?? TCM_OWNER_SEG;
-            const prefix = itemCodePrefix(rootBySrc.get(src.id)!, input.toStatus, input.toCond, clientSeg);
-            const seq = await nextItemSeq(tx, prefix);
-            const code = buildItemCode(rootBySrc.get(src.id)!, input.toStatus, input.toCond, clientSeg, seq);
-            const lotData = {
-              name: src.name,
-              catNodeId: src.catNodeId,
-              unit: src.unit,
-              isReusable: src.isReusable,
-              statusCode: input.toStatus,
-              conditionCode: input.toCond,
-              ownerClientId: src.ownerClientId,
-              boundProjectId: src.boundProjectId,
-              expiryDate: src.expiryDate,
-              clientDocNo: src.clientDocNo,
-              seq,
-            };
-            target = await tx.inventoryItem.create({
-              data: { code, partCount: src.partCount, ...lotData },
-              include: { parts: true },
-            });
-            if (src.partCount > 1) {
-              for (const p of src.parts) {
-                await tx.inventoryItem.create({
-                  data: {
-                    code: partItemCode(code, p.partNo!),
-                    ...lotData,
-                    name: p.name,
-                    unit: p.unit,
-                    parentItemId: target.id,
-                    partNo: p.partNo,
-                  },
-                });
-              }
-              target = (await tx.inventoryItem.findUnique({ where: { id: target.id }, include: { parts: { orderBy: { partNo: "asc" } } } }))!;
-            }
-          }
+          const target = await resolveTargetLot(tx, src, input.toStatus, input.toCond, rootBySrc.get(src.id)!);
           if (src.partCount > 1) {
             const tgtByNo = new Map(target.parts.map((p) => [p.partNo, p]));
             for (const p of src.parts) {

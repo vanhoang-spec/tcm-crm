@@ -2483,7 +2483,14 @@
       "errorSameProject": "Dự án gửi và dự án nhận phải khác nhau",
       "errorBoundOtherProject": "Lô đang ràng dự án khác: {items}",
       "errorOtherClientGoods": "Hàng của khách khác, không dùng chéo được: {items}",
-      "formLossReason": "Lý do mất / hỏng"
+      "formLossReason": "Lý do mất / hỏng",
+      "toStatus": "Trạng thái lúc về",
+      "toCondition": "Tình trạng lúc về",
+      "redeclareHint": "Khai đúng trạng thái/tình trạng THỰC TẾ lúc hàng về. Khác lúc xuất thì số lượng chạy sang một mã lô mới — mã cũ không bị sửa. Cùng một lô về nhiều tình trạng thì thêm nhiều dòng cho lô đó.",
+      "redeclareNoPermHint": "Bạn chỉ trả được nguyên lô như lúc xuất. Muốn khai lại trạng thái/tình trạng lúc về thì cần quyền lập phiếu chuyển đổi lô (thủ kho).",
+      "redeclarePartHint": "Phần con của bộ tách phần: khai lại phải chạy cả bộ bằng phiếu chuyển đổi lô, không khai lẻ từng phần.",
+      "errorOverHolding": "Tổng các dòng vượt số đang giữ: {item}",
+      "errorRedeclareForbidden": "Bạn không có quyền khai lại trạng thái/tình trạng lô. Bỏ phần khai lại hoặc nhờ thủ kho lập phiếu."
     },
     "items": {
       "title": "Danh mục hàng",

@@ -174,15 +174,33 @@ Sau đó verify trên browser thật (dev server) với đúng nghiệp vụ v�
 
 Server công ty: `192.168.1.111` (LAN) — domain `app.tcmbtl.com`. User `tcm`, key `~/.ssh/tcm_deploy`. Chạy bằng **pm2**.
 
-Quy trình đã dùng: **backup DB production → đồng bộ code (tar over ssh) → `prisma migrate deploy` → `npm run build` → `pm2 restart`**.
+### 8.1 Vào server — HAI đường, tuỳ mạng đang đứng
 
-- **Bộ hẹn giờ nhắc việc chạy TRONG tiến trình Next** (`src/instrumentation.ts`, chu kỳ 5 phút) — `pm2 restart` là đủ, KHÔNG cần cron của OS. Sau khi restart, kiểm `pm2 logs` phải thấy dòng `[jobs] scheduler bật`.
-- ⚠ **Server phải đặt `TZ=Asia/Ho_Chi_Minh`** (hoặc set trong env của pm2): mốc giờ 8/9/10h của `src/lib/occasions.ts` đọc bằng `now.getHours()` = giờ local của tiến trình, sai TZ là lệch 7 tiếng.
+| Mạng | Lệnh |
+|---|---|
+| Trong LAN công ty (`192.168.1.x`) | `ssh tcm@192.168.1.111` |
+| Ngoài công ty | `ssh -p 2222 tcm@115.79.195.150` |
 
-⚠️ **Chỉ deploy khi ở trong mạng LAN công ty.** Cổng 22 ở IP public (115.79.195.150) trả về host key **khác** với server đã biết → không phải máy chủ CRM, không được đẩy dữ liệu vào đó.
+Không chắc đang ở mạng nào thì xem IP máy mình (`ipconfig`), hoặc thử lần lượt cả hai.
 
-- Fingerprint server thật (192.168.1.111, ED25519): `SHA256:EWU4YXJM5NoE01QTVwLnXV2ao1Q1TG7fwvabxf39CfU`
+⚠️ **CỔNG 2222, KHÔNG PHẢI 22.** Cổng 22 ở IP public `115.79.195.150` là THIẾT BỊ KHÁC (router/modem của nhà mạng), không phải server CRM — nó trả về host key khác nên đừng tưởng server bị đổi khoá rồi bỏ qua cảnh báo. Cổng 2222 mới là cổng NAT về đúng máy chủ.
+*(Bản HANDOVER trước ghi "chỉ deploy khi ở trong LAN" vì lúc đó chưa biết cổng 2222 — cảnh báo đó không sai, chỉ thiếu. Nay đường ngoài dùng được.)*
+
+⚠️ **Bắt buộc đối chiếu fingerprint trước khi đẩy bất cứ thứ gì**, nhất là lần đầu đi đường 2222: cùng một server đi hai đường phải trình ra **cùng một khoá**. Khác là dừng ngay, không nhập gì, không đẩy gì.
+
+- Fingerprint server thật (ED25519, đúng cho CẢ hai đường): `SHA256:EWU4YXJM5NoE01QTVwLnXV2ao1Q1TG7fwvabxf39CfU`
+- Kiểm nhanh: `ssh-keyscan -p 2222 -t ed25519 115.79.195.150 | ssh-keygen -lf -`
+
+🔑 **Mật khẩu server KHÔNG nằm trong repo này** — nhận riêng qua kênh bảo mật, cùng nhóm với `.env` và `~/.ssh/tcm_deploy` (mục 1). Deploy bình thường dùng key, không cần mật khẩu. Nếu key báo `UNPROTECTED PRIVATE KEY FILE` thì siết quyền file trước: `chmod 600 ~/.ssh/tcm_deploy`.
+
+### 8.2 Quy trình deploy
+
+**backup DB production → đồng bộ code (tar over ssh) → `prisma migrate deploy` → `npm run db:seed` → `npm run build` → `pm2 restart`**
+
+- ⚠ **`npm run db:seed` là BẮT BUỘC sau `migrate deploy`**, không được bỏ: `migrate deploy` chỉ tạo bảng `role_permission` RỖNG → mọi role trừ ADMIN mất sạch quyền. Chi tiết ở mục 10.1 (BẪY DEPLOY).
 - Luôn **backup DB production trước** mọi thao tác ghi đè.
+- **Bộ hẹn giờ nhắc việc chạy TRONG tiến trình Next** (`src/instrumentation.ts`, chu kỳ 5 phút) — `pm2 restart` là đủ, KHÔNG cần cron của OS. Sau khi restart, kiểm `pm2 logs` phải thấy dòng `[jobs] scheduler bật`.
+- ⚠ **Server phải đặt `TZ=Asia/Ho_Chi_Minh`** (hoặc set trong env của pm2): mốc giờ 8/9/10h của `src/lib/occasions.ts` đọc bằng `now.getHours()` = giờ local của tiến trình, sai TZ là lệch 7 tiếng. Kho v2 K4 cũng dựa vào đây (xem mục 10.11, bug lệch ngày đã vá).
 
 ---
 

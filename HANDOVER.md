@@ -195,7 +195,18 @@ Không chắc đang ở mạng nào thì xem IP máy mình (`ipconfig`), hoặc 
 
 ### 8.2 Quy trình deploy
 
-**backup DB production → đồng bộ code (tar over ssh) → `prisma migrate deploy` → `npm run db:seed` → `npm run build` → `pm2 restart`**
+**Đã gói thành MỘT lệnh — chạy từ máy dev (Git Bash):**
+
+```bash
+bash scripts/deploy.sh          # deploy thật
+bash scripts/deploy.sh --check  # chỉ kiểm tiền trạm + kết nối, không ghi gì lên server
+```
+
+Script tự làm đúng thứ tự: tiền trạm local (repo phải sạch git + tsc + i18n parity) → tự chọn đường LAN/cổng 2222 **theo fingerprint** (sai fingerprint là dừng, không đẩy gì) → backup DB+code về CẢ máy dev → sync code (tar) → **so cây file & xoá file mồ côi** → `npm ci` nếu lockfile đổi → `prisma generate` → `next build` khi app cũ còn chạy (hỏng build thì app cũ nguyên vẹn) → `pm2 stop` → `migrate deploy` → `db:seed` → `pm2 start` → health check (HTTP + dòng `[jobs] scheduler bật`). Commit đang chạy ghi ở `~/tcm-crm/.deployed-commit`; bản build trước giữ ở `~/tcm-crm/.next-prev` để rollback; hỏng giữa chừng thì script IN SẴN lệnh khôi phục từ backup.
+
+⚠ **Script KHÔNG BAO GIỜ đụng `dev.db` / `.env` / `storage` trên server.** Từ 28/07/2026 dữ liệu thật sống trên production — lần đè DB ngày 28/07 (mục 11) là LẦN CUỐI; `dev.db` local từ nay chỉ là sandbox.
+
+Các bẫy mà script đã né sẵn (đọc để hiểu, không cần làm tay):
 
 - ⚠ **`npm run db:seed` là BẮT BUỘC sau `migrate deploy`**, không được bỏ: `migrate deploy` chỉ tạo bảng `role_permission` RỖNG → mọi role trừ ADMIN mất sạch quyền. Chi tiết ở mục 10.1 (BẪY DEPLOY).
 - Luôn **backup DB production trước** mọi thao tác ghi đè.

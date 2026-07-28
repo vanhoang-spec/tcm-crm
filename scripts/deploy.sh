@@ -113,8 +113,10 @@ SSHC "mkdir -p ~/backup && cd ~/tcm-crm \
 mkdir -p "$BACKUP_ROOT/backup-prod-$TS"
 SCPC "tcm@$HOST:~/backup/dev.db.bak-$TS" "$BACKUP_ROOT/backup-prod-$TS/dev.db" >/dev/null
 SCPC "tcm@$HOST:~/backup/app-$TS.tar.gz" "$BACKUP_ROOT/backup-prod-$TS/app.tar.gz" >/dev/null
-# Backup phải MỞ ĐƯỢC chứ không chỉ tồn tại
-STAFF_BK=$(DATABASE_URL="file:$BACKUP_ROOT/backup-prod-$TS/dev.db" node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient({datasources:{db:{url:process.env.DATABASE_URL}}});p.staff.count().then(n=>{console.log(n);return p.\$disconnect()})" 2>/dev/null || echo 0)
+# Backup phải MỞ ĐƯỢC chứ không chỉ tồn tại. Prisma trên Windows cần D:/... chứ không phải /d/...
+BK_DB="$BACKUP_ROOT/backup-prod-$TS/dev.db"
+command -v cygpath >/dev/null 2>&1 && BK_DB=$(cygpath -m "$BK_DB")
+STAFF_BK=$(DATABASE_URL="file:$BK_DB" node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient({datasources:{db:{url:process.env.DATABASE_URL}}});p.staff.count().then(n=>{console.log(n);return p.\$disconnect()})" 2>/dev/null || echo 0)
 [ "$STAFF_BK" -gt 0 ] || die "backup DB không mở được bằng Prisma — DỪNG trước khi ghi bất cứ gì"
 echo "✓ backup mở được (staff=$STAFF_BK), bản sao ở $BACKUP_ROOT/backup-prod-$TS/"
 

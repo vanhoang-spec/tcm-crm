@@ -199,6 +199,8 @@ Không chắc đang ở mạng nào thì xem IP máy mình (`ipconfig`), hoặc 
 
 - ⚠ **`npm run db:seed` là BẮT BUỘC sau `migrate deploy`**, không được bỏ: `migrate deploy` chỉ tạo bảng `role_permission` RỖNG → mọi role trừ ADMIN mất sạch quyền. Chi tiết ở mục 10.1 (BẪY DEPLOY).
 - Luôn **backup DB production trước** mọi thao tác ghi đè.
+- ⚠ **Dừng pm2 TRƯỚC khi đè `dev.db`** (`pm2 stop` → đè → build → `pm2 start`): đè lúc app còn chạy sẽ sinh lỗi `malformed database schema (orphan index)` thoáng qua — xem mục 11.
+- ⚠ **Giải nén tar KHÔNG xoá file mà local đã xoá** — sau khi sync code phải so cây file hai bên (`find src -type f | LC_ALL=C sort` + `comm`) và xoá file mồ côi, không thì build hỏng vì trang cũ tham chiếu type đã gỡ (đã xảy ra 28/07 với 2 trang gỡ ở K2/K4).
 - **Bộ hẹn giờ nhắc việc chạy TRONG tiến trình Next** (`src/instrumentation.ts`, chu kỳ 5 phút) — `pm2 restart` là đủ, KHÔNG cần cron của OS. Sau khi restart, kiểm `pm2 logs` phải thấy dòng `[jobs] scheduler bật`.
 - ⚠ **Server phải đặt `TZ=Asia/Ho_Chi_Minh`** (hoặc set trong env của pm2): mốc giờ 8/9/10h của `src/lib/occasions.ts` đọc bằng `now.getHours()` = giờ local của tiến trình, sai TZ là lệch 7 tiếng. Kho v2 K4 cũng dựa vào đây (xem mục 10.11, bug lệch ngày đã vá).
 
@@ -313,6 +315,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 - CO/CE nghiệm thu KUN: T013 "Phase 1: 5 tỉnh" — 3 revision (HĐ → Nghiệm thu → CO thật), CO 5,39 tỷ
 - Master Timeline: T013 (5 tỉnh đầu, 64 dòng) và T025 "Phase 2: 5 tỉnh tiếp theo" (5 tỉnh cuối, 65 dòng)
 
-**Đang chờ:** deploy lên server (chờ vào văn phòng dùng LAN). Chủ dự án đã chọn phương án **đè `dev.db` lên production** — nhớ backup DB production trước và báo lại số bản ghi chênh lệch trước khi ghi đè.
+**ĐÃ DEPLOY 28/07/2026 lúc ~08:00** (commit `01581ac` + HANDOVER `47f52ff`, đường cổng 2222): đè `dev.db` local lên production đúng phương án đã chọn. Hai DB seed độc lập (KHÔNG ID nào trùng) nên phần dữ liệu chỉ có trên production được CHUYỂN VỀ bằng script ánh xạ khoá nghiệp vụ: 5 tuần lịch + 145 ca làm của HR (khớp đủ 165 ca / 6 tuần / 0 bỏ qua sau import — anh Bình bảo vệ đổi email đăng nhập nên phải ánh xạ dự phòng theo MÃ nhân sự `TCM-0040`). Chat cũ trên production (2 hội thoại, 4 tin, 5 reaction) chấp nhận mất theo quyết định chủ dự án. Backup TRƯỚC khi đè giữ ở HAI nơi: `~/backup/` trên server và `D:/TCM/backup-prod-20260728-074255/` trên máy dev.
+
+Hai bài học deploy lần này (đã thành quy trình ở mục 8.2):
+- **Giải nén tar KHÔNG xoá file mà nguồn đã xoá.** Hai trang gỡ ở K2/K4 (`documents/new/issue`, `documents/new/transfer`) còn sót trên server làm build hỏng (`Type '"ISSUE"' is not assignable to type 'DocKind'`). Sau giải nén phải so cây file (`find src -type f | LC_ALL=C sort` hai bên rồi `comm`) và xoá file mồ côi.
+- **Dừng pm2 TRƯỚC khi đè `dev.db`.** Lần này đè lúc app cũ còn chạy → cửa sổ vài phút tiến trình cũ mở file mới sinh ~12 lỗi `malformed database schema (orphan index)` thoáng qua trong error log. `PRAGMA integrity_check` sau đó = `ok` trên cả DB mới lẫn backup, số liệu khớp tuyệt đối — nhưng đừng lặp lại: thứ tự đúng là `pm2 stop` → đè DB → build → `pm2 start`.
 
 **Việc lớn còn lại theo thứ tự ưu tiên gợi ý:** RBAC thật → module ⑦ Lương → CO/CE Phase 2 (CE theo dòng).

@@ -96,8 +96,8 @@ if [ "$CHECK_ONLY" = 1 ]; then
   log "--check: trạng thái server (không ghi gì)"
   SSHC "$NVM
     cd ~/tcm-crm
-    echo \"node \$(node -v) · pm2: \$(pm2 jlist 2>/dev/null | node -e 'let d=\"\";process.stdin.on(\"data\",c=>d+=c).on(\"end\",()=>{const a=JSON.parse(d).find(p=>p.name==\"$PM2_APP\");console.log(a?a.pm2_env.status:\"KHÔNG THẤY\")}')\"
-    echo \"đang chạy: \$(cat .deployed-commit 2>/dev/null | head -1 || echo '(chưa ghi — trước khi có script này)')\"
+    echo \"node \$(node -v) · pm2 $PM2_APP: \$(pm2 jlist 2>/dev/null | node -pe 'JSON.parse(require(\"fs\").readFileSync(0,\"utf8\")).find(p=>p.name==\"$PM2_APP\")?.pm2_env.status ?? \"KHÔNG THẤY\"')\"
+    echo \"đang chạy: \$(head -1 .deployed-commit 2>/dev/null || echo '(chưa ghi — trước khi có script này)')\"
     echo \"đĩa trống: \$(df -h ~ | awk 'NR==2{print \$4}')\"
     npx prisma migrate status 2>/dev/null | tail -3 || true"
   echo; echo "✓ Tiền trạm sạch, kết nối tốt. Bỏ --check để deploy thật."

@@ -107,7 +107,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 
 | # | Module | Route | Trạng thái |
 |---|---|---|---|
-| ① | Khách hàng | `/clients` | Xong (import Excel thật + báo cáo chăm sóc) + **Nhóm khách hàng** (`/clients/groups` — gom pháp nhân cùng tập đoàn, cảnh báo tập trung tính theo nhóm; xem mục 10.12) |
+| ① | Khách hàng | `/clients` | Xong (import Excel thật + báo cáo chăm sóc) + **Nhóm khách hàng** (`/clients/groups` — gom pháp nhân cùng tập đoàn, cảnh báo tập trung tính theo nhóm; xem mục 10.12) + **Kho kiến thức theo khách** (`/clients/[id]/kb` — thông tin chung / tài liệu nguồn / bài học theo chủ đề, neo vào NHÓM khi khách có nhóm; xem mục 10.13. Quiz + AI sinh bài để đợt H3) |
 | ② | Bidding & Hợp đồng | `/bidding` | Xong (CO/CE builder, make-up, margin gate, duyệt) |
 | ③ | Quản lý dự án | `/projects/[id]` | Xong — 9 tab: Tổng quan, Timeline, ORDER, CO/CE, Planning, Vận hành, Sản xuất, Thu mua, Nghiệm thu |
 | ④ | Chi phí & Công nợ | `/finance` | Xong (tạm ứng, thanh toán NCC, công nợ, cashflow) |
@@ -122,7 +122,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 80 model Prisma · 33 migration · 47 file `src/lib` · 2253 key i18n × 2 ngôn ngữ · ~85 route.
+**Quy mô:** 92 model Prisma · 54 migration · 61 file `src/lib` · 2903 key i18n × 2 ngôn ngữ · ~100 route.
 
 ---
 
@@ -228,10 +228,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 ## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
 
 1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
-   - **danh mục 109 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+   - **danh mục 111 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
      Ngoại lệ (kiểm bằng `hasPermission()` **bên trong** action đã có `requirePermission` khác ở đầu — đừng đi tìm `requirePermission` tương ứng): `finance.vendor_payment.over_cap` trong `createVendorPayment` VÀ trong `createCtvBatchPayments` (đề xuất thanh toán đợt CTV, operations/actions.ts); `finance.invoice.over_cap` trong `createClientInvoice` (trần mềm theo CO/CE sống — cửa Nghiệm thu vẫn trần cứng).
-   - **~290 điểm chặn**: ~206 server action + 72 page + 8 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
-   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 109 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
+   - **~305 điểm chặn**: ~216 server action + 76 page + 9 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
+   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 111 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
    - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
    - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
    - **Tài khoản VẬN HÀNH không có email** (thủ kho, bảo vệ — chốt 28/07/2026): `Staff.email` ở hệ này là TÊN ĐĂNG NHẬP chứ không phải hộp thư, nên KHÔNG cần cột mới. Người dùng gõ tên ngắn (`thukho`), `normalizeLoginId()` tự ghép `@tcm.local` (`lib/auth-session.ts`); `isAllowedLoginDomain` cho phép `@tcmbtl.com` + `tcm.local`/`tcm.internal`, còn `isMailableDomain` (chỉ `@tcmbtl.com`) gác "Quên mật khẩu" — tài khoản nội bộ không có hộp thư nên admin cấp lại mật khẩu ở `/settings/staff`. Ô đăng nhập là `type="text"` (để `type="email"` thì trình duyệt chặn tên không có `@`).
@@ -335,6 +335,90 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - Quản trị ở `/clients/groups`, dùng lại quyền `clients.manage` — **không mã quyền mới**. Seed nhóm AEON
       chỉ gán khi `groupId == null` nên chạy lại trên production không đè chỉnh tay của admin.
     - **CHƯA LÀM (cố ý):** lọc danh sách khách theo nhóm; gán nhóm trong import Excel; nhóm lồng nhóm.
+    - ⚠ **Gán nhóm KHÔNG đi qua form sửa khách.** Form đó bắt hồ sơ đầy đủ (MST, địa chỉ…), mà **64/68
+      khách đang thiếu hồ sơ** — gồm cả 4 pháp nhân AEON, đúng những khách cần gom nhóm nhất. Nên có
+      action hẹp `assignClientGroup` (ô chọn ngay trên trang chi tiết khách), theo đúng tiền lệ
+      `transferClient`. Đừng gỡ nó đi để "gom về một form".
+
+13. **KHO KIẾN THỨC THEO KHÁCH — H2 XONG** (migration `20260801000000_client_kb`, 4 bảng `client_kb_*`,
+    toàn bảng MỚI). Mục tiêu: nhân viên — nhất là người mới — đọc/học về khách TRƯỚC khi nhận việc;
+    PIC/Account leader nạp dần theo thời gian. Khung ĐỒNG NHẤT cho mọi khách, chỉ dữ liệu khác nhau:
+    (a) thông tin chung · (b) tài liệu nguồn (brand guideline, brief) · (c) bài học chia theo chủ đề.
+    - ⚠ **KHÔNG liên quan gì tới `/kb`** (thư viện tài liệu chung toàn công ty, model `KbDocument`).
+      Hai module trùng tên gọi nhưng khác hoàn toàn về dữ liệu, quyền và mục đích.
+    - **KB neo vào ĐỐI TƯỢNG, không neo vào khách**: `resolveKbAnchor()` trả nhóm nếu khách có nhóm,
+      ngược lại trả chính khách. Nhóm AEON học MỘT lần cho cả 4 pháp nhân. ⚠ Anchor **suy lại ở mọi
+      request**, KHÔNG cache vào cột nào — khách được gán nhóm là lập tức thấy kho nhóm, gỡ khỏi nhóm
+      là quay về kho riêng cũ (vẫn nguyên trong DB, không merge tự động).
+    - ⚠ **Bất biến XOR** (đúng một trong `clientId`/`groupId` có giá trị) chỉ được ép ở **một đường ghi
+      duy nhất** là `getOrCreateKbSpace()` — SQLite coi nhiều NULL là khác nhau nên `@unique` trên từng
+      cột KHÔNG tự ép được. Tạo space ở chỗ khác là phá bất biến trong im lặng.
+    - ⚠ **Bản nháp lọc ở TẦNG TRUY VẤN** (`loadKbSpaceView(anchor, canManage)`), không phải ở giao diện.
+      Lọc bằng CSS/JSX thì nội dung mật vẫn nằm trong HTML thô. Đã verify bằng cách đóng vai
+      Planning Executive: tiêu đề lẫn nội dung bài nháp KHÔNG có trong HTML, URL bài nháp trả 404.
+    - **Chống đọc/sửa chéo giữa các khách**: mọi action nhận `lessonId`/`topicId`/`sourceId` đều kiểm
+      lại nó thuộc đúng anchor đang mở (`lessonBelongsToAnchor`, `assertTopicInAnchor`). Không có bước
+      này thì đoán id là đọc được KB khách khác.
+    - **Nội dung bài = JSON BLOCK có cấu trúc** (heading/paragraph/bullets/terms), KHÔNG markdown/HTML —
+      repo cố ý không có markdown renderer. Render bằng JSX text node (React tự escape), Zod validate
+      lại ở mọi đường ghi. Cấu trúc này cũng để H3 cho AI sinh thẳng JSON đúng khuôn.
+    - **Quyền: 2 mã mới (109 → 111)** — `clients.kb.view` (mọi role TRỪ Thủ kho + Bảo vệ) và
+      `clients.kb.manage` (nhóm ACCOUNT + BGĐ). Backfill 2 marker `20260801_client_kb_h2_*`.
+    - ⚠ **`next.config.ts` nay khai `serverActions.bodySizeLimit: "30mb"` — ĐỪNG GỠ.** Trước H2 file này
+      KHÔNG có mục experimental, nên trần Server Action là mặc định **1MB** và MỌI trần upload khai
+      trong code chỉ là con số trên giấy: chat 10MB, KB chung 25MB, file AI 15MB, avatar 3MB. Vượt 1MB
+      là Next ném 413 TRƯỚC khi code mình chạy → người dùng thấy TRANG VỠ chứ không thấy thông báo lỗi.
+      Để 30MB chứ không phải đúng 25MB vì trần tính trên RAW body (gồm đệm multipart) — chừa dư để
+      guard trong code là chỗ báo lỗi tử tế. Nâng trần ở storage nào thì nhớ nâng cả ở đây.
+    - ⚠ **`isRestricted` trong seed PHẢI chứa `clients.kb.manage`.** Thiếu dòng đó thì mã này rơi vào
+      `baseGrantCodes` và một lần `migrate reset` + `db:seed` (hoặc dựng lại production sau sự cố) cấp
+      quyền SOẠN cho cả 20 role có base grant — ngược hẳn chính sách mà backfill đang thực thi, và
+      backfill KHÔNG siết lại được vì nó chỉ THÊM cho role đã có grant. Đã đo trên DB seed mới:
+      `clients.kb.manage` = 4 role, `clients.kb.view` = 20 role. `clients.kb.view` thì CỐ Ý nằm trong
+      base — thủ kho/bảo vệ đã bị chặn bằng `EXPLICIT_GRANTS`.
+    - ⚠ **Hằng dùng chung với ô chọn tệp (`CLIENT_KB_MIME_TYPES`, `MAX_CLIENT_KB_FILE_BYTES`) nằm ở
+      `client-kb.ts`, KHÔNG ở `client-kb-storage.ts`.** Storage import `fs/promises`; ô upload là client
+      component, kéo storage vào là build hỏng ngay (`Module not found: Can't resolve 'fs/promises'`).
+      Lỗi này **tsc và eslint đều KHÔNG bắt được** — chỉ `next build` bắt. Storage re-export lại 2 hằng
+      đó để các chỗ import cũ không phải đổi.
+    - **Bốn bẫy mất dữ liệu đã bịt** (soát nghịch trước khi commit, mỗi cái verify trên browser):
+      (a) 3 nút xoá nay đều `window.confirm` theo đúng tiền lệ `kb-panel.tsx:129`;
+      (b) `readLessonBlocks()` trả thêm cờ `corrupt` — trang SỬA hiện banner đỏ thay vì mở trình soạn
+      thảo trắng rồi để người dùng bấm Lưu ghi đè `[]` lên nội dung không đọc được;
+      (c) ô tiêu đề bài là **controlled** — React 19 gọi `requestFormReset` sau MỌI lần chạy form action
+      kể cả khi action trả lỗi, để `defaultValue` là tiêu đề vừa gõ bị trả về giá trị cũ;
+      (d) khách được gán vào nhóm mà trước đó đã có kho riêng: trang KB hiện banner đếm rõ "còn N chủ
+      đề, M tài liệu đang bị ẩn" (`countHiddenClientSpace`) thay vì im lặng như mất dữ liệu.
+    - **Ba chỗ làm module dùng được thật**: link "Sửa bài" ngay trên danh sách (trước phải đi 2 hop qua
+      trang xem) · ngày cập nhật bài + ngày tải tài liệu (dữ liệu đã nạp sẵn, trước bỏ không dùng) ·
+      `setLessonStatus` chặn ĐĂNG bài rỗng — bài mới tạo là bài rỗng và nút duy nhất trên danh sách là
+      "Đăng", không chặn thì nhân viên mở ra chỉ đọc được "Bài này chưa có nội dung".
+    - **Trình soạn thảo tự bỏ khối/ô rỗng khi gửi** (`pruneBlocks`): Zod bắt mọi trường `min(1)` mà chính
+      trình soạn thảo lại tạo khối rỗng — một ô để trống ở khối thứ 12 làm hỏng cả lần lưu với đúng một
+      câu "Nội dung bài không hợp lệ". Ô chưa điền = chưa phải nội dung. Verify: 3 khối trên màn hình
+      (1 có nội dung + 1 tiêu đề trống + 1 gạch đầu dòng trống) → payload đúng 1 khối → lưu thành công.
+    - **BIẾT VÀ CHẤP NHẬN (không vá ở H2):**
+      · `/api/client-kb/[id]` không kiểm tài liệu thuộc khách nào — HÔM NAY không phải lỗ hổng vì
+        `clients.kb.view` là quyền phẳng toàn cục và trang KB cũng nhận mọi `clientId`. Nhưng đây là
+        đường đọc DUY NHẤT không chạm `spaceId`: **ngày nào siết phạm vi theo team thì phải vá nó
+        trước** (3 dòng, dùng lại phép so neo của `lessonBelongsToAnchor`).
+      · `bodySizeLimit: "30mb"` áp cho TOÀN BỘ server action, và Next parse xong body RỒI mới gọi hàm
+        nên `requirePermission` chạy SAU khi 30MB đã nằm trong RAM. Người đã đăng nhập (kể cả 0 quyền
+        KB) bắn 20 request song song là ~600MB RSS trên tiến trình pm2 đơn lẻ. Đổi lại: không có dòng
+        này thì MỌI đường upload của app vỡ ở 1MB. Muốn cả hai thì phải chuyển 5 đường upload sang
+        route handler đọc stream — việc riêng, không thuộc H2.
+      · Ghi đè trọn bài, không kiểm phiên bản: hai người soạn cùng một bài thì người lưu sau xoá việc
+        của người lưu trước, im lặng. Rủi ro tăng đúng ở kho DÙNG CHUNG của nhóm.
+      · Xoá `Client`/`ClientGroup` bằng tay ở DB cuốn theo bản ghi tài liệu nhưng **để lại file trên
+        đĩa** (app không có đường xoá khách nên chưa gặp).
+      · **Không sắp xếp lại được thứ tự chủ đề/bài** — cột `sort` có sẵn nhưng chưa có giao diện, nên
+        thứ tự đọc = thứ tự gõ. Với KB "nạp dần theo thời gian" thì chủ đề nhập môn dễ nằm cuối. Đây là
+        thứ đáng làm sớm nhất ở H3.
+    - **CHƯA LÀM — để đợt H3:** AI sinh dàn bài/nội dung/quiz · quiz + chấm điểm + bảng tuân thủ · card
+      tuân thủ trên trang dự án · setting `clients.kb_pass_pct` · 3 mã quyền còn lại
+      (`clients.kb.quiz/generate/compliance`) · sắp xếp lại chủ đề/bài. **CẮT khỏi v1** (muốn thêm phải
+      hỏi chủ dự án): theo dõi tiến độ đọc từng người, lịch sử phiên bản bài học, glossary riêng, nhắc
+      học qua notification, gộp kho khách lẻ vào kho nhóm.
 
 ---
 

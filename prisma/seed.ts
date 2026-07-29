@@ -1941,6 +1941,11 @@ async function main() {
     code === "inventory.intake.confirm" ||
     code === "inventory.lot.convert" ||
     code === "inventory.destroy" ||
+    // KB theo khách (H2): SOẠN nội dung chỉ Account + BGĐ — xem extraByGroup. Thiếu dòng này thì
+    // seed MỚI (migrate reset, hoặc dựng lại production) cấp quyền soạn cho cả 20 role có base
+    // grant, ngược hẳn chính sách mà backfill 20260801_client_kb_h2_manage đang thực thi.
+    // `clients.kb.view` thì CỐ Ý nằm trong base — thủ kho/bảo vệ đã bị chặn bằng EXPLICIT_GRANTS.
+    code === "clients.kb.manage" ||
     code.startsWith("ai."); // (3)
 
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
@@ -1962,9 +1967,9 @@ async function main() {
 
   /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
   const extraByGroup: Record<string, string[]> = {
-    BOD: EXEC_EXTRA,
+    BOD: [...EXEC_EXTRA, "clients.kb.manage"],
     // Account duyệt đề xuất xuất kho của dự án MÌNH phụ trách (PIC/Leader) — quyết định flow K2
-    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve"],
+    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage"],
     CREATIVE: ["ai.brainstorm"],
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
     HR: ["ai.brainstorm", "ai.content"],
@@ -2109,6 +2114,18 @@ async function main() {
     // 29/07/2026 Kho v2 K4 — điều chuyển kho nay phải qua duyệt (trước K4 ai lập được là chạy
     // thẳng vào sổ cái). Người duyệt = OPE Manager (chủ vận hành kho) + BGĐ; Thủ kho KHÔNG tự duyệt
     // đề xuất của chính mình, họ chỉ chốt số thực xuất.
+    // 01/08/2026 Kho kiến thức theo khách (H2). Xem: mọi role TRỪ thủ kho + bảo vệ (họ không
+    // làm project cho khách). Soạn nội dung: nhóm Account + BGĐ.
+    {
+      key: "20260801_client_kb_h2_view",
+      codes: ["clients.kb.view"],
+      roleFilter: (r) => r.code !== "WAREHOUSE_KEEPER" && r.code !== "SECURITY_GUARD",
+    },
+    {
+      key: "20260801_client_kb_h2_manage",
+      codes: ["clients.kb.manage"],
+      roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "BOD",
+    },
     {
       key: "20260729_kho_k4_transfer_approve",
       codes: ["inventory.transfer.approve"],

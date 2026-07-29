@@ -75,6 +75,8 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "clients.transfer", module: "clients", labelVi: "Chuyển khách hàng sang người khác", labelEn: "Transfer client ownership", sensitive: true },
   { code: "clients.care", module: "clients", labelVi: "Ghi nhật ký chăm sóc", labelEn: "Add care notes" },
   { code: "clients.import", module: "clients", labelVi: "Nhập khách hàng từ Excel", labelEn: "Import clients from Excel" },
+  { code: "clients.kb.view", module: "clients", labelVi: "Xem kho kiến thức khách hàng", labelEn: "View client knowledge base" },
+  { code: "clients.kb.manage", module: "clients", labelVi: "Soạn nội dung kho kiến thức khách hàng", labelEn: "Author client knowledge base content" },
 
   // ── ② Bidding & Hợp đồng ──
   { code: "bidding.view", module: "bidding", labelVi: "Xem hồ sơ thầu & CO/CE", labelEn: "View bids & cost sheets" },

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Mail, Phone, MapPin, Star, ArrowLeftRight, Landmark } from "lucide-react";
+import { ArrowLeft, BookOpen, Pencil, Mail, Phone, MapPin, Star, ArrowLeftRight, Landmark } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import type { Locale } from "@/i18n/locales";
 import { addCareNote, addContact, assignClientGroup, transferClientAction } from "../actions";
 import { MAX_CONTACTS } from "@/lib/validators/client";
 import { getMissingClientProfileFields } from "@/lib/client-profile";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 
 const TEAM_TONE: Record<string, "brand" | "success" | "warning"> = {
   A1: "brand",
@@ -27,6 +27,9 @@ const STATUS_TONE: Record<string, "brand" | "success" | "neutral"> = {
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("clients.view");
   const { id } = await params;
+  // Nút KB phải ẩn theo quyền: requirePermission của trang KB KHÔNG trả 403 mà điều hướng sang
+  // SAFE_LANDING, nên để nút cho người không có quyền bấm là đá họ khỏi trang khách đang xem.
+  const canViewKb = await hasPermission("clients.kb.view");
 
   const client = await prisma.client.findUnique({
     where: { id },
@@ -130,10 +133,18 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             </Badge>
           </div>
         </div>
-        <LinkButton href={`/clients/${client.id}/edit`} variant="secondary" size="sm">
-          <Pencil className="h-3.5 w-3.5" />
-          {t("editInfo")}
-        </LinkButton>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {canViewKb && (
+            <LinkButton href={`/clients/${client.id}/kb`} variant="secondary" size="sm">
+              <BookOpen className="h-3.5 w-3.5" />
+              {t("openKb")}
+            </LinkButton>
+          )}
+          <LinkButton href={`/clients/${client.id}/edit`} variant="secondary" size="sm">
+            <Pencil className="h-3.5 w-3.5" />
+            {t("editInfo")}
+          </LinkButton>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

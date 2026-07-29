@@ -209,6 +209,8 @@ model Staff {
   kpiScores                   KpiScore[]                @relation("KpiScoreStaff")
   kpiScoresGiven              KpiScore[]                @relation("KpiScoreScoredBy")
   kpiPeriodsClosed            KpiPeriod[]               @relation("KpiPeriodClosedBy")
+  clientKbLessonsUpdated      ClientKbLesson[]          @relation("ClientKbLessonUpdatedBy")
+  clientKbSourcesUploaded     ClientKbSource[]          @relation("ClientKbSourceUploadedBy")
 
   @@map("staff")
 }
@@ -373,6 +375,7 @@ model ClientGroup {
   updatedAt DateTime @updatedAt
 
   clients Client[]
+  kbSpace ClientKbSpace?
 
   @@map("client_group")
 }
@@ -416,6 +419,7 @@ model Client {
   careNotes CareNote[]
   invoices  ClientInvoice[]
   inventoryItemsOwned InventoryItem[] @relation("InventoryItemOwnerClient")
+  kbSpace             ClientKbSpace?
 
   @@index([groupId])
   @@map("client")
@@ -2436,4 +2440,100 @@ model KpiPeriod {
 
   @@unique([periodCode, poolKey])
   @@map("kpi_period")
+}
+
+// ─────────────────────────────────────────────────────────
+// KNOWLEDGE BASE THEO KHÁCH HÀNG (H2)
+//
+// Khác hẳn `KbDocument` (/kb) — đó là thư viện dùng chung toàn công ty. Đây là kho kiến thức
+// RIÊNG của từng khách: thông tin chung, brand guideline, các term đặc thù, dạng bài học chia
+// theo topic để nhân viên đọc/nắm trước khi làm project cho khách đó.
+//
+// NEO VÀO NHÓM KHI KHÁCH CÓ NHÓM: 4 pháp nhân AEON dùng chung một kho — PIC nạp một lần,
+// nhân viên học một lần là đủ cho cả 4. Khách lẻ thì neo vào chính khách.
+// ─────────────────────────────────────────────────────────
+
+/// "Không gian KB" của MỘT đối tượng: hoặc 1 nhóm, hoặc 1 khách lẻ.
+///
+/// XOR (đúng một trong hai cột) được ép ở `getOrCreateKbSpace` — đường ghi DUY NHẤT tạo space.
+/// Hai `@unique` một-cột bảo đảm mỗi clientId/groupId cụ thể chỉ có tối đa một space; SQLite coi
+/// các NULL là khác nhau nên nhiều space khách-lẻ vẫn sống chung trong bảng.
+///
+/// Trang KB resolve đối tượng MỖI request (`resolveKbAnchor`) — khách vào/ra nhóm là tự nhìn
+/// thấy đúng kho của mình, KHÔNG copy dữ liệu. Space cũ của khách lẻ vẫn còn nguyên trong DB,
+/// chỉ bị ẩn khi khách đang thuộc nhóm; gỡ khỏi nhóm thì thấy lại.
+model ClientKbSpace {
+  id          String   @id @default(cuid())
+  clientId    String?  @unique
+  groupId     String?  @unique
+  generalNote String? // "Thông tin chung" PIC tự viết, bổ sung cho hồ sơ khách đã có trong CRM
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client  Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  group   ClientGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  topics  ClientKbTopic[]
+  sources ClientKbSource[]
+
+  @@map("client_kb_space")
+}
+
+/// Nhóm bài học theo CHỦ ĐỀ. Quiz của topic (H3) sẽ treo thẳng vào đây, không có bảng Quiz riêng.
+model ClientKbTopic {
+  id        String   @id @default(cuid())
+  spaceId   String
+  name      String
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  space   ClientKbSpace    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  lessons ClientKbLesson[]
+
+  @@index([spaceId, sort])
+  @@map("client_kb_topic")
+}
+
+/// Bài học. Nội dung là JSON BLOCKS có cấu trúc (heading/paragraph/bullets/terms) — KHÔNG phải
+/// markdown/HTML. Repo cố ý không có markdown renderer (chống XSS, xem ai-shared.tsx); block
+/// được render bằng JSX text node nên React tự escape. Zod validate ở MỌI đường ghi.
+model ClientKbLesson {
+  id          String   @id @default(cuid())
+  topicId     String
+  title       String
+  blocksJson  String   @default("[]")
+  status      String   @default("DRAFT") // DRAFT | PUBLISHED — người học chỉ thấy PUBLISHED
+  source      String   @default("MANUAL") // MANUAL | AI — nguồn sinh lần đầu (AI ở H3)
+  sort        Int      @default(0)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  topic     ClientKbTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  updatedBy Staff?        @relation("ClientKbLessonUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([topicId, sort])
+  @@map("client_kb_lesson")
+}
+
+/// Tài liệu nguồn: brand guideline, brief khách gửi từ trước tới giờ. Vừa để người đọc tải về,
+/// vừa là NGUYÊN LIỆU cho phần sinh bài bằng AI ở H3 (trích text qua lib/ai/extract-text.ts).
+/// File nằm ở storage/client-kb-uploads, chỉ đọc qua route có auth /api/client-kb/[id].
+model ClientKbSource {
+  id           String   @id @default(cuid())
+  spaceId      String
+  kind         String // BRAND_GUIDELINE | BRIEF | OTHER — hard-code vì đi vào logic prompt AI
+  fileKey      String
+  fileMime     String
+  fileName     String
+  fileSize     Int
+  note         String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  space      ClientKbSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  uploadedBy Staff?        @relation("ClientKbSourceUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([spaceId, kind])
+  @@map("client_kb_source")
 }

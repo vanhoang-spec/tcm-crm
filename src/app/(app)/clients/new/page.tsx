@@ -10,7 +10,7 @@ import { requirePermission } from "@/lib/permissions";
 
 export default async function NewClientPage() {
   await requirePermission("clients.view");
-  const [teams, industrySet, statusSet, classificationSet, staff, brands, t, locale] = await Promise.all([
+  const [teams, industrySet, statusSet, classificationSet, staff, brands, groups, t, locale] = await Promise.all([
     prisma.team.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
     prisma.optionSet.findUnique({
       where: { code: "industry" },
@@ -26,6 +26,7 @@ export default async function NewClientPage() {
     }),
     prisma.staff.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
     prisma.brand.findMany({ orderBy: { name: "asc" } }),
+    prisma.clientGroup.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     getTranslations("clients.new"),
     getLocale() as Promise<Locale>,
   ]);
@@ -50,6 +51,7 @@ export default async function NewClientPage() {
           statuses={(statusSet?.items ?? []).map((i) => ({ id: i.id, label: pickLabel(i, locale) }))}
           classifications={(classificationSet?.items ?? []).map((i) => ({ id: i.id, label: pickLabel(i, locale) }))}
           potentialStatusId={potentialStatus?.id}
+          groups={groups.map((g) => ({ id: g.id, label: g.name }))}
           introducers={staff.map((s) => ({ id: s.id, label: s.fullName }))}
           brands={brands.map((b) => b.name)}
           submitLabel={t("submit")}

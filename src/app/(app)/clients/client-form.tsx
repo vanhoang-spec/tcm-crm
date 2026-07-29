@@ -22,6 +22,7 @@ export function ClientForm({
   classifications,
   potentialStatusId,
   introducers,
+  groups,
   brands,
   defaultValues,
   submitLabel,
@@ -35,6 +36,8 @@ export function ClientForm({
   /** dùng khi mode==="create": statusId luôn = Tiềm năng, không cho chọn tay. */
   potentialStatusId?: string;
   introducers: Option[];
+  /** Nhóm khách hàng đang active — rỗng nghĩa là khách lẻ. */
+  groups: Option[];
   brands: string[];
   defaultValues?: {
     code?: string;
@@ -45,6 +48,7 @@ export function ClientForm({
     statusId?: string;
     classificationId?: string;
     ownerTeamId?: string;
+    groupId?: string;
     introducerId?: string;
     isNew?: boolean;
     paymentTermDays?: number;
@@ -184,6 +188,16 @@ export function ClientForm({
             </select>
           </Field>
         )}
+
+        <Field label={t("group")} error={state.fieldErrors?.groupId} hint={t("groupHint")}>
+          <SearchableSelect
+            name="groupId"
+            defaultValue={keep("groupId", defaultValues?.groupId) ?? ""}
+            placeholder={t("selectGroup")}
+            allowClear
+            options={[{ value: "", label: t("groupNone") }, ...groups.map((g) => ({ value: g.id, label: g.label }))]}
+          />
+        </Field>
 
         <Field label={t("introducer")} error={state.fieldErrors?.introducerId} required>
           <SearchableSelect

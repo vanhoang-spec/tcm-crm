@@ -354,6 +354,29 @@ model Notification {
 // MODULE ① — KHÁCH HÀNG
 // ─────────────────────────────────────────────────────────
 
+/// NHÓM KHÁCH HÀNG kiểu "family" — vd AEON gom 4 pháp nhân AHD/AHL/ALB/AHP.
+///
+/// CHỈ là nhãn gom + chỗ neo Knowledge Base dùng chung. Hợp đồng, hoá đơn, công nợ, mã lô kho
+/// và mã dự án VẪN theo TỪNG pháp nhân (Client) như trước — cố ý không làm cây cha–con vì
+/// công ty mẹ không đứng tên ký thay con ở nghiệp vụ thật.
+///
+/// ⚠ `code` ở đây 2–10 ký tự và KHÔNG tham gia bất kỳ mã sinh tự động nào. Đừng nhầm với
+/// `Client.code` 3 ký tự — mã đó nằm trong mã lô kho (lib/inventory-lot.ts) và mã dự án
+/// (lib/bidding.ts), đổi là hỏng dữ liệu cũ.
+model ClientGroup {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  note      String?
+  isActive  Boolean  @default(true) // tắt = ẩn khỏi ô chọn khi gán mới; member cũ giữ nguyên nhóm
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clients Client[]
+
+  @@map("client_group")
+}
+
 model Client {
   id               String   @id @default(cuid())
   code             String   @unique // đúng 3 ký tự — vd LOF, DHG, CTL (validate ở app layer)
@@ -368,6 +391,7 @@ model Client {
   isNew            Boolean  @default(true)
   introducerId     String? // null = "Khác" (không phải nhân viên công ty) — liên quan tính commission, xem CommissionScheme
   ownerTeamId      String? // team đang phụ trách — null = khách cấp BGĐ/chưa giao team ACC cụ thể (mirror Project.ownerTeamId)
+  groupId          String? // ClientGroup — null = khách lẻ. Chỉ để gom nhóm + neo KB dùng chung.
   paymentTermDays  Int      @default(90)
   address          String?
   phone            String?
@@ -383,7 +407,8 @@ model Client {
   status         OptionItem  @relation("ClientStatus", fields: [statusId], references: [id])
   classification OptionItem? @relation("ClientClassification", fields: [classificationId], references: [id])
   introducer     Staff?      @relation("ClientIntroducer", fields: [introducerId], references: [id])
-  ownerTeam      Team?       @relation("ClientOwnerTeam", fields: [ownerTeamId], references: [id])
+  ownerTeam      Team?        @relation("ClientOwnerTeam", fields: [ownerTeamId], references: [id])
+  group          ClientGroup? @relation(fields: [groupId], references: [id])
 
   contacts  Contact[]
   transfers ClientTransfer[]
@@ -392,6 +417,7 @@ model Client {
   invoices  ClientInvoice[]
   inventoryItemsOwned InventoryItem[] @relation("InventoryItemOwnerClient")
 
+  @@index([groupId])
   @@map("client")
 }
 

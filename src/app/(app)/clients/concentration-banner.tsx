@@ -11,7 +11,12 @@ import type { Locale } from "@/i18n/locales";
  *
  * Trước đây là băng "sẽ bật khi có dữ liệu doanh thu" bật cứng bằng `concentrationReady = false`.
  * Nay module ④ đã có ClientInvoice nên tính thật: doanh thu = tổng đã xuất hóa đơn trong năm tài
- * chính hiện tại, so tỉ trọng trong TEAM của khách. Không có khách nào vượt ngưỡng → không hiện gì.
+ * chính hiện tại. Không đối tượng nào vượt ngưỡng → không hiện gì.
+ *
+ * H1: gom theo NHÓM khách hàng. Rủi ro thật nằm ở nhóm — AEON 4 pháp nhân ký riêng, mỗi bên
+ * ~15% nên trước đây không bao giờ vượt ngưỡng, trong khi mất cả nhóm là mất 60%.
+ * ⚠ Nhóm vắt nhiều team thì mẫu số là TOÀN CÔNG TY (xem findConcentrationRisks) — nhãn dòng phải
+ * nói rõ để BGĐ không đọc nhầm hai loại % là cùng một thước.
  */
 export async function ConcentrationBanner() {
   const [t, locale, thresholdPct] = await Promise.all([
@@ -25,7 +30,15 @@ export async function ConcentrationBanner() {
     where: { voidedAt: null, project: { fiscalYear } },
     select: {
       amount: true,
-      client: { select: { id: true, name: true, ownerTeam: { select: { code: true } } } },
+      client: {
+        select: {
+          id: true,
+          name: true,
+          groupId: true,
+          ownerTeam: { select: { code: true } },
+          group: { select: { name: true } },
+        },
+      },
     },
   });
   if (invoices.length === 0) return null;
@@ -37,6 +50,8 @@ export async function ConcentrationBanner() {
       clientName: inv.client.name,
       teamCode: inv.client.ownerTeam?.code ?? null,
       revenue: 0,
+      groupId: inv.client.groupId,
+      groupName: inv.client.group?.name ?? null,
     };
     cur.revenue += toNum(inv.amount);
     byClient.set(inv.client.id, cur);
@@ -53,13 +68,20 @@ export async function ConcentrationBanner() {
         <span className="text-muted-foreground">{t("desc", { pct: formatNumber(thresholdPct, locale), year: fiscalYear })}</span>
         <ul className="mt-1.5 space-y-0.5">
           {risks.map((r) => (
-            <li key={r.clientName} className="text-xs text-warning">
-              {t("row", {
-                client: r.clientName,
-                team: r.teamCode ?? "—",
-                pct: formatPercent(r.sharePct, locale),
-                amount: formatNumber(r.revenue, locale),
-              })}
+            <li key={r.subjectName} className="text-xs text-warning">
+              {r.teamCode
+                ? t("rowTeam", {
+                    subject: r.subjectName,
+                    team: r.teamCode,
+                    pct: formatPercent(r.sharePct, locale),
+                    amount: formatNumber(r.revenue, locale),
+                  })
+                : t("rowCompany", {
+                    subject: r.subjectName,
+                    members: r.memberCount,
+                    pct: formatPercent(r.sharePct, locale),
+                    amount: formatNumber(r.revenue, locale),
+                  })}
             </li>
           ))}
         </ul>

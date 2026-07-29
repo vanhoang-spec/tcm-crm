@@ -55,6 +55,7 @@ async function parseClientForm(formData: FormData) {
     statusId: String(formData.get("statusId") ?? ""),
     classificationId: String(formData.get("classificationId") ?? ""),
     ownerTeamId: String(formData.get("ownerTeamId") ?? ""),
+    groupId: String(formData.get("groupId") ?? ""),
     introducerId: String(formData.get("introducerId") ?? ""),
     isNew: formData.get("isNew") === "on",
     paymentTermDays: String(formData.get("paymentTermDays") ?? "90"),
@@ -143,6 +144,7 @@ export async function createClient(_prevState: ClientFormState, formData: FormDa
         statusId,
         classificationId: data.classificationId,
         ownerTeamId: data.ownerTeamId,
+        groupId: toNullable(data.groupId),
         introducerId: resolveIntroducerId(data.introducerId),
         isNew: data.isNew,
         paymentTermDays: data.paymentTermDays,
@@ -213,6 +215,7 @@ export async function updateClient(
     statusId: data.statusId,
     classificationId: data.classificationId,
     ownerTeamId: data.ownerTeamId,
+    groupId: toNullable(data.groupId),
     introducerId: resolveIntroducerId(data.introducerId),
     isNew: data.isNew,
     paymentTermDays: data.paymentTermDays,
@@ -323,6 +326,48 @@ export async function addContact(clientId: string, formData: FormData) {
     data: { clientId, name, title, phone, email, isPrimary },
   });
 
+  revalidatePath(`/clients/${clientId}`);
+}
+
+/**
+ * Gán / gỡ NHÓM cho một khách — action riêng, KHÔNG đi qua form sửa khách.
+ *
+ * Lý do tách (giống hệt tiền lệ transferClient): form sửa khách bắt buộc hồ sơ đầy đủ (MST, địa
+ * chỉ, điện thoại, email, tài khoản ngân hàng). 64/68 khách hiện có đến từ import Excel nên thiếu
+ * các trường đó — đi qua form thì Zod chặn và KHÔNG gán nhóm được cho đúng những khách cần nhất
+ * (cả 4 pháp nhân AEON đều nằm trong nhóm 64 này). Gán nhóm là thao tác phân loại, không liên
+ * quan tới việc hồ sơ đã đủ để ký hợp đồng hay chưa.
+ */
+export async function assignClientGroup(clientId: string, formData: FormData) {
+  await requirePermission("clients.manage");
+  const raw = String(formData.get("groupId") ?? "").trim();
+  const groupId = raw === "" ? null : raw;
+
+  const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId }, select: { groupId: true } });
+  if (client.groupId === groupId) return;
+  // Chỉ nhận nhóm đang BẬT — nhóm đã tắt vẫn giữ member cũ nhưng không nhận member mới.
+  if (groupId) {
+    const g = await prisma.clientGroup.findUnique({ where: { id: groupId }, select: { isActive: true } });
+    if (!g?.isActive) return;
+  }
+
+  const staffId = await getCurrentStaffId();
+  await prisma.$transaction([
+    prisma.client.update({ where: { id: clientId }, data: { groupId } }),
+    prisma.auditLog.create({
+      data: {
+        entityType: "client",
+        entityId: clientId,
+        field: "groupId",
+        oldValue: client.groupId,
+        newValue: groupId,
+        action: "UPDATE",
+        changedBy: staffId,
+      },
+    }),
+  ]);
+
+  revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);
 }
 

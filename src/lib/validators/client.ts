@@ -32,6 +32,8 @@ export function getClientFormSchema(t: (key: string) => string) {
     phone: z.string().trim().regex(PHONE_REGEX, t("phoneFormat")),
     email: z.string().trim().email(t("emailFormat")),
     bankAccount: z.string().trim().min(1, t("bankAccountRequired")),
+    /** Nhóm khách hàng — rỗng = khách lẻ. Không bắt buộc: phần lớn khách không thuộc nhóm nào. */
+    groupId: z.string().trim().optional().or(z.literal("")),
     note: z.string().trim().optional().or(z.literal("")),
   });
 }

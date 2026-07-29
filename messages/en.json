@@ -110,12 +110,14 @@
       "teamUnassigned": "Unassigned",
       "importLink": "Import from Excel",
       "profileIncomplete": "Incomplete profile",
-      "profileIncompleteHint": "Missing tax code/address/bank account/industry/classification — needed before signing a contract."
+      "profileIncompleteHint": "Missing tax code/address/bank account/industry/classification — needed before signing a contract.",
+      "groupsBtn": "Client groups"
     },
     "concentration": {
       "title": "Client concentration warning (FR-11)",
-      "desc": "Clients at or above {pct}% of their team's invoiced revenue in {year}:",
-      "row": "{client} · Team {team} — {pct}% of team revenue ({amount})"
+      "desc": "Subjects taking {pct}% or more of invoiced revenue in {year} (client groups counted as one):",
+      "rowTeam": "{subject} · Team {team} — {pct}% of team revenue ({amount})",
+      "rowCompany": "{subject} ({members} legal entities across teams) — {pct}% of COMPANY-WIDE revenue ({amount})"
     },
     "new": {
       "backToList": "Back to list",
@@ -164,7 +166,11 @@
       "contactName": "Full name *",
       "contactTitle": "Title *",
       "contactPhone": "Phone *",
-      "contactEmail": "Email *"
+      "contactEmail": "Email *",
+      "group": "Client group",
+      "groupHint": "Groups legal entities of one corporation (e.g. AEON). Leave empty for standalone clients. Clients in a group share the group knowledge base.",
+      "selectGroup": "Select a group…",
+      "groupNone": "— No group —"
     },
     "detail": {
       "backToList": "Back to list",
@@ -220,7 +226,14 @@
         "bankAccount": "Bank account",
         "industryId": "Industry",
         "classificationId": "Vendor-list classification"
-      }
+      },
+      "groupBadge": "Group {name}",
+      "groupSiblingsTitle": "Same group {name} ({count})",
+      "groupSiblingsHint": "Other legal entities in the same corporation — each still signs contracts and carries its own receivables.",
+      "groupSiblingsEmpty": "No other legal entity in this group yet.",
+      "groupAssignTitle": "Client group",
+      "groupAssignDesc": "Assign or remove this client's group. Works even when the client profile is not yet complete — grouping is classification, not a contract prerequisite.",
+      "groupAssignBtn": "Save group"
     },
     "import": {
       "title": "Import clients from Excel",
@@ -252,6 +265,28 @@
       "picReviewTitle": "Review PIC 2/3/4 (not imported automatically)",
       "picReviewDesc": "PIC 2/3/4 in the file are misaligned with their client rows — download this file to review manually (with a suggested client match by email domain), then add contacts yourself on each client's detail page.",
       "picReviewButton": "Download PIC 2/3/4 review file"
+    },
+    "groups": {
+      "title": "Client groups",
+      "subtitle": "Group legal entities of one corporation so concentration risk is seen for the whole family. Contracts, invoices and receivables stay per entity.",
+      "backToList": "Back to client list",
+      "colCode": "Group code",
+      "colName": "Group name",
+      "colNote": "Note",
+      "colMembers": "Entities",
+      "memberCount": "{count} entities",
+      "namePlaceholder": "AEON MALL Vietnam",
+      "addBtn": "Add group",
+      "saveBtn": "Save",
+      "cancelBtn": "Cancel",
+      "editBtn": "Edit",
+      "deactivateBtn": "Disable",
+      "activateBtn": "Enable",
+      "empty": "No group yet.",
+      "errorCode": "Group code must be 2-10 alphanumeric characters",
+      "errorName": "Group name needs at least 2 characters",
+      "errorCodeExists": "Group code already exists",
+      "errorNotFound": "Group not found"
     }
   },
   "careReport": {

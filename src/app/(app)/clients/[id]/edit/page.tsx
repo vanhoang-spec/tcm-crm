@@ -17,7 +17,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
   const client = await prisma.client.findUnique({ where: { id }, include: { brand: true } });
   if (!client) notFound();
 
-  const [teams, industrySet, statusSet, classificationSet, staff, brands, t, locale] = await Promise.all([
+  const [teams, industrySet, statusSet, classificationSet, staff, brands, groups, t, locale] = await Promise.all([
     prisma.team.findMany({
       where: { OR: [{ isActive: true }, ...(client.ownerTeamId ? [{ id: client.ownerTeamId }] : [])] },
       orderBy: { code: "asc" },
@@ -36,6 +36,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
     }),
     prisma.staff.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
     prisma.brand.findMany({ orderBy: { name: "asc" } }),
+    prisma.clientGroup.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     getTranslations("clients.edit"),
     getLocale() as Promise<Locale>,
   ]);
@@ -63,6 +64,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
           industries={(industrySet?.items ?? []).map((i) => ({ id: i.id, label: pickLabel(i, locale) }))}
           statuses={(statusSet?.items ?? []).map((i) => ({ id: i.id, label: pickLabel(i, locale) }))}
           classifications={(classificationSet?.items ?? []).map((i) => ({ id: i.id, label: pickLabel(i, locale) }))}
+          groups={groups.map((g) => ({ id: g.id, label: g.name }))}
           introducers={staff.map((s) => ({ id: s.id, label: s.fullName }))}
           brands={brands.map((b) => b.name)}
           defaultValues={{
@@ -74,6 +76,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
             statusId: client.statusId,
             classificationId: client.classificationId ?? undefined,
             ownerTeamId: client.ownerTeamId ?? undefined,
+            groupId: client.groupId ?? undefined,
             introducerId: client.introducerId ?? OTHER_INTRODUCER,
             isNew: client.isNew,
             paymentTermDays: client.paymentTermDays,

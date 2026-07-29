@@ -54,6 +54,7 @@ export default async function ClientsPage({
         industry: true,
         brand: true,
         status: true,
+        group: { select: { code: true, name: true } },
         _count: { select: { contacts: true } },
       },
       orderBy: { name: "asc" },
@@ -71,6 +72,9 @@ export default async function ClientsPage({
         <div className="flex flex-wrap items-center gap-2">
           <LinkButton href="/clients/care-report" variant="secondary">
             {t("careReportLink")}
+          </LinkButton>
+          <LinkButton href="/clients/groups" variant="secondary">
+            {t("groupsBtn")}
           </LinkButton>
           <LinkButton href="/clients/import" variant="secondary">
             {t("importLink")}
@@ -111,7 +115,10 @@ export default async function ClientsPage({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">{c.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{c.brand.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {c.brand.name}
+                    {c.group && <span className="ml-1.5 text-brand-600">· {c.group.name}</span>}
+                  </p>
                 </div>
                 <Badge tone={STATUS_TONE[c.status.code] ?? "neutral"}>{pickLabel(c.status, locale)}</Badge>
               </div>
@@ -164,7 +171,10 @@ export default async function ClientsPage({
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground">{c.brand.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {c.brand.name}
+                    {c.group && <span className="ml-1.5 text-brand-600">· {c.group.name}</span>}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <Badge tone="neutral">{c.industry ? pickLabel(c.industry, locale) : "—"}</Badge>

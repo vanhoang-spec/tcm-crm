@@ -110,12 +110,14 @@
       "teamUnassigned": "Chưa giao team",
       "importLink": "Nhập từ Excel",
       "profileIncomplete": "Hồ sơ chưa đủ",
-      "profileIncompleteHint": "Thiếu MST/địa chỉ/TK ngân hàng/ngành hàng/phân loại — cần bổ sung trước khi ký hợp đồng."
+      "profileIncompleteHint": "Thiếu MST/địa chỉ/TK ngân hàng/ngành hàng/phân loại — cần bổ sung trước khi ký hợp đồng.",
+      "groupsBtn": "Nhóm KH"
     },
     "concentration": {
       "title": "Cảnh báo tập trung khách hàng (FR-11)",
-      "desc": "Các khách chiếm từ {pct}% doanh thu đã xuất hóa đơn của team trong năm {year}:",
-      "row": "{client} · Team {team} — {pct}% doanh thu team ({amount})"
+      "desc": "Đối tượng chiếm từ {pct}% doanh thu đã xuất hóa đơn trong năm {year} (nhóm khách hàng tính gộp cả nhóm):",
+      "rowTeam": "{subject} · Team {team} — {pct}% doanh thu team ({amount})",
+      "rowCompany": "{subject} (nhóm {members} pháp nhân, nhiều team) — {pct}% doanh thu TOÀN CÔNG TY ({amount})"
     },
     "new": {
       "backToList": "Quay lại danh sách",
@@ -164,7 +166,11 @@
       "contactName": "Họ tên *",
       "contactTitle": "Chức vụ *",
       "contactPhone": "Số điện thoại *",
-      "contactEmail": "Email *"
+      "contactEmail": "Email *",
+      "group": "Nhóm khách hàng",
+      "groupHint": "Gom các pháp nhân cùng một tập đoàn (vd AEON). Để trống nếu khách đứng riêng. Khách trong nhóm sẽ dùng chung kho kiến thức của nhóm.",
+      "selectGroup": "Chọn nhóm…",
+      "groupNone": "— Không thuộc nhóm —"
     },
     "detail": {
       "backToList": "Quay lại danh sách",
@@ -220,7 +226,14 @@
         "bankAccount": "Tài khoản ngân hàng",
         "industryId": "Ngành hàng",
         "classificationId": "Phân loại vendor-list"
-      }
+      },
+      "groupBadge": "Nhóm {name}",
+      "groupSiblingsTitle": "Cùng nhóm {name} ({count})",
+      "groupSiblingsHint": "Các pháp nhân khác trong cùng tập đoàn — mỗi bên vẫn ký hợp đồng và theo dõi công nợ riêng.",
+      "groupSiblingsEmpty": "Chưa có pháp nhân nào khác trong nhóm này.",
+      "groupAssignTitle": "Nhóm khách hàng",
+      "groupAssignDesc": "Gán hoặc gỡ nhóm cho khách này. Đổi được ngay cả khi hồ sơ khách chưa đủ để ký hợp đồng — gán nhóm là phân loại, không phải điều kiện ký.",
+      "groupAssignBtn": "Lưu nhóm"
     },
     "import": {
       "title": "Nhập khách hàng từ Excel",
@@ -252,6 +265,28 @@
       "picReviewTitle": "Rà soát PIC 2/3/4 (không tự động nhập)",
       "picReviewDesc": "PIC 2/3/4 trong file bị lệch dòng so với khách hàng — tải file này để đối chiếu tay (có gợi ý khách hàng phù hợp theo domain email) rồi tự thêm liên hệ qua trang chi tiết từng khách hàng.",
       "picReviewButton": "Tải file rà soát PIC 2/3/4"
+    },
+    "groups": {
+      "title": "Nhóm khách hàng",
+      "subtitle": "Gom các pháp nhân cùng một tập đoàn để nhìn rủi ro tập trung theo cả nhóm. Hợp đồng, hóa đơn và công nợ vẫn theo từng pháp nhân.",
+      "backToList": "Về danh sách khách hàng",
+      "colCode": "Mã nhóm",
+      "colName": "Tên nhóm",
+      "colNote": "Ghi chú",
+      "colMembers": "Số pháp nhân",
+      "memberCount": "{count} pháp nhân",
+      "namePlaceholder": "AEON MALL Việt Nam",
+      "addBtn": "Thêm nhóm",
+      "saveBtn": "Lưu",
+      "cancelBtn": "Huỷ",
+      "editBtn": "Sửa",
+      "deactivateBtn": "Tắt",
+      "activateBtn": "Bật lại",
+      "empty": "Chưa có nhóm nào.",
+      "errorCode": "Mã nhóm 2–10 ký tự, chỉ chữ và số",
+      "errorName": "Tên nhóm tối thiểu 2 ký tự",
+      "errorCodeExists": "Mã nhóm đã tồn tại",
+      "errorNotFound": "Không tìm thấy nhóm"
     }
   },
   "careReport": {

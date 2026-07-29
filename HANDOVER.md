@@ -107,7 +107,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 
 | # | Module | Route | Trạng thái |
 |---|---|---|---|
-| ① | Khách hàng | `/clients` | Xong (có import Excel thật + báo cáo chăm sóc) |
+| ① | Khách hàng | `/clients` | Xong (import Excel thật + báo cáo chăm sóc) + **Nhóm khách hàng** (`/clients/groups` — gom pháp nhân cùng tập đoàn, cảnh báo tập trung tính theo nhóm; xem mục 10.12) |
 | ② | Bidding & Hợp đồng | `/bidding` | Xong (CO/CE builder, make-up, margin gate, duyệt) |
 | ③ | Quản lý dự án | `/projects/[id]` | Xong — 9 tab: Tổng quan, Timeline, ORDER, CO/CE, Planning, Vận hành, Sản xuất, Thu mua, Nghiệm thu |
 | ④ | Chi phí & Công nợ | `/finance` | Xong (tạm ứng, thanh toán NCC, công nợ, cashflow) |
@@ -313,6 +313,28 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
    phiếu CH, ngưỡng 90/60/30 cấu hình được, khoá cứng giữ chỗ trước ADJUST/DESTROY/CONVERT, tự sinh dòng CO
    cho dự án nhận, chặn `markFinished` khi holding > 0. OptionSet `inventory_category` cũ deprecated (cột
    `categoryId` còn trong DB, không ai ghi).
+
+12. **NHÓM KHÁCH HÀNG — H1 XONG** (migration `20260731000000_client_groups`). Bài toán thật: AEON có 4 pháp
+    nhân (AHD/AHL/ALB ở team A2, AHP ở A3), mỗi bên tự ký hợp đồng — mất cả nhóm là mất 60% doanh thu nhưng
+    từng pháp nhân chỉ ~15% nên cảnh báo tập trung không bao giờ bật.
+    - **CỐ Ý chọn 1 tầng + nhóm, KHÔNG làm cây cha–con.** Nghiệp vụ thật không có công ty mẹ đứng tên ký
+      thay con. Cây cha–con sẽ buộc phải đổi ≥10 quy tắc đang chạy: kiểm sở hữu hàng kho (`ownerClientId`
+      so bằng `project.clientId`), mã lô kho, `client-status.ts` (cha không có dự án → mãi "Tiềm năng"),
+      `client-profile.ts` (cha không có MST → banner "hồ sơ thiếu" bật vĩnh viễn), đếm client ở dashboard,
+      `transferClient`, mọi picker khách. Nhóm chỉ đụng thêm mà không sửa quy tắc nào — trừ đúng 1 chỗ dưới.
+    - ⚠ **`ClientGroup.code` 2–10 ký tự và KHÔNG vào bất kỳ mã sinh nào.** Đừng nhầm với `Client.code` 3 ký
+      tự — mã đó nằm trong mã lô kho (`lib/inventory-lot.ts`) và mã dự án (`lib/bidding.ts`), đổi là hỏng
+      dữ liệu cũ. Nhóm thuần tuý là nhãn gom + (đợt sau) chỗ neo Knowledge Base dùng chung.
+    - **Cảnh báo tập trung nay gom theo ĐỐI TƯỢNG** = nhóm nếu có nhóm, ngược lại là chính khách
+      (`lib/client-concentration.ts`). ⚠ **Mẫu số đổi nghĩa khi nhóm vắt nhiều team**: nhóm nằm gọn 1 team
+      thì mẫu số vẫn là doanh thu team (nghĩa cũ); nhóm vắt ≥2 team (đúng ca AEON) thì mẫu số là doanh thu
+      TOÀN CÔNG TY và `teamCode = null`. Hai loại % KHÁC mẫu số nên banner dùng hai câu i18n riêng
+      (`rowTeam` / `rowCompany`) — đừng gộp lại thành một câu.
+    - Nhóm chỉ bật/tắt (`isActive`), **không có đường xoá**: xoá nhóm đang được khách trỏ vào là mất dấu vết
+      gom. Tắt = ẩn khỏi ô chọn khi gán mới, khách cũ giữ nguyên nhóm (mirror Vendor).
+    - Quản trị ở `/clients/groups`, dùng lại quyền `clients.manage` — **không mã quyền mới**. Seed nhóm AEON
+      chỉ gán khi `groupId == null` nên chạy lại trên production không đè chỉnh tay của admin.
+    - **CHƯA LÀM (cố ý):** lọc danh sách khách theo nhóm; gán nhóm trong import Excel; nhóm lồng nhóm.
 
 ---
 

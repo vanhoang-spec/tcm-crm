@@ -371,6 +371,26 @@ async function main() {
     }
   }
 
+  // ── Nhóm khách hàng (H1) — gom các pháp nhân cùng một "family" ──
+  // AEON là ca thật đã có trong dữ liệu: 4 pháp nhân ký riêng, nằm ở 2 team khác nhau. Các khách
+  // này đến từ import Excel chứ không từ seed, nên chỉ gán khi TÌM THẤY và khi khách CHƯA có nhóm
+  // — chạy lại trên production không đè chỉnh tay của admin, và DB trống cũng không lỗi.
+  const clientGroupsSeed = [
+    { code: "AEON", name: "AEON MALL Việt Nam", memberCodes: ["AHD", "AHL", "ALB", "AHP"] },
+  ];
+  for (const g of clientGroupsSeed) {
+    const group = await prisma.clientGroup.upsert({
+      where: { code: g.code },
+      update: {},
+      create: { code: g.code, name: g.name },
+    });
+    const assigned = await prisma.client.updateMany({
+      where: { code: { in: g.memberCodes }, groupId: null },
+      data: { groupId: group.id },
+    });
+    if (assigned.count > 0) console.log(`  nhóm ${g.code}: gán ${assigned.count} pháp nhân`);
+  }
+
   // ── MODULE ② — OptionSet mới ──
   const projectTypes = await seedOptionSet("project_type", "Nhóm dự án", [
     { code: "EVENT", labelVi: "Sự kiện / Hội nghị", labelEn: "Event / Conference" },

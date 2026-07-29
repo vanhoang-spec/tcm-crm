@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { formatDate, formatDateTime, formatNumber, pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { addCareNote, addContact, transferClientAction } from "../actions";
+import { addCareNote, addContact, assignClientGroup, transferClientAction } from "../actions";
 import { MAX_CONTACTS } from "@/lib/validators/client";
 import { getMissingClientProfileFields } from "@/lib/client-profile";
 import { requirePermission } from "@/lib/permissions";
@@ -37,6 +37,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       classification: true,
       introducer: true,
       brand: true,
+      group: { select: { id: true, code: true, name: true } },
       contacts: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
       transfers: {
         include: { fromTeam: true, toTeam: true, transferredBy: true },
@@ -50,10 +51,25 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   });
   if (!client) notFound();
 
+  // Các pháp nhân KHÁC cùng nhóm — chỉ query khi khách thuộc một nhóm.
+  const siblings = client.groupId
+    ? await prisma.client.findMany({
+        where: { groupId: client.groupId, id: { not: client.id }, isActive: true },
+        select: { id: true, code: true, name: true, ownerTeam: { select: { code: true } } },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
   const missingFields = getMissingClientProfileFields(client);
 
-  const [teams, auditEntries, t, tForm, locale] = await Promise.all([
+  const [teams, groupOptions, auditEntries, t, tForm, locale] = await Promise.all([
     prisma.team.findMany({ where: client.ownerTeamId ? { NOT: { id: client.ownerTeamId } } : undefined, orderBy: { code: "asc" } }),
+    // Nhóm đang bật + nhóm hiện tại của khách (kể cả đã tắt) để select không mất giá trị đang chọn.
+    prisma.clientGroup.findMany({
+      where: { OR: [{ isActive: true }, ...(client.groupId ? [{ id: client.groupId }] : [])] },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     prisma.auditLog.findMany({
       where: { entityType: "client", entityId: client.id },
       orderBy: { changedAt: "desc" },
@@ -66,6 +82,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   const addContactWithId = addContact.bind(null, client.id);
   const transferWithId = transferClientAction.bind(null, client.id);
+  const assignGroupWithId = assignClientGroup.bind(null, client.id);
   const addCareNoteWithId = addCareNote.bind(null, client.id);
 
   return (
@@ -104,6 +121,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ) : (
               <Badge tone="neutral">{t("teamUnassignedBadge")}</Badge>
             )}
+            {client.group && <Badge tone="brand">{t("groupBadge", { name: client.group.name })}</Badge>}
             {client.industry && <Badge tone="neutral">{pickLabel(client.industry, locale)}</Badge>}
             <Badge tone={STATUS_TONE[client.status.code] ?? "neutral"}>{pickLabel(client.status, locale)}</Badge>
             {client.classification && <Badge tone="neutral">{pickLabel(client.classification, locale)}</Badge>}
@@ -120,6 +138,33 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {/* Các pháp nhân cùng nhóm — chỉ hiện khi khách thuộc một nhóm */}
+          {client.group && (
+            <section className="rounded-xl border border-border bg-surface p-5">
+              <h2 className="text-sm font-semibold text-foreground">
+                {t("groupSiblingsTitle", { name: client.group.name, count: siblings.length })}
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">{t("groupSiblingsHint")}</p>
+              {siblings.length === 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">{t("groupSiblingsEmpty")}</p>
+              ) : (
+                <ul className="mt-3 divide-y divide-border">
+                  {siblings.map((sib) => (
+                    <li key={sib.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                      <Link href={`/clients/${sib.id}`} className="text-sm font-medium text-foreground hover:text-brand-600">
+                        {sib.name}
+                      </Link>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">{sib.code}</span>
+                        {sib.ownerTeam && <Badge tone={TEAM_TONE[sib.ownerTeam.code] ?? "neutral"}>{sib.ownerTeam.code}</Badge>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           {/* Contacts */}
           <section className="rounded-xl border border-border bg-surface p-5">
             <h2 className="text-sm font-semibold text-foreground">{t("contactsTitle")}</h2>
@@ -242,6 +287,26 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <InfoRow label={t("bankAccountLabel")} value={client.bankAccount} icon={Landmark} />
               {client.note && <InfoRow label={t("noteLabel")} value={client.note} />}
             </dl>
+          </section>
+
+          {/* Gán nhóm — action RIÊNG, không đi qua form sửa khách (form đó đòi hồ sơ đầy đủ mà
+              64/68 khách nhập từ Excel chưa có, sẽ chặn oan đúng những khách cần gán nhóm nhất). */}
+          <section className="rounded-xl border border-border bg-surface p-5">
+            <h2 className="text-sm font-semibold text-foreground">{t("groupAssignTitle")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("groupAssignDesc")}</p>
+            <form action={assignGroupWithId} className="mt-3 flex flex-wrap items-center gap-2">
+              <select name="groupId" defaultValue={client.groupId ?? ""} className={smallInput + " min-w-0 flex-1"}>
+                <option value="">{tForm("groupNone")}</option>
+                {groupOptions.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="h-9 rounded-lg border border-border-strong px-3 text-xs font-medium hover:bg-surface-2">
+                {t("groupAssignBtn")}
+              </button>
+            </form>
           </section>
 
           {/* Transfer */}

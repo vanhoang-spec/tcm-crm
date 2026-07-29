@@ -117,6 +117,13 @@ export async function deleteTopic(clientId: string, topicId: string, _prev: KbFo
   if (!found) return { error: t("errorNotFound") };
   const lessons = await prisma.clientKbLesson.count({ where: { topicId } });
   if (lessons > 0) return { error: t("errorTopicHasLessons", { count: lessons }) };
+  // H3 treo thêm câu hỏi và LƯỢT LÀM BÀI vào chủ đề, cả hai đều cascade. Chỉ đếm bài học thì xoá
+  // một chủ đề trống bài là cuốn sạch lịch sử học của cả công ty cho chủ đề đó — bằng chứng
+  // "ai đã học xong" biến mất mà nút chỉ báo mỗi số bài.
+  const attempts = await prisma.clientKbAttempt.count({ where: { topicId } });
+  if (attempts > 0) return { error: t("errorTopicHasAttempts", { count: attempts }) };
+  const questions = await prisma.clientKbQuestion.count({ where: { topicId } });
+  if (questions > 0) return { error: t("errorTopicHasQuestions", { count: questions }) };
   await prisma.clientKbTopic.delete({ where: { id: topicId } });
   await audit("client_kb_topic", topicId, "DELETE");
   revalidate(clientId);

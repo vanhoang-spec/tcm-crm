@@ -2,17 +2,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { readLessonBlocks } from "@/lib/client-kb";
 import { loadKbClient, loadKbLesson, lessonBelongsToAnchor } from "@/lib/client-kb-data";
 import { LessonEditor } from "../../../lesson-editor";
 import { DeleteLessonButton } from "./delete-lesson-button";
+import { GenerateLessonButton } from "../../../ai-panels";
 
 export default async function EditKbLessonPage({ params }: { params: Promise<{ id: string; lessonId: string }> }) {
   await requirePermission("clients.kb.manage");
   const { id, lessonId } = await params;
-  const [t, loaded, lesson] = await Promise.all([
+  const [t, canGenerate, loaded, lesson] = await Promise.all([
     getTranslations("clients.kb"),
+    hasPermission("clients.kb.generate"),
     loadKbClient(id),
     loadKbLesson(lessonId),
   ]);
@@ -32,7 +34,10 @@ export default async function EditKbLessonPage({ params }: { params: Promise<{ i
         </Link>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("editLessonTitle")}</h1>
-          <DeleteLessonButton clientId={id} lessonId={lessonId} />
+          <div className="flex flex-wrap items-center gap-2">
+            {canGenerate && <GenerateLessonButton clientId={id} lessonId={lessonId} />}
+            <DeleteLessonButton clientId={id} lessonId={lessonId} />
+          </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{t("editLessonHint")}</p>
       </div>
@@ -43,7 +48,20 @@ export default async function EditKbLessonPage({ params }: { params: Promise<{ i
         </p>
       )}
 
-      <LessonEditor clientId={id} lessonId={lessonId} title={lesson.title} blocks={blocks} />
+      {/*
+        `key` theo mốc sửa cuối là BẮT BUỘC, không phải trang trí. LessonEditor giữ nội dung trong
+        useState khởi tạo từ prop; nút "AI viết nội dung bài này" nằm ngay trên trang này và ghi
+        thẳng vào DB, nhưng prop mới KHÔNG làm useState chạy lại — khung soạn thảo vẫn hiện nội dung
+        CŨ. PIC tưởng AI hỏng, sửa một chữ rồi bấm Lưu là ghi đè ngược lên bài AI vừa viết, mất
+        trắng, không cảnh báo. Đổi key thì React tháo component cũ và dựng lại với nội dung mới.
+      */}
+      <LessonEditor
+        key={lesson.updatedAt.toISOString()}
+        clientId={id}
+        lessonId={lessonId}
+        title={lesson.title}
+        blocks={blocks}
+      />
     </div>
   );
 }

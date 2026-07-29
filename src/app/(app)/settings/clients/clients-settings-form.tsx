@@ -5,7 +5,15 @@ import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { saveClientsSettings, type ClientsSettingsState } from "./actions";
 
-export function ClientsSettingsForm({ activeDays, inactiveDays }: { activeDays: number; inactiveDays: number }) {
+export function ClientsSettingsForm({
+  activeDays,
+  inactiveDays,
+  kbPassPct,
+}: {
+  activeDays: number;
+  inactiveDays: number;
+  kbPassPct: number;
+}) {
   const [state, formAction, pending] = useActionState<ClientsSettingsState, FormData>(saveClientsSettings, {});
   const t = useTranslations("settings.clients");
 
@@ -21,6 +29,11 @@ export function ClientsSettingsForm({ activeDays, inactiveDays }: { activeDays: 
           <label className="mb-1 block text-xs font-medium text-foreground">{t("inactiveInterval")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("inactiveIntervalHint")}</p>
           <NumberField name="inactiveDays" defaultValue={inactiveDays} className={input} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-foreground">{t("kbPassPct")}</label>
+          <p className="mb-1 text-xs text-muted-foreground">{t("kbPassPctHint")}</p>
+          <NumberField name="kbPassPct" defaultValue={kbPassPct} className={input} />
         </div>
       </div>
       <div className="flex items-center gap-3 border-t border-border pt-4">

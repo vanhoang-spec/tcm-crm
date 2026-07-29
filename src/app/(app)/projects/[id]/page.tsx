@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { RolesForm } from "./roles-form";
 import { TeamManager, type MemberData } from "./team-manager";
 import { GuestInviteManager, type InviteData } from "./guest-invite-manager";
+import { KbComplianceCard } from "./kb-compliance-card";
 import { requirePermission } from "@/lib/permissions";
 
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -73,6 +74,9 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           <TeamManager projectId={project.id} members={memberData} allStaff={staffOptions} />
         </div>
       </section>
+
+      {/* Kho kiến thức khách — cảnh báo mềm, tự ẩn khi khách chưa có chủ đề nào "phải đạt" */}
+      <KbComplianceCard projectId={project.id} />
 
       {/* Guest invites */}
       <section className="rounded-xl border border-border bg-surface p-5">

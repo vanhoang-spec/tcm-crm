@@ -107,7 +107,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 
 | # | Module | Route | Trạng thái |
 |---|---|---|---|
-| ① | Khách hàng | `/clients` | Xong (import Excel thật + báo cáo chăm sóc) + **Nhóm khách hàng** (`/clients/groups` — gom pháp nhân cùng tập đoàn, cảnh báo tập trung tính theo nhóm; xem mục 10.12) + **Kho kiến thức theo khách** (`/clients/[id]/kb` — thông tin chung / tài liệu nguồn / bài học theo chủ đề, neo vào NHÓM khi khách có nhóm; xem mục 10.13. Quiz + AI sinh bài để đợt H3) |
+| ① | Khách hàng | `/clients` | Xong (import Excel thật + báo cáo chăm sóc) + **Nhóm khách hàng** (`/clients/groups` — gom pháp nhân cùng tập đoàn, cảnh báo tập trung tính theo nhóm; xem mục 10.12) + **Kho kiến thức theo khách — XONG TOÀN BỘ** (`/clients/[id]/kb` — thông tin chung / tài liệu nguồn / bài học theo chủ đề + AI sinh dàn bài, nội dung, đề kiểm tra + chấm điểm + bảng tuân thủ; neo vào NHÓM khi khách có nhóm; xem mục 10.13 và 10.14) |
 | ② | Bidding & Hợp đồng | `/bidding` | Xong (CO/CE builder, make-up, margin gate, duyệt) |
 | ③ | Quản lý dự án | `/projects/[id]` | Xong — 9 tab: Tổng quan, Timeline, ORDER, CO/CE, Planning, Vận hành, Sản xuất, Thu mua, Nghiệm thu |
 | ④ | Chi phí & Công nợ | `/finance` | Xong (tạm ứng, thanh toán NCC, công nợ, cashflow) |
@@ -122,7 +122,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 92 model Prisma · 54 migration · 61 file `src/lib` · 2903 key i18n × 2 ngôn ngữ · ~100 route.
+**Quy mô:** 94 model Prisma · 55 migration · 61 file `src/lib` · 2949 key i18n × 2 ngôn ngữ · 116 route.
 
 ---
 
@@ -228,10 +228,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 ## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
 
 1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
-   - **danh mục 111 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+   - **danh mục 114 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
      Ngoại lệ (kiểm bằng `hasPermission()` **bên trong** action đã có `requirePermission` khác ở đầu — đừng đi tìm `requirePermission` tương ứng): `finance.vendor_payment.over_cap` trong `createVendorPayment` VÀ trong `createCtvBatchPayments` (đề xuất thanh toán đợt CTV, operations/actions.ts); `finance.invoice.over_cap` trong `createClientInvoice` (trần mềm theo CO/CE sống — cửa Nghiệm thu vẫn trần cứng).
-   - **~305 điểm chặn**: ~216 server action + 76 page + 9 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
-   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 111 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
+   - **~315 điểm chặn**: ~220 server action + 78 page + 9 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
+   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 114 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
    - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
    - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
    - **Tài khoản VẬN HÀNH không có email** (thủ kho, bảo vệ — chốt 28/07/2026): `Staff.email` ở hệ này là TÊN ĐĂNG NHẬP chứ không phải hộp thư, nên KHÔNG cần cột mới. Người dùng gõ tên ngắn (`thukho`), `normalizeLoginId()` tự ghép `@tcm.local` (`lib/auth-session.ts`); `isAllowedLoginDomain` cho phép `@tcmbtl.com` + `tcm.local`/`tcm.internal`, còn `isMailableDomain` (chỉ `@tcmbtl.com`) gác "Quên mật khẩu" — tài khoản nội bộ không có hộp thư nên admin cấp lại mật khẩu ở `/settings/staff`. Ô đăng nhập là `type="text"` (để `type="email"` thì trình duyệt chặn tên không có `@`).
@@ -414,11 +414,109 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       · **Không sắp xếp lại được thứ tự chủ đề/bài** — cột `sort` có sẵn nhưng chưa có giao diện, nên
         thứ tự đọc = thứ tự gõ. Với KB "nạp dần theo thời gian" thì chủ đề nhập môn dễ nằm cuối. Đây là
         thứ đáng làm sớm nhất ở H3.
-    - **CHƯA LÀM — để đợt H3:** AI sinh dàn bài/nội dung/quiz · quiz + chấm điểm + bảng tuân thủ · card
-      tuân thủ trên trang dự án · setting `clients.kb_pass_pct` · 3 mã quyền còn lại
-      (`clients.kb.quiz/generate/compliance`) · sắp xếp lại chủ đề/bài. **CẮT khỏi v1** (muốn thêm phải
-      hỏi chủ dự án): theo dõi tiến độ đọc từng người, lịch sử phiên bản bài học, glossary riêng, nhắc
-      học qua notification, gộp kho khách lẻ vào kho nhóm.
+    - **H3 ĐÃ XONG** — xem ngay dưới đây.
+
+14. **KHO KIẾN THỨC — H3 XONG: AI sinh bài + bài kiểm tra + bảng tuân thủ** (migration
+    `20260802000000_client_kb_quiz`, 2 bảng MỚI `client_kb_question` / `client_kb_attempt`).
+    **Knowledge Base theo khách HOÀN TẤT — không còn đợt nào.**
+    - **KHÔNG có model Quiz riêng**: "bài kiểm tra của chủ đề" = tập câu hỏi `isActive` của chủ đề đó.
+    - ⚠ **`correctIndex` KHÔNG BAO GIỜ ra khỏi server trước khi nộp.** Đường render dùng
+      `loadQuizQuestions` (không select cột đó); chấm điểm dùng `loadQuizAnswerKey`, CHỈ gọi trong
+      `submitQuiz`. Thêm `correctIndex: true` vào select của đường render là đáp án đi thẳng vào HTML.
+      Đã verify: HTML trang làm bài không chứa chuỗi `correctIndex` nào.
+    - ⚠ **`isUsableQuestion` là MỘT nguồn sự thật cho "câu nào tính".** Cả trang làm bài lẫn bộ chấm
+      phải lọc bằng đúng hàm này. Lệch nhau là người dùng trượt oan vì câu họ chưa từng nhìn thấy —
+      đã tái hiện bằng số trước khi sửa: 1 câu `optionsJson` hỏng ⇒ hiện 4 câu, trả lời đúng cả 4,
+      vẫn bị chấm **4/5 = 80%**. Sau khi gom về một hàm: **4/4 = 100%**.
+    - ⚠ **`ClientKbAttempt.passPct` chốt ngưỡng TẠI THỜI ĐIỂM CHẤM.** BGĐ đổi setting
+      `clients.kb_pass_pct` về sau KHÔNG chấm lại quá khứ. Verify bằng số: cùng bài 3/5 → ngưỡng 80
+      trượt, ngưỡng 60 đạt; hai lượt cũ vẫn giữ nguyên `passPct: 80`.
+    - **Câu dở thì TẮT (`isActive=false`), đừng xoá** — `answersJson` của lượt cũ trỏ theo id câu hỏi.
+      Sinh lại bằng AI chỉ tắt câu `source="AI"`, câu nhập tay giữ nguyên. Verify: sinh 2 lần → 10
+      dòng, 5 bật / 5 tắt.
+    - **Bỏ trắng một câu = SAI**, cố ý: không cho lách bằng cách chỉ trả lời câu chắc chắn.
+    - ⚠ **KHÔNG BAO GIỜ bọc `$transaction` quanh call AI.** SQLite single-writer, một lượt gọi tới
+      90s — giữ writer suốt thời gian đó là treo cả app. Thứ tự đúng ở cả 3 action: đọc DB → gọi AI
+      (ngoài transaction) → Zod → transaction NGẮN để ghi.
+    - **`aiChatJson` chỉ ép kiểu `as T`, KHÔNG validate** (H3 là caller đầu tiên của nó trong repo).
+      Mọi output AI phải qua Zod: `kbOutlineSchema` · `kbLessonContentSchema` · `quizQuestionsSchema`.
+      Riêng `correctIndex` bị ép vào [0,3] ngay trong schema — model hay trả 1..4 theo thói quen người,
+      để lọt là câu đó không ai trả lời đúng được và người học trượt oan.
+    - **Mọi thứ AI sinh ra đều là BẢN NHÁP.** `generateLessonContent` ép `status="DRAFT"` kể cả khi
+      bài đang PUBLISHED — nội dung vừa đổi thì bản đã đăng không còn đúng nữa.
+    - **`generateOutline` chỉ chạy trên kho TRỐNG** (chặn ở cả UI lẫn server): chạy lại trên kho đã có
+      nội dung sẽ đẻ chủ đề trùng mà không ai dọn.
+    - **"Chủ đề phải đạt" = có ≥1 bài ĐÃ ĐĂNG **và** ≥1 câu hỏi đang bật.** Chủ đề soạn dở không được
+      làm cả công ty đỏ rực. Kho chưa có chủ đề nào như vậy → trạng thái `NA`, card trên trang dự án
+      TỰ ẨN. Verify: 3 chủ đề (1 đủ điều kiện, 1 thiếu câu hỏi, 1 chỉ có bài nháp) → mẫu số đúng 1.
+    - **Card trên trang dự án là CẢNH BÁO MỀM** (quyết định chủ dự án) — không chặn nút nào. ⚠ Radar
+      chỉ gồm **PIC + Leader + thành viên team** (3 nguồn người duy nhất có trên model `Project`).
+      Nhân sự chạy hiện trường theo ca CHƯA vào đây vì task C2 chưa làm — đọc card như tham chiếu,
+      không phải danh sách đầy đủ.
+    - **Quyền: 3 mã mới (111 → 114)** — `clients.kb.quiz` (đi cùng người được xem: ai đọc được bài thì
+      phải làm được bài) · `clients.kb.generate` (tách riêng vì AI tốn tiền theo LƯỢT, để BGĐ cắt chi
+      phí mà không cắt luôn khả năng nhập tay) · `clients.kb.compliance`. Backfill 3 marker
+      `20260802_client_kb_h3_*`. ⚠ `isRestricted` phải chứa `generate` + `compliance` (KHÔNG chứa
+      `quiz`). Verify trên DB thật sau `db:seed`: 20 / 4 / 4 role.
+    - **Setting `clients.kb_pass_pct`** (mặc định 80) ở `/settings/clients`, chặn ngoài dải [1,100]:
+      0 thì ai cũng đạt kể cả bỏ trắng, >100 thì không ai đạt được.
+    - **Sáu bẫy đã bịt trong lúc soát nghịch trước khi commit** (mỗi cái tái hiện được bằng số):
+      (a) ⚠ **Trang sửa bài phải có `key={lesson.updatedAt}` trên `LessonEditor`** — nút "AI viết nội
+          dung" nằm ngay trên trang đó, mà editor giữ nội dung trong `useState` khởi tạo từ prop nên
+          prop mới KHÔNG làm nó chạy lại. Không có key thì AI ghi xong màn hình vẫn hiện nội dung CŨ,
+          PIC tưởng hỏng, sửa một chữ rồi bấm Lưu là ghi đè ngược lên bài AI vừa viết — mất trắng, im
+          lặng, không có revision. Đã verify: sau khi vá, editor tự hiện nội dung AI mới.
+      (b) Câu hỏi hỏng khuôn từng bị lọc ở trang mà KHÔNG lọc lúc chấm → xem `isUsableQuestion` ở trên.
+      (c) `submitQuiz` chặn bài nộp thuộc BỘ ĐỀ CŨ (`errorQuizStale`): PIC bấm "AI ra đề" trong lúc có
+          người đang làm dở thì mọi id câu đổi hết, không chặn là người đó bị chấm 0/5 và lưu thành
+          một lượt TRƯỢT dù trả lời đúng hết. Phân biệt bằng CÓ GỬI ô nào hay không, để người thật sự
+          bỏ trắng cả bài vẫn bị chấm bình thường.
+      (d) `generateOutline` kiểm LẠI số chủ đề **bên trong transaction**: cửa sổ giữa lần đếm đầu và
+          lúc ghi dài bằng cả lượt gọi AI (tới 90s), hai Account cùng nhóm bấm cách nhau 20 giây là
+          kho có hai dàn bài chồng nhau.
+      (e) `deleteTopic` nay chặn cả khi còn **câu hỏi** hoặc **lượt làm bài** — H3 treo hai thứ đó vào
+          chủ đề với `onDelete: Cascade`, chỉ đếm bài học thì xoá một chủ đề trống bài là cuốn sạch
+          lịch sử học của cả công ty cho chủ đề đó.
+      (f) Ba action AI gác `requirePermission("clients.kb.manage")` rồi mới kiểm
+          `hasPermission("clients.kb.generate")` bên trong — sinh bằng AI là ĐẶC QUYỀN THÊM chồng lên
+          quyền soạn, không phải đường vòng thay thế nó (mirror mẫu `finance.vendor_payment.over_cap`).
+    - ⚠ **Card tuân thủ trên trang dự án gác bằng `clients.kb.compliance`, KHÔNG phải `.view`** — nó
+      liệt kê trạng thái học của từng người có tên, đúng thứ mà mã `compliance` sinh ra để giới hạn.
+      Người học tự xem trạng thái của mình bằng nhãn "Đã học xong" trên trang kho kiến thức.
+    - ⚠ **BIẾT VÀ CHẤP NHẬN — cột "Đã học xong" là TỰ KHAI, không phải bằng chứng đã đọc bài.** Màn
+      kết quả hiện đáp án đúng của các câu sai (để người học biết mình sai chỗ nào) và cho làm lại
+      không giới hạn. Ai cũng có thể nộp bừa lần 1 để đọc đáp án rồi làm lại lần 2 đạt 100% trong 30
+      giây mà không mở bài nào. Đây là đánh đổi CỐ Ý của "cảnh báo mềm" — dùng bảng tuân thủ để NHẮC,
+      đừng dùng làm bằng chứng kỷ luật. Muốn siết thì phải bàn riêng (giới hạn số lượt, đảo thứ tự
+      phương án, không hiện đáp án).
+    - **Giới hạn khác đã biết:** câu hỏi KHÔNG có cổng duyệt DRAFT→PUBLISHED như bài học — AI ra đề
+      xong là dùng ngay · sửa bài SAU khi đã ra đề thì câu hỏi thành lỗi thời mà không có cảnh báo,
+      và lượt ĐÃ ĐẠT không bao giờ bị vô hiệu · `answersJson` là cột chỉ-ghi, chưa có màn hình xem
+      lại bài đã làm · mỗi cú bấm AI đọc lại và parse lại TOÀN BỘ file nguồn (20 bài × 4 tài liệu =
+      80 lượt parse), chưa cache text đã trích · chống bấm liên tục chỉ có ở client, chưa ghi nhận số
+      lượt/token đã tiêu nên không truy được chi phí AI theo người.
+    - ⚠ **Dữ liệu gửi ra DeepSeek:** KHÔNG có PII có cấu trúc (email/điện thoại/MST/lương/giá CO/CE
+      đều không được select). Nhưng **hai kênh văn bản tự do đi nguyên văn**: "Thông tin chung" PIC
+      viết (≤20.000 ký tự) và text trích từ tài liệu khách gửi (≤24.000 ký tự) — brief thật thường có
+      tên/email/điện thoại người phụ trách phía khách và bảng ngân sách. Hộp xác nhận của cả 3 nút AI
+      đã nói rõ "gửi sang DeepSeek" để người bấm biết mình đang gửi gì đi đâu.
+    - **CẮT khỏi v1** (muốn thêm phải hỏi chủ dự án): sắp xếp lại thứ tự chủ đề/bài · theo dõi tiến độ
+      đọc từng người · lịch sử phiên bản bài học · glossary riêng · nhắc học qua notification · gộp
+      kho khách lẻ vào kho nhóm · nhập tay câu hỏi (hiện chỉ AI sinh) · cấu hình số câu mỗi đề (hằng 5).
+
+15. ⚠ **HAI LỖ HỔNG PHÂN QUYỀN CÓ TỪ TRƯỚC H3 — chưa vá, cần chủ dự án quyết.** Soát nghịch đợt H3
+    phát hiện, đã đo trên DB thật: **hiện tại KHÔNG có hại** vì DB production kế thừa grant từ các
+    đợt seed cũ (đo được: `inventory.reservation.approve` = 4 role, `inventory.transfer.approve` = 2
+    role, `SECURITY_GUARD` đúng 2 mã, `WAREHOUSE_KEEPER` đúng 13 mã). Lỗ hổng chỉ bật khi **dựng lại
+    DB từ đầu** (`migrate reset` + `db:seed`) — tức đúng lúc khôi phục sau sự cố:
+    - `isRestricted` trong `prisma/seed.ts` **THIẾU** `inventory.reservation.approve` và
+      `inventory.transfer.approve` → trên seed mới cả hai rơi vào `baseGrantCodes`, 20 role nhận
+      quyền duyệt giữ chỗ và duyệt điều chuyển kho thay vì 4 và 2.
+    - Hai backfill **không có `roleFilter`**: `20260727_order_task_codes` và
+      `20260728_kho_k2_request_create` → chúng chạy SAU Vòng 4c nên cấp cả cho `SECURITY_GUARD` và
+      `WAREHOUSE_KEEPER`, phá chính sách "role vận hành hẹp" ở mục 10.1.
+    Cả hai đều là sửa 1–2 dòng, nhưng nằm NGOÀI phạm vi H3 và đụng chính sách của module Kho — để
+    chủ dự án quyết có gộp vào đợt sau hay không.
 
 ---
 

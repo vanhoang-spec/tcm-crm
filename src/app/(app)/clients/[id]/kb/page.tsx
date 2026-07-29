@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, FileText, ListChecks } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { hasPermission, requirePermission } from "@/lib/permissions";
-import { countPublished } from "@/lib/client-kb";
+import { countPublished, isUsableQuestion, parseLessonBlocks } from "@/lib/client-kb";
+import { prisma } from "@/lib/prisma";
+import { getCurrentStaffId } from "@/lib/current-staff";
 import { countHiddenClientSpace, loadKbClient, loadKbSpaceView } from "@/lib/client-kb-data";
 import { CreateLessonForm, CreateTopicForm, GeneralNoteForm, PublishToggle, TopicHeaderActions, UploadSourceForm } from "./manage-panels";
 import { SourceList } from "./source-list";
+import { GenerateOutlineButton, GenerateQuizButton } from "./ai-panels";
 
 /**
  * KHO KIẾN THỨC THEO KHÁCH — khung ĐỒNG NHẤT cho mọi khách, chỉ dữ liệu khác nhau:
@@ -21,9 +24,13 @@ import { SourceList } from "./source-list";
 export default async function ClientKbPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("clients.kb.view");
   const { id } = await params;
-  const [t, canManage, loaded] = await Promise.all([
+  const [t, canManage, canGenerate, canQuiz, canCompliance, staffId, loaded] = await Promise.all([
     getTranslations("clients.kb"),
     hasPermission("clients.kb.manage"),
+    hasPermission("clients.kb.generate"),
+    hasPermission("clients.kb.quiz"),
+    hasPermission("clients.kb.compliance"),
+    getCurrentStaffId(),
     loadKbClient(id),
   ]);
   if (!loaded) notFound();
@@ -36,6 +43,19 @@ export default async function ClientKbPage({ params }: { params: Promise<{ id: s
   ]);
   const topics = view?.topics ?? [];
   const sources = view?.sources ?? [];
+
+  // Chủ đề nào NGƯỜI ĐANG XEM đã đạt — chỉ để hiện nhãn, không chặn gì (cảnh báo mềm).
+  const passedTopicIds = new Set(
+    staffId && topics.length
+      ? (
+          await prisma.clientKbAttempt.findMany({
+            where: { staffId, passed: true, topicId: { in: topics.map((x) => x.id) } },
+            select: { topicId: true },
+            distinct: ["topicId"],
+          })
+        ).map((a) => a.topicId)
+      : [],
+  );
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -55,6 +75,15 @@ export default async function ClientKbPage({ params }: { params: Promise<{ id: s
         <p className="mt-1 text-sm text-muted-foreground">
           {loaded.anchor.kind === "GROUP" ? t("scopeGroupHint") : t("scopeClientHint")}
         </p>
+        {canCompliance && (
+          <Link
+            href={`/clients/${id}/kb/compliance`}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
+          >
+            <ClipboardCheck className="h-3.5 w-3.5" />
+            {t("complianceLink")}
+          </Link>
+        )}
       </div>
 
       {hidden && (
@@ -105,11 +134,17 @@ export default async function ClientKbPage({ params }: { params: Promise<{ id: s
         {canManage && <CreateTopicForm clientId={id} />}
 
         {topics.length === 0 && (
-          <p className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">{t("topicsEmpty")}</p>
+          <div className="space-y-3 rounded-xl border border-border bg-surface p-5">
+            <p className="text-sm text-muted-foreground">{t("topicsEmpty")}</p>
+            {/* Dựng dàn bài CHỈ hiện khi kho còn trống — chạy lại trên kho đã có nội dung sẽ đẻ
+                chủ đề trùng. Server cũng chặn lần nữa (errorOutlineNotEmpty). */}
+            {canGenerate && <GenerateOutlineButton clientId={id} />}
+          </div>
         )}
 
         {topics.map((topic) => {
           const { published, total } = countPublished(topic.lessons);
+          const usableQuestions = topic.questions.filter(isUsableQuestion).length;
           return (
             <div key={topic.id} className="rounded-xl border border-border bg-surface p-5">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -120,6 +155,23 @@ export default async function ClientKbPage({ params }: { params: Promise<{ id: s
                   </p>
                 </div>
                 {canManage && <TopicHeaderActions clientId={id} topicId={topic.id} name={topic.name} />}
+              </div>
+
+              {/* Bài kiểm tra của chủ đề */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {usableQuestions > 0 && canQuiz && (
+                  <Link
+                    href={`/clients/${id}/kb/quiz/${topic.id}`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border-strong px-3 text-xs font-medium hover:bg-surface-2"
+                  >
+                    <ListChecks className="h-3.5 w-3.5" />
+                    {t("quizOpen", { count: usableQuestions })}
+                  </Link>
+                )}
+                {usableQuestions > 0 && passedTopicIds.has(topic.id) && (
+                  <Badge tone="success">{t("statusPass")}</Badge>
+                )}
+                {canGenerate && published > 0 && <GenerateQuizButton clientId={id} topicId={topic.id} />}
               </div>
 
               {topic.lessons.length === 0 ? (
@@ -137,6 +189,9 @@ export default async function ClientKbPage({ params }: { params: Promise<{ id: s
                       </Link>
                       <div className="flex shrink-0 items-center gap-2">
                         <span className="text-xs text-muted-foreground">{formatDate(l.updatedAt)}</span>
+                        {canManage && parseLessonBlocks(l.blocksJson).length === 0 && (
+                          <Badge tone="neutral">{t("lessonEmptyBadge")}</Badge>
+                        )}
                         {l.status === "DRAFT" && <Badge tone="warning">{t("statusDraft")}</Badge>}
                         {canManage && (
                           <>

@@ -1946,6 +1946,11 @@ async function main() {
     // grant, ngược hẳn chính sách mà backfill 20260801_client_kb_h2_manage đang thực thi.
     // `clients.kb.view` thì CỐ Ý nằm trong base — thủ kho/bảo vệ đã bị chặn bằng EXPLICIT_GRANTS.
     code === "clients.kb.manage" ||
+    // H3: sinh bằng AI tốn tiền theo LƯỢT → tách mã riêng, chỉ Account + BGĐ. Bảng tuân thủ là
+    // việc quản lý người → AD/AM + HR + BGĐ. Riêng `clients.kb.quiz` CỐ Ý nằm trong base: ai đọc
+    // được bài thì phải làm được bài, tách ra chỉ đẻ thêm một chỗ để quên tick.
+    code === "clients.kb.generate" ||
+    code === "clients.kb.compliance" ||
     code.startsWith("ai."); // (3)
 
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
@@ -1967,9 +1972,9 @@ async function main() {
 
   /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
   const extraByGroup: Record<string, string[]> = {
-    BOD: [...EXEC_EXTRA, "clients.kb.manage"],
+    BOD: [...EXEC_EXTRA, "clients.kb.manage", "clients.kb.generate", "clients.kb.compliance"],
     // Account duyệt đề xuất xuất kho của dự án MÌNH phụ trách (PIC/Leader) — quyết định flow K2
-    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage"],
+    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate"],
     CREATIVE: ["ai.brainstorm"],
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
     HR: ["ai.brainstorm", "ai.content"],
@@ -1979,11 +1984,12 @@ async function main() {
   };
   /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
   const extraByRole: Record<string, string[]> = {
+    HR_MANAGER: ["clients.kb.compliance"], // theo dõi ai đã học xong là việc của HR
     CFO: EXEC_EXTRA, // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
     // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
-    ACCOUNT_DIRECTOR: ["inventory.request.approve_any"],
-    ACCOUNT_MANAGER: ["inventory.request.approve_any"],
+    ACCOUNT_DIRECTOR: ["inventory.request.approve_any", "clients.kb.compliance"],
+    ACCOUNT_MANAGER: ["inventory.request.approve_any", "clients.kb.compliance"],
     // Chưa ai giữ role Thủ kho → OPE Manager giữ tạm vai xác nhận kho như TRƯỚC khi có ma trận
     // (đúng nguyên tắc "grant mặc định = quyền mọi người đang có"). Giao người thật xong thì BGĐ bỏ tick.
     OPERATIONS_MANAGER: WAREHOUSE_EXTRA,
@@ -2125,6 +2131,26 @@ async function main() {
       key: "20260801_client_kb_h2_manage",
       codes: ["clients.kb.manage"],
       roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "BOD",
+    },
+    // 02/08/2026 Kho kiến thức theo khách (H3) — AI sinh bài + quiz + bảng tuân thủ.
+    // Làm bài: đi CÙNG người được xem (ai đọc được thì phải làm được bài) — tách ra chỉ đẻ thêm
+    // một chỗ để quên tick. Sinh bằng AI: tốn tiền theo lượt nên tách mã riêng, chỉ Account + BGĐ,
+    // để BGĐ cắt được chi phí mà không cắt luôn khả năng nhập tay. Bảng tuân thủ: việc quản lý người.
+    {
+      key: "20260802_client_kb_h3_quiz",
+      codes: ["clients.kb.quiz"],
+      roleFilter: (r) => r.code !== "WAREHOUSE_KEEPER" && r.code !== "SECURITY_GUARD",
+    },
+    {
+      key: "20260802_client_kb_h3_generate",
+      codes: ["clients.kb.generate"],
+      roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "BOD",
+    },
+    {
+      key: "20260802_client_kb_h3_compliance",
+      codes: ["clients.kb.compliance"],
+      roleFilter: (r) =>
+        r.code === "ACCOUNT_DIRECTOR" || r.code === "ACCOUNT_MANAGER" || r.code === "HR_MANAGER" || r.groupCode === "BOD",
     },
     {
       key: "20260729_kho_k4_transfer_approve",

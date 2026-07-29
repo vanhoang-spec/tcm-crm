@@ -211,6 +211,7 @@ model Staff {
   kpiPeriodsClosed            KpiPeriod[]               @relation("KpiPeriodClosedBy")
   clientKbLessonsUpdated      ClientKbLesson[]          @relation("ClientKbLessonUpdatedBy")
   clientKbSourcesUploaded     ClientKbSource[]          @relation("ClientKbSourceUploadedBy")
+  clientKbAttempts            ClientKbAttempt[]         @relation("ClientKbAttemptStaff")
 
   @@map("staff")
 }
@@ -2487,8 +2488,10 @@ model ClientKbTopic {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  space   ClientKbSpace    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  lessons ClientKbLesson[]
+  space     ClientKbSpace      @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  lessons   ClientKbLesson[]
+  questions ClientKbQuestion[]
+  attempts  ClientKbAttempt[]
 
   @@index([spaceId, sort])
   @@map("client_kb_topic")
@@ -2536,4 +2539,51 @@ model ClientKbSource {
 
   @@index([spaceId, kind])
   @@map("client_kb_source")
+}
+
+/// Câu hỏi kiểm tra của MỘT chủ đề. KHÔNG có model Quiz riêng: "quiz của chủ đề" = tập câu hỏi
+/// `isActive` của chủ đề đó — chốt ở kế hoạch H3 để không đẻ thêm một tầng chỉ để đặt tên.
+///
+/// ⚠ `correctIndex` KHÔNG BAO GIỜ được select xuống client trước khi nộp bài. Chấm điểm chạy
+/// hoàn toàn phía server (`gradeQuiz`), giống nguyên tắc "không tin số từ client" của CO/CE.
+/// Câu dở thì đặt `isActive=false` chứ đừng xoá — xoá là phá luôn `answersJson` của các lượt cũ.
+model ClientKbQuestion {
+  id           String   @id @default(cuid())
+  topicId      String
+  prompt       String
+  optionsJson  String // JSON mảng đúng 4 phương án, validate bằng Zod ở mọi đường ghi
+  correctIndex Int
+  explanation  String?
+  source       String   @default("MANUAL") // MANUAL | AI
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  topic ClientKbTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId, isActive])
+  @@map("client_kb_question")
+}
+
+/// Một LƯỢT làm bài. Giữ MỌI lượt (không ghi đè): "đã đạt chủ đề" = tồn tại một lượt `passed`.
+///
+/// ⚠ `passPct` chốt NGƯỠNG TẠI THỜI ĐIỂM CHẤM. BGĐ đổi setting `clients.kb_pass_pct` về sau
+/// KHÔNG được chấm lại quá khứ — người đã đạt vẫn đạt, kết quả cũ là bằng chứng không đổi.
+model ClientKbAttempt {
+  id          String   @id @default(cuid())
+  topicId     String
+  staffId     String
+  score       Int
+  total       Int
+  passPct     Int
+  passed      Boolean
+  answersJson String // JSON: { questionId: chỉ số phương án đã chọn } — để xem lại bài đã làm
+  createdAt   DateTime @default(now())
+
+  topic ClientKbTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  staff Staff         @relation("ClientKbAttemptStaff", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([topicId, staffId])
+  @@index([staffId, passed])
+  @@map("client_kb_attempt")
 }

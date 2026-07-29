@@ -77,6 +77,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "clients.import", module: "clients", labelVi: "Nhập khách hàng từ Excel", labelEn: "Import clients from Excel" },
   { code: "clients.kb.view", module: "clients", labelVi: "Xem kho kiến thức khách hàng", labelEn: "View client knowledge base" },
   { code: "clients.kb.manage", module: "clients", labelVi: "Soạn nội dung kho kiến thức khách hàng", labelEn: "Author client knowledge base content" },
+  { code: "clients.kb.quiz", module: "clients", labelVi: "Làm bài kiểm tra kho kiến thức", labelEn: "Take knowledge base quizzes" },
+  { code: "clients.kb.generate", module: "clients", labelVi: "Dùng AI sinh bài học & câu hỏi", labelEn: "Use AI to draft lessons & questions", sensitive: true },
+  { code: "clients.kb.compliance", module: "clients", labelVi: "Xem bảng tuân thủ học kho kiến thức", labelEn: "View knowledge base compliance" },
 
   // ── ② Bidding & Hợp đồng ──
   { code: "bidding.view", module: "bidding", labelVi: "Xem hồ sơ thầu & CO/CE", labelEn: "View bids & cost sheets" },

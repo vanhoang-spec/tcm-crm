@@ -522,7 +522,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       đọc từng người · lịch sử phiên bản bài học · glossary riêng · nhắc học qua notification · gộp
       kho khách lẻ vào kho nhóm · nhập tay câu hỏi (hiện chỉ AI sinh) · cấu hình số câu mỗi đề (hằng 5) · sửa/xoá từng câu hỏi (sai thì ra đề lại).
 
-15. **BA LỖ HỔNG PHÂN QUYỀN KHI DỰNG LẠI DB — ĐÃ VÁ 30/07/2026.** Chỉ bật khi `migrate reset` +
+15. **BỐN LỖ HỔNG PHÂN QUYỀN KHI DỰNG LẠI DB — ĐÃ VÁ 30/07/2026.** Chỉ bật khi `migrate reset` +
     `db:seed`, tức đúng lúc khôi phục sau sự cố; production đang chạy KHÔNG bị (đã đo). Vá xong thì
     một lần dựng lại từ đầu cho ra đúng chính sách hiện hành.
 
@@ -530,10 +530,19 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
     | | seed cũ | seed đã vá | production |
     |---|---|---|---|
+    | `bidding.costsheet.approve` | 20 role | **2** (BGĐ+CFO) | 2 |
+    | `bidding.margin_override` | 20 role | **2** (BGĐ+CFO) | 2 |
     | `inventory.reservation.approve` | 20 role | **4** | 4 |
     | `inventory.transfer.approve` | 20 role | **2** | 2 |
     | `SECURITY_GUARD` | 11 mã | **2** | 2 |
     | `WAREHOUSE_KEEPER` | 17 mã | **13** | 13 |
+
+    - ⚠ **`bidding.costsheet.approve` + `bidding.margin_override`** — DUYỆT CO/CE và PHÁ NGƯỠNG
+      MARGIN 31%, tức bất biến số 1 ở mục 6. Thiết kế cũ để chúng trong grant mặc định rộng rồi trông
+      cậy BGĐ siết tay trong ma trận; BGĐ đã siết còn 2 role, nhưng phần siết đó KHÔNG sống sót qua
+      một lần dựng lại DB. Nay chốt cứng trong seed: hằng riêng `BIDDING_APPROVE_EXTRA` cấp cho
+      đúng BGĐ + CFO. Cố ý KHÔNG nhét vào `EXEC_EXTRA` — ai đọc seed phải thấy ngay danh sách người
+      giữ quyền phá ngưỡng margin.
 
     - `isRestricted` thiếu hai mã DUYỆT kho → chúng rơi vào `baseGrantCodes`. Đã thêm vào
       `isRestricted` **và** cấp lại đúng role qua `extraByGroup`/`extraByRole` (BGĐ + FINANCE +
@@ -548,17 +557,25 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - `20260728_kho_k2_request_create` nay chỉ loại BẢO VỆ, KHÔNG loại thủ kho — mã này nằm trong
       13 mã `EXPLICIT_GRANTS` của thủ kho, lọc cả hai là siết oan.
 
-    **CÒN LỆCH giữa bản dựng-từ-đầu và production — KHÔNG phải bug, cần chủ dự án quyết:**
-    - `bidding.costsheet.approve` + `bidding.margin_override`: production 2 role, dựng mới 20 role.
-      Hai mã này nằm trong base grant theo đúng thiết kế "grant mặc định rộng, BGĐ siết trong ma
-      trận" — và BGĐ đã siết tay còn 2. Dựng lại DB là mất phần siết đó. ⚠ Đây là quyền DUYỆT CO/CE
-      và PHÁ NGƯỠNG MARGIN 31% — nếu muốn chúng hẹp kể cả sau khôi phục thì phải đưa vào
-      `isRestricted` + `extraByRole`, giống ba chỗ vừa vá. Cần quyết định của chủ dự án.
+    **Đối chiếu TOÀN BỘ grant giữa bản dựng-từ-đầu và production sau khi vá: còn đúng 5 mã lệch,
+    16 dòng — và cả 16 đều giải thích được, không còn chỗ nào bí ẩn:**
     - CFO thừa 4 mã trên bản dựng mới (`inventory.request.approve`, `.approve_any`,
       `purchasing.po.manage`, `.receive`): `EXEC_EXTRA` cấp trọn gói cho CFO, nhưng `roleFilter` của
-      các backfill tương ứng lại không có CFO — hai đường mâu thuẫn nhau. Chọn một đường.
+      các backfill tương ứng lại không có CFO — hai đường mâu thuẫn nhau. Chọn một đường; cần quyết
+      định của chủ dự án về việc CFO có duyệt đề xuất kho và PO hay không.
     - `projects.invoice.edit`: production còn 20 dòng grant cho mã ĐÃ GỠ khỏi catalog (cặp ô
       `Contract.invoiceNo/invoiceDate` cũ). Dòng chết, không ai kiểm, dọn lúc nào cũng được.
+    - ⚠ Ghi nhận thêm khi đo: **`bidding.approve` hiện KHÔNG ai có trên production** (0 role, kể cả
+      BGĐ) — chỉ ADMIN dùng được nhờ sàn cứng trong code. Chưa rõ cố ý hay bị bỏ tick nhầm; kiểm lại
+      xem cổng duyệt hồ sơ thầu có đang kẹt không.
+
+    **Cách verify lại nếu sửa tiếp seed** (không đụng `prisma/dev.db`):
+    ```bash
+    DB="file:$(cygpath -m /đường/dẫn/tạm.db)"
+    DATABASE_URL="$DB" npx prisma migrate deploy && DATABASE_URL="$DB" npm run db:seed
+    ```
+    rồi đếm `rolePermission` theo mã và đối chiếu với production. Nhớ kiểm lại `prisma/dev.db` sau đó
+    (bảo vệ phải vẫn 2 mã) để chắc biến môi trường đã có tác dụng.
 
 ---
 

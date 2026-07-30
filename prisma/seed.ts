@@ -1948,6 +1948,12 @@ async function main() {
     // `20260728_kho_k3_reserve_approve` và `20260729_kho_k4_transfer_approve`.
     code === "inventory.reservation.approve" ||
     code === "inventory.transfer.approve" ||
+    // DUYỆT CO/CE + PHÁ NGƯỠNG MARGIN 31% — hai chốt chặn TIỀN nặng nhất của app (bất biến số 1,
+    // mục 6). Theo thiết kế cũ chúng nằm trong grant mặc định rộng rồi để BGĐ siết tay trong ma
+    // trận; BGĐ ĐÃ siết còn BGĐ + CFO, nhưng dựng lại DB là mất phần siết đó và 20 role duyệt được
+    // CO/CE trở lại. Nay chốt cứng trong seed đúng bằng những gì production đang có.
+    code === "bidding.costsheet.approve" ||
+    code === "bidding.margin_override" ||
     // KB theo khách (H2): SOẠN nội dung chỉ Account + BGĐ — xem extraByGroup. Thiếu dòng này thì
     // seed MỚI (migrate reset, hoặc dựng lại production) cấp quyền soạn cho cả 20 role có base
     // grant, ngược hẳn chính sách mà backfill 20260801_client_kb_h2_manage đang thực thi.
@@ -1963,6 +1969,13 @@ async function main() {
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
   /** Kho v2 K2 — quyền của THỦ KHO: người duy nhất chốt số thực xuất/thực nhập, chuyển lô, xuất hủy. */
   const WAREHOUSE_EXTRA = ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"];
+  /**
+   * Duyệt CO/CE + phá ngưỡng margin 31%. Tách hằng riêng (không nhét vào EXEC_EXTRA) vì đây là
+   * chốt chặn TIỀN, ai đọc seed phải thấy ngay danh sách người giữ nó — đúng BGĐ + CFO như
+   * production. Nới thêm role nào là nới quyền phá bất biến margin, phải có quyết định của BGĐ.
+   */
+  const BIDDING_APPROVE_EXTRA = ["bidding.costsheet.approve", "bidding.margin_override"];
+
   const EXEC_EXTRA = [
     "dashboard.cashflow",
     "dashboard.all_teams",
@@ -1981,6 +1994,7 @@ async function main() {
   const extraByGroup: Record<string, string[]> = {
     BOD: [
       ...EXEC_EXTRA,
+      ...BIDDING_APPROVE_EXTRA,
       "clients.kb.manage",
       "clients.kb.generate",
       "clients.kb.compliance",
@@ -2000,7 +2014,7 @@ async function main() {
   /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
   const extraByRole: Record<string, string[]> = {
     HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve"], // HR theo dõi học + là vế 2 của duyệt giữ chỗ
-    CFO: EXEC_EXTRA, // Phạm Thu Huyền — exec trong cả (2) và (3)
+    CFO: [...EXEC_EXTRA, ...BIDDING_APPROVE_EXTRA], // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
     // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
     ACCOUNT_DIRECTOR: ["inventory.request.approve_any", "clients.kb.compliance"],

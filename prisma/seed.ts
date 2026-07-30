@@ -1958,6 +1958,63 @@ async function main() {
     "kb.manage": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "HR_MANAGER"],
   };
 
+  /**
+   * MỞ LẠI KPI + CÀI ĐẶT — chốt 30/07/2026 với chủ dự án.
+   *
+   * Trước đó `kpi.*` và `settings.*` bị `isRestricted` mà KHÔNG có đường cấp lại nào ⇒ 0 vai, chỉ
+   * ADMIN dùng được. Đó là tái hiện trung thành hành vi `requireAdmin()` thời trước ma trận, nhưng
+   * hệ quả thật: module ⑥ ghi "Xong" mà chỉ một tài khoản chấm được KPI, và chỉ một người duy nhất
+   * tạo được tài khoản / cấp lại mật khẩu cho 42 nhân sự.
+   *
+   * ⚠ BA MÃ CỐ Ý KHÔNG CÓ Ở ĐÂY — giữ nguyên chỉ ADMIN:
+   *   · `settings.permissions.manage` — sửa được ma trận quyền, tức TỰ CẤP LẠI 13 mã tiền vừa siết
+   *     ở MONEY_POLICY. Cấp mã này cho ai là vô hiệu hoá toàn bộ chính sách tiền, âm thầm.
+   *   · `settings.roles.manage`        — đổi được nhóm quyền của bất kỳ ai, gồm chính mình.
+   *   · `settings.security.manage`     — đổi mật khẩu chung của công ty.
+   *
+   * ⚠ NÓI THẲNG GIỚI HẠN: `settings.staff.manage` (cấp cho HR Manager để hết cảnh một người duy
+   * nhất tạo tài khoản) vốn đã cho phép TẠO tài khoản mới KÈM chọn nhóm quyền và đặt mật khẩu — nên
+   * người giữ nó về lý thuyết vẫn dựng được một tài khoản quyền cao. Đây là bản chất của việc "HR
+   * tạo tài khoản", không phải lỗ hổng của bảng này; chốt chặn thật là audit log + đúng một người
+   * có tên giữ mã đó.
+   */
+  const ADMIN_POLICY: Record<string, string[]> = {
+    // — KPI: HR chủ trì chấm, CFO giữ quỹ performance 25% lương —
+    "kpi.view": ["BOARD_OF_MANAGEMENT", "CFO", "HR_MANAGER"],
+    "kpi.score": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    "kpi.close_period": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+
+    // — cửa vào /settings: ai có ít nhất một mục con thì phải vào được trang —
+    "settings.view": [
+      "BOARD_OF_MANAGEMENT", "CFO", "HR_MANAGER",
+      "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER",
+      "CREATIVE_DIRECTOR", "OPERATIONS_MANAGER", "PURCHASING_MANAGER",
+    ],
+
+    // — nhân sự & tổ chức: HR —
+    "settings.staff.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    "settings.departments.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    "settings.teams.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    "settings.timekeeping.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    "settings.kpi.manage": ["BOARD_OF_MANAGEMENT", "CFO", "HR_MANAGER"],
+
+    // — cấu hình đụng tiền: CFO. `settings.bidding.manage` chứa NGƯỠNG MARGIN 31% (bất biến số 1) —
+    "settings.finance.manage": ["BOARD_OF_MANAGEMENT", "CFO"],
+    "settings.bidding.manage": ["BOARD_OF_MANAGEMENT", "CFO"],
+    "settings.commission.manage": ["BOARD_OF_MANAGEMENT", "CFO"],
+    "settings.ai.manage": ["BOARD_OF_MANAGEMENT", "CFO"],
+
+    // — cấu hình theo module, giao cho người chủ module —
+    "settings.creative.manage": ["BOARD_OF_MANAGEMENT", "CFO", "CREATIVE_DIRECTOR"],
+    "settings.clients.manage": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER"],
+    "settings.templates.manage": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR"],
+    "settings.vendors.manage": ["BOARD_OF_MANAGEMENT", "PURCHASING_MANAGER"],
+    "settings.warehouses.manage": ["BOARD_OF_MANAGEMENT", "OPERATIONS_MANAGER"],
+    // Danh mục dùng chung đụng MỌI module (trạng thái dự án, loại task, nhóm hàng…) — giữ hẹp.
+    "settings.options.manage": ["BOARD_OF_MANAGEMENT"],
+    "settings.communication.manage": ["BOARD_OF_MANAGEMENT"],
+  };
+
   const isRestricted = (code: string) =>
     code in MONEY_POLICY || // chính sách quyền chạm tiền — xem MONEY_POLICY ngay trên
     code.startsWith("kpi.") || // (1)
@@ -2102,6 +2159,12 @@ async function main() {
       .filter(([, allowed]) => allowed.includes(roleCode))
       .map(([code]) => code);
 
+  /** Mã KPI / Cài đặt mà role này được giữ theo ADMIN_POLICY (xem hằng ở trên). */
+  const adminCodesFor = (roleCode: string) =>
+    Object.entries(ADMIN_POLICY)
+      .filter(([, allowed]) => allowed.includes(roleCode))
+      .map(([code]) => code);
+
   const grantCodesFor = (r: (typeof roleSeeds)[number]) =>
     EXPLICIT_GRANTS[r.code]
       ? new Set(EXPLICIT_GRANTS[r.code])
@@ -2110,6 +2173,7 @@ async function main() {
           ...(extraByGroup[r.groupCode] ?? []),
           ...(extraByRole[r.code] ?? []),
           ...moneyCodesFor(r.code),
+          ...adminCodesFor(r.code),
         ]);
 
   for (const r of roleSeeds) {
@@ -2334,6 +2398,45 @@ async function main() {
       },
     });
     console.log(`🔒 Siết quyền chạm tiền: xoá ${removed} dòng, cấp thêm ${added} dòng`);
+  }
+
+  /*
+    ── Vòng 4e: MỞ LẠI KPI + Cài đặt theo ADMIN_POLICY — chạy đúng MỘT lần ──
+
+    Thuần CỘNG THÊM, không xoá của ai: 23 mã này đang 0 vai (chỉ ADMIN dùng được nhờ sàn cứng
+    trong code), nên không có gì để siết. Ngược chiều hoàn toàn với Vòng 4d.
+
+    Vì sao không dùng cơ chế backfill có sẵn: backfill nhóm theo TẬP MÃ + một roleFilter, mà ở đây
+    mỗi mã có một danh sách vai riêng — sẽ phải đẻ ra ~12 entry rời rạc. Đọc một bảng vẫn dễ hơn
+    đọc 12 entry, và bảng đó cũng chính là thứ nuôi `adminCodesFor` cho DB dựng-từ-đầu.
+  */
+  const ADMIN_OPEN_KEY = "20260730_admin_open";
+  const adminMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: ADMIN_OPEN_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!adminMarker) {
+    let granted = 0;
+    for (const [code, allowed] of Object.entries(ADMIN_POLICY)) {
+      for (const roleCode of allowed) {
+        const role = roleByCode[roleCode];
+        if (!role) continue;
+        const has = await prisma.rolePermission.count({ where: { roleId: role.id, permissionCode: code } });
+        if (has === 0) {
+          await prisma.rolePermission.create({ data: { roleId: role.id, permissionCode: code } });
+          granted++;
+        }
+      }
+    }
+    await prisma.setting.create({
+      data: {
+        module: "seed",
+        key: ADMIN_OPEN_KEY,
+        scope: "GLOBAL",
+        scopeRef: "",
+        value: JSON.stringify({ at: new Date().toISOString(), granted }),
+      },
+    });
+    console.log(`🔓 Mở lại KPI + Cài đặt: cấp ${granted} dòng`);
   }
 
   // ── Module ⑥ KPI — tiêu chí đánh giá + lương vị trí + điểm mẫu ──

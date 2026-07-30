@@ -615,6 +615,31 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     **Muốn đảo lại:** tick lại ở `/settings/roles` (không cần deploy), hoặc khôi phục
     `~/backup/dev.db.bak-*` gần nhất trước 30/07 13:2x.
 
+17. **KPI + CÀI ĐẶT — ĐÃ MỞ LẠI 30/07/2026** (quyết định chủ dự án). 23 mã `kpi.*` và `settings.*`
+    trước đó nằm trong `isRestricted` mà KHÔNG có đường cấp lại nào ⇒ **0 vai**, chỉ ADMIN dùng được.
+    Đó là tái hiện trung thành `requireAdmin()` thời trước ma trận, nhưng hệ quả thật: module ⑥ ghi
+    "Xong" mà chỉ một tài khoản chấm được KPI, và chỉ một người tạo được tài khoản cho 42 nhân sự.
+
+    - **`ADMIN_POLICY` là nguồn sự thật**, nuôi cả `adminCodesFor` (Vòng 4, DB dựng mới) lẫn
+      **Vòng 4e** (cộng thêm trên DB đang chạy, marker `20260730_admin_open`). Cùng khuôn `MONEY_POLICY`.
+    - Vòng 4e **thuần CỘNG THÊM**, không xoá của ai — ngược chiều hoàn toàn với Vòng 4d.
+    - ⚠ **BA MÃ CỐ Ý GIỮ NGUYÊN CHỈ ADMIN — đừng cấp cho ai nếu chưa cân nhắc kỹ:**
+      · `settings.permissions.manage` — sửa được ma trận quyền, tức **TỰ CẤP LẠI 13 mã tiền** vừa
+        siết ở mục 10.16. Cấp mã này là vô hiệu hoá toàn bộ chính sách tiền, âm thầm.
+      · `settings.roles.manage` — đổi được nhóm quyền của bất kỳ ai, gồm chính mình.
+      · `settings.security.manage` — đổi mật khẩu chung của công ty.
+    - ⚠ **Giới hạn phải nói thẳng:** `settings.staff.manage` (cấp cho HR Manager để hết cảnh một
+      người duy nhất tạo tài khoản) vốn đã cho phép TẠO tài khoản mới KÈM chọn nhóm quyền và đặt mật
+      khẩu — nên người giữ nó về lý thuyết vẫn dựng được tài khoản quyền cao. Đây là bản chất của
+      "HR tạo tài khoản", không phải lỗ hổng của bảng; chốt chặn thật là audit log + đúng một người
+      có tên giữ mã đó.
+    - `settings.bidding.manage` chứa **ngưỡng margin 31%** (bất biến số 1 ở mục 6) → chỉ BGĐ + CFO.
+    - `settings.options.manage` đụng danh mục dùng chung của MỌI module → giữ 1 vai (BGĐ).
+
+    **Kết quả đo (diễn tập trên bản sao DB production trước):** 1365 → siết 215 → cộng **48** = **1198**.
+    20/20 mã khớp bảng, 3 mã meta vẫn **0 vai**, 13 mã tiền vẫn siết nguyên. Chạy `db:seed` lần hai
+    là no-op (1198 → 1198); DB dựng-từ-đầu báo cả hai vòng "0 dòng" — hai đường nhất trí tuyệt đối.
+
     **Cách verify lại nếu sửa tiếp seed** (không đụng `prisma/dev.db`):
     ```bash
     DB="file:$(cygpath -m /đường/dẫn/tạm.db)"

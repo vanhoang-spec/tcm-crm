@@ -1941,6 +1941,13 @@ async function main() {
     code === "inventory.intake.confirm" ||
     code === "inventory.lot.convert" ||
     code === "inventory.destroy" ||
+    // Kho v2 K3/K4 — hai mã DUYỆT. Thiếu hai dòng này thì trên seed MỚI chúng rơi vào
+    // `baseGrantCodes` và 20 role nhận quyền duyệt giữ chỗ / duyệt điều chuyển kho, thay vì 4 và 2.
+    // Backfill KHÔNG cứu được vì nó chỉ THÊM cho role đã có grant, không siết lại ai.
+    // Role đích cấp qua extraByGroup/extraByRole ngay dưới, khớp đúng roleFilter của hai backfill
+    // `20260728_kho_k3_reserve_approve` và `20260729_kho_k4_transfer_approve`.
+    code === "inventory.reservation.approve" ||
+    code === "inventory.transfer.approve" ||
     // KB theo khách (H2): SOẠN nội dung chỉ Account + BGĐ — xem extraByGroup. Thiếu dòng này thì
     // seed MỚI (migrate reset, hoặc dựng lại production) cấp quyền soạn cho cả 20 role có base
     // grant, ngược hẳn chính sách mà backfill 20260801_client_kb_h2_manage đang thực thi.
@@ -1972,19 +1979,27 @@ async function main() {
 
   /** Cấp lại theo NHÓM role — khớp đúng phòng ban trong getAiVisibility cũ. */
   const extraByGroup: Record<string, string[]> = {
-    BOD: [...EXEC_EXTRA, "clients.kb.manage", "clients.kb.generate", "clients.kb.compliance"],
+    BOD: [
+      ...EXEC_EXTRA,
+      "clients.kb.manage",
+      "clients.kb.generate",
+      "clients.kb.compliance",
+      // Hai mã duyệt kho: BGĐ duyệt được cả giữ chỗ (K3) và điều chuyển kho (K4).
+      "inventory.reservation.approve",
+      "inventory.transfer.approve",
+    ],
     // Account duyệt đề xuất xuất kho của dự án MÌNH phụ trách (PIC/Leader) — quyết định flow K2
     ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate"],
     CREATIVE: ["ai.brainstorm"],
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
     HR: ["ai.brainstorm", "ai.content"],
-    FINANCE: ["ai.costsheet"],
+    FINANCE: ["ai.costsheet", "inventory.reservation.approve"],
     PURCHASING: ["purchasing.po.manage", "purchasing.po.receive"],
     WAREHOUSE: WAREHOUSE_EXTRA,
   };
   /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
   const extraByRole: Record<string, string[]> = {
-    HR_MANAGER: ["clients.kb.compliance"], // theo dõi ai đã học xong là việc của HR
+    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve"], // HR theo dõi học + là vế 2 của duyệt giữ chỗ
     CFO: EXEC_EXTRA, // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
     // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
@@ -1992,7 +2007,8 @@ async function main() {
     ACCOUNT_MANAGER: ["inventory.request.approve_any", "clients.kb.compliance"],
     // Chưa ai giữ role Thủ kho → OPE Manager giữ tạm vai xác nhận kho như TRƯỚC khi có ma trận
     // (đúng nguyên tắc "grant mặc định = quyền mọi người đang có"). Giao người thật xong thì BGĐ bỏ tick.
-    OPERATIONS_MANAGER: WAREHOUSE_EXTRA,
+    // Duyệt điều chuyển kho là việc của chủ vận hành kho; Thủ kho KHÔNG tự duyệt đề xuất của mình.
+    OPERATIONS_MANAGER: [...WAREHOUSE_EXTRA, "inventory.transfer.approve"],
   };
 
   /**
@@ -2070,7 +2086,16 @@ async function main() {
     // 27/07/2026 — gác 10 action ORDER + task bộ phận (trước đó KHÔNG gác, ai đăng nhập cũng làm
     // được): grant cho MỌI role đúng nguyên tắc "grant mặc định = quyền mọi người có trước khi bật
     // ma trận"; BGĐ siết dần ở /settings/roles.
-    { key: "20260727_order_task_codes", codes: ["projects.order.respond", "projects.task.manage", "projects.task.submit", "projects.task.approve"] },
+    //
+    // ⚠ roleFilter LOẠI hai role vận hành hẹp. Backfill chạy SAU Vòng 4c (siết ở dòng ~2047), nên
+    // không lọc là cấp lại 4 mã dự án cho đúng hai role vừa bị siết — thủ kho và bảo vệ không chạy
+    // ORDER hay task bộ phận. Nguyên tắc "grant mặc định = quyền mọi người ĐANG có" chỉ đúng với
+    // role CŨ; hai role này sinh ra sau khi có ma trận nên không có quyền cũ nào để bảo toàn.
+    {
+      key: "20260727_order_task_codes",
+      codes: ["projects.order.respond", "projects.task.manage", "projects.task.submit", "projects.task.approve"],
+      roleFilter: (r) => r.code !== "WAREHOUSE_KEEPER" && r.code !== "SECURITY_GUARD",
+    },
     // 27/07/2026 — hai mã vượt trần (phiếu chi + hóa đơn) cấp cho BGĐ + CFO, theo quyết định chủ
     // dự án (cùng nhóm được duyệt CO/CE & override margin). Các role khác muốn có thì BGĐ tick.
     {
@@ -2090,7 +2115,15 @@ async function main() {
       roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO",
     },
     // 28/07/2026 Kho v2 K2 — tách vai kho. Đề xuất: mọi role (trước đây ai cũng lập được phiếu xuất).
-    { key: "20260728_kho_k2_request_create", codes: ["inventory.request.create"] },
+    //
+    // ⚠ Chỉ loại BẢO VỆ, KHÔNG loại thủ kho: `inventory.request.create` nằm trong 13 mã
+    // EXPLICIT_GRANTS của WAREHOUSE_KEEPER nên họ vốn phải có, lọc cả hai là siết oan. Bảo vệ thì
+    // đúng 2 mã (chat + đọc KB chung), không lập đề xuất kho.
+    {
+      key: "20260728_kho_k2_request_create",
+      codes: ["inventory.request.create"],
+      roleFilter: (r) => r.code !== "SECURITY_GUARD",
+    },
     // Duyệt: Account (dự án mình) + BGĐ; duyệt-mọi-dự-án: AD/AM + BGĐ.
     {
       key: "20260728_kho_k2_approve",
@@ -2102,11 +2135,15 @@ async function main() {
       codes: ["inventory.request.approve_any"],
       roleFilter: (r) => r.code === "ACCOUNT_DIRECTOR" || r.code === "ACCOUNT_MANAGER" || r.groupCode === "BOD",
     },
-    // Xác nhận thực xuất/nhập + chuyển lô + xuất hủy: nhóm Thủ kho; OPE Manager giữ tạm tới khi giao người.
+    // Xác nhận thực xuất/nhập + chuyển lô + xuất hủy: THỦ KHO; OPE Manager giữ tạm tới khi giao người.
+    //
+    // ⚠ Lọc theo MÃ ROLE, KHÔNG theo nhóm. `SECURITY_GUARD` cũng có `groupCode: "WAREHOUSE"`
+    // (bảo vệ tại điểm kho), nên lọc theo nhóm là cấp cho bảo vệ cả 4 mã này — tức quyền xác nhận
+    // thực xuất/thực nhập và XUẤT HỦY hàng. Đã đo trên DB dựng từ đầu: bảo vệ nhận 11 mã thay vì 2.
     {
       key: "20260728_kho_k2_keeper",
       codes: ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"],
-      roleFilter: (r) => r.groupCode === "WAREHOUSE" || r.code === "OPERATIONS_MANAGER",
+      roleFilter: (r) => r.code === "WAREHOUSE_KEEPER" || r.code === "OPERATIONS_MANAGER",
     },
     // 28/07/2026 Kho v2 K3 — duyệt giữ chỗ tồn kho để đưa vào CO với đơn giá 0.
     // Chủ dự án chốt: "Kế toán và/hoặc HR Manager" — MỘT trong hai duyệt là đủ, nên cùng một mã
@@ -2117,9 +2154,6 @@ async function main() {
       roleFilter: (r) => r.groupCode === "FINANCE" || r.code === "HR_MANAGER" || r.groupCode === "BOD",
     },
  
-    // 29/07/2026 Kho v2 K4 — điều chuyển kho nay phải qua duyệt (trước K4 ai lập được là chạy
-    // thẳng vào sổ cái). Người duyệt = OPE Manager (chủ vận hành kho) + BGĐ; Thủ kho KHÔNG tự duyệt
-    // đề xuất của chính mình, họ chỉ chốt số thực xuất.
     // 01/08/2026 Kho kiến thức theo khách (H2). Xem: mọi role TRỪ thủ kho + bảo vệ (họ không
     // làm project cho khách). Soạn nội dung: nhóm Account + BGĐ.
     {
@@ -2152,6 +2186,9 @@ async function main() {
       roleFilter: (r) =>
         r.code === "ACCOUNT_DIRECTOR" || r.code === "ACCOUNT_MANAGER" || r.code === "HR_MANAGER" || r.groupCode === "BOD",
     },
+    // 29/07/2026 Kho v2 K4 — điều chuyển kho nay phải qua duyệt (trước K4 ai lập được là chạy
+    // thẳng vào sổ cái). Người duyệt = OPE Manager (chủ vận hành kho) + BGĐ; Thủ kho KHÔNG tự duyệt
+    // đề xuất của chính mình, họ chỉ chốt số thực xuất.
     {
       key: "20260729_kho_k4_transfer_approve",
       codes: ["inventory.transfer.approve"],

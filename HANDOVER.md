@@ -522,19 +522,43 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       đọc từng người · lịch sử phiên bản bài học · glossary riêng · nhắc học qua notification · gộp
       kho khách lẻ vào kho nhóm · nhập tay câu hỏi (hiện chỉ AI sinh) · cấu hình số câu mỗi đề (hằng 5) · sửa/xoá từng câu hỏi (sai thì ra đề lại).
 
-15. ⚠ **HAI LỖ HỔNG PHÂN QUYỀN CÓ TỪ TRƯỚC H3 — chưa vá, cần chủ dự án quyết.** Soát nghịch đợt H3
-    phát hiện, đã đo trên DB thật: **hiện tại KHÔNG có hại** vì DB production kế thừa grant từ các
-    đợt seed cũ (đo được: `inventory.reservation.approve` = 4 role, `inventory.transfer.approve` = 2
-    role, `SECURITY_GUARD` đúng 2 mã, `WAREHOUSE_KEEPER` đúng 13 mã). Lỗ hổng chỉ bật khi **dựng lại
-    DB từ đầu** (`migrate reset` + `db:seed`) — tức đúng lúc khôi phục sau sự cố:
-    - `isRestricted` trong `prisma/seed.ts` **THIẾU** `inventory.reservation.approve` và
-      `inventory.transfer.approve` → trên seed mới cả hai rơi vào `baseGrantCodes`, 20 role nhận
-      quyền duyệt giữ chỗ và duyệt điều chuyển kho thay vì 4 và 2.
-    - Hai backfill **không có `roleFilter`**: `20260727_order_task_codes` và
-      `20260728_kho_k2_request_create` → chúng chạy SAU Vòng 4c nên cấp cả cho `SECURITY_GUARD` và
-      `WAREHOUSE_KEEPER`, phá chính sách "role vận hành hẹp" ở mục 10.1.
-    Cả hai đều là sửa 1–2 dòng, nhưng nằm NGOÀI phạm vi H3 và đụng chính sách của module Kho — để
-    chủ dự án quyết có gộp vào đợt sau hay không.
+15. **BA LỖ HỔNG PHÂN QUYỀN KHI DỰNG LẠI DB — ĐÃ VÁ 30/07/2026.** Chỉ bật khi `migrate reset` +
+    `db:seed`, tức đúng lúc khôi phục sau sự cố; production đang chạy KHÔNG bị (đã đo). Vá xong thì
+    một lần dựng lại từ đầu cho ra đúng chính sách hiện hành.
+
+    Đo trên DB dựng-từ-đầu, TRƯỚC rồi SAU khi vá:
+
+    | | seed cũ | seed đã vá | production |
+    |---|---|---|---|
+    | `inventory.reservation.approve` | 20 role | **4** | 4 |
+    | `inventory.transfer.approve` | 20 role | **2** | 2 |
+    | `SECURITY_GUARD` | 11 mã | **2** | 2 |
+    | `WAREHOUSE_KEEPER` | 17 mã | **13** | 13 |
+
+    - `isRestricted` thiếu hai mã DUYỆT kho → chúng rơi vào `baseGrantCodes`. Đã thêm vào
+      `isRestricted` **và** cấp lại đúng role qua `extraByGroup`/`extraByRole` (BGĐ + FINANCE +
+      HR_MANAGER cho giữ chỗ; BGĐ + OPE Manager cho điều chuyển) — khớp đúng `roleFilter` của hai
+      backfill tương ứng. ⚠ Thêm vào `isRestricted` mà quên cấp lại là role đích MẤT quyền.
+    - `20260727_order_task_codes` không có `roleFilter` → nay loại thủ kho + bảo vệ.
+    - ⚠ **`20260728_kho_k2_keeper` lọc theo NHÓM `groupCode === "WAREHOUSE"`** — mà
+      `SECURITY_GUARD` cũng thuộc nhóm đó (bảo vệ tại điểm kho), nên **bảo vệ nhận cả 4 mã xác nhận
+      thực xuất/thực nhập + chuyển lô + XUẤT HỦY**. Đây là chỗ nặng nhất trong ba chỗ và KHÔNG nằm
+      trong báo cáo soát ban đầu — tìm ra lúc đo bản dựng-từ-đầu. Nay lọc theo MÃ ROLE.
+      **Bài học: đừng lọc backfill theo `groupCode` khi trong nhóm có role hẹp quyền.**
+    - `20260728_kho_k2_request_create` nay chỉ loại BẢO VỆ, KHÔNG loại thủ kho — mã này nằm trong
+      13 mã `EXPLICIT_GRANTS` của thủ kho, lọc cả hai là siết oan.
+
+    **CÒN LỆCH giữa bản dựng-từ-đầu và production — KHÔNG phải bug, cần chủ dự án quyết:**
+    - `bidding.costsheet.approve` + `bidding.margin_override`: production 2 role, dựng mới 20 role.
+      Hai mã này nằm trong base grant theo đúng thiết kế "grant mặc định rộng, BGĐ siết trong ma
+      trận" — và BGĐ đã siết tay còn 2. Dựng lại DB là mất phần siết đó. ⚠ Đây là quyền DUYỆT CO/CE
+      và PHÁ NGƯỠNG MARGIN 31% — nếu muốn chúng hẹp kể cả sau khôi phục thì phải đưa vào
+      `isRestricted` + `extraByRole`, giống ba chỗ vừa vá. Cần quyết định của chủ dự án.
+    - CFO thừa 4 mã trên bản dựng mới (`inventory.request.approve`, `.approve_any`,
+      `purchasing.po.manage`, `.receive`): `EXEC_EXTRA` cấp trọn gói cho CFO, nhưng `roleFilter` của
+      các backfill tương ứng lại không có CFO — hai đường mâu thuẫn nhau. Chọn một đường.
+    - `projects.invoice.edit`: production còn 20 dòng grant cho mã ĐÃ GỠ khỏi catalog (cặp ô
+      `Contract.invoiceNo/invoiceDate` cũ). Dòng chết, không ai kiểm, dọn lúc nào cũng được.
 
 ---
 

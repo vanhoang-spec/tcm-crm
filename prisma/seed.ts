@@ -1923,7 +1923,43 @@ async function main() {
   //   (1) requireAdmin()      → /kpi và /settings chỉ ADMIN
   //   (2) getDashboardScope() → cashflow + xem-mọi-team chỉ phòng CEO hoặc title CFO
   //   (3) getAiVisibility()   → từng tính năng AI theo phòng ban, riêng 4 người có all-access
+  /**
+   * CHÍNH SÁCH QUYỀN CHẠM TIỀN — chốt 30/07/2026 với chủ dự án.
+   *
+   * ⚠ ĐÂY LÀ MỘT NGUỒN SỰ THẬT DUY NHẤT, dùng cho CẢ BA đường:
+   *   1. `isRestricted` — để mã không rơi vào grant mặc định rộng;
+   *   2. `moneyCodesFor` trong Vòng 4 — cấp lại đúng role trên DB dựng-từ-đầu;
+   *   3. Vòng 4d — XOÁ grant thừa trên DB đang chạy, chạy đúng một lần.
+   * Sửa bảng này là cả ba đường đổi theo. ĐỪNG cấp ba mã này ở chỗ nào khác — chính việc có hai
+   * đường cấp mâu thuẫn nhau là nguồn của 5 lỗ hổng phải vá ngày 30/07 (xem HANDOVER 10.15).
+   *
+   * `finance.advance.request` CỐ Ý không có ở đây: ai chạy hiện trường cũng phải ĐỀ NGHỊ được tạm
+   * ứng. Tách "đề nghị" khỏi "duyệt" chính là lý do hai mã đó tồn tại riêng.
+   */
+  const MONEY_POLICY: Record<string, string[]> = {
+    // — tiền ra khỏi quỹ —
+    "finance.advance.approve": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF"],
+    "finance.vendor_payment.pay": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF"],
+    // — chứng từ & tiền vào —
+    "finance.payment.record": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF"],
+    "finance.invoice.manage": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF"],
+    "bidding.contract.manage": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER"],
+    // Vòng đời dự án + nghiệm thu là việc Account bấm HẰNG NGÀY — giữ tới cấp Staff, siết là kẹt luồng.
+    "bidding.status.change": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER", "ACCOUNT_STAFF"],
+    "projects.liquidation.send": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER", "ACCOUNT_STAFF"],
+    "projects.acceptance.confirm": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER", "ACCOUNT_STAFF"],
+    // — nhìn thấy số & đụng dữ liệu người khác —
+    // Account Manager giữ finance.view để theo công nợ khách của mình; trước đây mã này mở cho 20
+    // nhóm trong khi dashboard.cashflow chỉ 2 — che ở Dashboard mà hở ở /finance là vô nghĩa.
+    "finance.view": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER"],
+    "creative.cost.view": ["BOARD_OF_MANAGEMENT", "CFO", "HR_MANAGER", "CREATIVE_DIRECTOR"],
+    "clients.transfer": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER"],
+    "chat.moderate": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    "kb.manage": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "HR_MANAGER"],
+  };
+
   const isRestricted = (code: string) =>
+    code in MONEY_POLICY || // chính sách quyền chạm tiền — xem MONEY_POLICY ngay trên
     code.startsWith("kpi.") || // (1)
     code.startsWith("settings.") || // (1)
     code.startsWith("payroll.") || // module chưa làm — chưa ai có
@@ -2060,10 +2096,21 @@ async function main() {
   };
 
   const baseGrantCodes = PERMISSION_CODES.filter((c) => !isRestricted(c));
+  /** Mã chạm tiền mà role này được giữ theo MONEY_POLICY (xem hằng ở trên). */
+  const moneyCodesFor = (roleCode: string) =>
+    Object.entries(MONEY_POLICY)
+      .filter(([, allowed]) => allowed.includes(roleCode))
+      .map(([code]) => code);
+
   const grantCodesFor = (r: (typeof roleSeeds)[number]) =>
     EXPLICIT_GRANTS[r.code]
       ? new Set(EXPLICIT_GRANTS[r.code])
-      : new Set([...baseGrantCodes, ...(extraByGroup[r.groupCode] ?? []), ...(extraByRole[r.code] ?? [])]);
+      : new Set([
+          ...baseGrantCodes,
+          ...(extraByGroup[r.groupCode] ?? []),
+          ...(extraByRole[r.code] ?? []),
+          ...moneyCodesFor(r.code),
+        ]);
 
   for (const r of roleSeeds) {
     if (r.code === "ADMIN") continue; // ADMIN là sàn cứng trong code — không cần (và không nên) có dòng grant
@@ -2238,6 +2285,55 @@ async function main() {
     await prisma.setting.create({
       data: { module: "seed", key: bf.key, scope: "GLOBAL", scopeRef: "", value: JSON.stringify(new Date().toISOString()) },
     });
+  }
+
+  /*
+    ── Vòng 4d: SIẾT quyền chạm tiền theo MONEY_POLICY — chạy đúng MỘT lần ──
+
+    ⚠ Đây là vòng DUY NHẤT trong seed XOÁ grant của role đang hoạt động. Mọi vòng khác chỉ THÊM.
+    Lý do phải có: 13 mã này đã nằm trong grant mặc định rộng của 20 role từ ngày bật ma trận;
+    `isRestricted` chỉ chặn DB dựng-từ-đầu chứ không siết lại DB đang chạy (Vòng 4 bỏ qua role đã
+    có grant). Không có vòng này thì bảng chính sách chỉ có hiệu lực sau một lần khôi phục.
+
+    Chạy SAU backfill để có tiếng nói cuối cùng. Marker bảo đảm chỉ một lần: sau đó BGĐ toàn quyền
+    tick lại trong /settings/roles mà re-seed không đè.
+
+    ADMIN không có dòng grant nào (sàn cứng trong code) nên không bị đụng.
+  */
+  const MONEY_NARROW_KEY = "20260730_money_narrow";
+  const moneyMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: MONEY_NARROW_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!moneyMarker) {
+    let removed = 0;
+    let added = 0;
+    for (const [code, allowed] of Object.entries(MONEY_POLICY)) {
+      const del = await prisma.rolePermission.deleteMany({
+        where: { permissionCode: code, role: { code: { notIn: [...allowed, "ADMIN"] } } },
+      });
+      removed += del.count;
+      // Cấp cho role trong chính sách mà chưa có — để vòng này tự nó là bức tranh đầy đủ, không
+      // phụ thuộc việc Vòng 4 đã chạy hay chưa.
+      for (const roleCode of allowed) {
+        const role = roleByCode[roleCode];
+        if (!role) continue;
+        const has = await prisma.rolePermission.count({ where: { roleId: role.id, permissionCode: code } });
+        if (has === 0) {
+          await prisma.rolePermission.create({ data: { roleId: role.id, permissionCode: code } });
+          added++;
+        }
+      }
+    }
+    await prisma.setting.create({
+      data: {
+        module: "seed",
+        key: MONEY_NARROW_KEY,
+        scope: "GLOBAL",
+        scopeRef: "",
+        value: JSON.stringify({ at: new Date().toISOString(), removed, added }),
+      },
+    });
+    console.log(`🔒 Siết quyền chạm tiền: xoá ${removed} dòng, cấp thêm ${added} dòng`);
   }
 
   // ── Module ⑥ KPI — tiêu chí đánh giá + lương vị trí + điểm mẫu ──

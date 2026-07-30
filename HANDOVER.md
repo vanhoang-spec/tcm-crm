@@ -579,6 +579,42 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       BGĐ) — chỉ ADMIN dùng được nhờ sàn cứng trong code. Chưa rõ cố ý hay bị bỏ tick nhầm; kiểm lại
       xem cổng duyệt hồ sơ thầu có đang kẹt không.
 
+16. **QUYỀN CHẠM TIỀN — ĐÃ SIẾT 30/07/2026** (quyết định chủ dự án, có bảng đối chiếu từng mã × vai).
+    13 mã trước đó nằm trong grant mặc định rộng nên **20/23 nhóm quyền đều có** — nghĩa là gần như
+    mọi nhân viên ghi được "khách đã thanh toán", phát hành được hoá đơn, sửa được giá trị hợp đồng.
+
+    - ⚠ **`MONEY_POLICY` trong `prisma/seed.ts` là MỘT NGUỒN SỰ THẬT cho cả ba đường**: `isRestricted`
+      (chặn rơi vào grant rộng) · `moneyCodesFor` trong Vòng 4 (cấp lại đúng vai trên DB dựng mới) ·
+      **Vòng 4d** (XOÁ grant thừa trên DB đang chạy). Sửa bảng là cả ba đổi theo. ĐỪNG cấp mấy mã này
+      ở chỗ nào khác — chính việc có hai đường cấp mâu thuẫn là nguồn của 5 lỗ hổng ở mục 10.15.
+    - ⚠ **Vòng 4d là vòng DUY NHẤT trong seed XOÁ grant của role đang hoạt động** (mọi vòng khác chỉ
+      THÊM). Bắt buộc phải có: `isRestricted` chỉ chặn DB dựng-từ-đầu, KHÔNG siết lại DB đang chạy vì
+      Vòng 4 bỏ qua role đã có grant. Chạy đúng một lần theo marker `20260730_money_narrow`; sau đó
+      BGĐ toàn quyền tick lại ở `/settings/roles` mà re-seed không đè.
+    - Chốt giữ **`finance.advance.request` rộng cho 20 nhóm**: ai chạy hiện trường cũng phải ĐỀ NGHỊ
+      được tạm ứng. Tách "đề nghị" khỏi "duyệt" chính là lý do hai mã đó tồn tại riêng.
+    - Vòng đời dự án (`bidding.status.change`, `projects.liquidation.send`,
+      `projects.acceptance.confirm`) giữ tới **Account Staff** — đây là việc họ bấm hằng ngày, siết là
+      kẹt luồng. Các bất biến (chặn Finished khi chưa có hoá đơn…) vẫn chạy bên trong action.
+    - `finance.view` nay 5 vai. Trước đó nó mở cho 20 trong khi `dashboard.cashflow` chỉ 2 — che khối
+      dòng tiền ở Dashboard mà hở `/finance/cashflow` là vô nghĩa.
+
+    **Kết quả đo (diễn tập trên BẢN SAO DB production trước, rồi mới chạy thật):**
+
+    | | trước | sau |
+    |---|---|---|
+    | tổng dòng grant | 1365 | **1150** (−215) |
+    | 13 mã tiền | 20 vai mỗi mã | 2–5 vai, khớp bảng duyệt, 0 mã sai |
+    | `finance.advance.request` | 20 vai | 20 vai (cố ý giữ) |
+    | nhân sự / khách / dự án / CO-CE | 42 / 68 / 25 / 4 | không đổi |
+
+    Đã verify: chạy `db:seed` lần hai là **no-op** (1150 → 1150) · DB **dựng-từ-đầu** ra đúng trạng
+    thái đã siết (Vòng 4d báo "xoá 0 dòng" vì `isRestricted` + `moneyCodesFor` đã cho kết quả đúng) —
+    hai đường nhất trí tuyệt đối.
+
+    **Muốn đảo lại:** tick lại ở `/settings/roles` (không cần deploy), hoặc khôi phục
+    `~/backup/dev.db.bak-*` gần nhất trước 30/07 13:2x.
+
     **Cách verify lại nếu sửa tiếp seed** (không đụng `prisma/dev.db`):
     ```bash
     DB="file:$(cygpath -m /đường/dẫn/tạm.db)"

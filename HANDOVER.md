@@ -556,6 +556,16 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       **Bài học: đừng lọc backfill theo `groupCode` khi trong nhóm có role hẹp quyền.**
     - `20260728_kho_k2_request_create` nay chỉ loại BẢO VỆ, KHÔNG loại thủ kho — mã này nằm trong
       13 mã `EXPLICIT_GRANTS` của thủ kho, lọc cả hai là siết oan.
+    - ⚠ **Đã gỡ `WAREHOUSE: WAREHOUSE_EXTRA` khỏi `extraByGroup`** — cùng lỗ hổng "cấp theo NHÓM mà
+      trong nhóm có bảo vệ", chỉ nằm ở đường Vòng 4 thay vì đường backfill. Trước đây vô hại nhờ MAY
+      (cả hai role nhóm WAREHOUSE đều trong `EXPLICIT_GRANTS` nên `grantCodesFor` short-circuit,
+      dòng đó là code chết). Thêm một role kho thứ ba mà quên khai `EXPLICIT_GRANTS` là mìn nổ. Đã
+      đo: bỏ dòng này grant KHÔNG đổi (1349 → 1349 trên bản dựng mới).
+
+    ⚠ **KHÔNG có kiểm tự động nào gác lớp lỗi này.** Chú thích ở `permission-catalog.ts` từng nói có
+    `scripts/verify-permissions.mjs` đối chiếu hai chiều — **file đó chưa bao giờ tồn tại**; đã sửa
+    chú thích cho đúng sự thật. `tsc`/`eslint`/`next build` đều SẠCH khi seed cấp nhầm quyền, vì đây
+    là lỗi dữ liệu chứ không phải lỗi kiểu. Cách duy nhất hiện có là dựng DB tạm rồi đo (lệnh ở dưới).
 
     **Đối chiếu TOÀN BỘ grant giữa bản dựng-từ-đầu và production sau khi vá: còn đúng 5 mã lệch,
     16 dòng — và cả 16 đều giải thích được, không còn chỗ nào bí ẩn:**

@@ -2009,7 +2009,13 @@ async function main() {
     HR: ["ai.brainstorm", "ai.content"],
     FINANCE: ["ai.costsheet", "inventory.reservation.approve"],
     PURCHASING: ["purchasing.po.manage", "purchasing.po.receive"],
-    WAREHOUSE: WAREHOUSE_EXTRA,
+    // ⚠ CỐ Ý KHÔNG có `WAREHOUSE: WAREHOUSE_EXTRA` ở đây. Nhóm WAREHOUSE chứa CẢ `SECURITY_GUARD`
+    // (bảo vệ điểm kho) — cấp 4 mã xác nhận thực xuất/thực nhập + chuyển lô + XUẤT HỦY theo NHÓM
+    // chính là lỗ hổng vừa vá ở backfill `20260728_kho_k2_keeper`, chỉ tái sinh ở đường khác.
+    // Dòng đó trước đây vô hại nhờ MAY: cả hai role trong nhóm đều có trong EXPLICIT_GRANTS nên
+    // `grantCodesFor` short-circuit và không bao giờ đọc tới. Thêm một role kho thứ ba mà quên khai
+    // EXPLICIT_GRANTS là mìn nổ. Thủ kho lấy 4 mã này qua EXPLICIT_GRANTS, OPE Manager qua
+    // extraByRole — không ai mất gì khi bỏ dòng này (đã đo: grant không đổi một dòng nào).
   };
   /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
   const extraByRole: Record<string, string[]> = {

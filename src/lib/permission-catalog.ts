@@ -10,7 +10,12 @@
  * thuần dữ liệu (xem HANDOVER 4.2: luật parity vẫn giữ, chỉ phần chrome của UI mới cần key).
  *
  * THÊM QUYỀN MỚI: thêm một dòng ở đây + gọi requirePermission() ở đúng action/page tương ứng.
- * Có test chặn ở lib/permission-catalog.test-ish (script verify-permissions.mjs) đối chiếu 2 chiều.
+ *
+ * ⚠ KHÔNG có kiểm tự động nào đối chiếu hai chiều "mã trong danh mục ↔ chỗ requirePermission".
+ * (Chú thích cũ ở đây nhắc tới `scripts/verify-permissions.mjs` — file đó CHƯA BAO GIỜ tồn tại
+ * trong repo. Tin vào nó là tin vào một lưới an toàn không có thật.) Việc đối chiếu hiện làm TAY,
+ * và cũng phải soát cả đường CẤP quyền trong `prisma/seed.ts` — xem HANDOVER mục 10.15 để biết
+ * loại lỗi mà chỗ này bỏ lọt: mã có hai đường cấp mâu thuẫn nhau, tsc/eslint/build đều sạch.
  */
 
 export type PermissionDef = {

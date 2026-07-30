@@ -2,17 +2,18 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getNumberSetting } from "@/lib/settings";
-import { DEFAULT_KB_PASS_PCT } from "@/lib/client-kb";
+import { DEFAULT_KB_MAX_ATTEMPTS_PER_DAY, DEFAULT_KB_PASS_PCT } from "@/lib/client-kb";
 import { ClientsSettingsForm } from "./clients-settings-form";
 import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsClientsPage() {
   await requirePermission("settings.clients.manage");
-  const [t, activeDays, inactiveDays, kbPassPct] = await Promise.all([
+  const [t, activeDays, inactiveDays, kbPassPct, kbMaxAttempts] = await Promise.all([
     getTranslations("settings.clients"),
     getNumberSetting("clients", "care_interval_active_days", 60),
     getNumberSetting("clients", "care_interval_inactive_days", 90),
     getNumberSetting("clients", "kb_pass_pct", DEFAULT_KB_PASS_PCT),
+    getNumberSetting("clients", "kb_max_attempts_per_day", DEFAULT_KB_MAX_ATTEMPTS_PER_DAY),
   ]);
 
   return (
@@ -26,7 +27,7 @@ export default async function SettingsClientsPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t("desc")}</p>
       </div>
 
-      <ClientsSettingsForm activeDays={activeDays} inactiveDays={inactiveDays} kbPassPct={kbPassPct} />
+      <ClientsSettingsForm activeDays={activeDays} inactiveDays={inactiveDays} kbPassPct={kbPassPct} kbMaxAttempts={kbMaxAttempts} />
     </div>
   );
 }

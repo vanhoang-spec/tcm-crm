@@ -9,10 +9,12 @@ export function ClientsSettingsForm({
   activeDays,
   inactiveDays,
   kbPassPct,
+  kbMaxAttempts,
 }: {
   activeDays: number;
   inactiveDays: number;
   kbPassPct: number;
+  kbMaxAttempts: number;
 }) {
   const [state, formAction, pending] = useActionState<ClientsSettingsState, FormData>(saveClientsSettings, {});
   const t = useTranslations("settings.clients");
@@ -34,6 +36,11 @@ export function ClientsSettingsForm({
           <label className="mb-1 block text-xs font-medium text-foreground">{t("kbPassPct")}</label>
           <p className="mb-1 text-xs text-muted-foreground">{t("kbPassPctHint")}</p>
           <NumberField name="kbPassPct" defaultValue={kbPassPct} className={input} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-foreground">{t("kbMaxAttempts")}</label>
+          <p className="mb-1 text-xs text-muted-foreground">{t("kbMaxAttemptsHint")}</p>
+          <NumberField name="kbMaxAttempts" defaultValue={kbMaxAttempts} className={input} />
         </div>
       </div>
       <div className="flex items-center gap-3 border-t border-border pt-4">

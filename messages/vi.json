@@ -379,7 +379,7 @@
       "aiRunning": "AI đang chạy…",
       "aiDone": "Xong — đọc lại rồi đăng",
       "quizTitle": "Bài kiểm tra",
-      "quizHint": "Trả lời đúng từ {pct}% trở lên là đạt. Làm lại bao nhiêu lần cũng được.",
+      "quizHint": "Trả lời đúng từ {pct}% trở lên là đạt. Tối đa {max} lượt mỗi ngày. Đáp án không được hiển thị.",
       "quizOpen": "Làm bài kiểm tra ({count} câu)",
       "quizEmpty": "Chủ đề này chưa có câu hỏi nào.",
       "quizSubmit": "Nộp bài",
@@ -387,7 +387,6 @@
       "quizScore": "Đúng {score}/{total} câu ({pct}%)",
       "quizPassed": "Đạt — ngưỡng {pct}%",
       "quizFailed": "Chưa đạt — cần từ {pct}% trở lên",
-      "quizCorrectIs": "Đáp án đúng: {option}",
       "quizAlreadyPassed": "Bạn đã đạt chủ đề này ({score}/{total}).",
       "complianceLink": "Bảng tuân thủ",
       "complianceTitle": "Bảng tuân thủ kho kiến thức",
@@ -410,7 +409,17 @@
       "errorQuizStale": "Bộ đề vừa được cập nhật trong lúc bạn làm bài — tải lại trang và làm lại, bài này chưa được ghi nhận",
       "lessonEmptyBadge": "Chưa có nội dung",
       "errorTopicHasAttempts": "Chủ đề đã có {count} lượt làm bài — xoá là mất lịch sử học, không xoá được",
-      "errorTopicHasQuestions": "Chủ đề còn {count} câu hỏi — gỡ câu hỏi trước đã"
+      "errorTopicHasQuestions": "Chủ đề còn {count} câu hỏi — gỡ câu hỏi trước đã",
+      "quizAttemptsLeft": "Còn {left} lượt trong hôm nay.",
+      "quizOutOfAttempts": "Hôm nay bạn đã dùng hết {max} lượt cho chủ đề này. Đọc lại bài và quay lại vào ngày mai.",
+      "quizNoAttemptsLeftToday": "Hết lượt hôm nay — đọc lại bài, mai làm tiếp.",
+      "quizReviewThenRetry": "Đọc lại các bài trong chủ đề rồi làm lại. Còn {left} lượt hôm nay.",
+      "quizReviewLink": "Xem đề kèm đáp án (chỉ người soạn)",
+      "quizReviewTitle": "Đề kiểm tra & đáp án",
+      "quizReviewHint": "Người học KHÔNG thấy đáp án — đây là chỗ duy nhất kiểm được câu AI ra có đúng không. Thấy sai thì bấm “AI ra đề kiểm tra” lại ở trang kho kiến thức.",
+      "sourceAi": "AI sinh",
+      "sourceManual": "Nhập tay",
+      "errorQuizTooMany": "Đã hết {max} lượt của hôm nay cho chủ đề này — mai làm tiếp"
     }
   },
   "careReport": {
@@ -558,7 +567,9 @@
       "saved": "Đã lưu.",
       "errorInvalid": "Giá trị phải là số ≥ 0.",
       "kbPassPct": "Ngưỡng đạt bài kiểm tra (%)",
-      "kbPassPctHint": "Trả lời đúng từ mức này trở lên là đạt. Đổi ngưỡng KHÔNG chấm lại các lượt đã làm."
+      "kbPassPctHint": "Trả lời đúng từ mức này trở lên là đạt. Đổi ngưỡng KHÔNG chấm lại các lượt đã làm.",
+      "kbMaxAttempts": "Số lượt làm bài mỗi ngày",
+      "kbMaxAttemptsHint": "Trần theo NGÀY cho mỗi chủ đề, tự hết hạn lúc nửa đêm — không ai bị khoá vĩnh viễn."
     },
     "teams": {
       "backToSettings": "Quay lại Thiết lập",

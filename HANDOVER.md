@@ -122,7 +122,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 94 model Prisma · 55 migration · 61 file `src/lib` · 2949 key i18n × 2 ngôn ngữ · 116 route.
+**Quy mô:** 94 model Prisma · 55 migration · 61 file `src/lib` · 2964 key i18n × 2 ngôn ngữ · 117 route.
 
 ---
 
@@ -230,7 +230,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
    - **danh mục 114 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
      Ngoại lệ (kiểm bằng `hasPermission()` **bên trong** action đã có `requirePermission` khác ở đầu — đừng đi tìm `requirePermission` tương ứng): `finance.vendor_payment.over_cap` trong `createVendorPayment` VÀ trong `createCtvBatchPayments` (đề xuất thanh toán đợt CTV, operations/actions.ts); `finance.invoice.over_cap` trong `createClientInvoice` (trần mềm theo CO/CE sống — cửa Nghiệm thu vẫn trần cứng).
-   - **~315 điểm chặn**: ~220 server action + 78 page + 9 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
+   - **~316 điểm chặn**: ~220 server action + 79 page + 9 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
    - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 114 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
    - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
    - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
@@ -458,8 +458,9 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       phí mà không cắt luôn khả năng nhập tay) · `clients.kb.compliance`. Backfill 3 marker
       `20260802_client_kb_h3_*`. ⚠ `isRestricted` phải chứa `generate` + `compliance` (KHÔNG chứa
       `quiz`). Verify trên DB thật sau `db:seed`: 20 / 4 / 4 role.
-    - **Setting `clients.kb_pass_pct`** (mặc định 80) ở `/settings/clients`, chặn ngoài dải [1,100]:
-      0 thì ai cũng đạt kể cả bỏ trắng, >100 thì không ai đạt được.
+    - **Hai setting ở `/settings/clients`**: `clients.kb_pass_pct` (mặc định 80, dải [1,100] — 0 thì ai
+      cũng đạt kể cả bỏ trắng, >100 thì không ai đạt được) và `clients.kb_max_attempts_per_day`
+      (mặc định 3, dải [1,20] — 0 thì không ai làm bài được bao giờ).
     - **Sáu bẫy đã bịt trong lúc soát nghịch trước khi commit** (mỗi cái tái hiện được bằng số):
       (a) ⚠ **Trang sửa bài phải có `key={lesson.updatedAt}` trên `LessonEditor`** — nút "AI viết nội
           dung" nằm ngay trên trang đó, mà editor giữ nội dung trong `useState` khởi tạo từ prop nên
@@ -483,12 +484,29 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - ⚠ **Card tuân thủ trên trang dự án gác bằng `clients.kb.compliance`, KHÔNG phải `.view`** — nó
       liệt kê trạng thái học của từng người có tên, đúng thứ mà mã `compliance` sinh ra để giới hạn.
       Người học tự xem trạng thái của mình bằng nhãn "Đã học xong" trên trang kho kiến thức.
-    - ⚠ **BIẾT VÀ CHẤP NHẬN — cột "Đã học xong" là TỰ KHAI, không phải bằng chứng đã đọc bài.** Màn
-      kết quả hiện đáp án đúng của các câu sai (để người học biết mình sai chỗ nào) và cho làm lại
-      không giới hạn. Ai cũng có thể nộp bừa lần 1 để đọc đáp án rồi làm lại lần 2 đạt 100% trong 30
-      giây mà không mở bài nào. Đây là đánh đổi CỐ Ý của "cảnh báo mềm" — dùng bảng tuân thủ để NHẮC,
-      đừng dùng làm bằng chứng kỷ luật. Muốn siết thì phải bàn riêng (giới hạn số lượt, đảo thứ tự
-      phương án, không hiện đáp án).
+    - **ĐÃ SIẾT ĐỘ TIN CẬY CỦA BÀI KIỂM TRA** (quyết định chủ dự án 30/07/2026 — trước đó màn kết quả
+      hiện đáp án và cho làm lại vô hạn, nộp bừa lần 1 để đọc đáp án rồi lần 2 đạt 100% mất 30 giây):
+      · ⚠ **Đáp án bị cắt khỏi PAYLOAD, không phải khỏi JSX.** `QuizState.result.detail` chỉ còn
+        `{questionId, prompt, chosen, ok}` — không `correctIndex`, không `explanation`. Bỏ khỏi giao
+        diện mà vẫn trả về là mở DevTools thấy ngay. Người học vẫn biết SAI CÂU NÀO để quay lại đọc.
+      · **Đảo thứ tự phương án mỗi lần tải trang** (`shuffleOptions`). ⚠ Ô radio gửi lên
+        `originalIndex` — chỉ số trong `optionsJson` GỐC — nên bộ chấm không cần biết gì về việc đảo.
+        Gửi chỉ số HIỂN THỊ là chấm sai toàn bộ; test thuần có hẳn một ca chứng minh điều đó.
+      · **Trần số lượt theo NGÀY** (setting `clients.kb_max_attempts_per_day`, mặc định 3, dải 1–20).
+        Theo NGÀY chứ không phải trần tuyệt đối: trần tuyệt đối khoá vĩnh viễn người trượt hết lượt
+        và bắt phải đẻ thêm màn hình admin mở khoá. ⚠ Mốc "đầu ngày" dựng bằng giờ ĐỊA PHƯƠNG
+        (`new Date(y,m,d)`) vì `createdAt` của lượt là mốc thời gian thật, KHÔNG theo quy ước
+        UTC-midnight của các cột ngày nghiệp vụ — dùng UTC là khung 0–7h sáng tính nhầm sang hôm
+        trước (đúng lỗi đã vá ở Kho v2 K4). Chặn ở CẢ trang lẫn server; đã verify server chặn độc
+        lập bằng cách dùng hết lượt sau lưng một trang đã render → server từ chối, DB không tăng.
+      · **Trang `/kb/quiz/[topicId]/review` gác `clients.kb.manage`** — hệ quả BẮT BUỘC của việc giấu
+        đáp án: trước đây người học thấy "đáp án đúng là X" nên báo được câu AI ra sai; giấu đi là
+        bịt luôn kênh phát hiện duy nhất. Trang này in `correctIndex` thẳng ra HTML — **đừng bao giờ
+        hạ mã quyền xuống `.quiz` hay `.view`**, ai vào được là đạt 100% trong 10 giây.
+      · ⚠ **Ranh giới còn lại:** với 3 lượt/ngày và 5 câu, người CỐ TÌNH vẫn dò được đáp án qua vài
+        ngày bằng loại trừ, vì màn kết quả còn hiện đúng/sai từng câu. Giữ phần đúng/sai là cố ý —
+        bỏ nốt thì người học mất hoàn toàn manh mối nên đọc lại bài nào. Bảng tuân thủ vẫn nên đọc
+        là "đã làm bài đạt", không phải "đã đọc hết bài".
     - **Giới hạn khác đã biết:** câu hỏi KHÔNG có cổng duyệt DRAFT→PUBLISHED như bài học — AI ra đề
       xong là dùng ngay · sửa bài SAU khi đã ra đề thì câu hỏi thành lỗi thời mà không có cảnh báo,
       và lượt ĐÃ ĐẠT không bao giờ bị vô hiệu · `answersJson` là cột chỉ-ghi, chưa có màn hình xem
@@ -502,7 +520,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       đã nói rõ "gửi sang DeepSeek" để người bấm biết mình đang gửi gì đi đâu.
     - **CẮT khỏi v1** (muốn thêm phải hỏi chủ dự án): sắp xếp lại thứ tự chủ đề/bài · theo dõi tiến độ
       đọc từng người · lịch sử phiên bản bài học · glossary riêng · nhắc học qua notification · gộp
-      kho khách lẻ vào kho nhóm · nhập tay câu hỏi (hiện chỉ AI sinh) · cấu hình số câu mỗi đề (hằng 5).
+      kho khách lẻ vào kho nhóm · nhập tay câu hỏi (hiện chỉ AI sinh) · cấu hình số câu mỗi đề (hằng 5) · sửa/xoá từng câu hỏi (sai thì ra đề lại).
 
 15. ⚠ **HAI LỖ HỔNG PHÂN QUYỀN CÓ TỪ TRƯỚC H3 — chưa vá, cần chủ dự án quyết.** Soát nghịch đợt H3
     phát hiện, đã đo trên DB thật: **hiện tại KHÔNG có hại** vì DB production kế thừa grant từ các

@@ -25,16 +25,20 @@ export async function saveClientsSettings(
   const activeDays = Number(formData.get("activeDays") ?? NaN);
   const inactiveDays = Number(formData.get("inactiveDays") ?? NaN);
   const kbPassPct = Number(formData.get("kbPassPct") ?? NaN);
+  const kbMaxAttempts = Number(formData.get("kbMaxAttempts") ?? NaN);
   if (!Number.isFinite(activeDays) || activeDays < 1 || !Number.isFinite(inactiveDays) || inactiveDays < 1) {
     return { error: t("errorInvalid") };
   }
   // Ngưỡng ngoài [1,100] là vô nghĩa: 0 thì ai cũng đạt kể cả bỏ trắng, >100 thì không ai đạt được.
   if (!Number.isFinite(kbPassPct) || kbPassPct < 1 || kbPassPct > 100) return { error: t("errorInvalid") };
+  // Tối thiểu 1 lượt/ngày — để 0 là không ai làm bài được bao giờ. Trần 20 cho đỡ vô nghĩa.
+  if (!Number.isFinite(kbMaxAttempts) || kbMaxAttempts < 1 || kbMaxAttempts > 20) return { error: t("errorInvalid") };
 
   const staffId = await getCurrentStaffId();
   await upsertSetting("care_interval_active_days", String(Math.round(activeDays)), staffId);
   await upsertSetting("care_interval_inactive_days", String(Math.round(inactiveDays)), staffId);
   await upsertSetting("kb_pass_pct", String(Math.round(kbPassPct)), staffId);
+  await upsertSetting("kb_max_attempts_per_day", String(Math.round(kbMaxAttempts)), staffId);
 
   revalidatePath("/settings/clients");
   revalidatePath("/clients/care-report");

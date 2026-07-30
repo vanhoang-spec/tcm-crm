@@ -147,6 +147,33 @@ export const QUIZ_OPTION_COUNT = 4;
 /** Số câu AI sinh mỗi lượt. Hằng số, không đưa vào setting. */
 export const QUIZ_AI_QUESTION_COUNT = 5;
 export const DEFAULT_KB_PASS_PCT = 80;
+/**
+ * Trần số lượt làm bài MỖI NGÀY cho một chủ đề. Theo NGÀY chứ không phải trần tuyệt đối: trần
+ * tuyệt đối khoá vĩnh viễn người trượt hết lượt và bắt phải có màn hình admin mở khoá.
+ */
+export const DEFAULT_KB_MAX_ATTEMPTS_PER_DAY = 3;
+
+/**
+ * Đảo thứ tự hiển thị phương án — HÀM THUẦN (nhận nguồn ngẫu nhiên để test được).
+ *
+ * ⚠ Trả kèm `originalIndex` và ô radio phải gửi CHÍNH SỐ ĐÓ lên. Nhờ vậy bộ chấm không phải biết
+ * gì về việc đảo: `correctIndex` trong DB vẫn trỏ đúng phương án cũ. Đảo mà gửi chỉ số HIỂN THỊ
+ * là chấm sai toàn bộ.
+ *
+ * Mục đích: chặn học vẹt vị trí ("đáp án luôn là ô thứ 2") và làm việc dò đáp án bằng cách làm
+ * lại nhiều lượt trở nên vô nghĩa vì vị trí đổi mỗi lần tải trang.
+ */
+export function shuffleOptions(
+  options: QuizOption[],
+  rand: () => number = Math.random,
+): { text: QuizOption; originalIndex: number }[] {
+  const arr = options.map((text, originalIndex) => ({ text, originalIndex }));
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 export type QuizOption = string;
 export type QuizQuestionInput = {

@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { requirePermission } from "@/lib/permissions";
 import { getNumberSetting } from "@/lib/settings";
-import { DEFAULT_KB_PASS_PCT, gradeQuiz } from "@/lib/client-kb";
-import { loadKbClient, loadQuizAnswerKey } from "@/lib/client-kb-data";
+import { DEFAULT_KB_MAX_ATTEMPTS_PER_DAY, DEFAULT_KB_PASS_PCT, gradeQuiz } from "@/lib/client-kb";
+import { countAttemptsToday, loadKbClient, loadQuizAnswerKey } from "@/lib/client-kb-data";
 
 /**
  * Nộp và CHẤM bài kiểm tra của một chủ đề.
@@ -28,8 +28,17 @@ export type QuizState = {
     pct: number;
     passed: boolean;
     passPct: number;
-    /** Chỉ trả về SAU khi đã chấm — trước đó đáp án không rời khỏi server. */
-    detail: { questionId: string; prompt: string; chosen: number | null; correctIndex: number; ok: boolean; explanation: string | null }[];
+    /** Số lượt còn được làm trong hôm nay, tính SAU lượt vừa nộp. */
+    attemptsLeftToday: number;
+    /**
+     * ⚠ CHỈ có `ok` — KHÔNG có `correctIndex`, KHÔNG có `explanation`.
+     *
+     * Đáp án không bao giờ rời khỏi server, kể cả sau khi chấm: hiện đáp án rồi cho làm lại là
+     * đường tắt để đạt 100% trong 30 giây mà không mở bài nào. Người học vẫn biết mình sai câu
+     * nào để quay lại đọc, chỉ không biết đáp án đúng là gì. Cắt ở TẦNG DỮ LIỆU chứ không phải ở
+     * JSX — bỏ khỏi giao diện mà vẫn trả về payload thì mở DevTools là thấy.
+     */
+    detail: { questionId: string; prompt: string; chosen: number | null; ok: boolean }[];
   };
 };
 
@@ -56,6 +65,20 @@ export async function submitQuiz(
   const inAnchor =
     loaded.anchor.kind === "GROUP" ? topic.space.groupId === loaded.anchor.id : topic.space.clientId === loaded.anchor.id;
   if (!inAnchor) return { error: t("errorNotFound") };
+
+  /*
+    Trần số lượt TRONG NGÀY, không phải trần tuyệt đối. Cố ý: trần tuyệt đối thì người trượt hết
+    lượt bị khoá vĩnh viễn, phải đẻ thêm một màn hình admin mở khoá — còn trần theo ngày tự hết
+    hạn lúc nửa đêm, không ai phải can thiệp.
+
+    Đây là chốt chống DÒ ĐÁP ÁN: không hiện đáp án nữa nhưng người ta vẫn thấy điểm mỗi lượt, nên
+    làm lại vô hạn là vẫn dò ra được bằng cách loại trừ. Trần ngày làm việc đó bất khả thi.
+  */
+  const maxPerDay = Math.round(
+    await getNumberSetting("clients", "kb_max_attempts_per_day", DEFAULT_KB_MAX_ATTEMPTS_PER_DAY),
+  );
+  const usedToday = await countAttemptsToday(topicId, staffId);
+  if (usedToday >= maxPerDay) return { error: t("errorQuizTooMany", { max: maxPerDay }) };
 
   const key = await loadQuizAnswerKey(topicId);
   if (key.length === 0) return { error: t("errorQuizNoQuestion") };
@@ -105,13 +128,13 @@ export async function submitQuiz(
       pct: graded.pct,
       passed: graded.passed,
       passPct,
+      attemptsLeftToday: Math.max(0, maxPerDay - usedToday - 1),
+      // KHÔNG map `correctIndex` và `explanation` xuống đây — xem chú thích ở QuizState.
       detail: graded.detail.map((d) => ({
         questionId: d.questionId,
         prompt: byId.get(d.questionId)?.prompt ?? "",
         chosen: d.chosen,
-        correctIndex: d.correctIndex,
         ok: d.ok,
-        explanation: byId.get(d.questionId)?.explanation ?? null,
       })),
     },
   };

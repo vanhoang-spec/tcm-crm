@@ -217,6 +217,36 @@ export async function loadQuizQuestions(topicId: string) {
 }
 
 /**
+ * Số lượt người này đã làm chủ đề này TRONG NGÀY HÔM NAY.
+ *
+ * ⚠ Mốc "đầu ngày" dựng bằng thành phần ĐỊA PHƯƠNG (`new Date(y, m, d)`), không phải `Date.UTC` —
+ * `createdAt` của lượt làm là mốc thời gian THẬT, không theo quy ước UTC-midnight của các cột
+ * ngày nghiệp vụ. Dùng UTC ở đây thì trong khung 0–7h sáng giờ Sài Gòn, trần lượt sẽ tính nhầm
+ * sang ngày hôm trước (đúng loại lỗi đã vá ở Kho v2 K4 — xem HANDOVER 10.11).
+ * Server bắt buộc đặt `TZ=Asia/Ho_Chi_Minh`.
+ */
+export async function countAttemptsToday(topicId: string, staffId: string): Promise<number> {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return prisma.clientKbAttempt.count({ where: { topicId, staffId, createdAt: { gte: startOfDay } } });
+}
+
+/**
+ * Đề kèm ĐÁP ÁN cho người SOẠN xem lại (`clients.kb.manage`).
+ *
+ * Cần thiết vì từ lúc giấu đáp án khỏi người học, đây là kênh DUY NHẤT còn lại để phát hiện câu
+ * AI ra sai. Không có nó thì một đáp án sai nằm im vĩnh viễn và cả công ty trượt oan câu đó.
+ */
+export async function loadQuizForReview(topicId: string) {
+  const rows = await prisma.clientKbQuestion.findMany({
+    where: { topicId, isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, prompt: true, optionsJson: true, correctIndex: true, explanation: true, source: true },
+  });
+  return rows.filter(isUsableQuestion);
+}
+
+/**
  * Đáp án — CHỈ gọi trong action chấm bài, không bao giờ ở đường render.
  *
  * ⚠ Lọc bằng CÙNG `isUsableQuestion` như đường render. Lệch một chút là mẫu số chấm điểm khác số

@@ -379,7 +379,7 @@
       "aiRunning": "AI running…",
       "aiDone": "Done — review, then publish",
       "quizTitle": "Quiz",
-      "quizHint": "Score {pct}% or above to pass. You may retake it as often as you like.",
+      "quizHint": "Score {pct}% or above to pass. Up to {max} attempts per day. Answers are not revealed.",
       "quizOpen": "Take the quiz ({count} questions)",
       "quizEmpty": "This topic has no questions yet.",
       "quizSubmit": "Submit",
@@ -387,7 +387,6 @@
       "quizScore": "{score}/{total} correct ({pct}%)",
       "quizPassed": "Passed — threshold {pct}%",
       "quizFailed": "Not passed — {pct}% required",
-      "quizCorrectIs": "Correct answer: {option}",
       "quizAlreadyPassed": "You already passed this topic ({score}/{total}).",
       "complianceLink": "Compliance",
       "complianceTitle": "Knowledge base compliance",
@@ -410,7 +409,17 @@
       "errorQuizStale": "The question set was updated while you were taking the quiz — reload and retake; this attempt was not recorded",
       "lessonEmptyBadge": "No content yet",
       "errorTopicHasAttempts": "This topic has {count} quiz attempts — deleting would destroy learning history",
-      "errorTopicHasQuestions": "This topic still has {count} questions — remove them first"
+      "errorTopicHasQuestions": "This topic still has {count} questions — remove them first",
+      "quizAttemptsLeft": "{left} attempts left today.",
+      "quizOutOfAttempts": "You have used all {max} attempts for this topic today. Re-read the lessons and come back tomorrow.",
+      "quizNoAttemptsLeftToday": "No attempts left today — re-read the lessons and try again tomorrow.",
+      "quizReviewThenRetry": "Re-read the lessons in this topic, then try again. {left} attempts left today.",
+      "quizReviewLink": "View questions with answers (authors only)",
+      "quizReviewTitle": "Quiz questions & answers",
+      "quizReviewHint": "Learners do NOT see the answers — this is the only place to check whether the AI got them right. If one is wrong, run “AI write quiz” again from the knowledge base page.",
+      "sourceAi": "AI-generated",
+      "sourceManual": "Manual",
+      "errorQuizTooMany": "All {max} attempts for today are used on this topic — try again tomorrow"
     }
   },
   "careReport": {
@@ -558,7 +567,9 @@
       "saved": "Saved.",
       "errorInvalid": "Value must be a number ≥ 0.",
       "kbPassPct": "Quiz pass threshold (%)",
-      "kbPassPctHint": "Scoring at or above this passes. Changing it does NOT re-grade past attempts."
+      "kbPassPctHint": "Scoring at or above this passes. Changing it does NOT re-grade past attempts.",
+      "kbMaxAttempts": "Quiz attempts per day",
+      "kbMaxAttemptsHint": "A per-DAY cap for each topic, resetting at midnight — nobody gets locked out permanently."
     },
     "teams": {
       "backToSettings": "Back to Settings",

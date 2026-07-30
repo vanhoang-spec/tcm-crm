@@ -540,6 +540,33 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
+**ĐÃ DEPLOY 30/07/2026 lúc 11:15** — commit `d8f1603`, gói cả H1 (nhóm khách hàng) + H2 + H3 (kho kiến
+thức theo khách, AI sinh bài, bài kiểm tra, bảng tuân thủ) + bản siết độ tin cậy bài kiểm tra. Chạy
+bằng `bash scripts/deploy.sh` đường LAN, fingerprint khớp. 3 migration mới áp sạch
+(`client_groups`, `client_kb`, `client_kb_quiz`).
+
+Đối chiếu SAU deploy với backup TRƯỚC deploy — không mất gì:
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 42 / 68 / 25 | 42 / 68 / 25 |
+| CO/CE (sheet / dòng) | 4 / 327 | 4 / — |
+| timeline / ca làm | 141 / 205 | giữ nguyên |
+| dòng grant quyền | 1313 | 1365 (+52 = phần KB mới, đúng như dự kiến) |
+
+Grant 5 mã KB trên production đo được **đúng chính sách**: `view` 20 · `manage` 4 · `quiz` 20 ·
+`generate` 4 · `compliance` 4 role. Đủ 5 marker backfill `20260801_*` + `20260802_*`. Nhóm AEON có
+sẵn với 4 pháp nhân. `PRAGMA integrity_check` = `ok`, `foreign_key_check` 0 dòng. Route mới trả 307
+về login đúng như mong đợi, `/login` 200, không có 500 nào. Error log **không thêm dòng nào** sau
+11:15 (mọi dòng `orphan index` và `Failed to find Server Action` trong đó có từ 19:39 ngày 29/07 —
+xem ghi chú deploy 28/07 bên dưới).
+
+⚠ Trên server còn một tiến trình pm2 thứ hai tên `tcm-crm-test` (online, uptime ~24h). Không phải
+app production; kiểm lại xem còn cần không, đang chiếm RAM.
+
+**Bảng kho v2 trên production đang TRỐNG** (0 mặt hàng, 0 phiếu) — module đã dựng xong toàn bộ K1–K5
+nhưng chưa ai nhập liệu thật. Không phải mất dữ liệu: backup trước deploy cũng 0.
+
 **Vừa xong (đã verify sạch, chưa deploy):**
 - CO/CE hỗ trợ dòng âm tiền + thuế "Khác (nhập tay)" — migration `20260725010528_costline_custom_tax_amount`.
 

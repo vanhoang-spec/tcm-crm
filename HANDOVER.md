@@ -722,12 +722,37 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       CO/CE` ở `/finance` · `aria-label="Chọn ngày"` của `DateField` · 2 chỗ còn chữ "BGĐ" trong
       `messages/en.json`.
 
+    **SỐ VÀ NGÀY CHỐT CỨNG `vi-VN` — QUYẾT ĐỊNH CÓ CHỦ Ý (chủ dự án xác nhận 01/08/2026). ĐỪNG "SỬA".**
+    `NUMBER_LOCALE`/`DATE_LOCALE` ở `lib/utils.ts` là hằng, KHÔNG đọc ngôn ngữ giao diện. Bốn hàm
+    `formatNumber`/`formatDecimal`/`formatDate`/`formatDateTime` vẫn nhận tham số `_locale` (gạch
+    dưới = cố ý không dùng) chỉ để khỏi phải sửa ~252 chỗ gọi. **Ngày LUÔN LÀ `dd/mm/yyyy`, số luôn
+    `1.234,5`, ở mọi ngôn ngữ.** Ô NHẬP theo cùng chuẩn: `number-field.tsx` cũng khoá `vi-VN`,
+    `DateField` dùng mask `dd/mm/yyyy` cố định.
+    - Lý do (đã ghi ở `utils.ts:14` và `:52`): app TỪNG chạy ngày theo locale, hệ quả là xem bằng
+      tiếng Anh ra `MM/DD/YYYY` ⇒ hai người mở cùng một hợp đồng đọc ra hai ngày khác nhau
+      (`07/05` là 7/5 hay 5/7?). Với mốc nghiệm thu và hạn thanh toán thì đó là lỗi nặng hơn hẳn
+      việc người quen chuẩn Anh–Mỹ phải làm quen dấu phân cách.
+    - Đánh đổi được chấp nhận: người đọc quen `en-US` nhìn `80.000.000` có thể hiểu nhầm là 80,0 và
+      `11,25` thành 11250. Chấp nhận vì đây là app NỘI BỘ của công ty Việt Nam. (Ghi chú: phần NGÀY
+      thực ra không lệch với người Anh — `en-GB` cũng là `dd/mm/yyyy`; chỉ `en-US` lệch.)
+    - ⚠ Nếu ngày nào đó muốn đổi thì phải đổi **ĐỒNG THỜI hiển thị VÀ ô nhập**. Sửa mỗi phần hiển
+      thị sẽ ra cảnh gõ `1,234.5` vào ô rồi lưu xong hiện `1.234,5` trong cùng một form.
+
+    **Đã soát toàn app 01/08/2026 để bảo đảm "dd/mm/yyyy xuyên suốt" — 2 chỗ lệch, đã vá:**
+    - `operations-grid.tsx` dùng `<input type="date">` THUẦN (đường duy nhất trong repo). Input
+      native hiển thị theo locale HĐH/trình duyệt và Chromium bỏ qua `lang` — máy đặt tiếng Anh-Mỹ
+      sẽ hiện `mm/dd/yyyy`. Đã thay bằng `DateField` (submit y hệt: cùng `name`, cùng ISO).
+    - `bidding/order-actions.ts` dựng giờ họp brainstorm bằng `toLocaleString("vi-VN")` → cho ra
+      `16:59:00 5/7/2026` (không đệm 0, có giây, giờ đứng trước). Đã đổi sang `formatDateTime`.
+
+    **KHÔNG phải lệch, đừng đụng:** báo giá BM02 (`costsheet-quotation.ts`) dựng ngày `dd/mm/yyyy`
+    bằng tay và CỐ Ý đọc thành phần **UTC** vì ngày sự kiện lưu UTC-midnight (mục 4.3) · `cellText`
+    trong `clients-review-export.ts` gọi `toISOString()` nhưng đó là đường ĐỌC file Excel khách gửi,
+    không phải định dạng hiển thị · `staff/page.tsx` đổi `Intl.DateTimeFormat` theo ngôn ngữ nhưng
+    chỉ để lấy TÊN THỨ (`Th 2` / `Mon`) — phần số ngay sau đã là `dd/mm`, tên thứ là chữ nên dịch
+    được là đúng.
+
     **Chưa vá — xếp theo mức ảnh hưởng:**
-    - ⚠ **Số và ngày chốt cứng `vi-VN`** (`NUMBER_LOCALE`/`DATE_LOCALE` ở `lib/utils.ts`). Bốn hàm
-      `formatNumber`/`formatDecimal`/`formatDate`/`formatDateTime` NHẬN tham số `_locale` rồi BỎ QUA;
-      252 chỗ gọi đang truyền locale vào chỗ không ai đọc. Ở chế độ English hiện `80.000.000` (người
-      Anh đọc dấu chấm là dấu thập phân) và `11,25` (dấu phẩy bị đọc là dấu nghìn). Đây KHÔNG cùng
-      loại với "chưa dịch" — người đọc **hiểu sai số tiền mà không biết mình sai**.
     - `Department` / `Team` / `Role` chỉ có MỘT cột `name`, không có `nameEn` như các bảng khác ⇒
       `Creative / Thiết kế`, `ACC 1 — Dự án/Đấu thầu đa ngành`, `Quản trị hệ thống (Admin)` hiện
       nguyên tiếng Việt ở org chart, `/settings/staff`, ma trận quyền và mọi ô chọn nhân sự.

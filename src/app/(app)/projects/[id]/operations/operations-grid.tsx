@@ -6,6 +6,7 @@ import { Plus, Trash2, Upload, Download, FileDown, Check, Banknote } from "lucid
 import { CTV_COLUMNS } from "@/lib/ctv-columns";
 import { ctvRowCost, ctvEffectiveLineId, ctvPlanVsActual, type CtvPlanLine } from "@/lib/ctv-costing";
 import { formatNumber } from "@/lib/utils";
+import { DateField } from "@/components/ui/date-field";
 import type { Locale } from "@/i18n/locales";
 import {
   createCtvBatch,
@@ -660,7 +661,11 @@ function PlanVsActualBlock({
           <form action={handleCreatePayments} className="flex flex-wrap items-end gap-2">
             <label className="text-[11px] text-muted-foreground">
               {t("payDueDate")}
-              <input type="date" name="dueDate" className={input + " w-40"} />
+              {/* DateField chứ KHÔNG phải <input type="date"> thuần: input native hiển thị theo
+                  locale của HĐH/trình duyệt (Chromium bỏ qua lang), nên máy đặt tiếng Anh-Mỹ sẽ
+                  hiện mm/dd/yyyy trong khi cả app dùng dd/mm/yyyy. Submit y hệt: cùng `name`,
+                  cùng giá trị ISO yyyy-mm-dd. */}
+              <DateField name="dueDate" className={input + " w-40"} />
             </label>
             {hasOver && (
               <label className="text-[11px] text-muted-foreground">

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { requirePermission } from "@/lib/permissions";
 import { ORDER_DEPARTMENT_LABELS } from "@/lib/bidding";
+import { formatDateTime } from "@/lib/utils";
 import { spawnTasksForCreativeOrder } from "@/lib/creative";
 import { spawnPlanningJobForOrder, orderRecipientWhere } from "@/lib/planning";
 import { spawnTasksForDepartmentOrder, isDepartmentTaskDepartment } from "@/lib/department-tasks";
@@ -66,7 +67,9 @@ export async function createBrainstormOrder(projectId: string, formData: FormDat
       recipientStaffId,
       type: "BRAINSTORM_MEETING_INVITE",
       title: `Mời họp brainstorm — dự án ${project.code}`,
-      body: `${project.name} · ${new Date(meetingAtRaw).toLocaleString("vi-VN")}${meetingLocation ? ` · ${meetingLocation}` : ""}`,
+      // formatDateTime chứ KHÔNG phải toLocaleString: bản kia cho ra "16:59:00 5/7/2026" (không đệm
+      // số 0, có giây, giờ đứng trước) — lệch chuẩn dd/mm/yyyy dùng xuyên suốt app.
+      body: `${project.name} · ${formatDateTime(new Date(meetingAtRaw))}${meetingLocation ? ` · ${meetingLocation}` : ""}`,
       projectId,
     })),
   });

@@ -18,8 +18,20 @@ import "server-only";
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_MODEL = "deepseek-chat";
-/** Cắt sau 90s — tránh giữ request Next.js treo vô hạn khi API chậm. */
-const TIMEOUT_MS = 90_000;
+/**
+ * Cắt sau 75s — tránh giữ request Next.js treo vô hạn khi API chậm.
+ *
+ * ⚠ CON SỐ NÀY BỊ TRẦN TỪ BÊN NGOÀI, đừng nâng lên mà không kiểm lại đường mạng phía trước:
+ * Cloudflare (gói free) ngắt request proxy ở khoảng 100s và trả lỗi 524. Nếu app chỉ bỏ cuộc SAU
+ * mốc đó thì người dùng thấy trang lỗi của Cloudflare chứ không phải thông báo của app — mà server
+ * vẫn chạy tiếp và CÓ THỂ đã ghi xong vào DB, tức là "hỏng" nhưng thật ra đã thành công.
+ * Trước 01/08/2026 để 90s, chỉ còn 10s biên — quá mỏng. 75s cho biên 25s.
+ * nginx phía trước đặt `proxy_read_timeout 300s` nên nginx KHÔNG phải chỗ thắt cổ chai.
+ *
+ * Nếu sau này lượt sinh nội dung dài hơn 75s và bắt đầu rớt, cách đúng KHÔNG phải nâng số này lên
+ * quá 100s mà là đẩy phần gọi AI sang chạy nền rồi cho client hỏi kết quả sau.
+ */
+const TIMEOUT_MS = 75_000;
 
 export function isAiConfigured(): boolean {
   return !!process.env.DEEPSEEK_API_KEY;

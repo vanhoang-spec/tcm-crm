@@ -648,6 +648,107 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     rồi đếm `rolePermission` theo mã và đối chiếu với production. Nhớ kiểm lại `prisma/dev.db` sau đó
     (bảo vệ phải vẫn 2 mã) để chắc biến môi trường đã có tác dụng.
 
+18. **PLANNING GIẢI THỂ + TÁI CƠ CẤU TEAM ACCOUNT — 01/08/2026** (quyết định chủ dự án).
+    Bộ phận Planning thôi là phòng độc lập; luồng giao việc Planning trở thành việc NỘI BỘ trong mỗi
+    team Account. Toàn bộ team Account 2 (5 người dưới Hứa Thị Trâm Anh) + nhân sự Planning duy nhất
+    (Dương Mỹ Ngọc) nghỉ trong tháng 8 → **xoá vĩnh viễn**. 42 → 36 nhân sự.
+
+    | | trước | sau |
+    |---|---|---|
+    | A1 | tắt, 0 người | **bật, 2 người** (Phước + Tươi) |
+    | A2 | 7 người · 48 khách · 17 dự án | **0 / 0 / 0** |
+    | A3 | 6 người | 6 người |
+    | phòng Planning | 1 người, có lead | **0 người, lead trống, VẪN active** |
+    | dự án mất PIC | 21 | **21 — không tăng** |
+
+    - ⚠ **ĐỪNG tắt `Department.isActive` của PLANNING.** Phòng này không chỉ chứa headcount, nó còn
+      là HẠNG MỤC CÔNG VIỆC: `costPrefix = "PLA"` sinh mã dòng chi phí, và `bidding/[id]/page.tsx`
+      + `projects/[id]/co-ce/page.tsx` lọc phòng theo `costPrefix != null AND isActive = true`. Tắt
+      là mất tiền tố PLA khỏi trình dựng CO/CE, và Planning cũng biến khỏi Master Timeline
+      (`projects/[id]/timeline` + `settings/timeline-templates` cũng lọc theo `isActive`). Cột
+      Planning trên org chart tự biến mất khi hết người — không cần tắt phòng để đạt điều đó.
+    - ⚠ **Khối "Tái cơ cấu team Account (2026-07)" cũ đã bị THAY** — khối đó dồn A1→A2 và tắt A1
+      **vô điều kiện mỗi lần seed**, không marker. Để nguyên thì mọi thay đổi team bị dồn lại lặng lẽ
+      ngay lần `db:seed` kế tiếp (mà seed là BẮT BUỘC sau `migrate deploy`). Nay là 2 khối một-lần
+      có marker: `20260801_a2_offboard` và `20260801_planning_dissolved`.
+    - ⚠ **THỨ TỰ LÀ BẤT BIẾN: chuyển chủ TRƯỚC, xoá SAU.** Xoá trước thì `project.ownerId`/`leaderId`
+      bị SET NULL ở tầng DB, và dự án trống PIC/Leader chỉ người có `inventory.request.approve_any`
+      duyệt được đề xuất xuất kho (mục 10.11) → kẹt luồng kho.
+    - **Ảnh chụp trước khi xoá** ghi vào `AuditLog` (`field = "offboard_snapshot"`): tạm ứng, revision
+      CO/CE, order đã gửi, **số ca làm sẽ bị deleteMany**, **điểm KPI sẽ bị CASCADE**. Hai thứ cuối
+      biến mất KHÔNG dấu vết ở tầng DB — production có ~205 ca làm (dev.db chỉ 20). `requestedById`
+      CỐ Ý không trỏ sang người khác: ghi người còn ở lại đứng tên khoản tạm ứng họ không đề nghị là
+      bịa lịch sử.
+    - ⚠ **Gỡ người khỏi `STAFF_ROWS` thì phải trỏ lại mọi alias dùng họ.** `yen` (Trâm Anh, 31 chỗ) →
+      Lê Huỳnh Kim Yến; `orderLeadByCode.PLANNING` (Mỹ Ngọc, 7 chỗ) → cùng người đó. KHÔNG trỏ `yen`
+      về `thao` (Phước): hai biến này cùng vào một GROUP chat, `ConversationMember` có
+      `@@unique([conversationId, staffId])` nên seed nổ P2002.
+    - **`PLANNING` đã gỡ khỏi `deptLeads`** — gán một Account Manager làm "trưởng phòng Planning" sẽ
+      hiện sai trên nhãn của tab Planning. FK optional nên xoá Ngọc tự SET NULL.
+
+    **Ai làm Planning — cột mới `Staff.isPlanningStaff`** (migration `20260803000000_staff_is_planning_staff`,
+    viết tay `ALTER TABLE` thay vì bản `prisma migrate diff` sinh ra, vì bản đó là `RedefineTables`
+    = DROP TABLE staff rồi dựng lại, trên bảng có 82 cạnh FK trỏ tới).
+    - ⚠ **`orderRecipientWhere()` trong `lib/planning.ts` là MỘT NGUỒN SỰ THẬT** cho cả 4 chỗ hỏi
+      "ai nhận việc Planning": ô "Giao cho" tab Planning, board task bộ phận, và người nhận thông báo
+      ORDER ở CẢ HAI đường gửi order. Lọc PLANNING theo `department.code` sẽ ra DANH SÁCH RỖNG — hệ
+      quả im lặng là gửi order Planning mà KHÔNG AI nhận được thông báo.
+    - **CỐ Ý không lọc cứng theo team** ở ô chọn người nhận: nhãn có kèm mã team để người giao biết
+      đang mượn người team khác. Lọc cứng là team không có người Planning sẽ không giao được cho ai.
+    - ⚠ **HIỆN 0 người có cờ này.** Order Planning gửi đi sẽ không báo cho ai và không tự gán được
+      người làm cho tới khi tuyển người mới và tick cờ ở `/settings/staff`. Đúng thực tế, nhưng im lặng.
+
+    **Bỏ bước chờ giao** (`spawnPlanningJobForOrder`): job sinh ra đã có người nhận cho cả 3 khâu và
+    order tự chuyển ACCEPTED. `assignedById` = người GỬI ORDER nên khi nộp version thì thông báo bay
+    thẳng về đúng Account đã đặt việc. `resolveAutoPlanner` CHỈ tự gán khi còn đúng MỘT ứng viên —
+    nhiều hơn một là có lựa chọn thật, máy chọn hộ sẽ giao nhầm người mà không ai biết. Giờ làm ở
+    version proposal đổi từ tuỳ chọn sang **BẮT BUỘC** (bội số 0.25), khớp 2 chỗ còn lại vốn đã bắt buộc.
+
+    **Org chart:** thêm cột `ACCOUNT_A1` + `ACCOUNT_NOTEAM`. Trước đây `bucketOf` dùng "cái còn lại thì
+    về A2" nên người team A1 **lẫn người chưa gán team** đều bị nhốt vào cột nhãn "Account 2", nhìn
+    không ra là sai. Node giả "TBC (To Be Confirmed) — Planning Manager" đã gỡ: nó được `chart.push`
+    vô điều kiện nên cột Planning LUÔN hiện dù không còn ai.
+
+19. **i18N — ĐÃ VÁ 2 LỚP 01/08/2026, CÒN 4 LỚP.** Script parity ở mục 4.2 chỉ kiểm KEY khớp nhau
+    (2988/2988, lệch 0/0) — nó KHÔNG bắt được chuỗi hardcode, key ghép lúc chạy, hay bản "dịch" en
+    vẫn còn tiếng Việt. Đã soát cả 6 lớp, verify tận mắt trên browser ở chế độ EN.
+
+    **Đã vá:**
+    - ⚠ **3 chuỗi mặc định của `SearchableSelect`** (`— Chọn —` · `Tìm kiếm…` · `Không tìm thấy kết
+      quả phù hợp.`) từng hardcode làm GIÁ TRỊ MẶC ĐỊNH CỦA PROP. Đo được: **38 lần dùng, 0 lần
+      truyền `emptyText`/`searchPlaceholder`** ⇒ mọi ô chọn có tìm kiếm trong toàn app hiện tiếng
+      Việt kể cả ở chế độ English. Nay đọc từ namespace `common`; chỗ nào đã truyền prop riêng vẫn giữ.
+    - Toàn bộ thân trang `/settings/ai` (tiêu đề dịch, nội dung thì không) · link `→ Quản lý dự án ·
+      CO/CE` ở `/finance` · `aria-label="Chọn ngày"` của `DateField` · 2 chỗ còn chữ "BGĐ" trong
+      `messages/en.json`.
+
+    **Chưa vá — xếp theo mức ảnh hưởng:**
+    - ⚠ **Số và ngày chốt cứng `vi-VN`** (`NUMBER_LOCALE`/`DATE_LOCALE` ở `lib/utils.ts`). Bốn hàm
+      `formatNumber`/`formatDecimal`/`formatDate`/`formatDateTime` NHẬN tham số `_locale` rồi BỎ QUA;
+      252 chỗ gọi đang truyền locale vào chỗ không ai đọc. Ở chế độ English hiện `80.000.000` (người
+      Anh đọc dấu chấm là dấu thập phân) và `11,25` (dấu phẩy bị đọc là dấu nghìn). Đây KHÔNG cùng
+      loại với "chưa dịch" — người đọc **hiểu sai số tiền mà không biết mình sai**.
+    - `Department` / `Team` / `Role` chỉ có MỘT cột `name`, không có `nameEn` như các bảng khác ⇒
+      `Creative / Thiết kế`, `ACC 1 — Dự án/Đấu thầu đa ngành`, `Quản trị hệ thống (Admin)` hiện
+      nguyên tiếng Việt ở org chart, `/settings/staff`, ma trận quyền và mọi ô chọn nhân sự.
+    - ~40 tiêu đề Notification ở 8 file action + `mailer.ts` + thiệp sinh nhật/chào mừng. ⚠ Ngoại lệ
+      ghi ở mục 4.2 chỉ nói về `reminders.ts` ("vì không có `getTranslations`") — thực tế nó đã lan
+      sang những chỗ `getTranslations` dùng được bình thường.
+    - File xuất Excel/CSV toàn tiếng Việt (KPI, bảng công, BM08, BM02, CSV kho). Nhiều khả năng CỐ Ý
+      vì là biểu mẫu ISO thật, nhưng chưa thấy chỗ nào ghi rõ.
+    - 5 thông báo Zod trong `validators/costsheet.ts`: hàm THUẦN, không có `getTranslations`. Dịch
+      được thì phải truyền translator vào validator hoặc đổi sang mã lỗi — đụng đường lưu CO/CE, chỗ
+      nhạy nhất app, để dịch 5 câu vốn là chốt chặn "đáng lẽ không chạm tới". Đánh đổi không đáng.
+
+    **KHÔNG phải lỗ hổng** (đừng "sửa"): 103 key có en trùng hệt vi hầu hết là từ mượn mà bản tiếng
+    Việt cũng dùng (`Team`, `Email`, `Creative`, `Project Owner`, `Master Timeline`) · `CostSheetSection`
+    0/44 có `nameEn` vì đó là tên hạng mục do người dùng tự gõ · chữ `đ` trong 11 giá trị en là hậu tố
+    tiền tệ, khớp với code · nội dung do người dùng nhập (tên đầu việc timeline, tên khách).
+
+    **Key ghép lúc chạy đã kiểm hết** — đọc hằng thẳng từ source (`ITEM_STATUS_CODES`,
+    `REQUEST_STATUSES`, `ADVANCE_STATUSES`, `ROLE_GROUP_ORDER`…) rồi đối chiếu: **51/51 phân giải
+    được ở cả hai file**. Đây là lớp script parity mù, và repo đã từng vỡ trang vì nó (mục 10.1).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

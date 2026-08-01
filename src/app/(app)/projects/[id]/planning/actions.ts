@@ -120,7 +120,9 @@ export async function submitProposalVersion(jobId: string, formData: FormData) {
   const link = str(formData.get("resultLinkUrl"));
   const hours = nullable(formData.get("hoursSpent"));
   if (!link) return;
-  if (hours !== null && !isValidHours(Number(hours))) return;
+  // Giờ làm BẮT BUỘC từ 01/08/2026 (quyết định chủ dự án: "trả bài content và note thời gian đã làm,
+  // 0.25h là mốc tối thiểu"). Trước đó tuỳ chọn — lệch với khâu stage và board task vốn đã bắt buộc.
+  if (hours === null || !isValidHours(Number(hours))) return;
 
   const staffId = await getCurrentStaffId();
   try {
@@ -129,7 +131,7 @@ export async function submitProposalVersion(jobId: string, formData: FormData) {
         jobId,
         versionNo: (latest?.versionNo ?? 0) + 1,
         resultLinkUrl: link,
-        hoursSpent: hours !== null ? Number(hours) : null,
+        hoursSpent: Number(hours),
         submittedById: staffId,
       },
     });

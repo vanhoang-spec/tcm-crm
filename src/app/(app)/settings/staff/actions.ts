@@ -117,7 +117,7 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
  *
  * Trước đây gõ sai lúc tạo là kẹt vĩnh viễn: không action nào trong app ghi `email`, mà đây lại là
  * thứ gõ tay nhiều nhất (nhất là khi mở điểm kho mới, nhập một loạt tài khoản vận hành).
- * Cố ý CHỈ hai field này — phòng ban/chức danh/quản lý vẫn chưa sửa được trong app (xem HANDOVER).
+ * Cố ý CHỈ hai field này — phòng ban/team/quản lý sửa ở `updateStaffOrg`, chức danh vẫn chưa sửa được.
  */
 export async function updateStaffLogin(staffId: string, _prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
   await requirePermission("settings.staff.manage");
@@ -148,6 +148,71 @@ export async function updateStaffLogin(staffId: string, _prev: StaffFormState, f
   });
   revalidatePath("/settings/staff");
   revalidatePath("/staff/timesheet");
+  return { success: "SAVED" };
+}
+
+/**
+ * Sửa PHÒNG BAN / TEAM / QUẢN LÝ TRỰC TIẾP + cờ "làm function Planning" sau khi đã tạo.
+ *
+ * Trước 08/2026 ba field đầu chỉ đặt được lúc `createStaff` — chuyển một người sang phòng/team khác
+ * bắt buộc phải sửa tay dưới DB. Cần đường này khi bộ phận Planning giải thể về 2 team Account.
+ *
+ * `isPlanningStaff` là NGUỒN SỰ THẬT DUY NHẤT cho ô "Giao cho" của tab Planning — đây là chỗ DUY NHẤT
+ * trong app bật/tắt được nó (xem chú thích cột trong schema.prisma).
+ *
+ * ⚠ `managerId` là nguồn DUY NHẤT dựng cây org chart (`org-chart-svg.ts`). Vòng lặp quản lý
+ * (A quản B, B quản A) làm cả nhánh đó KHÔNG có gốc → DFS không bao giờ chạm tới → những người
+ * liên quan BIẾN MẤT khỏi sơ đồ mà không báo lỗi. Vì vậy chặn cả tự-quản-lý lẫn vòng lặp ở đây.
+ */
+export async function updateStaffOrg(staffId: string, _prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
+  await requirePermission("settings.staff.manage");
+  const t = await getTranslations("settings.staff");
+  const departmentId = String(formData.get("departmentId") ?? "").trim() || null;
+  const teamId = String(formData.get("teamId") ?? "").trim() || null;
+  const managerId = String(formData.get("managerId") ?? "").trim() || null;
+  const isPlanningStaff = formData.get("isPlanningStaff") === "on";
+
+  const target = await prisma.staff.findUnique({
+    where: { id: staffId },
+    select: { departmentId: true, teamId: true, managerId: true, isPlanningStaff: true },
+  });
+  if (!target) return { error: t("errorRequired") };
+
+  if (departmentId && !(await prisma.department.count({ where: { id: departmentId } }))) return { error: t("errorRequired") };
+  if (teamId && !(await prisma.team.count({ where: { id: teamId } }))) return { error: t("errorRequired") };
+
+  if (managerId) {
+    if (managerId === staffId) return { error: t("errorManagerSelf") };
+    // Đi ngược chuỗi quản lý từ manager mới lên; gặp lại chính mình là vòng lặp.
+    // Chặn `seen` để chuỗi hỏng sẵn có trong DB không làm vòng while chạy mãi.
+    const seen = new Set<string>([staffId]);
+    let cursor: string | null = managerId;
+    while (cursor) {
+      if (seen.has(cursor)) return { error: t("errorManagerCycle") };
+      seen.add(cursor);
+      const up: { managerId: string | null } | null = await prisma.staff.findUnique({
+        where: { id: cursor },
+        select: { managerId: true },
+      });
+      if (!up) return { error: t("errorRequired") };
+      cursor = up.managerId;
+    }
+  }
+
+  await prisma.staff.update({ where: { id: staffId }, data: { departmentId, teamId, managerId, isPlanningStaff } });
+  await prisma.auditLog.create({
+    data: {
+      entityType: "staff",
+      entityId: staffId,
+      field: "departmentId,teamId,managerId,isPlanningStaff",
+      oldValue: JSON.stringify(target),
+      newValue: JSON.stringify({ departmentId, teamId, managerId, isPlanningStaff }),
+      action: "UPDATE",
+      changedBy: await getCurrentStaffId(),
+    },
+  });
+  revalidatePath("/settings/staff");
+  revalidatePath("/orgchart");
   return { success: "SAVED" };
 }
 

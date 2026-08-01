@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,9 +52,9 @@ export function SearchableSelect({
   value,
   defaultValue = "",
   onChange,
-  placeholder = "— Chọn —",
+  placeholder,
   searchPlaceholder,
-  emptyText = "Không tìm thấy kết quả phù hợp.",
+  emptyText,
   required,
   disabled,
   hasError,
@@ -77,6 +78,14 @@ export function SearchableSelect({
   allowClear?: boolean;
   className?: string;
 }) {
+  // 3 chuỗi này TRƯỚC ĐÂY hardcode tiếng Việt làm giá trị mặc định của prop. Đo được: 38 lần dùng
+  // component trong app, KHÔNG lần nào truyền `emptyText` hay `searchPlaceholder` — nghĩa là mọi ô
+  // chọn có tìm kiếm đều hiện tiếng Việt kể cả khi người dùng đang ở chế độ English.
+  const tCommon = useTranslations("common");
+  const placeholderText = placeholder ?? tCommon("selectPlaceholder");
+  const searchText = searchPlaceholder ?? tCommon("searchPlaceholder");
+  const emptyResultText = emptyText ?? tCommon("noResults");
+
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(defaultValue);
   const selected = isControlled ? value! : internalValue;
@@ -167,7 +176,7 @@ export function SearchableSelect({
         )}
       >
         <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
-          {selectedOption ? selectedOption.label : placeholder}
+          {selectedOption ? selectedOption.label : placeholderText}
         </span>
         <span className="flex flex-none items-center gap-1">
           {canClear && (
@@ -199,13 +208,13 @@ export function SearchableSelect({
                 setHighlight(0);
               }}
               onKeyDown={onKeyDown}
-              placeholder={searchPlaceholder ?? "Tìm kiếm…"}
+              placeholder={searchText}
               className="h-9 w-full bg-transparent pl-8 pr-2 text-sm outline-none"
             />
           </div>
           <ul className="max-h-64 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <li className="px-3 py-4 text-center text-xs text-muted-foreground">{emptyText}</li>
+              <li className="px-3 py-4 text-center text-xs text-muted-foreground">{emptyResultText}</li>
             ) : (
               filtered.map((o, i) => (
                 <li key={o.value}>

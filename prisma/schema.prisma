@@ -109,6 +109,16 @@ model Staff {
   /// ⚠ ĐỪNG thay bằng cách nhập lương 0 ở PositionSalary: 0 ≠ null nên người đó vẫn nằm trong
   /// nhóm đủ điều kiện và VẪN ĂN share thật của quỹ KPI (xem kpi.ts, nhánh `salary == null`).
   payrollExempt Boolean   @default(false)
+  /// Người này LÀM function Planning (viết proposal, research, design brief) — quyết định chủ dự án
+  /// 01/08/2026: bộ phận Planning độc lập giải thể, nhân sự Planning về thẳng các team Account, nên
+  /// "ai là người Planning" KHÔNG còn suy được từ `departmentId` nữa.
+  /// ⚠ Đây là NGUỒN SỰ THẬT DUY NHẤT cho ô "Giao cho" của tab Planning. Đừng thêm đường lọc thứ hai
+  /// theo phòng ban song song với cờ này — hai nguồn mâu thuẫn chính là gốc của 5 lỗ hổng phân quyền
+  /// phải vá 30/07 (HANDOVER 10.15).
+  /// ⚠ CỐ Ý KHÔNG lọc thêm theo team ở ô chọn: hiện chỉ có 1 người Planning cho 2 team Account, lọc
+  /// cứng theo team là team còn lại không giao được việc cho ai. Nhãn ô chọn có ghi tên team để người
+  /// giao tự biết mình đang mượn người của team khác.
+  isPlanningStaff Boolean @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

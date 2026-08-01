@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { isTaskLocked, finishedGraceDaysLeft } from "./projects";
+import { orderRecipientWhere } from "./planning";
 
 // ─────────────────────────────────────────────────────────
 // Task nội bộ theo bộ phận — PLANNING | PCC | OPE | PRO (Creative dùng CreativeTask riêng, xem
@@ -114,13 +115,27 @@ export async function getDepartmentTasks(projectId: string, department: Departme
   });
 }
 
-/** Nhân sự active thuộc 1 bộ phận — dùng cho select "Giao cho" (hiện Tên — email). */
+/**
+ * Nhân sự active nhận được việc của 1 bộ phận — dùng cho select "Giao cho" (hiện Tên — email).
+ *
+ * ⚠ PLANNING đi đường KHÁC ba bộ phận còn lại: từ 01/08/2026 Planning không còn là phòng ban độc lập,
+ * người làm Planning nằm rải trong các team Account và được đánh dấu bằng cờ `Staff.isPlanningStaff`
+ * (xem chú thích cột trong schema.prisma). Lọc PLANNING theo `department.code` như cũ sẽ ra DANH SÁCH
+ * RỖNG và không giao được việc cho ai.
+ *
+ * Nhãn kèm mã team khi có, để người giao biết mình đang mượn người của team khác — cố ý KHÔNG chặn
+ * cứng theo team (hiện chỉ 1 người Planning cho 2 team).
+ */
 export async function getDepartmentStaffOptions(department: DepartmentTaskDepartment) {
   const staff = await prisma.staff.findMany({
-    where: { department: { code: department }, isActive: true },
+    where: orderRecipientWhere(department),
+    include: { team: { select: { code: true } } },
     orderBy: { fullName: "asc" },
   });
-  return staff.map((s) => ({ id: s.id, label: `${s.fullName} — ${s.email}` }));
+  return staff.map((s) => ({
+    id: s.id,
+    label: s.team ? `${s.fullName} — ${s.email} (${s.team.code})` : `${s.fullName} — ${s.email}`,
+  }));
 }
 
 type DepartmentTaskRow = Awaited<ReturnType<typeof getDepartmentTasks>>[number];

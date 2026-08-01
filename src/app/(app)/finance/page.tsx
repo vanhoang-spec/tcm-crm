@@ -205,7 +205,7 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
       {projectId && (
         <p className="text-xs text-muted-foreground">
           <Link href={`/projects/${projectId}/co-ce`} className="text-brand-600 hover:underline">
-            → Quản lý dự án · CO/CE
+            {t("openProjectCoCe")}
           </Link>
         </p>
       )}

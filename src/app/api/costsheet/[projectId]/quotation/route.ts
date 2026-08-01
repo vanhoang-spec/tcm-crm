@@ -27,7 +27,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ projectId: 
   const mode = req.nextUrl.searchParams.get("mode") === "internal" ? "internal" : "client";
 
   const src = await loadQuotationSource(projectId);
-  if (!src) return new NextResponse("Chưa có bảng CO/CE", { status: 409 });
+  // Ba thân lỗi của route này ("Unauthorized" / "Forbidden" / dòng dưới) là văn bản KỸ THUẬT theo
+  // kiểu HTTP status, cố ý không đi qua next-intl. Chỗ này trước đây lạc lõng vì viết tiếng Việt.
+  if (!src) return new NextResponse("No cost sheet", { status: 409 });
 
   const buffer = await buildQuotationWorkbook(buildQuotationModel(src, mode));
   const filename = `${src.projectCode}_${mode === "client" ? "BaoGia" : "COCE-NoiBo"}.xlsx`;

@@ -6,11 +6,15 @@
  * Operation), thụt lề nhẹ dưới trưởng phòng.
  *
  * Một số quy tắc HIỂN THỊ (không đụng dữ liệu DB — không có Staff/Department giả nào được tạo):
- *  • Phòng Account tách theo team thành 2 cột kề nhau: "Account 2" (team A2) và "Account 3" (team A3).
+ *  • Phòng Account tách theo team thành các cột kề nhau: "Account 1" (A1), "Account 2" (A2),
+ *    "Account 3" (A3). Cột không có ai tự bị bỏ qua — từ 08/2026 A2 trống nên chỉ còn A1 và A3.
+ *    Người phòng Account chưa gán team rơi vào cột riêng "Account (chưa có team)" để nhìn thấy được;
+ *    trước đây họ bị gộp âm thầm vào cột "Account 2" nên không ai phát hiện thiếu team.
  *  • Business Development tách khỏi Production: giám đốc BD&Production (title chứa "BD") xuất hiện ở CẢ
  *    2 cột — 1 node ở cột Production, 1 node nhân bản ở cột Business Development.
- *  • Planning luôn có trưởng phòng "Planning Manager" tên "TBC (To Be Confirmed)" (node placeholder,
- *    KHÔNG lưu DB) làm head; nhân sự Planning xếp dưới TBC.
+ *  • Planning KHÔNG còn cột cố định. Trước 01/08/2026 cột này luôn hiện nhờ một node head giả
+ *    "TBC (To Be Confirmed)"; nay bộ phận Planning đã giải thể về các team Account nên cột chỉ hiện
+ *    khi thực sự còn người trong bộ phận đó.
  *
  * Export ảnh (PNG qua canvas trình duyệt) và PDF (Ctrl+P) xử lý ở client (orgchart-client.tsx).
  */
@@ -42,9 +46,11 @@ const COLHEAD_H = 28; // dải tiêu đề cột phòng ban
 const PAD = 24;
 
 // Thứ tự cột từ trái sang phải (yêu cầu BGĐ). Bucket không có ai bị bỏ qua; bucket lạ thêm cuối.
-const BUCKET_ORDER = ["ACCOUNT_A2", "ACCOUNT_A3", "CREATIVE", "PLANNING", "BD", "OPE", "PRO", "FIN", "PCC", "HR"];
+const BUCKET_ORDER = ["ACCOUNT_A1", "ACCOUNT_A2", "ACCOUNT_A3", "ACCOUNT_NOTEAM", "CREATIVE", "PLANNING", "BD", "OPE", "PRO", "FIN", "PCC", "HR"];
 
 const BUCKET_LABEL: Record<string, string> = {
+  ACCOUNT_A1: "Account 1",
+  ACCOUNT_NOTEAM: "Account (chưa có team)",
   ACCOUNT_A2: "Account 2",
   ACCOUNT_A3: "Account 3",
   CREATIVE: "Creative",
@@ -59,8 +65,10 @@ const BUCKET_LABEL: Record<string, string> = {
 
 const BUCKET_COLOR: Record<string, string> = {
   HEADER: "#0068E6",
+  ACCOUNT_A1: "#3BA0FF",
   ACCOUNT_A2: "#0B84FA",
   ACCOUNT_A3: "#0068E6",
+  ACCOUNT_NOTEAM: "#94A3B8",
   CREATIVE: "#16A34A",
   PLANNING: "#D97706",
   BD: "#9333EA",
@@ -70,8 +78,6 @@ const BUCKET_COLOR: Record<string, string> = {
   PCC: "#0891B2",
   HR: "#65A30D",
 };
-
-const TBC_PLANNING_ID = "__TBC_PLANNING__";
 
 function bucketColor(bucket: string): string {
   return BUCKET_COLOR[bucket] ?? "#64748B";
@@ -101,7 +107,14 @@ function titleRank(title: string | null): number {
 
 function bucketOf(s: OrgStaffNode): string {
   const d = s.deptCode;
-  if (d === "ACCOUNT") return s.teamCode === "A3" ? "ACCOUNT_A3" : "ACCOUNT_A2";
+  // Khớp THẲNG theo mã team, không dùng "cái còn lại thì về A2" — kiểu cũ nhốt cả người team A1 lẫn
+  // người chưa gán team vào cột nhãn "Account 2", nhìn không ra là sai.
+  if (d === "ACCOUNT") {
+    if (s.teamCode === "A1") return "ACCOUNT_A1";
+    if (s.teamCode === "A2") return "ACCOUNT_A2";
+    if (s.teamCode === "A3") return "ACCOUNT_A3";
+    return "ACCOUNT_NOTEAM";
+  }
   if (d && ["CREATIVE", "PLANNING", "OPE", "PRO", "FIN", "PCC", "HR"].includes(d)) return d;
   return d ?? "UNASSIGNED";
 }
@@ -150,9 +163,8 @@ function nodeBoxSvg(n: PositionedNode): string {
   const sub = xmlEscape(truncate([n.deptName, n.teamCode].filter(Boolean).join(" · "), 30));
   const initials = xmlEscape(initialsOf(n.fullName));
   const cy = n.y + BOX_H / 2;
-  const dashed = n.chartId === TBC_PLANNING_ID ? ` stroke-dasharray="5 3"` : "";
   return `<g>
-    <rect x="${n.x}" y="${n.y}" width="${BOX_W}" height="${BOX_H}" rx="10" fill="#ffffff" stroke="${color}" stroke-width="1.4"${dashed}/>
+    <rect x="${n.x}" y="${n.y}" width="${BOX_W}" height="${BOX_H}" rx="10" fill="#ffffff" stroke="${color}" stroke-width="1.4"/>
     <circle cx="${n.x + 25}" cy="${cy}" r="16" fill="${color}" opacity="0.14"/>
     <text x="${n.x + 25}" y="${cy + 4.5}" font-size="11.5" font-weight="700" fill="${color}" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif">${initials}</text>
     <text x="${n.x + 50}" y="${n.y + 22}" font-size="12.5" font-weight="700" fill="#0F172A" font-family="system-ui, -apple-system, Segoe UI, sans-serif">${name}</text>
@@ -177,8 +189,8 @@ function curveConnector(mgr: PositionedNode, child: PositionedNode): string {
   return `<path d="M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>`;
 }
 
-/** Biến danh sách Staff thô thành các ChartNode có bucket/head/effManagerId (gồm node nhân bản BD + TBC). */
-function buildChartNodes(rest: OrgStaffNode[], ceoId: string | null): ChartNode[] {
+/** Biến danh sách Staff thô thành các ChartNode có bucket/head/effManagerId (gồm node nhân bản BD). */
+function buildChartNodes(rest: OrgStaffNode[]): ChartNode[] {
   const chart: ChartNode[] = [];
   const byBucket = new Map<string, OrgStaffNode[]>();
   for (const s of rest) {
@@ -226,29 +238,11 @@ function buildChartNodes(rest: OrgStaffNode[], ceoId: string | null): ChartNode[
     }
   }
 
-  // Planning: chèn head placeholder "TBC" (không lưu DB); nhân sự Planning xếp dưới TBC.
-  const tbc: ChartNode = {
-    id: TBC_PLANNING_ID,
-    chartId: TBC_PLANNING_ID,
-    fullName: "TBC (To Be Confirmed)",
-    title: "Planning Manager",
-    deptCode: "PLANNING",
-    deptName: "Planning",
-    teamCode: null,
-    managerId: ceoId,
-    bucket: "PLANNING",
-    effManagerId: ceoId,
-    rank: titleRank("Planning Manager"),
-    isHead: true,
-  };
-  chart.push(tbc);
-  for (const c of chart) {
-    if (c.bucket === "PLANNING" && c.chartId !== TBC_PLANNING_ID) {
-      c.isHead = false;
-      c.effManagerId = TBC_PLANNING_ID;
-    }
-  }
-
+  // Planning KHÔNG còn node head placeholder. Trước 01/08/2026 ở đây chèn vô điều kiện một node giả
+  // "TBC (To Be Confirmed) — Planning Manager"; hệ quả là cột Planning LUÔN hiện dù không còn ai
+  // trong bộ phận, và tắt `Department.isActive` cũng không gỡ được (trang orgchart chỉ lọc theo
+  // `Staff.isActive`). Bỏ node giả đi thì quy tắc "bucket không có ai bị bỏ qua" tự lo phần còn lại:
+  // bộ phận Planning giải thể → cột tự biến mất, có người quay lại → cột tự hiện.
   return chart;
 }
 
@@ -262,18 +256,8 @@ export function buildOrgChartSvg(staff: OrgStaffNode[]): string {
   const headerRowCount = headerLaidOut.length;
   const headerHeight = headerRowCount > 0 ? headerRowCount * BOX_H + (headerRowCount - 1) * ROW_GAP : 0;
 
-  // CEO = node header được nhiều người nhất lấy làm quản lý trực tiếp (để nối các head phòng + TBC/BD về CEO).
-  const mgrCount = new Map<string, number>();
-  for (const s of staff) if (s.managerId) mgrCount.set(s.managerId, (mgrCount.get(s.managerId) ?? 0) + 1);
-  let ceoId: string | null = headerRaw[0]?.id ?? null;
-  let bestCount = -1;
-  for (const h of headerRaw) {
-    const c = mgrCount.get(h.id) ?? 0;
-    if (c > bestCount) { bestCount = c; ceoId = h.id; }
-  }
-
   const rest = staff.filter((s) => s.deptCode !== "CEO");
-  const chart = buildChartNodes(rest, ceoId);
+  const chart = buildChartNodes(rest);
 
   const byBucket = new Map<string, ChartNode[]>();
   for (const c of chart) {

@@ -7,7 +7,7 @@ import { prisma } from "./prisma";
 import { ORDERABLE_DEPARTMENTS, cancelTasksForOrderItems } from "./projects";
 import { ORDER_DEPARTMENT_LABELS } from "./bidding";
 import { spawnTasksForCreativeOrder } from "./creative";
-import { spawnPlanningJobForOrder } from "./planning";
+import { spawnPlanningJobForOrder, orderRecipientWhere } from "./planning";
 import { spawnTasksForDepartmentOrder, isDepartmentTaskDepartment } from "./department-tasks";
 
 /** Resolve phòng ban của 1 item timeline: ưu tiên department của PIC (ownerStaff), fallback departmentCode. */
@@ -136,7 +136,7 @@ export async function dispatchOrder(
   if (isDepartmentTaskDepartment(order.department)) await spawnTasksForDepartmentOrder(orderId); // PLANNING (thêm "Task từ timeline") + PCC/OPE/PRO
 
 
-  const recipients = await prisma.staff.findMany({ where: { department: { code: order.department }, isActive: true } });
+  const recipients = await prisma.staff.findMany({ where: orderRecipientWhere(order.department) });
   if (recipients.length > 0) {
     const deptLabel = ORDER_DEPARTMENT_LABELS[order.department] ?? order.department;
     await prisma.notification.createMany({

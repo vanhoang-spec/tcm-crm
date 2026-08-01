@@ -69,11 +69,9 @@ async function main() {
     { code: null, fullName: "NGUYỄN VĂN HOÀNG", location: "TPHCM", deptExcel: "General", title: "Chief Executive Officer (CEO)", managerName: "NGUYỄN ĐẠO BÌNH", gender: "Nam", phone: "0983114803", dob: [15, 11, 1977], email: "nvhoang@tcmbtl.com", firstWorkDate: [1, 7, 2026], roleText: "CEO cum Super Admin" },
     { code: null, fullName: "TRƯƠNG VĂN TƯƠI", location: "TPHCM", deptExcel: "Account 1", title: "Senior Account Executive", managerName: "HỒ HỒNG PHƯỚC", gender: "Nam", phone: "0939064298", dob: [28, 2, 1994], email: "tvtuoi@tcmbtl.com", firstWorkDate: [4, 9, 2024], roleText: "Account Staff" },
     { code: null, fullName: "HỒ HỒNG PHƯỚC", location: "TPHCM", deptExcel: "Account 1", title: "Account Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0966339603", dob: [20, 4, 1996], email: "hhphuoc@tcmbtl.com", firstWorkDate: [19, 2, 2025], roleText: "Account Manager" },
-    { code: null, fullName: "NGUYỄN THỊ YẾN MINH", location: "TPHCM", deptExcel: "Account 2", title: "Assistant Account Manager", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0796955876", dob: [2, 11, 2001], email: "ntyminh@tcmbtl.com", firstWorkDate: [10, 6, 2024], roleText: "Account Staff" },
-    { code: null, fullName: "ĐẶNG THỊ Ý NHƯ", location: "TPHCM", deptExcel: "Account 2", title: "Senior Account Executive", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0336609797", dob: [7, 9, 2001], email: "dtynhu@tcmbtl.com", firstWorkDate: [11, 8, 2025], roleText: "Account Staff" },
-    { code: null, fullName: "TRẦN THỊ BẢO TRÂN", location: "TPHCM", deptExcel: "Account 2", title: "Account Executive", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0931951105", dob: [2, 4, 2001], email: "ttbtran@tcmbtl.com", firstWorkDate: [8, 10, 2025], roleText: "Account Staff" },
-    { code: null, fullName: "HỨA THỊ TRÂM ANH", location: "TPHCM", deptExcel: "Account 2", title: "Senior Account Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0963839246", dob: [15, 10, 1987], email: "httanh@tcmbtl.com", firstWorkDate: [29, 12, 2025], roleText: "Account Manager" },
-    { code: null, fullName: "TRẦN THỊ KIM NHI", location: "TPHCM", deptExcel: "Account 2", title: "Account Executive", managerName: "HỨA THỊ TRÂM ANH", gender: "Nữ", phone: "0344065254", dob: [1, 11, 2001], email: "ttknhi@tcmbtl.com", firstWorkDate: [30, 3, 2026], roleText: "Account Staff" },
+    // Team Account 2 (5 người dưới Hứa Thị Trâm Anh) nghỉ trong tháng 8/2026 — ĐÃ GỠ khỏi danh sách.
+    // DB dựng-từ-đầu vì thế không bao giờ tạo lại họ; DB ĐANG CHẠY được dọn bằng khối một-lần
+    // "Nghỉ việc team Account 2" ở cuối file (marker 20260801_a2_offboard). Hai đường phải nhất trí.
     { code: null, fullName: "NGUYỄN PHAN HÀ UYÊN", location: "TPHCM", deptExcel: "Account 3", title: "Account Manager", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0919708048", dob: [1, 9, 1991], email: "nphuyen@tcmbtl.com", firstWorkDate: [21, 4, 2025], roleText: "Account Staff" },
     { code: null, fullName: "VÕ NGỌC HUYỀN DUYÊN", location: "TPHCM", deptExcel: "Account 3", title: "Senior Account Executive", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0768611271", dob: [27, 1, 2000], email: "vnhduyen@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Account Staff" },
     { code: null, fullName: "TRẦN THU HÀ", location: "TPHCM", deptExcel: "Account 3", title: "Account Director", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0909111235", dob: [12, 7, 1995], email: "ttha@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Account Manager" },
@@ -102,7 +100,10 @@ async function main() {
     { code: null, fullName: "VŨ THỊ HUYỀN TRANG", location: "TPHCM", deptExcel: "Operation", title: "Admin Operation", managerName: "TRẦN HOÀI HẬN", gender: "Nữ", phone: "0929126240", dob: [29, 8, 2002], email: "vthtrang@tcmbtl.com", firstWorkDate: [23, 10, 2025], roleText: "Operations Staff" },
     { code: null, fullName: "NGUYỄN HỮU DANH", location: "TPHCM", deptExcel: "Operation", title: "Field Executive", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0902849223", dob: [26, 1, 2001], email: "nhdanh@tcmbtl.com", firstWorkDate: [17, 11, 2025], roleText: "Operations Staff" },
     { code: null, fullName: "TRẦN ĐÌNH DUY", location: "HÀ NỘI", deptExcel: "Operation", title: "Field Executive", managerName: "TRẦN HOÀI HẬN", gender: "Nam", phone: "0936954567", dob: [29, 9, 1998], email: "tdduy@tcmbtl.com", firstWorkDate: [1, 6, 2026], roleText: "Operations Staff" },
-    { code: null, fullName: "DƯƠNG MỸ NGỌC", location: "TPHCM", deptExcel: "Planning", title: "Planning Executive", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0354670617", dob: [10, 11, 2002], email: "dmngoc@tcmbtl.com", firstWorkDate: [25, 3, 2025], roleText: "Planning Staff" },
+    // Nhân sự Planning duy nhất (Dương Mỹ Ngọc) nghỉ trong tháng 8/2026 — ĐÃ GỠ khỏi danh sách.
+    // Bộ phận Planning từ đây KHÔNG còn headcount riêng: người làm Planning tuyển sau này nằm trong
+    // team Account (A1/A3) và được đánh dấu bằng cờ `Staff.isPlanningStaff`. DB đang chạy được dọn
+    // bằng khối một-lần "Giải thể headcount Planning" ở cuối file (marker 20260801_planning_dissolved).
     { code: null, fullName: "HỒ SĨ BẢO", location: "TPHCM", deptExcel: "Production", title: "Business Development & Production Director", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nam", phone: "0907785645", dob: [20, 5, 1986], email: "hsbao@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Production Manager" },
     { code: null, fullName: "PHẠM LONG BÌNH", location: "TPHCM", deptExcel: "Production", title: "Production Supervisor", managerName: "HỒ SĨ BẢO", gender: "Nam", phone: "0834546246", dob: [19, 1, 1988], email: "plbinh@tcmbtl.com", firstWorkDate: [1, 10, 2025], roleText: "Production Staff" },
     { code: null, fullName: "TRẦN NGUYỄN HUỲNH NHƯ", location: "TPHCM", deptExcel: "Production", title: "Production Executive", managerName: "HỒ SĨ BẢO", gender: "Nữ", phone: "0945797240", dob: [3, 8, 1996], email: "tnhnhu@tcmbtl.com", firstWorkDate: [22, 4, 2026], roleText: "Production Staff" },
@@ -184,7 +185,12 @@ async function main() {
   // ── Alias sang tên biến cũ — phần còn lại của file KHÔNG đổi, chỉ nguồn dữ liệu đổi sang người thật ──
   const ceo = staffByFullName.get("NGUYỄN VĂN HOÀNG")!;
   const thao = staffByFullName.get("HỒ HỒNG PHƯỚC")!; // Account Manager, team A1
-  const yen = staffByFullName.get("HỨA THỊ TRÂM ANH")!; // Senior Account Manager, team A2
+  // Trước 01/08/2026 alias này trỏ Hứa Thị Trâm Anh (Senior Account Manager, team A2). Cả 5 người
+  // team A2 đã nghỉ → trỏ sang Lê Huỳnh Kim Yến (Account Manager, team A3) để dữ liệu MẪU phía dưới
+  // (dự án T002, CO/CE revision, chat, tạm ứng) vẫn dựng được trên DB mới. ⚠ KHÔNG trỏ về `thao`
+  // (Phước): hai biến này cùng vào một GROUP chat ở khối MODULE ⑨ → trùng staffId, ConversationMember
+  // có @@unique([conversationId, staffId]) nên seed sẽ nổ P2002.
+  const yen = staffByFullName.get("LÊ HUỲNH KIM YẾN")!; // Account Manager, team A3
   const ha = staffByFullName.get("TRẦN THU HÀ")!; // Account Director, team A3 — cũng là lead phòng ACCOUNT
   const bdDirector = staffByFullName.get("HỒ SĨ BẢO")!; // Business Development & Production Director — 1 người giữ cả 2 vai trò thật
   const hrStaff = staffByFullName.get("TRẦN THỊ HẢI YẾN")!; // Senior HR Manager
@@ -200,7 +206,10 @@ async function main() {
   // KHÔNG tạo mới — trỏ thẳng vào người thật tương ứng đã import ở Vòng 1.
   const orderLeadByCode: Record<string, { id: string }> = {
     CREATIVE: creativeLead,
-    PLANNING: staffByFullName.get("DƯƠNG MỸ NGỌC")!, // hiện chỉ có 1 nhân sự Planning thật
+    // Planning KHÔNG còn nhân sự riêng (01/08/2026) — dữ liệu MẪU phía dưới cần một người đứng tên
+    // job Planning, nên trỏ vào Account Manager của team A3. Đúng mô hình mới: việc Planning do người
+    // trong team Account làm. Trên DB thật, ai làm Planning được chọn bằng cờ `isPlanningStaff`.
+    PLANNING: yen,
     PCC: staffByFullName.get("ĐÀM ÁNH TUYẾT")!,
     OPE: staffByFullName.get("TRẦN HOÀI HẬN")!,
     PRO: bdDirector, // Hồ Sĩ Bảo
@@ -806,7 +815,10 @@ async function main() {
   );
   const projSeed = [
     { code: "T001DHG26A1", name: "Roadshow DHG Q3", clientCode: "DHG", teamId: a1.id as string | null, ownerId: thao.id, status: "BIDDING", complexity: "COMPLEX", type: "CAMPAIGN", goNogo: "GO" as string | null },
-    { code: "T002DIA26A2", name: "Activation Diageo Tết", clientCode: "DIA", teamId: a2.id as string | null, ownerId: yen.id, status: "PROCESSING", complexity: "SIMPLE", type: "CAMPAIGN", goNogo: null },
+    // ⚠ MÃ dự án giữ nguyên "…26A2" dù team nay là A3: mã là KHOÁ TRA CỨU (findUnique theo code, dùng
+    // lại ~20 chỗ phía dưới). Đổi mã là seed không thấy dự án cũ trên production → tạo thêm một dự án
+    // mẫu TRÙNG. Team đổi sang A3 vì A2 đã trống sau đợt nghỉ việc 8/2026.
+    { code: "T002DIA26A2", name: "Activation Diageo Tết", clientCode: "DIA", teamId: a3.id as string | null, ownerId: yen.id, status: "PROCESSING", complexity: "SIMPLE", type: "CAMPAIGN", goNogo: null },
     { code: "T003LOF26A3", name: "Hội nghị khách hàng LOF", clientCode: "LOF", teamId: a3.id as string | null, ownerId: ha.id, status: "BIDDING", complexity: "COMPLEX", type: "EVENT", goNogo: "PENDING" },
     { code: "T004CTL26A1", name: "Ra mắt sản phẩm Castrol", clientCode: "CTL", teamId: null as string | null, ownerId: thao.id, status: "BIDDING", complexity: "SIMPLE", type: "EVENT", goNogo: null },
   ];
@@ -1744,7 +1756,9 @@ async function main() {
   // ── MODULE ⑤ Chấm công & Ca làm việc — lead bộ phận + danh mục ca + loại nghỉ + tuần mẫu ──
   const deptLeads: Record<string, string> = {
     ACCOUNT: ha.id, // Trần Thu Hà — Account Director, cao nhất trong 3 team Account
-    PLANNING: orderLeadByCode["PLANNING"].id,
+    // PLANNING: để trống từ 01/08/2026 — bộ phận không còn headcount riêng, việc Planning do người
+    // trong team Account làm. Gán một Account Manager làm "trưởng phòng Planning" ở đây sẽ hiện sai
+    // trên nhãn "Planning Manager" của tab Planning. Ngọc nghỉ ⇒ FK optional tự SET NULL.
     CREATIVE: creativeLead.id,
     PCC: orderLeadByCode["PCC"].id,
     OPE: orderLeadByCode["OPE"].id,
@@ -2491,21 +2505,213 @@ async function main() {
     }
   }
 
-  // ── Tái cơ cấu team Account (2026-07) ──
-  // Trâm Anh (lead A2) nghỉ 28/08/2026 → thôi làm leader; Phước (lead A1) kiêm lead A1+A2, gom về 1 team A2;
-  // A1 ngưng hoạt động từ 01/08/2026. Idempotent — chạy fresh-seed cho ra đúng cấu trúc hiện hành live.
-  {
+  /*
+    ── Nghỉ việc team Account 2 + bật lại team A1 — chạy đúng MỘT lần (2026-08) ──
+
+    Quyết định chủ dự án 01/08/2026: 5 người team Account 2 (dưới Hứa Thị Trâm Anh) nghỉ trong
+    tháng 8 → XOÁ VĨNH VIỄN; A2 thành trống. Phước quay lại làm lead team A1 của chính mình, và
+    NHẬN toàn bộ khách + dự án của A2.
+
+    ⚠ Khối này THAY THẾ khối "Tái cơ cấu team Account (2026-07)" cũ — khối đó dồn A1→A2 và tắt A1
+    VÔ ĐIỀU KIỆN mỗi lần seed, không có marker. Để nguyên thì mọi thay đổi team ở đây sẽ bị nó dồn
+    lại lặng lẽ ngay lần `db:seed` kế tiếp (mà seed là BẮT BUỘC sau `migrate deploy` — HANDOVER 8.2).
+
+    ⚠ THỨ TỰ LÀ BẤT BIẾN: chuyển chủ TRƯỚC, xoá SAU. Xoá trước thì `project.ownerId`/`leaderId` bị
+    SET NULL ở tầng DB, và dự án trống PIC/Leader chỉ người có `inventory.request.approve_any` mới
+    duyệt được đề xuất xuất kho (HANDOVER 10.11) → kẹt luồng kho.
+
+    ⚠ Ảnh chụp trước khi xoá: ~33 FK là SET NULL, xảy ra ở tầng DB, KHÔNG sinh audit. Trong đó có
+    tạm ứng và revision CO/CE — mất người đứng tên là mất dấu vết tiền. `requestedById` CỐ Ý không
+    trỏ sang người khác: ghi Phước đứng tên một khoản tạm ứng anh ấy không đề nghị là bịa lịch sử.
+    Ghi ảnh chụp vào AuditLog rồi để DB set null.
+
+    DB dựng-từ-đầu: 5 người đã gỡ khỏi STAFF_ROWS nên khối này không tìm thấy ai, A1 vốn đã active
+    và đã có Phước+Tươi, A2 vốn đã trống ⇒ báo "0 người" và chỉ ghi marker. Hai đường nhất trí.
+  */
+  const A2_OFFBOARD_KEY = "20260801_a2_offboard";
+  const A2_OFFBOARD_EMAILS = [
+    "httanh@tcmbtl.com",   // HỨA THỊ TRÂM ANH   — Senior Account Manager (lead A2)
+    "ntyminh@tcmbtl.com",  // NGUYỄN THỊ YẾN MINH — Assistant Account Manager
+    "dtynhu@tcmbtl.com",   // ĐẶNG THỊ Ý NHƯ      — Senior Account Executive
+    "ttbtran@tcmbtl.com",  // TRẦN THỊ BẢO TRÂN   — Account Executive
+    "ttknhi@tcmbtl.com",   // TRẦN THỊ KIM NHI    — Account Executive
+  ];
+  const offboardMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: A2_OFFBOARD_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!offboardMarker) {
     const phuoc = await prisma.staff.findUnique({ where: { email: "hhphuoc@tcmbtl.com" } });
-    const tramAnh = await prisma.staff.findUnique({ where: { email: "httanh@tcmbtl.com" } });
-    if (phuoc && tramAnh) {
-      await prisma.staff.updateMany({ where: { teamId: a1.id }, data: { teamId: a2.id } });
-      await prisma.staff.updateMany({ where: { teamId: a2.id, managerId: tramAnh.id }, data: { managerId: phuoc.id } });
-      if (tramAnh.managerId !== phuoc.id) await prisma.staff.update({ where: { id: tramAnh.id }, data: { managerId: phuoc.id } });
-      await prisma.client.updateMany({ where: { ownerTeamId: a1.id }, data: { ownerTeamId: a2.id } });
-      await prisma.project.updateMany({ where: { ownerTeamId: a1.id }, data: { ownerTeamId: a2.id } });
-      await prisma.team.update({ where: { id: a2.id }, data: { name: "ACC 2 — Phước làm leader (gộp ACC 1 & 2)" } });
-      await prisma.team.update({ where: { id: a1.id }, data: { isActive: false } });
+    const leavers = await prisma.staff.findMany({
+      where: { email: { in: A2_OFFBOARD_EMAILS } },
+      select: { id: true, fullName: true, email: true },
+    });
+    const leaverIds = leavers.map((s) => s.id);
+
+    // ① Team: A1 sống lại, A2 giữ lại nhưng trống (không xoá — 25 dự án/68 khách từng trỏ vào mã này).
+    await prisma.team.update({ where: { id: a1.id }, data: { isActive: true, name: "ACC 1 — Dự án/Đấu thầu đa ngành" } });
+    await prisma.team.update({ where: { id: a2.id }, data: { name: "ACC 2 — (chưa có nhân sự)" } });
+
+    // ② Phước + Tươi quay về A1 (đảo lại phần dồn của khối cũ). Chỉ đụng đúng 2 người, không quét cả team.
+    await prisma.staff.updateMany({
+      where: { email: { in: ["hhphuoc@tcmbtl.com", "tvtuoi@tcmbtl.com"] } },
+      data: { teamId: a1.id },
+    });
+
+    // ③ Toàn bộ khách + dự án của A2 sang A1 (quyết định chủ dự án: chuyển hết sang team Phước).
+    const movedClients = await prisma.client.updateMany({ where: { ownerTeamId: a2.id }, data: { ownerTeamId: a1.id } });
+    const movedProjects = await prisma.project.updateMany({ where: { ownerTeamId: a2.id }, data: { ownerTeamId: a1.id } });
+
+    let snapshots = 0;
+    let deleted = 0;
+    if (phuoc && leaverIds.length > 0) {
+      // ④ Chuyển chủ TRƯỚC khi xoá — nếu không, DB set null và luồng kho của các dự án đó bị kẹt.
+      await prisma.project.updateMany({ where: { ownerId: { in: leaverIds } }, data: { ownerId: phuoc.id } });
+      await prisma.project.updateMany({ where: { leaderId: { in: leaverIds } }, data: { leaderId: phuoc.id } });
+      await prisma.client.updateMany({ where: { introducerId: { in: leaverIds } }, data: { introducerId: phuoc.id } });
+      await prisma.staff.updateMany({ where: { managerId: { in: leaverIds } }, data: { managerId: phuoc.id } });
+
+      for (const leaver of leavers) {
+        // ⑤ Ảnh chụp dấu vết tiền TRƯỚC khi DB set null (SET NULL không sinh audit).
+        // ⚠ `kpiScore` là CASCADE và `shiftAssignment` bị deleteMany ngay dưới — cả hai BIẾN MẤT
+        // KHÔNG DẤU VẾT. Production có ~205 ca làm (dev.db chỉ 20) nên phải ghi lại trước.
+        const [advances, revisions, orders, shifts, kpiScores] = await Promise.all([
+          prisma.advance.findMany({ where: { requestedById: leaver.id }, select: { id: true, amount: true, status: true } }),
+          prisma.costSheetRevision.findMany({ where: { createdById: leaver.id }, select: { id: true, costSheetId: true } }),
+          prisma.projectOrder.findMany({ where: { sentById: leaver.id }, select: { id: true, department: true } }),
+          prisma.shiftAssignment.count({ where: { staffId: leaver.id } }),
+          prisma.kpiScore.findMany({ where: { staffId: leaver.id }, select: { id: true, periodCode: true, criterionId: true } }),
+        ]);
+        await prisma.auditLog.create({
+          data: {
+            entityType: "Staff",
+            entityId: leaver.id,
+            field: "offboard_snapshot",
+            action: "DELETE",
+            reason: "Nghỉ việc team Account 2 (08/2026) — ảnh chụp trước khi xoá vĩnh viễn",
+            oldValue: JSON.stringify({
+              fullName: leaver.fullName,
+              email: leaver.email,
+              advances: advances.map((a) => ({ id: a.id, amount: String(a.amount), status: a.status })),
+              costSheetRevisions: revisions,
+              projectOrders: orders,
+              shiftAssignmentsDeleted: shifts,
+              kpiScoresCascaded: kpiScores,
+            }),
+          },
+        });
+        snapshots++;
+
+        // ⑥ Xoá — dọn đúng 6 bảng FK RESTRICT theo thứ tự của `deleteStaff` (settings/staff/actions.ts).
+        await prisma.$transaction([
+          prisma.notification.deleteMany({ where: { recipientStaffId: leaver.id } }),
+          prisma.clientTransfer.deleteMany({ where: { transferredById: leaver.id } }),
+          prisma.projectOrderAttendee.deleteMany({ where: { staffId: leaver.id } }),
+          prisma.projectMember.deleteMany({ where: { staffId: leaver.id } }),
+          prisma.conversationMember.deleteMany({ where: { staffId: leaver.id } }),
+          prisma.shiftAssignment.deleteMany({ where: { staffId: leaver.id } }),
+          prisma.staff.delete({ where: { id: leaver.id } }),
+        ]);
+        deleted++;
+      }
     }
+
+    await prisma.setting.create({
+      data: {
+        module: "seed",
+        key: A2_OFFBOARD_KEY,
+        scope: "GLOBAL",
+        scopeRef: "",
+        value: JSON.stringify({
+          at: new Date().toISOString(),
+          deleted,
+          snapshots,
+          movedClients: movedClients.count,
+          movedProjects: movedProjects.count,
+        }),
+      },
+    });
+    console.log(
+      `👥 Nghỉ việc team A2: xoá ${deleted} nhân sự (ảnh chụp ${snapshots}), chuyển ${movedClients.count} khách + ${movedProjects.count} dự án sang A1`,
+    );
+  }
+
+  /*
+    ── Giải thể HEADCOUNT bộ phận Planning — chạy đúng MỘT lần (2026-08) ──
+
+    Quyết định chủ dự án 01/08/2026: Dương Mỹ Ngọc — nhân sự Planning DUY NHẤT — cũng nghỉ trong
+    tháng 8. Từ đây bộ phận Planning không còn người nào; người làm Planning tuyển sau này nằm trong
+    team Account (A1 của Phước, A3 của Hà) và được đánh dấu bằng cờ `Staff.isPlanningStaff`.
+
+    ⚠ CỐ Ý KHÔNG tắt `Department.isActive` của PLANNING. Phòng này không chỉ là chỗ chứa headcount,
+    nó còn là HẠNG MỤC CÔNG VIỆC: `costPrefix = "PLA"` sinh mã dòng chi phí CO/CE, và cả hai trang
+    bidding/[id] lẫn projects/[id]/co-ce lọc phòng theo `costPrefix != null AND isActive = true`.
+    Tắt đi là mất tiền tố PLA khỏi trình dựng dòng chi phí, và Planning cũng biến khỏi Master
+    Timeline (projects/[id]/timeline + settings/timeline-templates cũng lọc theo isActive).
+    Cột Planning trên org chart tự biến mất khi không còn ai — không cần tắt phòng để đạt điều đó.
+
+    ⚠ HỆ QUẢ PHẢI BIẾT: sau khối này KHÔNG còn ai có `isPlanningStaff`. Order Planning gửi đi sẽ
+    không báo cho ai và không tự gán được người làm (`resolveAutoPlanner` trả null) cho tới khi
+    tuyển người mới và tick cờ đó ở /settings/staff. Đây là phản ánh đúng thực tế, không phải lỗi.
+  */
+  const PLANNING_DISSOLVED_KEY = "20260801_planning_dissolved";
+  const planningMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: PLANNING_DISSOLVED_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!planningMarker) {
+    const ngoc = await prisma.staff.findUnique({
+      where: { email: "dmngoc@tcmbtl.com" },
+      select: { id: true, fullName: true, email: true },
+    });
+    let removed = 0;
+    if (ngoc) {
+      // Ảnh chụp trước khi xoá — cùng khuôn với khối team A2 ở trên. Ngọc không đứng tên dự án/khách/
+      // tiền nào, nhưng vẫn ghi lại phần việc Planning đã làm để tra ngược được.
+      const [stages, versions, tasks, shifts, kpiScores] = await Promise.all([
+        prisma.planningStage.findMany({ where: { assigneeId: ngoc.id }, select: { id: true, stage: true, jobId: true } }),
+        prisma.planningProposalVersion.findMany({ where: { submittedById: ngoc.id }, select: { id: true, versionNo: true, jobId: true } }),
+        prisma.departmentTask.findMany({ where: { assigneeId: ngoc.id }, select: { id: true, title: true } }),
+        prisma.shiftAssignment.count({ where: { staffId: ngoc.id } }),
+        prisma.kpiScore.findMany({ where: { staffId: ngoc.id }, select: { id: true, periodCode: true, criterionId: true } }),
+      ]);
+      await prisma.auditLog.create({
+        data: {
+          entityType: "Staff",
+          entityId: ngoc.id,
+          field: "offboard_snapshot",
+          action: "DELETE",
+          reason: "Giải thể headcount bộ phận Planning (08/2026) — ảnh chụp trước khi xoá vĩnh viễn",
+          oldValue: JSON.stringify({
+            fullName: ngoc.fullName,
+            email: ngoc.email,
+            planningStages: stages,
+            proposalVersions: versions,
+            departmentTasks: tasks,
+            shiftAssignmentsDeleted: shifts,
+            kpiScoresCascaded: kpiScores,
+          }),
+        },
+      });
+      await prisma.$transaction([
+        prisma.notification.deleteMany({ where: { recipientStaffId: ngoc.id } }),
+        prisma.clientTransfer.deleteMany({ where: { transferredById: ngoc.id } }),
+        prisma.projectOrderAttendee.deleteMany({ where: { staffId: ngoc.id } }),
+        prisma.projectMember.deleteMany({ where: { staffId: ngoc.id } }),
+        prisma.conversationMember.deleteMany({ where: { staffId: ngoc.id } }),
+        prisma.shiftAssignment.deleteMany({ where: { staffId: ngoc.id } }),
+        prisma.staff.delete({ where: { id: ngoc.id } }),
+      ]);
+      removed = 1;
+    }
+    await prisma.setting.create({
+      data: {
+        module: "seed",
+        key: PLANNING_DISSOLVED_KEY,
+        scope: "GLOBAL",
+        scopeRef: "",
+        value: JSON.stringify({ at: new Date().toISOString(), removed }),
+      },
+    });
+    console.log(`🗂  Giải thể headcount Planning: xoá ${removed} nhân sự — phòng Planning giữ nguyên làm hạng mục công việc`);
   }
 
   console.log("✅ Seed hoàn tất:", {

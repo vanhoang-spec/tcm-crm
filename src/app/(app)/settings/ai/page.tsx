@@ -12,9 +12,16 @@ import { requirePermission } from "@/lib/permissions";
  * vào DB rồi hiện lên form, bất kỳ ai vào được Settings đều đọc/đổi được khoá tính tiền, trong khi
  * app chưa có phân quyền thật. Đổi key = sửa .env + khởi động lại CRM.
  */
+/** Thẻ <code> cho các bước cấu hình — next-intl rich text, giữ tên file/biến bên trong chuỗi dịch. */
+const code = (chunks: React.ReactNode) => <code className="rounded bg-surface-2 px-1">{chunks}</code>;
+
 export default async function SettingsAiPage() {
   await requirePermission("settings.ai.manage");
-  const [t, tIdx] = await Promise.all([getTranslations("ai"), getTranslations("settings.index")]);
+  const [t, tIdx, tAi] = await Promise.all([
+    getTranslations("ai"),
+    getTranslations("settings.index"),
+    getTranslations("settings.ai"),
+  ]);
   const configured = isAiConfigured();
   const searchOn = isWebSearchConfigured();
 
@@ -37,7 +44,7 @@ export default async function SettingsAiPage() {
             <XCircle className="h-5 w-5 text-muted-foreground" />
           )}
           <span className="text-sm font-medium text-foreground">
-            {configured ? "DeepSeek: đã kết nối" : "DeepSeek: chưa cấu hình"}
+            {configured ? tAi("deepseekOn") : tAi("deepseekOff")}
           </span>
         </div>
 
@@ -46,29 +53,22 @@ export default async function SettingsAiPage() {
         <div className="mt-4 flex items-center gap-2 border-t border-border pt-4">
           {searchOn ? <CheckCircle2 className="h-5 w-5 text-success" /> : <XCircle className="h-5 w-5 text-muted-foreground" />}
           <span className="text-sm font-medium text-foreground">
-            {searchOn ? "Tìm kiếm web (Tavily): đã bật" : "Tìm kiếm web (Tavily): chưa cấu hình"}
+            {searchOn ? tAi("tavilyOn") : tAi("tavilyOff")}
           </span>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {searchOn
-            ? "Mục “Xu hướng ngành” sẽ đọc nguồn thật trên internet rồi tổng hợp, kèm link kiểm chứng."
-            : "Chưa bật thì mục “Xu hướng ngành” chỉ trả lời bằng kiến thức chung của mô hình, KHÔNG có link kiểm chứng và không biết tin mới."}
-        </p>
+        <p className="mt-2 text-xs text-muted-foreground">{searchOn ? tAi("tavilyOnHint") : tAi("tavilyOffHint")}</p>
 
         <div className="mt-4 border-t border-border pt-4">
-          <p className="text-xs font-medium text-foreground">Cách cấu hình</p>
+          <p className="text-xs font-medium text-foreground">{tAi("howTo")}</p>
           <ol className="mt-2 space-y-1.5 text-xs text-muted-foreground">
-            <li>1. Tạo khoá API tại platform.deepseek.com → API keys.</li>
-            <li>2. Mở file <code className="rounded bg-surface-2 px-1">.env</code> trong thư mục CRM trên máy chủ.</li>
-            <li>3. Thêm dòng <code className="rounded bg-surface-2 px-1">DEEPSEEK_API_KEY=&quot;sk-...&quot;</code></li>
-            <li>
-              4. (Tuỳ chọn) Đăng ký miễn phí tại tavily.com rồi thêm{" "}
-              <code className="rounded bg-surface-2 px-1">TAVILY_API_KEY=&quot;tvly-...&quot;</code> để bật tìm kiếm web.
-            </li>
-            <li>5. Khởi động lại CRM (chạy lại <code className="rounded bg-surface-2 px-1">scripts\2-CHAY-CRM.bat</code>).</li>
+            <li>{tAi("step1")}</li>
+            <li>{tAi.rich("step2", { code })}</li>
+            <li>{tAi.rich("step3", { code })}</li>
+            <li>{tAi.rich("step4", { code })}</li>
+            <li>{tAi.rich("step5", { code })}</li>
           </ol>
           <p className="mt-3 rounded-lg border border-warning/40 bg-warning-bg px-3 py-2 text-xs text-warning">
-            Khoá API tính tiền theo lượng sử dụng. Không chia sẻ khoá ra ngoài, không đưa vào ảnh chụp màn hình.
+            {tAi("keyWarning")}
           </p>
         </div>
       </div>

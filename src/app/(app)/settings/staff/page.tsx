@@ -10,7 +10,7 @@ import { requirePermission } from "@/lib/permissions";
 export default async function SettingsStaffPage() {
   await requirePermission("settings.staff.manage");
   const tAuth = await getTranslations("auth.admin");
-  const [staff, departments, teams, roles, t] = await Promise.all([
+  const [staff, departments, teams, roles, activeStaff, t] = await Promise.all([
     prisma.staff.findMany({
       orderBy: { fullName: "asc" },
       include: {
@@ -23,6 +23,8 @@ export default async function SettingsStaffPage() {
     prisma.team.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     // Gán nhóm quyền NGAY LÚC TẠO: bỏ trống thì người đó đăng nhập vào không mở được trang nào.
     prisma.role.findMany({ orderBy: [{ sort: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    // Ứng viên quản lý trực tiếp cho ô "Sửa phòng ban/team" ở từng hàng.
+    prisma.staff.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true } }),
     getTranslations("settings.staff"),
   ]);
 
@@ -62,15 +64,23 @@ export default async function SettingsStaffPage() {
             {staff.map((s) => (
               <StaffRow
                 key={s.id}
+                departments={departments}
+                teams={teams}
+                managers={activeStaff.filter((m) => m.id !== s.id)}
                 staff={{
                   id: s.id,
                   fullName: s.fullName,
                   email: s.email,
                   title: s.title,
+                  departmentId: s.departmentId,
                   departmentName: s.department?.name ?? null,
+                  teamId: s.teamId,
+                  teamName: s.team?.name ?? null,
                   gender: s.gender,
                   workLocation: s.workLocation,
+                  managerId: s.managerId,
                   managerName: s.manager?.fullName ?? null,
+                  isPlanningStaff: s.isPlanningStaff,
                   isActive: s.isActive,
                   payrollExempt: s.payrollExempt,
                   dateOfBirth: s.dateOfBirth,

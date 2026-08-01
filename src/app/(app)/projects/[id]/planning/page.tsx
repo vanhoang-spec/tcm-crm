@@ -8,7 +8,7 @@ import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { isPlanningJobLocked, type PlanningStageCode } from "@/lib/planning";
+import { isPlanningJobLocked, orderRecipientWhere, type PlanningStageCode } from "@/lib/planning";
 import { getDepartmentTasks, getDepartmentStaffOptions, toDepartmentTaskBoardData } from "@/lib/department-tasks";
 import { DepartmentTaskBoard } from "../department-task-board";
 import {
@@ -45,7 +45,9 @@ export default async function ProjectPlanningPage({ params }: { params: Promise<
         versions: { orderBy: { versionNo: "desc" }, include: { submittedBy: true, reviewedBy: true } },
       },
     }),
-    prisma.staff.findMany({ where: { department: { code: "PLANNING" }, isActive: true }, orderBy: { fullName: "asc" } }),
+    // Người nhận khâu Planning = ai có cờ `isPlanningStaff`, KHÔNG phải ai thuộc phòng "PLANNING":
+    // bộ phận Planning độc lập đã giải thể 01/08/2026, nhân sự về thẳng các team Account.
+    prisma.staff.findMany({ where: orderRecipientWhere("PLANNING"), orderBy: { fullName: "asc" } }),
     prisma.department.findUnique({ where: { code: "PLANNING" }, include: { lead: true } }),
     prisma.project.findUnique({ where: { id }, include: { status: true } }),
     getDepartmentTasks(id, "PLANNING"),
@@ -257,7 +259,7 @@ export default async function ProjectPlanningPage({ params }: { params: Promise<
                   <input name="resultLinkUrl" type="url" placeholder={t("resultLinkLabel")} className={input + " min-w-[220px] flex-1"} required />
                   <label className="text-xs text-muted-foreground">
                     {t("hoursLabel")}
-                    <NumberField decimals={2} name="hoursSpent" placeholder="0.25" className={input + " ml-1 w-20"} />
+                    <NumberField decimals={2} name="hoursSpent" placeholder="0.25" className={input + " ml-1 w-20"} required />
                   </label>
                   <button type="submit" className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
                     {t("submitVersion")}

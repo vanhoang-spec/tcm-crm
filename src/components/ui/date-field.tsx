@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,7 @@ export function DateField({
   "aria-label"?: string;
   onChange?: () => void; // gọi khi giá trị đổi (gõ tay hoặc chọn lịch) — dùng cho dirty-tracking
 }) {
+  const tCommon = useTranslations("common");
   const [iso, setIso] = useState(defaultValue ?? "");
   const [display, setDisplay] = useState(isoToDisplay(defaultValue ?? ""));
 
@@ -111,7 +113,7 @@ export function DateField({
         tabIndex={-1}
         onClick={openPicker}
         disabled={disabled}
-        aria-label="Chọn ngày"
+        aria-label={tCommon("pickDate")}
         className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-40"
       >
         <CalendarDays className="h-3.5 w-3.5" />

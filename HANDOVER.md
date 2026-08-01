@@ -753,6 +753,44 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
+**ĐÃ DEPLOY 01/08/2026 lúc 12:46** — commit `8536dd8`: Planning giải thể về team Account, xoá team A2
++ nhân sự Planning, vá 2 lớp i18n (mục 10.18 và 10.19). Chạy `bash scripts/deploy.sh` **đường ngoài
+cổng 2222**, fingerprint khớp. 1 migration mới áp sạch (`20260803000000_staff_is_planning_staff`).
+
+Đối chiếu production SAU deploy — khớp tuyệt đối với bản diễn tập trên bản sao trước đó:
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự | 42 | **36** (xoá 5 team A2 + 1 Planning) |
+| khách / dự án | 68 / 25 | **68 / 25 — không mất dòng nào** |
+| A1 | tắt, 0 người | **bật, 2 người · 48 khách · 17 dự án** |
+| A2 | 7 người · 48 khách · 17 dự án | **0 / 0 / 0** |
+| A3 | 6 người · 17 khách · 7 dự án | không đổi |
+| phòng Planning | 1 người, có lead | **0 người, lead trống, VẪN active, costPrefix PLA còn nguyên** |
+| dự án mất PIC | 21 | **21 — không tăng** |
+| dòng grant quyền | 1198 | **1198 — không đổi** |
+
+Hai marker ghi đúng số: `20260801_a2_offboard` = `{deleted:5, snapshots:5, movedClients:48,
+movedProjects:17}` · `20260801_planning_dissolved` = `{removed:1}`. Đủ **6 ảnh chụp offboard** trong
+`AuditLog`; cả 6 người đo được **0 ca làm, 0 điểm KPI** nên không mất gì ngoài phần đã lường trước
+(riêng Trâm Anh có 2 tạm ứng đã chụp lại). `PRAGMA integrity_check` = `ok`, `foreign_key_check` 0
+dòng. Health check `/login` 200, `[jobs] scheduler bật` xuất hiện sau restart.
+
+Backup TRƯỚC deploy giữ ở HAI nơi: `~/backup/` trên server và
+`D:/TCM/backup-prod-20260801-124359/` trên máy dev (`dev.db` 2,36MB + `app.tar.gz`).
+
+⚠ **Script `deploy.sh` LỌC BỚT output của `db:seed`** — chỉ in dòng "✅ Seed hoàn tất", nuốt mất các
+dòng log của từng vòng one-shot. Đừng đọc log deploy để kết luận vòng nào đã chạy; kiểm thẳng bảng
+`setting` module `seed` trên production (cách làm ở mục 10.17).
+
+⚠ **`ssh` tay phải chỉ rõ key**: `ssh -p 2222 -i ~/.ssh/tcm_deploy tcm@115.79.195.150`. Không có
+`-i` là rơi vào hỏi mật khẩu. Và script node chạy trên server **phải nằm trong `~/tcm-crm`** mới
+resolve được `@prisma/client`; để ở `/tmp` là `MODULE_NOT_FOUND`.
+
+---
+
+### Deploy trước đó — 30/07/2026 lúc 11:15
+
 **ĐÃ DEPLOY 30/07/2026 lúc 11:15** — commit `d8f1603`, gói cả H1 (nhóm khách hàng) + H2 + H3 (kho kiến
 thức theo khách, AI sinh bài, bài kiểm tra, bảng tuân thủ) + bản siết độ tin cậy bài kiểm tra. Chạy
 bằng `bash scripts/deploy.sh` đường LAN, fingerprint khớp. 3 migration mới áp sạch

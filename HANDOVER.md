@@ -780,9 +780,21 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**ĐÃ DEPLOY 01/08/2026 lúc 12:46** — commit `8536dd8`: Planning giải thể về team Account, xoá team A2
-+ nhân sự Planning, vá 2 lớp i18n (mục 10.18 và 10.19). Chạy `bash scripts/deploy.sh` **đường ngoài
-cổng 2222**, fingerprint khớp. 1 migration mới áp sạch (`20260803000000_staff_is_planning_staff`).
+**Production đang chạy `ee37e20`** (01/08/2026 22:28). Ba lần deploy trong ngày: `8536dd8` (Planning
+giải thể + xoá team A2, mục 10.18/10.19) → `29e979a` (chốt cứng dd/mm/yyyy) → `ee37e20` (chuẩn bị bật
+Cloudflare Tunnel). Cả ba chạy `bash scripts/deploy.sh` **đường ngoài cổng 2222**, fingerprint khớp.
+1 migration mới trong ngày (`20260803000000_staff_is_planning_staff`).
+
+⚠ **Từ 22:31 ngày 01/08, app KHÔNG còn lắng nghe trên LAN.** Đã đổi sang `npm run start:server`
+(bind `127.0.0.1:3000`) + thêm `AUTH_COOKIE_SECURE="true"` vào `.env` — chi tiết và lý do ở mục 8.2.
+Đo sau khi đổi: `https://app.tcmbtl.com/login` → 200 · `http://127.0.0.1:3000` → 200 (nginx dùng) ·
+`http://192.168.1.111:3000` → **ECONNREFUSED** (đúng như mong đợi). Backup `.env` và `start-tcm.sh`
+trước khi sửa nằm ở `~/backup/*.bak-20260801-2231*`.
+**CHƯA KIỂM ĐƯỢC:** máy trong LAN công ty có mở được `https://app.tcmbtl.com` không — tên miền phân
+giải ra IP PUBLIC `115.79.195.150`, nên cần router hỗ trợ NAT hairpin, hoặc phải thêm bản ghi DNS nội
+bộ trỏ `app.tcmbtl.com` → `192.168.1.111`. Máy dev không nằm trong LAN đó nên không thử hộ được.
+
+**Số đo sau deploy `8536dd8`:**
 
 Đối chiếu production SAU deploy — khớp tuyệt đối với bản diễn tập trên bản sao trước đó:
 

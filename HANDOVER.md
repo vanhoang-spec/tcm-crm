@@ -892,10 +892,36 @@ spend.record 4 · spend.pay 3 · over_budget 2. Ba mã ISO: view 20 · manage 5 
 `20260802_iso_*` + `20260802_overhead_*`. Health check: `/login` 200 · `/overhead`, `/overhead/budget`,
 `/overhead/spends`, `/iso` đều 307 về login khi chưa đăng nhập · `/api/overhead/export` **401**.
 
-⚠ **Bảng overhead trên production đang TRỐNG** (0 bản ngân sách, 0 khoản, 0 lần chi) và `ProjectIsoDoc`
-cũng 0 dòng. Module đã dựng xong nhưng **chưa ai nhập liệu thật** — việc đầu tiên phải làm là HR
-Manager vào `/overhead/budget` import file `2026_HR_Chi phi van phong thực tế`. Đã verify bộ import
-trên bản sao DB: ra đúng 50 khoản · 167 lần chi · 16.248.791.769đ.
+**Ngân sách chi phí văn phòng 2026 ĐÃ NHẬP vào production** (02/08/2026 13:52, theo yêu cầu chủ dự
+án). Vì không đăng nhập hộ được nên chạy bằng script trên server gọi **đúng đường code của app**
+(`parseOverheadExcel` → `saveAiFile` → `importBudget`) rồi ghi `AuditLog` như `confirmBudgetImport` —
+KHÔNG viết lại logic, vì script viết lại chỉ chứng minh script đúng. Checksum file trên server khớp
+md5 bản gốc trước khi chạy. Backup ngay trước khi ghi: `~/backup/dev.db.bak-20260802-135050` +
+`D:/TCM/backup-prod-20260802-135050/`.
+
+Đọc lại bằng chính `loadOverheadReport` của app trên production — **khớp tuyệt đối bản đo trên máy dev**:
+
+| | production |
+|---|---|
+| bản ngân sách | 1 · trạng thái **LOCKED** · người đứng tên NGUYỄN VĂN HOÀNG |
+| khoản / lần chi / ô tháng | **50 · 167 · 600** |
+| ngân sách năm | **16.248.791.769đ** |
+| đã chi (PAID) / còn lại | **8.666.620.418đ** / **7.582.171.351đ** |
+| khoản vượt | **3** — TCM26-12 −12.723.662 · TCM26-13 −3.908.000 · TCM26-30 −22.917.862 |
+| khoản nguồn PAYROLL | TCM26-20 / 21 / 22 |
+
+`integrity_check` ok · `foreign_key_check` 0 dòng · 36 nhân sự / 68 khách / 25 dự án / 4 CO-CE
+không đổi. File Excel gốc lưu ở `storage` (`sourceFileKey`) để về sau còn đối chiếu.
+
+⚠ **`ProjectIsoDoc` vẫn 0 dòng** — đúng thiết kế: sổ ISO chỉ điền dần theo dự án MỚI, không backfill
+63 dự án cũ (mục 10.20).
+
+⚠ **Script chạy tay trên server phải là `.mts`, không phải `.ts`.** Repo không khai `type: module`
+nên tsx dịch `.ts` sang CJS và `await` ở cấp cao nhất là lỗi biên dịch — mà bản vá `server-only`
+buộc phải dùng dynamic import (import tĩnh bị nâng lên chạy trước bản vá). Kèm theo: shell không
+đăng nhập KHÔNG có `node` trong PATH, phải
+`export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"`; server cũng **không có `sqlite3` lẫn
+`curl`** — kiểm DB bằng `PRAGMA` qua Prisma, kiểm HTTP bằng `curl` từ máy dev.
 
 ---
 

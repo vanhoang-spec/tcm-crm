@@ -872,7 +872,36 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `ee37e20`** (01/08/2026 22:28). Ba lần deploy trong ngày: `8536dd8` (Planning
+**Production đang chạy `a158fa6`** (02/08/2026 13:42) — ISO-1 + OVH-1, xem mục 10.20 và 10.21. Chạy
+`bash scripts/deploy.sh` **đường ngoài cổng 2222**, fingerprint khớp. 3 migration mới áp sạch
+(`project_iso_docs`, `overhead_costs`, `overhead_spend_note`). Backup TRƯỚC deploy ở HAI nơi:
+`~/backup/*-20260802-134201*` trên server và `D:/TCM/backup-prod-20260802-134201/` trên máy dev.
+
+Đối chiếu production SAU deploy — **không mất dòng nào**, và grant khớp tuyệt đối với bản diễn tập
+(mô phỏng bằng cách gỡ marker + grant trên bản sao rồi seed lại, đo trước là 1245):
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| CO/CE sheet / dòng | 4 / 327 | **4 / 327** |
+| dòng grant quyền | 1198 | **1245** (+47 = 10 mã mới của ISO + Overhead) |
+| `PRAGMA integrity_check` | — | **ok**, `foreign_key_check` 0 dòng |
+
+7 mã overhead đo được đúng chính sách: view 4 · budget.manage 2 · approve_cfo 1 · approve_ceo 1 ·
+spend.record 4 · spend.pay 3 · over_budget 2. Ba mã ISO: view 20 · manage 5 · export 5. Đủ 8 marker
+`20260802_iso_*` + `20260802_overhead_*`. Health check: `/login` 200 · `/overhead`, `/overhead/budget`,
+`/overhead/spends`, `/iso` đều 307 về login khi chưa đăng nhập · `/api/overhead/export` **401**.
+
+⚠ **Bảng overhead trên production đang TRỐNG** (0 bản ngân sách, 0 khoản, 0 lần chi) và `ProjectIsoDoc`
+cũng 0 dòng. Module đã dựng xong nhưng **chưa ai nhập liệu thật** — việc đầu tiên phải làm là HR
+Manager vào `/overhead/budget` import file `2026_HR_Chi phi van phong thực tế`. Đã verify bộ import
+trên bản sao DB: ra đúng 50 khoản · 167 lần chi · 16.248.791.769đ.
+
+---
+
+### Deploy trước đó — 01/08/2026 lúc 22:28
+
+**Production khi đó chạy `ee37e20`.** Ba lần deploy trong ngày: `8536dd8` (Planning
 giải thể + xoá team A2, mục 10.18/10.19) → `29e979a` (chốt cứng dd/mm/yyyy) → `ee37e20` (chuẩn bị bật
 Cloudflare Tunnel). Cả ba chạy `bash scripts/deploy.sh` **đường ngoài cổng 2222**, fingerprint khớp.
 1 migration mới trong ngày (`20260803000000_staff_is_planning_staff`).

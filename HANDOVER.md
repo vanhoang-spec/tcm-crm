@@ -120,9 +120,11 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
 | — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) |
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
+| — | Hồ sơ ISO | `/iso` | Xong (sổ đăng ký 25 loại hồ sơ / dự án, 8 loại app tự chấm, tab `/projects/[id]/iso`, xuất Excel 33 cột — xem mục 10.20) |
+| — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 94 model Prisma · 55 migration · 61 file `src/lib` · 2964 key i18n × 2 ngôn ngữ · 117 route.
+**Quy mô:** 99 model Prisma · 59 migration · 69 file `src/lib` · 3172 key i18n × 2 ngôn ngữ · 124 mã quyền.
 
 ---
 
@@ -230,10 +232,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 ## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
 
 1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
-   - **danh mục 114 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+   - **danh mục 124 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
      Ngoại lệ (kiểm bằng `hasPermission()` **bên trong** action đã có `requirePermission` khác ở đầu — đừng đi tìm `requirePermission` tương ứng): `finance.vendor_payment.over_cap` trong `createVendorPayment` VÀ trong `createCtvBatchPayments` (đề xuất thanh toán đợt CTV, operations/actions.ts); `finance.invoice.over_cap` trong `createClientInvoice` (trần mềm theo CO/CE sống — cửa Nghiệm thu vẫn trần cứng).
    - **~316 điểm chặn**: ~220 server action + 79 page + 9 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
-   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 114 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
+   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 124 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
    - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
    - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
    - **Tài khoản VẬN HÀNH không có email** (thủ kho, bảo vệ — chốt 28/07/2026): `Staff.email` ở hệ này là TÊN ĐĂNG NHẬP chứ không phải hộp thư, nên KHÔNG cần cột mới. Người dùng gõ tên ngắn (`thukho`), `normalizeLoginId()` tự ghép `@tcm.local` (`lib/auth-session.ts`); `isAllowedLoginDomain` cho phép `@tcmbtl.com` + `tcm.local`/`tcm.internal`, còn `isMailableDomain` (chỉ `@tcmbtl.com`) gác "Quên mật khẩu" — tài khoản nội bộ không có hộp thư nên admin cấp lại mật khẩu ở `/settings/staff`. Ô đăng nhập là `type="text"` (để `type="email"` thì trình duyệt chặn tên không có `@`).
@@ -775,6 +777,96 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     **Key ghép lúc chạy đã kiểm hết** — đọc hằng thẳng từ source (`ITEM_STATUS_CODES`,
     `REQUEST_STATUSES`, `ADVANCE_STATUSES`, `ROLE_GROUP_ORDER`…) rồi đối chiếu: **51/51 phân giải
     được ở cả hai file**. Đây là lớp script parity mù, và repo đã từng vỡ trang vì nó (mục 10.1).
+
+20. **HỒ SƠ ISO — ISO-1 XONG 02/08/2026** (migration `20260804000000_project_iso_docs`). Thay file
+    `Các hồ sơ kiểm tra ISO.xlsx` (63 dự án, mới lấp 20%) bằng sổ đăng ký **25 loại hồ sơ cho MỖI
+    dự án**: app tự chấm loại nào suy được, còn lại PIC đính file / dán link / đánh "không áp dụng"
+    kèm lý do.
+    - **Danh mục 25 loại để ở CODE** (`lib/iso-catalog.ts`), khuôn `permission-catalog.ts`: mã
+      `ISO-01`…`ISO-25` bất biến, nhãn song ngữ đi qua `pickLabel()` — không đẻ ~50 key i18n.
+    - ⚠ **Trạng thái AUTO TÍNH LÚC ĐỌC, KHÔNG LƯU** (`lib/iso-report.ts`, hàm thuần). Lưu là báo cáo
+      nói dối ngay khi dữ liệu gốc đổi: xoá CO/CE đi mà ô ISO vẫn xanh thì kỳ kiểm ISO tin nhầm.
+      Bảng `ProjectIsoDoc` **chỉ lưu phần TAY** (đính file / link / N/A + lý do).
+    - Thứ tự ưu tiên trong `resolveIsoDocs` là CỐ Ý: **N/A do người đánh THẮNG mọi thứ** → rồi mới
+      tới AUTO hoặc PRESENT do người đính → còn lại MISSING. Đảo lại là hồ sơ "không áp dụng" bị
+      máy bật thành thiếu, người dùng đánh bao nhiêu lần cũng không tắt được.
+    - `naReason` **bắt buộc khi N/A** — cột "Ghi chú về dự án" của biểu mẫu ISO gốc chính là chỗ này.
+    - **Mở khoá `ProjectFile`**: hạ tầng lưu file đã có từ module AI nhưng bị nhốt trong đó, không có
+      đường tải về. Route mới `api/project-file/[id]`. ⚠ Route này **KIỂM `projectId`** ngay từ đầu —
+      cố ý KHÔNG lặp lại lỗ của `api/client-kb/[id]` (mục 10.13). Đã verify: lấy id file dự án A gọi
+      dưới dự án B → 404.
+    - **Quyền: 3 mã mới (114 → 117)** `iso.view` / `iso.manage` / `iso.export`. Backfill 2 marker
+      `20260802_iso_view` + `20260802_iso_manage` (mã `export` đi CHUNG marker với `manage`). Đo
+      trên DB dựng mới VÀ trên bản mô phỏng production: 20 / 5 / 5 vai, hai đường khớp nhau.
+    - ⚠ **VẤN ĐỀ KHÔNG PHẢI CODE MÀ LÀ DỮ LIỆU: 0 mã dự án trùng nhau** giữa file ISO (63 dự án) và
+      app (25). Trong 21 dự án thật của app: 3 có CO/CE, 2 có timeline, 0 có link brief. Quyết định
+      chủ dự án: **app là nguồn sự thật cho dự án MỚI, không backfill 63 dự án cũ** — nên báo cáo ISO
+      năm 2026 vẫn phải ghép tay với file cũ, từ 2027 mới đủ trong app.
+    - **9/25 loại hiện chưa có chỗ chứa nào trong app** (Execution Plan, đăng ký thi công, báo giá
+      NCC, Agenda, MC Script, Layout/Rundown, phiếu duyệt mẫu, bằng chứng email/ảnh, hình ảnh &
+      report) → đính file tay. Biến chúng thành quy trình thật là đợt riêng, nên chờ xem PIC có dùng
+      sổ đăng ký thật không đã.
+
+21. **CHI PHÍ VĂN PHÒNG — OVH-1 XONG 02/08/2026** (migration `20260805000000_overhead_costs` +
+    `20260805010000_overhead_spend_note`). Thay file `2026_HR_Chi phi van phong thực tế`: ngân sách
+    BGĐ duyệt đầu năm + thực chi cập nhật liên tục, báo cáo realtime bất cứ lúc nào.
+    - **Ba làn tiền dùng lại đúng nghĩa của `pnl.ts`**: KẾ HOẠCH · **ĐÃ CHI** (chỉ `PAID`) · **CAM
+      KẾT** (`SCHEDULED` — tiền sẽ ra, CHƯA trừ vào "đã dùng"). Đã verify bằng số trên browser: tạo
+      1 khoản 5.000.000đ ở trạng thái chờ ⇒ cam kết +5tr, "đã chi" và "còn lại" KHÔNG đổi.
+    - ⚠ **`spendTotal` CỐ Ý KHÔNG cộng VAT**: `amountNet + tncn + tndn`. Đo trên file thật rồi mới
+      chốt — VAT là thuế khấu trừ, cộng vào là mọi khoản có hoá đơn VAT bị thổi lên 10% và ngân sách
+      báo vượt oan. Cùng nguyên tắc với hệ số VAT = 1 ở `lib/bidding.ts` (mục 6).
+    - ⚠ **So với ngân sách bằng `amountTotal`, KHÔNG phải `amountNet`.** Kế hoạch ban đầu ghi
+      `amountNet`; đo 4 tổ hợp giả thuyết trên file thật thì **TỔNG + tới T6 khớp 26 khoản, NET + tới
+      T6 chỉ khớp 14** → đổi thiết kế theo số đo. Cũng là bài học `amount` vs `amountTotal` đã trả
+      giá ở phiếu chi NCC.
+    - ⚠ **File nguồn TỰ MÂU THUẪN: 25/50 khoản** có cột tóm tắt lệch với chính sheet chi tiết của
+      nó (cột được cập nhật tay nên trôi — khoản dừng T6, khoản tới T7). Vì vậy sau import app
+      **tính LẠI "đã dùng" từ danh sách lần chi**, KHÔNG lấy cột tóm tắt; `reconcileImport` chỉ hiện
+      bảng "chỗ nào file tự lệch" cho kế toán xem lúc import. Đừng "sửa" thành tin cột tóm tắt.
+    - **Ngân sách 2026 import Excel** (vào thẳng `LOCKED` vì BGĐ đã duyệt ngoài app) → **từ 2027 nhân
+      bản trong app**: copy số **T12 của năm đang chạy** (thực chi T12 nếu có, chưa có thì kế hoạch
+      T12) ra 12 tháng năm sau, mã tự đổi `TCM26-` → `TCM27-`; HR Manager sửa/thêm/bớt → **CFO
+      duyệt** → **CEO duyệt = LOCKED**.
+    - ⚠ **`approve_cfo` và `approve_ceo` PHẢI là hai mã khác nhau, và cấp cho hai vai khác nhau.**
+      Đang là CFO = 1 vai, CEO(BGĐ) = 1 vai, KHÔNG chồng nhau. Cấp cả hai cho BGĐ là một người bấm
+      hết hai cấp, cổng duyệt thành trang trí. Đã verify sống: đóng vai CFO, lấy `$ACTION_ID` của
+      bước CEO rồi POST thẳng ⇒ redirect, DB vẫn `PENDING_CEO`, `ceoApprovedAt` vẫn trống.
+    - ⚠ **Chỉ nhân bản được từ bản `LOCKED`** — chặn ở CẢ trang lẫn server (`SOURCE_NOT_LOCKED`).
+      Bản mới tạo còn DRAFT mà trang vẫn mời "tạo năm sau" thì cả năm sau xây trên số chưa ai chốt.
+    - **Vòng đời khoản chi mượn nguyên `VendorPayment`**: `updateMany` + guard status trong `where` +
+      kiểm `count === 0` (chống double-click), đảo bắt buộc `reverseNote`, huỷ bắt buộc `cancelNote`,
+      **không xoá bản ghi**. Verify: bắn 2 lần trong cùng một tick ⇒ **1 bản ghi, 2 dòng AuditLog**.
+    - **Vượt ngân sách: CẢNH BÁO chứ không chặn** (quyết định chủ dự án) — nhưng bắt buộc
+      `overBudgetNote` VÀ phải có `overhead.spend.over_budget`. Verify trên khoản `TCM26-12` (ngân
+      sách 0đ, đã chi 12,7tr): gửi không lý do ⇒ chặn; có lý do ⇒ qua.
+    - ⚠ **Ô "Nội dung chi" và "Giải trình vượt" phải là CONTROLLED.** React 19 `requestFormReset`
+      chạy sau MỌI lần gọi action kể cả khi action TRẢ LỖI. Đã tái hiện: gõ xong nội dung, bị chặn vì
+      thiếu giải trình, ô nội dung về `""`. Cùng bẫy đã vá ở KB-H2 mục (c). Ô tiền dùng `NumberField`
+      chế độ điều khiển nên vốn an toàn — đó chính là lý do lỗi này khó thấy, chỉ ô CHỮ mới mất.
+    - ⚠ **ĐỪNG gộp lỗi của nhiều `useActionState` bằng `??`.** Mỗi hook giữ lỗi riêng và không tự
+      xoá cho nhau ⇒ lỗi CŨ của thao tác này che lỗi MỚI của thao tác kia. Đã tái hiện: double-click
+      "Thanh toán" để lại "đã thanh toán rồi", sau đó bấm Đảo bỏ trống lý do vẫn hiện câu cũ. Nay mỗi
+      thao tác chỉ hiện lỗi của chính nó (`modeErr` theo `mode` đang mở).
+    - **Ba khoản lương `TCM26-20/21/22` đặt `actualSource="PAYROLL"`**: KHÔNG nhập tay được (lọc khỏi
+      ô chọn + chặn ở server) vì số thật thuộc module ⑦. ⚠ Nhưng **bản import 2026 đã mang sẵn số chi
+      lương của các tháng đã qua** — nên nhãn phân biệt hai ca: có số rồi thì ghi "nguồn Payroll",
+      chưa có số mới ghi "chờ Payroll". Để nguyên chữ "chờ" cạnh con số 6,3 tỷ là nói dối người đọc.
+      **Khi làm Payroll: số 2026 này là LỊCH SỬ, đừng cộng dồn lần nữa.**
+    - **Quyền: 7 mã mới (117 → 124)**, cả 7 khai trong `MONEY_POLICY` — một nguồn sự thật cho
+      `isRestricted` + `moneyCodesFor` + Vòng 4d (mục 10.16). Backfill 6 marker `20260802_overhead_*`
+      (`spend.record` đi CHUNG marker với `view`). Đo được **giống hệt nhau** trên DB dựng-từ-đầu và
+      trên bản mô phỏng production (gỡ marker + grant rồi seed lại): view 4 · budget.manage 2 ·
+      approve_cfo 1 · approve_ceo 1 · spend.record 4 · spend.pay 3 · over_budget 2. `db:seed` lần hai
+      no-op (1229 → 1229).
+    - **Import file thật đã verify bằng SỐ, cả headless lẫn qua giao diện — khớp tuyệt đối:**
+      50 khoản · 167 lần chi · ngân sách **16.248.791.769đ** · đã chi **8.666.620.418đ** · còn lại
+      **7.582.171.351đ** · **3 khoản vượt**: `TCM26-12` −12.723.662 · `TCM26-13` −3.908.000 ·
+      `TCM26-30` −22.917.862 (file gốc ghi −22.917.863, lệch **1 đồng** do làm tròn).
+      Nhân bản 2027: **50/50 khoản khớp mốc T12**, 600 ô tháng, mã đổi 26→27.
+    - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** đọc số thực chi từ Payroll (module ⑦ chưa
+      có) · sửa/xoá từng lần chi đã tạo (chỉ có đảo + huỷ) · đính hoá đơn/chứng từ vào khoản chi ·
+      biểu đồ theo tháng · nhắc hạn thanh toán qua notification · phân quyền theo NHÓM chi phí.
 
 ---
 

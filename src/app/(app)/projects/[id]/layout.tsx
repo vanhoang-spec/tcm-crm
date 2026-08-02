@@ -41,6 +41,7 @@ export default async function ProjectWorkspaceLayout({
     production: tNav("production"),
     purchasing: tNav("purchasing"),
     liquidation: tNav("liquidation"),
+    iso: tNav("iso"),
   };
 
   return (
@@ -67,7 +68,12 @@ export default async function ProjectWorkspaceLayout({
       </div>
 
       {/* Sub-module nav nằm ngang trên đầu (thay left-rail) để nhường chiều ngang cho nội dung (Master Timeline). */}
-      <WorkspaceNav projectId={id} labels={labels} showPnl={await hasPermission("projects.pnl.view")} />
+      <WorkspaceNav
+        projectId={id}
+        labels={labels}
+        showPnl={await hasPermission("projects.pnl.view")}
+        showIso={await hasPermission("iso.view")}
+      />
 
       <div className="min-w-0">{children}</div>
     </div>

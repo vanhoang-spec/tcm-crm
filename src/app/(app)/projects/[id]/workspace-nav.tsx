@@ -14,6 +14,7 @@ type Labels = {
   production: string;
   purchasing: string;
   liquidation: string;
+  iso: string;
 };
 
 // Thứ tự tab: Nghiệm thu chuyển ra cuối cùng; Production thêm cạnh Operations; Purchasing thêm sau Production.
@@ -28,6 +29,7 @@ const TABS: { key: keyof Labels; seg: string }[] = [
   { key: "purchasing", seg: "/purchasing" },
   { key: "pnl", seg: "/pnl" },
   { key: "liquidation", seg: "/liquidation" },
+  { key: "iso", seg: "/iso" },
 ];
 
 /**
@@ -35,12 +37,12 @@ const TABS: { key: keyof Labels; seg: string }[] = [
  * trên desktop), để nhường toàn bộ chiều ngang cho nội dung (Master Timeline cần bảng rộng).
  * Cuộn ngang trên mobile nếu không đủ chỗ.
  */
-export function WorkspaceNav({ projectId, labels, showPnl }: { projectId: string; labels: Labels; showPnl: boolean }) {
+export function WorkspaceNav({ projectId, labels, showPnl, showIso }: { projectId: string; labels: Labels; showPnl: boolean; showIso: boolean }) {
   const pathname = usePathname();
   const base = `/projects/${projectId}`;
   // Ẩn tab P&L với người không có quyền — chỉ là TRANG TRÍ (HANDOVER 10.1), trang /pnl tự gác
   // requirePermission("projects.pnl.view") ở câu lệnh đầu.
-  const tabs = TABS.filter((tab) => tab.key !== "pnl" || showPnl);
+  const tabs = TABS.filter((tab) => (tab.key !== "pnl" || showPnl) && (tab.key !== "iso" || showIso));
 
   return (
     <nav className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-2">

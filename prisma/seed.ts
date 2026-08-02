@@ -1970,6 +1970,21 @@ async function main() {
     "clients.transfer": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER"],
     "chat.moderate": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
     "kb.manage": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "HR_MANAGER"],
+    // — chi phí văn phòng (OVH-1) —
+    // ⚠ CẢ 7 MÃ đều khai ở đây, kể cả `overhead.view`. Mã nào không nằm trong MONEY_POLICY sẽ rơi
+    // vào `baseGrantCodes` và được cấp cho 20 vai — mà bảng này chứa NGÂN SÁCH LƯƠNG toàn công ty
+    // (~12,2 tỷ/năm), không phải thứ để mọi nhân viên mở ra xem.
+    "overhead.view": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF", "HR_MANAGER"],
+    "overhead.spend.record": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF", "HR_MANAGER"],
+    // Người lập ngân sách theo file thật là HR (cột "Người đề nghị" = Lê Ngọc Châu, "Người duyệt" =
+    // Trần Thị Hải Yến). Kế toán ghi nhận và xác nhận thanh toán.
+    "overhead.budget.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    // ⚠ HAI MÃ DUYỆT TÁCH RIÊNG, KHÔNG GỘP. Gộp một mã thì CFO bấm được luôn bước của CEO và hai
+    // cấp duyệt chỉ còn là trang trí. `approve_ceo` = khoá số cuối cùng của năm nên chỉ BGĐ.
+    "overhead.budget.approve_cfo": ["CFO"],
+    "overhead.budget.approve_ceo": ["BOARD_OF_MANAGEMENT"],
+    "overhead.spend.pay": ["BOARD_OF_MANAGEMENT", "CFO", "ACCOUNTANT_STAFF"],
+    "overhead.spend.over_budget": ["BOARD_OF_MANAGEMENT", "CFO"],
   };
 
   /**
@@ -2071,6 +2086,11 @@ async function main() {
     // được bài thì phải làm được bài, tách ra chỉ đẻ thêm một chỗ để quên tick.
     code === "clients.kb.generate" ||
     code === "clients.kb.compliance" ||
+    // Hồ sơ ISO (ISO-1): ĐÍNH hồ sơ và XUẤT báo cáo là việc của Account + HR + BGĐ. `iso.view` CỐ Ý
+    // nằm trong base — ai cũng nên thấy dự án mình đang thiếu hồ sơ gì; thủ kho/bảo vệ đã bị chặn
+    // bằng EXPLICIT_GRANTS. Thiếu hai dòng dưới thì seed MỚI cấp quyền đính hồ sơ cho cả 20 role.
+    code === "iso.manage" ||
+    code === "iso.export" ||
     code.startsWith("ai."); // (3)
 
   const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
@@ -2108,9 +2128,12 @@ async function main() {
       // Hai mã duyệt kho: BGĐ duyệt được cả giữ chỗ (K3) và điều chuyển kho (K4).
       "inventory.reservation.approve",
       "inventory.transfer.approve",
+      "iso.manage",
+      "iso.export",
     ],
     // Account duyệt đề xuất xuất kho của dự án MÌNH phụ trách (PIC/Leader) — quyết định flow K2
-    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate"],
+    // Account là PIC của dự án nên là người đính hồ sơ ISO cho chính dự án mình.
+    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate", "iso.manage", "iso.export"],
     CREATIVE: ["ai.brainstorm"],
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
     HR: ["ai.brainstorm", "ai.content"],
@@ -2126,7 +2149,9 @@ async function main() {
   };
   /** Cấp lại theo MÃ role cụ thể — các ngoại lệ cũ vốn gắn theo EMAIL từng người. */
   const extraByRole: Record<string, string[]> = {
-    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve"], // HR theo dõi học + là vế 2 của duyệt giữ chỗ
+    // HR theo dõi học + là vế 2 của duyệt giữ chỗ. Kỳ kiểm ISO do HR chủ trì (file gốc là file của
+    // HR) nên HR Manager đính hồ sơ và xuất báo cáo được.
+    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export"],
     CFO: [...EXEC_EXTRA, ...BIDDING_APPROVE_EXTRA], // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
     // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
@@ -2330,6 +2355,56 @@ async function main() {
       codes: ["clients.kb.compliance"],
       roleFilter: (r) =>
         r.code === "ACCOUNT_DIRECTOR" || r.code === "ACCOUNT_MANAGER" || r.code === "HR_MANAGER" || r.groupCode === "BOD",
+    },
+    // 02/08/2026 ISO-1 — sổ đăng ký hồ sơ ISO. XEM mở rộng (ai cũng nên thấy dự án mình thiếu hồ sơ
+    // gì); ĐÍNH hồ sơ + XUẤT báo cáo giới hạn ở Account (PIC của dự án) + HR Manager (chủ trì kỳ
+    // kiểm ISO) + BGĐ.
+    // ⚠ Lọc theo MÃ ROLE, không theo `groupCode === "WAREHOUSE"`: nhóm đó chứa cả SECURITY_GUARD —
+    // đúng cái bẫy đã phải vá ở `20260728_kho_k2_keeper` (HANDOVER 10.15).
+    {
+      key: "20260802_iso_view",
+      codes: ["iso.view"],
+      roleFilter: (r) => r.code !== "WAREHOUSE_KEEPER" && r.code !== "SECURITY_GUARD",
+    },
+    {
+      key: "20260802_iso_manage",
+      codes: ["iso.manage", "iso.export"],
+      roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "BOD" || r.code === "HR_MANAGER",
+    },
+    // 02/08/2026 OVH-1 — chi phí văn phòng. Bảy mã đều nằm trong MONEY_POLICY nên KHÔNG được cấp
+    // qua baseGrantCodes; mà Vòng 4d (siết theo MONEY_POLICY) đã chạy xong từ 30/07 nên trên DB
+    // đang chạy nó cũng không cấp lại. Không có backfill này thì production KHÔNG AI mở được module.
+    // Danh sách vai dưới đây phải khớp ĐÚNG MONEY_POLICY ở trên — lệch là hai đường mâu thuẫn.
+    {
+      key: "20260802_overhead_view",
+      codes: ["overhead.view", "overhead.spend.record"],
+      roleFilter: (r) =>
+        r.groupCode === "BOD" || r.code === "CFO" || r.code === "ACCOUNTANT_STAFF" || r.code === "HR_MANAGER",
+    },
+    {
+      key: "20260802_overhead_budget",
+      codes: ["overhead.budget.manage"],
+      roleFilter: (r) => r.groupCode === "BOD" || r.code === "HR_MANAGER",
+    },
+    {
+      key: "20260802_overhead_approve_cfo",
+      codes: ["overhead.budget.approve_cfo"],
+      roleFilter: (r) => r.code === "CFO",
+    },
+    {
+      key: "20260802_overhead_approve_ceo",
+      codes: ["overhead.budget.approve_ceo"],
+      roleFilter: (r) => r.groupCode === "BOD",
+    },
+    {
+      key: "20260802_overhead_pay",
+      codes: ["overhead.spend.pay"],
+      roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO" || r.code === "ACCOUNTANT_STAFF",
+    },
+    {
+      key: "20260802_overhead_over_budget",
+      codes: ["overhead.spend.over_budget"],
+      roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO",
     },
     // 29/07/2026 Kho v2 K4 — điều chuyển kho nay phải qua duyệt (trước K4 ai lập được là chạy
     // thẳng vào sổ cái). Người duyệt = OPE Manager (chủ vận hành kho) + BGĐ; Thủ kho KHÔNG tự duyệt

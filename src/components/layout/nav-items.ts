@@ -15,6 +15,8 @@ import {
   BookOpen,
   Network,
   Sparkles,
+  FileCheck,
+  Receipt,
 } from "lucide-react";
 
 export type NavItem = {
@@ -50,6 +52,11 @@ export const NAV_ITEMS: NavItem[] = [
   { module: "⑤", labelKey: "staff", href: "/staff", icon: UsersRound, status: "active", permission: "staff.view" },
   { module: "⑥", labelKey: "kpi", href: "/kpi", icon: Award, status: "active", permission: "kpi.view" },
   { module: "⑦", labelKey: "payroll", href: "/payroll", icon: Banknote, status: "soon", permission: "payroll.view" },
+  // Chi phí văn phòng — đặt NGAY DƯỚI Lương theo yêu cầu chủ dự án: cùng là chi phí vận hành công
+  // ty (khác chi phí theo dự án ở module ④). Không đánh số vì nằm ngoài chuỗi ①…⑨ nghiệp vụ dự án.
+  { module: null, labelKey: "overhead", href: "/overhead", icon: Receipt, status: "active", permission: "overhead.view" },
+  // Hồ sơ ISO — báo cáo tuân thủ, cắt ngang mọi dự án nên không mang số module nghiệp vụ.
+  { module: null, labelKey: "iso", href: "/iso", icon: FileCheck, status: "active", permission: "iso.view" },
   // Cơ sở tri thức — nằm cuối cùng, độc lập với chuỗi module nghiệp vụ tuần tự phía trên.
   { module: null, labelKey: "kb", href: "/kb", icon: BookOpen, status: "active", permission: "kb.view" },
   // Sơ đồ tổ chức — ngay dưới Knowledge Base, dựng realtime từ Staff.managerId.

@@ -199,6 +199,14 @@ model Staff {
   ctvBatchesCreated           CtvBatch[]
   kbDocumentsUploaded         KbDocument[]              @relation("KbDocumentUploadedBy")
   projectFilesUploaded        ProjectFile[]             @relation("ProjectFileUploadedBy")
+  projectIsoDocsUpdated       ProjectIsoDoc[]           @relation("ProjectIsoDocUpdatedBy")
+  overheadBudgetsSubmitted    OverheadBudget[]          @relation("OverheadBudgetSubmittedBy")
+  overheadBudgetsCfoApproved  OverheadBudget[]          @relation("OverheadBudgetCfoBy")
+  overheadBudgetsCeoApproved  OverheadBudget[]          @relation("OverheadBudgetCeoBy")
+  overheadBudgetsRejected     OverheadBudget[]          @relation("OverheadBudgetRejectedBy")
+  overheadSpendsPaid          OverheadSpend[]           @relation("OverheadSpendPaidBy")
+  overheadSpendsRequested     OverheadSpend[]           @relation("OverheadSpendRequestedBy")
+  overheadSpendsCreated       OverheadSpend[]           @relation("OverheadSpendCreatedBy")
   stockDocumentsCreated       StockDocument[]           @relation("StockDocCreatedBy")
   stockDocumentsConfirmed     StockDocument[]           @relation("StockDocConfirmedBy")
   stockDocumentsCanceled      StockDocument[]           @relation("StockDocCanceledBy")
@@ -636,6 +644,10 @@ model Project {
   liquidationAt  DateTime? // mốc vào Liquidation — dùng tính reminder hàng tuần hồ sơ nghiệm thu
   finishedAt     DateTime? // mốc vào Finished — Creative có 7 ngày grace lưu về local server trước khi khóa task
   fiscalYear     Int
+  /// Link thư mục hồ sơ dự án (SharePoint/Drive) — cột "Link Hồ sơ" của sheet ISO. KHÁC
+  /// `briefLinkUrl` (link brief khách gửi): đây là thư mục CHỨA TOÀN BỘ hồ sơ dự án mà kiểm toán
+  /// ISO mở ra xem. Trước 08/2026 app không có chỗ nào lưu link này.
+  isoFolderUrl   String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -680,9 +692,42 @@ model Project {
   inventoryItemsBound InventoryItem[] @relation("InventoryItemBoundProject")
   planningJobs      PlanningJob[]
   files             ProjectFile[]
+  isoDocs           ProjectIsoDoc[]
 
   @@index([ownerTeamId, statusId])
   @@map("project")
+}
+
+/// SỔ ĐĂNG KÝ HỒ SƠ ISO — chỉ giữ phần CON NGƯỜI làm.
+///
+/// 25 loại hồ sơ ISO khai ở src/lib/iso-catalog.ts. Trong đó 14 loại app TỰ CHẤM được từ dữ liệu
+/// sẵn có (Proposal FINAL, CO/CE, timeline, hợp đồng…) — phần đó KHÔNG có dòng nào ở đây, vì tính
+/// lúc đọc mới không nói dối khi dữ liệu gốc đổi (xem doc src/lib/iso-report.ts).
+///
+/// Bảng này chỉ sinh dòng khi PIC: đính file, dán link, hoặc đánh "không áp dụng".
+model ProjectIsoDoc {
+  id            String   @id @default(cuid())
+  projectId     String
+  /// Mã trong ISO_DOCS (ISO-01…ISO-25) — BẤT BIẾN, chốt bằng isIsoDocCode() ở mọi đường ghi.
+  docCode       String
+  /// PRESENT = đã có bằng chứng đính kèm · NA = không áp dụng cho dự án này (BẮT BUỘC có naReason).
+  status        String
+  linkUrl       String?
+  projectFileId String?
+  /// ISO đòi giải trình vì sao thiếu — chính là cột "Ghi chú về dự án" của sheet HS ISO.
+  naReason      String?
+  note          String?
+  updatedById   String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile ProjectFile? @relation(fields: [projectFileId], references: [id], onDelete: SetNull)
+  updatedBy   Staff?       @relation("ProjectIsoDocUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([projectId, docCode])
+  @@index([projectId])
+  @@map("project_iso_doc")
 }
 
 /// Thư viện file đính kèm CẤP DỰ ÁN — "file mời thầu", tài liệu khách gửi... Nguồn duy nhất mà các
@@ -703,6 +748,7 @@ model ProjectFile {
 
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploadedBy Staff?  @relation("ProjectFileUploadedBy", fields: [uploadedById], references: [id])
+  isoDocs    ProjectIsoDoc[]
 
   @@index([projectId])
   @@map("project_file")
@@ -2596,4 +2642,143 @@ model ClientKbAttempt {
   @@index([topicId, staffId])
   @@index([staffId, passed])
   @@map("client_kb_attempt")
+}
+
+// ─────────────────────────────────────────────────────────
+// CHI PHÍ VĂN PHÒNG (Overhead costs) — không đánh số module vì nằm ngoài chuỗi ①…⑨ nghiệp vụ dự án
+//
+// Nghiệp vụ thật (file `2026_HR_Chi phi van phong thực tế`): đầu năm chốt một bản ngân sách gồm ~25
+// khoản chi, mỗi khoản có mã PID (TCM26-01…) và 12 con số theo tháng. Sau đó HR tự chi trong ngân
+// sách; VƯỢT thì phải giải trình chứ KHÔNG bị chặn — file gốc đã có 2 khoản "còn lại" âm kèm lý do.
+//
+// Năm 2026 import từ Excel (BOD đã duyệt ngoài app). Từ 2027: nhân bản số tháng 12 năm đang chạy →
+// HR Manager sửa/thêm/bớt → CFO duyệt → CEO duyệt là KHOÁ.
+// ─────────────────────────────────────────────────────────
+
+/// Bản ngân sách của MỘT năm tài chính.
+model OverheadBudget {
+  id         String @id @default(cuid())
+  fiscalYear Int    @unique
+  /// DRAFT → PENDING_CFO → PENDING_CEO → LOCKED, hoặc REJECTED (CFO/CEO trả về, HR sửa rồi trình lại).
+  /// Bản 2026 import từ Excel vào thẳng LOCKED vì BOD đã duyệt ngoài app.
+  status     String @default("DRAFT")
+  /// storageKey file Excel gốc đã import (storage/ai-uploads) — giữ để đối chiếu về sau.
+  sourceFileKey String?
+  note          String?
+
+  submittedAt    DateTime?
+  submittedById  String?
+  cfoApprovedAt  DateTime?
+  cfoApprovedById String?
+  ceoApprovedAt  DateTime?
+  ceoApprovedById String?
+  rejectedAt     DateTime?
+  rejectedById   String?
+  rejectedNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submittedBy   Staff? @relation("OverheadBudgetSubmittedBy", fields: [submittedById], references: [id])
+  cfoApprovedBy Staff? @relation("OverheadBudgetCfoBy", fields: [cfoApprovedById], references: [id])
+  ceoApprovedBy Staff? @relation("OverheadBudgetCeoBy", fields: [ceoApprovedById], references: [id])
+  rejectedBy    Staff? @relation("OverheadBudgetRejectedBy", fields: [rejectedById], references: [id])
+  items         OverheadItem[]
+
+  @@map("overhead_budget")
+}
+
+/// Một KHOẢN CHI trong ngân sách năm (1 dòng của sheet "Total 2026").
+model OverheadItem {
+  id       String @id @default(cuid())
+  budgetId String
+  /// Mã hiển thị kiểu "TCM26-01".
+  /// ⚠ CHỈ ĐỂ HIỂN THỊ — khoá liên kết tiền là `id`. Repo đã trả giá đúng bài này với
+  /// `CostLine.itemCode` và phải thêm `stableKey` (xem src/lib/finance.ts): mã do người gõ thì đổi
+  /// lúc nào cũng được, dùng nó nối tiền là mất dấu khoản chi.
+  pidCode  String
+  name     String
+  /// "CHI PHÍ THUÊ - MƯỚN - VP" | "DI CHUYỂN - VẬN HÀNH" | "CP VẬN HÀNH" | "LƯƠNG - CHÍNH SÁCH PHÚC LỢI"…
+  /// Nhãn tự do theo file gốc, KHÔNG phải OptionSet — danh mục này do kế toán tự đặt theo từng năm.
+  categoryLabel String
+  /// "Hàng tháng" | "Khi phát sinh" | "1 năm/lần" — cột "Loại đề nghị" của file gốc.
+  requestKind   String @default("MONTHLY")
+  /// MANUAL = kế toán nhập thực chi · PAYROLL = số thực chi đọc từ module ⑦ Lương (chưa làm).
+  /// 3 khoản lương/BHXH/công đoàn để PAYROLL: hiện chỉ hiện ngân sách, ô thực chi TRỐNG và KHÔNG
+  /// cho nhập tay — có hai nguồn số cho cùng một khoản là chắc chắn lệch.
+  actualSource  String @default("MANUAL")
+  sort     Int     @default(0)
+  /// Bớt khoản = tắt cờ này, KHÔNG xoá — các năm trước còn khoản chi trỏ vào (mirror Vendor/ClientGroup).
+  isActive Boolean @default(true)
+  note     String?
+
+  budget       OverheadBudget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  budgetMonths OverheadBudgetMonth[]
+  spends       OverheadSpend[]
+
+  @@unique([budgetId, pidCode])
+  @@index([budgetId])
+  @@map("overhead_item")
+}
+
+/// Ngân sách của một khoản trong MỘT tháng.
+/// Một dòng cho mỗi (khoản × tháng) thay vì 12 cột — đúng cách `CreativeSalaryBudget` đang làm
+/// (@@unique([positionTitle, periodCode])), và là cách duy nhất lọc/tổng hợp theo tháng mà không
+/// phải viết 12 nhánh if.
+model OverheadBudgetMonth {
+  id     String @id @default(cuid())
+  itemId String
+  month  Int // 1..12
+  amount BigInt @default(0)
+
+  item OverheadItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, month])
+  @@map("overhead_budget_month")
+}
+
+/// MỘT LẦN CHI thực tế. Vòng đời + đường đảo mượn nguyên khuôn `VendorPayment`.
+model OverheadSpend {
+  id     String @id @default(cuid())
+  itemId String
+  month  Int // 1..12 — tháng ghi nhận chi phí, KHÔNG nhất thiết trùng tháng thanh toán
+  name   String
+  expectedDate DateTime?
+
+  /// Số THỰC TRẢ ra ngoài (chưa gross-up thuế) — đây là con số dùng đối chiếu ngân sách.
+  amountNet   BigInt @default(0)
+  vat         BigInt @default(0)
+  tncn        BigInt @default(0)
+  tndn        BigInt @default(0)
+  /// Tổng đã gồm phần thuế — chỉ để hiển thị/đối chiếu chứng từ.
+  /// ⚠ ĐỪNG lấy cột này làm số so ngân sách: HANDOVER ghi lại vụ lấy nhầm `amount` thay `netAmount`
+  /// làm trần, cho chi vượt đúng bằng phần thuế (đo được 70.250.002đ trên T013).
+  amountTotal BigInt @default(0)
+
+  /// SCHEDULED (đã lên phiếu, chưa chi) | PAID (kế toán xác nhận đã thanh toán) | CANCELED.
+  status   String    @default("SCHEDULED")
+  paidDate DateTime?
+  paidById String?
+
+  requestedById String?
+  createdById   String?
+  /// Bắt buộc khi khoản chi làm vượt ngân sách của khoản đó — "vượt phải giải trình".
+  overBudgetNote String?
+  cancelNote     String?
+  /// Bắt buộc khi bỏ đánh dấu đã thanh toán (PAID → SCHEDULED).
+  reverseNote    String?
+  /// Ghi chú tự do — cột "GHI CHÚ" của sheet chi tiết (vd "Đang tạm ứng").
+  note           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item        OverheadItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  paidBy      Staff?       @relation("OverheadSpendPaidBy", fields: [paidById], references: [id])
+  requestedBy Staff?       @relation("OverheadSpendRequestedBy", fields: [requestedById], references: [id])
+  createdBy   Staff?       @relation("OverheadSpendCreatedBy", fields: [createdById], references: [id])
+
+  @@index([itemId, month])
+  @@index([status])
+  @@map("overhead_spend")
 }

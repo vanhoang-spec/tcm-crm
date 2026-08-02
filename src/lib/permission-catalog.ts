@@ -44,6 +44,8 @@ export const PERMISSION_MODULES = [
   "chat",
   "ai",
   "kb",
+  "iso",
+  "overhead",
   "settings",
   "system",
 ] as const;
@@ -64,6 +66,8 @@ export const PERMISSION_MODULE_LABELS: Record<string, { labelVi: string; labelEn
   chat: { labelVi: "⑨ Trao đổi", labelEn: "⑨ Chat" },
   ai: { labelVi: "Trợ lý AI", labelEn: "AI assistant" },
   kb: { labelVi: "Cơ sở tri thức", labelEn: "Knowledge base" },
+  iso: { labelVi: "Hồ sơ ISO", labelEn: "ISO records" },
+  overhead: { labelVi: "Chi phí văn phòng", labelEn: "Overhead costs" },
   settings: { labelVi: "Cài đặt", labelEn: "Settings" },
   system: { labelVi: "Hệ thống", labelEn: "System" },
 };
@@ -189,6 +193,23 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── Cơ sở tri thức ──
   { code: "kb.view", module: "kb", labelVi: "Xem tài liệu", labelEn: "View knowledge base" },
   { code: "kb.manage", module: "kb", labelVi: "Đăng / xoá tài liệu", labelEn: "Create / delete documents" },
+
+  // ── Hồ sơ ISO ──
+  { code: "iso.view", module: "iso", labelVi: "Xem sổ đăng ký hồ sơ ISO", labelEn: "View ISO document register" },
+  { code: "iso.manage", module: "iso", labelVi: "Đính hồ sơ / đánh không áp dụng", labelEn: "Attach documents / mark not applicable" },
+  { code: "iso.export", module: "iso", labelVi: "Xuất báo cáo ISO", labelEn: "Export ISO report" },
+
+  // ── Chi phí văn phòng ──
+  // ⚠ 5 mã `sensitive` dưới đây PHẢI khai trong MONEY_POLICY (prisma/seed.ts) — đó là một nguồn sự
+  // thật cho cả isRestricted, moneyCodesFor và Vòng 4d. Cấp ở chỗ khác là tái tạo đúng lớp lỗ hổng
+  // đã phải vá 30/07 (HANDOVER 10.16).
+  { code: "overhead.view", module: "overhead", labelVi: "Xem chi phí văn phòng", labelEn: "View overhead costs" },
+  { code: "overhead.budget.manage", module: "overhead", labelVi: "Lập / sửa / trình duyệt ngân sách năm", labelEn: "Create / edit / submit the annual budget", sensitive: true },
+  { code: "overhead.budget.approve_cfo", module: "overhead", labelVi: "CFO duyệt ngân sách năm", labelEn: "CFO approves the annual budget", sensitive: true },
+  { code: "overhead.budget.approve_ceo", module: "overhead", labelVi: "CEO duyệt & khoá ngân sách năm", labelEn: "CEO approves & locks the annual budget", sensitive: true },
+  { code: "overhead.spend.record", module: "overhead", labelVi: "Ghi nhận khoản chi", labelEn: "Record a spend" },
+  { code: "overhead.spend.pay", module: "overhead", labelVi: "Xác nhận đã thanh toán", labelEn: "Confirm payment", sensitive: true },
+  { code: "overhead.spend.over_budget", module: "overhead", labelVi: "Chi vượt ngân sách (kèm giải trình)", labelEn: "Spend over budget (with justification)", sensitive: true },
 
   // ── Cài đặt ──
   { code: "settings.view", module: "settings", labelVi: "Vào trang Cài đặt", labelEn: "Open settings", sensitive: true },

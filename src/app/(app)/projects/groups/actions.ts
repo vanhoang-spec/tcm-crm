@@ -31,9 +31,14 @@ function parse(formData: FormData, t: (k: string) => string) {
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const name = String(formData.get("name") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim() || null;
+  // CE hợp đồng khung — số THAM CHIẾU nhập tay từ hợp đồng (chưa VAT, sau phí agency).
+  // 0 / bỏ trống = chưa chốt khung → banner đối chiếu trên trang nhóm tự ẩn.
+  const rawFramework = Number(String(formData.get("frameworkCe") ?? "").trim() || 0) || 0;
+  if (rawFramework < 0) return { error: t("errorFramework") };
+  const frameworkCe = rawFramework > 0 ? BigInt(Math.round(rawFramework)) : null;
   if (!CODE_REGEX.test(code)) return { error: t("errorCode") };
   if (name.length < 2) return { error: t("errorName") };
-  return { data: { code, name, note } };
+  return { data: { code, name, note, frameworkCe } };
 }
 
 export async function createProjectGroup(_prev: ProjectGroupFormState, formData: FormData): Promise<ProjectGroupFormState> {

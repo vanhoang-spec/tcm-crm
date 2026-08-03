@@ -124,7 +124,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 100 model Prisma · 60 migration · 70 file `src/lib` · 3216 key i18n × 2 ngôn ngữ · 124 mã quyền.
+**Quy mô:** 100 model Prisma · 61 migration · 70 file `src/lib` · 3222 key i18n × 2 ngôn ngữ · 124 mã quyền.
 
 ---
 
@@ -932,6 +932,42 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - ⚠ **CẦN XÁC NHẬN:** khối hợp đồng của file Mekong ghi **"Hợp đồng TCM – Prowtech"**, không phải
       TCM – LOF. Nếu Mekong ký qua Prowtech thì đó là cấu trúc thương mại KHÁC với 10 tỉnh (khách
       hàng là ai, hoá đơn xuất cho ai) — ảnh hưởng nếu sau này quyết định nhập vào app.
+
+    **LOF-V1b — CE HỢP ĐỒNG KHUNG + NHẬP T025 (04/08/2026, migration
+    `20260806010000_project_group_framework_ce`).** Đọc thêm 2 file: báo giá khách chốt 03-06Apr và
+    CECO TRIỂN KHAI confirmed 15Apr — ráp được TOÀN BỘ chuỗi thương vụ KUN:
+    R1 6 tỉnh 9.036.968.233 (margin 32,15%) → khách chốt 10 tỉnh **13.981.715.611** (CO 9.935.562.868,
+    margin **28,94% — DƯỚI sàn 31%**, gồm Com 4-5% + dự phòng thuế) → HĐ phase 1 7.270.970.056 →
+    NT phase 1 7.557.818.278 → **phase 2 còn lại = 6.710.745.555** (phép trừ khớp từng đồng).
+    - **`ProjectGroup.frameworkCe`** — CE khung khách chốt cho CẢ chiến dịch, nhập tay, THUẦN THAM
+      CHIẾU (tiền lệ `Project.budget`). Trang nhóm so với **Σ ceTotal** các phase (KHÔNG cộng Chi
+      hộ — khung là CE hợp đồng, trộn Chi hộ là so hai đại lượng khác nhau) → hiện "khớp" hoặc
+      "chênh ±X". Đã verify trên browser: KUN10T hiện đúng
+      `CE khung 13.981.715.611 · Σ phase 14.268.563.833 — chênh +286.848.222` = đúng phát sinh
+      nghiệm thu phase 1 được duyệt. Seed điền khung cho KUN10T CHỈ KHI đang trống.
+    - **T025 ĐÃ CÓ CO/CE** (chỉ trên dev.db): 61 section · 156 dòng · rev1 kind=CONTRACT ·
+      CE 6.710.745.555 · pseudo-CO 6.411.555.554 (margin giả 4,46% — dòng là GIÁ BÁN gross-up thuế,
+      CÙNG quy ước T013 rev1 4,48%; CO thật vào ở bản sống khi triển khai, như T013 rev3).
+      Nguồn: file 20Jul, **phase 2 từng dòng = tt(HĐ tổng 10 tỉnh) − tt(HĐ phase 1)** — hai khối
+      nằm CÙNG DÒNG nên không phải khớp tên gì cả. Parser đối soát 4/4 sheet khớp tuyệt đối
+      (MB 3.362.750.000/1.757.750.000 · VH 5.696.825.556/2.898.147.778 · PO 1.448.875.000/745.475.000
+      · DT 2.202.200.000/1.208.600.000).
+    - **Ba bẫy parser đã vấp và vá** (ghi lại vì deploy production PHẢI chạy lại import này):
+      (a) **Ô THÀNH TIỀN là số chuẩn, KHÔNG phải SL×tỉnh×đơn giá** — có dòng tt=8M trong khi
+          SL×dg=16M (cổng đường trượt tính nửa giá). Amount phải đọc từ tt.
+      (b) Dòng có STT số + thành tiền nhưng KHÔNG có đơn giá vẫn là DÒNG LÁ (ca thật: "PIT/Thuế
+          TNCN" r166 vận hành, 164,5tr) → FIXED. Thiếu quy tắc này là Σ lệch đúng 164.555.556.
+      (c) **Key section phải theo SỐ ĐẾM, không theo chữ La Mã** — file lặp lại "I" ở nhiều khối,
+          key trùng làm dòng nhân đôi (nổ unique stableKey + pseudo-CO thổi từ 6,4 lên 7,5 tỷ).
+    - Dòng T025 CHƯA gắn legCode: file hợp đồng chỉ có "Số tỉnh ×N", chiều tỉnh chỉ xuất hiện ở
+      giai đoạn nghiệm thu — A3 gắn nhãn dần khi triển khai, đúng thiết kế.
+    - Phát hiện kèm: 2 file lệch nhau **1.000.000đ** ở POSM bản R1 (933.785.000 vs 932.785.000) —
+      lỗi copy tay giữa các file Excel, đúng loại lỗi app xoá sổ.
+    - ⚠ **DEPLOY LƯU Ý:** dữ liệu T025 + kind rev1/rev2 của T013 + nhóm KUN10T chỉ có trên dev.db.
+      Production (từ 28/07 là nguồn sự thật, KHÔNG đè DB) khi deploy LOF-V1/V1b phải: seed tự tạo
+      nhóm + điền khung; còn **gắn kind cho T013 (rev1=CONTRACT, rev2=ACCEPTANCE) làm qua UI tab
+      So sánh**, và **import T025 chạy lại script** (dựng lại theo đúng 3 bẫy ở trên — nguồn là file
+      20Jul còn nguyên trên OneDrive).
 
 ---
 

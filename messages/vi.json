@@ -2049,7 +2049,13 @@
       "errorCode": "Mã nhóm phải 2–10 ký tự, chỉ chữ IN HOA và số.",
       "errorName": "Tên nhóm quá ngắn.",
       "errorCodeExists": "Mã nhóm này đã tồn tại.",
-      "errorNotFound": "Không tìm thấy nhóm."
+      "errorNotFound": "Không tìm thấy nhóm.",
+      "colFramework": "CE hợp đồng khung",
+      "frameworkHint": "CE khách đã chốt cho CẢ chiến dịch (chưa VAT, sau phí agency) — nhập tay từ hợp đồng. Chỉ để đối chiếu với tổng các phase, không vào báo cáo tiền nào. Bỏ trống nếu chưa chốt.",
+      "frameworkRow": "CE khung {framework} · Σ phase {sum}",
+      "frameworkMatch": "— khớp",
+      "frameworkDelta": "— chênh {delta}",
+      "errorFramework": "CE hợp đồng khung không được âm."
     }
   },
   "guest": {

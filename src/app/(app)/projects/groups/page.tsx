@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions";
 import { formatNumber, toNum } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { CreateGroupForm, GroupRow } from "./group-forms";
+import { CreateGroupForm, GroupRow, type FrameworkCmp } from "./group-forms";
 
 /**
  * Quản trị NHÓM CHIẾN DỊCH — gom nhiều dự án của cùng một chiến dịch nhiều giai đoạn
@@ -42,6 +42,7 @@ export default async function ProjectGroupsPage() {
   const rollup = (g: (typeof groups)[number]) => {
     let co = 0;
     let ce = 0;
+    let ceOnly = 0;
     let invoiced = 0;
     for (const p of g.projects) {
       const sheet = p.costSheets[0];
@@ -49,10 +50,19 @@ export default async function ProjectGroupsPage() {
         co += toNum(sheet.coTotal);
         // Cộng Chi hộ vào cột "khách phải trả" đúng định nghĩa clientBillableTotal.
         ce += toNum(sheet.ceTotal) + toNum(sheet.chiHo);
+        // Riêng phép đối chiếu CE KHUNG thì KHÔNG cộng Chi hộ: khung là CE hợp đồng (chưa VAT, sau
+        // phí agency) — cùng thước với ceTotal; trộn Chi hộ vào là so hai đại lượng khác nhau.
+        ceOnly += toNum(sheet.ceTotal);
       }
       invoiced += p.clientInvoices.reduce((s, i) => s + toNum(i.amount), 0);
     }
-    return { co: money(co), ce: money(ce), invoiced: money(invoiced) };
+    return { co: money(co), ce: money(ce), invoiced: money(invoiced), ceOnly };
+  };
+  const frameworkCmpOf = (g: (typeof groups)[number], ceOnly: number): FrameworkCmp | null => {
+    if (g.frameworkCe == null) return null;
+    const fw = toNum(g.frameworkCe);
+    const delta = ceOnly - fw;
+    return { framework: money(fw), sumPhases: money(ceOnly), delta, deltaFmt: (delta > 0 ? "+" : "−") + money(Math.abs(delta)) };
   };
 
   return (
@@ -73,6 +83,7 @@ export default async function ProjectGroupsPage() {
         {groups.length === 0 && <li className="rounded-xl border border-border p-4 text-sm text-muted-foreground">{t("empty")}</li>}
         {groups.map((g) => {
           const m = rollup(g);
+          const cmp = frameworkCmpOf(g, m.ceOnly);
           return (
             <li key={g.id} className={"rounded-xl border border-border bg-surface p-3" + (g.isActive ? "" : " opacity-50")}>
               <p className="font-mono text-sm font-semibold text-foreground">{g.code}</p>
@@ -82,6 +93,16 @@ export default async function ProjectGroupsPage() {
                 {t("colCe")}: <span className="tabular-nums text-foreground">{m.ce}</span> · {t("colInvoiced")}:{" "}
                 <span className="tabular-nums">{m.invoiced}</span>
               </p>
+              {cmp && (
+                <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                  {t("frameworkRow", { framework: cmp.framework, sum: cmp.sumPhases })}{" "}
+                  {cmp.delta === 0 ? (
+                    <span className="text-success">{t("frameworkMatch")}</span>
+                  ) : (
+                    <span className={cmp.delta > 0 ? "text-warning" : "text-danger"}>{t("frameworkDelta", { delta: cmp.deltaFmt })}</span>
+                  )}
+                </p>
+              )}
               <ul className="mt-1 space-y-0.5">
                 {g.projects.map((p) => (
                   <li key={p.id} className="text-[11px] text-muted-foreground">
@@ -119,9 +140,18 @@ export default async function ProjectGroupsPage() {
                   </td>
                 </tr>
               )}
-              {groups.map((g) => (
-                <GroupRow key={g.id} group={g} projectCount={g.projects.length} money={rollup(g)} />
-              ))}
+              {groups.map((g) => {
+                const m = rollup(g);
+                return (
+                  <GroupRow
+                    key={g.id}
+                    group={{ id: g.id, code: g.code, name: g.name, note: g.note, isActive: g.isActive, frameworkCe: g.frameworkCe == null ? null : toNum(g.frameworkCe) }}
+                    projectCount={g.projects.length}
+                    money={m}
+                    frameworkCmp={frameworkCmpOf(g, m.ceOnly)}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>

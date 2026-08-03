@@ -406,14 +406,20 @@ async function main() {
   // cùng khách — CỐ Ý không gán (quyết định chủ dự án 04/08/2026).
   // Chỉ gán khi dự án CHƯA có nhóm: chạy lại trên production không đè chỉnh tay của Account.
   const projectGroupsSeed = [
-    { code: "KUN10T", name: "KUN đường trượt 10 tỉnh", memberCodes: ["T013LO226A3", "T025LO226A3"] },
+    // frameworkCe = CE hợp đồng khung 10 tỉnh khách chốt 6.4.2026 (chưa VAT, sau phí agency) — từ
+    // file "TCM_Bao gia_Duong truot Kun 10 tinh update 03Apr2026". Chỉ điền khi đang TRỐNG.
+    { code: "KUN10T", name: "KUN đường trượt 10 tỉnh", memberCodes: ["T013LO226A3", "T025LO226A3"], frameworkCe: BigInt("13981715611") },
   ];
   for (const g of projectGroupsSeed) {
     const group = await prisma.projectGroup.upsert({
       where: { code: g.code },
       update: {},
-      create: { code: g.code, name: g.name },
+      create: { code: g.code, name: g.name, frameworkCe: g.frameworkCe },
     });
+    if (group.frameworkCe == null && g.frameworkCe != null) {
+      await prisma.projectGroup.update({ where: { id: group.id }, data: { frameworkCe: g.frameworkCe } });
+      console.log(`  nhóm chiến dịch ${g.code}: điền CE khung ${g.frameworkCe}`);
+    }
     const assigned = await prisma.project.updateMany({
       where: { code: { in: g.memberCodes }, groupId: null },
       data: { groupId: group.id },

@@ -717,6 +717,11 @@ model ProjectGroup {
   code      String   @unique
   name      String
   note      String?
+  /// CE HỢP ĐỒNG KHUNG khách đã chốt cho CẢ chiến dịch (chưa VAT, sau phí agency) — nhập tay từ
+  /// hợp đồng. SỐ THAM CHIẾU thuần (tiền lệ `Project.budget`): trang nhóm so nó với Σ ceTotal của
+  /// các phase để lộ ra phát sinh/giảm trừ; không cộng vào bất kỳ báo cáo tiền nào. Ca thật: KUN
+  /// khung 13.981.715.611 vs Σ phase sau nghiệm thu phase 1 = +286.848.222 phát sinh được duyệt.
+  frameworkCe BigInt?
   isActive  Boolean  @default(true) // tắt = ẩn khỏi ô chọn khi gán mới; dự án cũ giữ nguyên nhóm
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

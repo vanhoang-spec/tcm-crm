@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileSpreadsheet, CheckCircle2, Circle } from "lucide-react";
+import { FileSpreadsheet, FileDown, CheckCircle2, Circle } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +42,7 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
           include: {
             sentToLiquidationRevision: true,
             sentToLiquidationBy: true,
-            revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } },
+            revisions: { orderBy: { revNo: "desc" }, select: { revNo: true, kind: true } },
           },
         },
       },
@@ -106,6 +106,10 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
   // thì kế toán xuất hóa đơn theo số cũ mà không biết.
   const latestRevNo = sheet?.revisions[0]?.revNo ?? null;
   const isStaleRev = !!sentRev && latestRevNo != null && latestRevNo > sentRev.revNo;
+
+  // Bảng nghiệm thu gửi khách cần ĐỦ CẢ HAI mốc: bản hợp đồng để so, bản nghiệm thu để chốt.
+  const revKinds = new Set((sheet?.revisions ?? []).map((r) => r.kind));
+  const hasAcceptancePair = revKinds.has("CONTRACT") && revKinds.has("ACCEPTANCE");
 
   // Trần xuất hóa đơn = CE + Chi hộ của ĐÚNG bản đã chuyển nghiệm thu (xem clientBillableTotal).
   const billable = sentRev ? clientBillableTotal(toNum(sentRev.ceTotal), toNum(sentRev.chiHo)) : 0;
@@ -177,7 +181,20 @@ export default async function ProjectLiquidationPage({ params }: { params: Promi
 
       {/* CO/CE đã chuyển sang Nghiệm thu */}
       <section className="rounded-xl border border-border bg-surface p-5">
-        <h3 className="text-sm font-semibold text-foreground">{t("coceSnapshotTitle")}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-foreground">{t("coceSnapshotTitle")}</h3>
+          {/* Bảng nghiệm thu gửi khách (HĐ ↔ NT ↔ chênh lệch, gom theo chặng). Chỉ hiện khi đã đánh
+              dấu đủ HAI bản — thiếu một bản thì không có gì để so, nút bấm vào chỉ ra lỗi. */}
+          {hasAcceptancePair && (
+            <a
+              href={`/api/acceptance-export?projectId=${id}`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-medium text-white hover:bg-brand-700"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              {t("acceptanceExport")}
+            </a>
+          )}
+        </div>
         {!sentRev || !sheet ? (
           <>
             <p className="mt-2 text-sm text-muted-foreground">{t("coceSnapshotEmpty")}</p>

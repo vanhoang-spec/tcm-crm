@@ -1310,7 +1310,15 @@
       "untitledSection": "(hạng mục chưa đặt tên)",
       "stockLineBadge": "Kho",
       "stockQtyLocked": "Số lượng khoá theo mức đã duyệt giữ chỗ — sửa bằng cách huỷ đề xuất và làm lại.",
-      "stockRefPriceHint": "Đơn giá THAM CHIẾU của hàng lấy từ kho: không tính vào giá vốn, chỉ dùng để chia tiền khách trên báo giá và gợi ý make-up."
+      "stockRefPriceHint": "Đơn giá THAM CHIẾU của hàng lấy từ kho: không tính vào giá vốn, chỉ dùng để chia tiền khách trên báo giá và gợi ý make-up.",
+      "colLeg": "Chặng",
+      "colLegHint": "Tỉnh / điểm / đợt của dòng này. Thuần nhãn — không tính vào tiền. Dùng để gom khi xuất bảng nghiệm thu gửi khách.",
+      "colLegPlaceholder": "vd Bình Dương",
+      "revisionKindLabel": "Đánh dấu bản này là",
+      "revisionKindNone": "Bản nội bộ",
+      "revisionKindQUOTE": "Báo giá",
+      "revisionKindCONTRACT": "Hợp đồng",
+      "revisionKindACCEPTANCE": "Nghiệm thu"
     },
     "rounds": {
       "title": "Vòng deal giá",
@@ -1667,7 +1675,13 @@
       "printBtn": "In / Lưu PDF",
       "printBack": "Về tab CO/CE",
       "printSwitchInternal": "Xem bản nội bộ",
-      "printSwitchClient": "Xem bản gửi khách"
+      "printSwitchClient": "Xem bản gửi khách",
+      "revKind": "Vai trò",
+      "revKindHint": "Bản này đóng vai gì trong hồ sơ gửi khách. Bản xuất nghiệm thu so bản HỢP ĐỒNG với bản NGHIỆM THU.",
+      "revKindNone": "— Bản nội bộ —",
+      "revKindQUOTE": "Báo giá",
+      "revKindCONTRACT": "Hợp đồng",
+      "revKindACCEPTANCE": "Nghiệm thu"
     },
     "liquidation": {
       "title": "Nghiệm thu & Thanh lý",
@@ -1733,7 +1747,8 @@
       "msErrRequired": "Nhập tên đợt và % (0–100).",
       "msErrHasInvoices": "Đợt đã có hóa đơn phát hành — không xoá được.",
       "msPickLabel": "Đợt thu",
-      "msPickNone": "— Không gắn đợt —"
+      "msPickNone": "— Không gắn đợt —",
+      "acceptanceExport": "Xuất bảng nghiệm thu"
     },
     "operations": {
       "title": "Vận hành — Thuê ngoài (CTV)",
@@ -2004,6 +2019,37 @@
       "errNeedReason": "Phải nhập lý do không áp dụng.",
       "errFileRejected": "File bị từ chối (quá 15MB hoặc sai định dạng).",
       "errGeneric": "Không lưu được."
+    },
+    "groups": {
+      "title": "Nhóm chiến dịch",
+      "subtitle": "Gom nhiều dự án của cùng một chiến dịch nhiều giai đoạn (vd KUN đường trượt 10 tỉnh = phase 1 + phase 2) để xem tổng một chỗ.",
+      "backToList": "Về danh sách dự án",
+      "empty": "Chưa có nhóm nào.",
+      "namePlaceholder": "KUN đường trượt 10 tỉnh",
+      "colCode": "Mã nhóm",
+      "colName": "Tên nhóm",
+      "colNote": "Ghi chú",
+      "colProjects": "Số dự án",
+      "colCo": "Tổng CO",
+      "colCe": "Khách phải trả",
+      "colInvoiced": "Đã xuất hoá đơn",
+      "memberCount": "{count} dự án",
+      "addBtn": "Thêm nhóm",
+      "saveBtn": "Lưu",
+      "cancelBtn": "Huỷ",
+      "editBtn": "Sửa",
+      "deactivateBtn": "Tắt",
+      "activateBtn": "Bật lại",
+      "rollupHint": "Số ở bảng này được CỘNG LẠI mỗi lần mở từ bảng CO/CE sống và hoá đơn đã phát hành của từng dự án — nhóm không lưu tổng riêng.",
+      "assignTitle": "Nhóm chiến dịch",
+      "assignDesc": "Gán dự án này vào một chiến dịch nhiều giai đoạn. Chỉ là nhãn gom — không đổi CO/CE, hợp đồng hay hoá đơn của dự án.",
+      "assignNone": "— Không thuộc nhóm nào —",
+      "assignBtn": "Lưu nhóm",
+      "manageLink": "Quản lý nhóm →",
+      "errorCode": "Mã nhóm phải 2–10 ký tự, chỉ chữ IN HOA và số.",
+      "errorName": "Tên nhóm quá ngắn.",
+      "errorCodeExists": "Mã nhóm này đã tồn tại.",
+      "errorNotFound": "Không tìm thấy nhóm."
     }
   },
   "guest": {

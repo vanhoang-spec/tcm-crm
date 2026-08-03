@@ -15,6 +15,12 @@ export type SnapshotLine = {
   unitPrice?: number | null;
   fixedAmount?: number | null;
   percentVal?: number | null;
+  /** Cờ "TCM hỗ trợ" — snapshot đã ghi từ đợt BM02, nay khai kiểu để bộ xuất nghiệm thu bỏ trống tiền. */
+  isSponsored?: boolean;
+  /** K3 — giá tham chiếu hàng kho; vào TRỌNG SỐ chia tiền khách, không vào tiền. Đã ghi từ đợt K3. */
+  stockRefUnitPrice?: number | null;
+  /** LOF-V1 — nhãn chặng (tỉnh/điểm/đợt). Snapshot cũ không có → undefined. */
+  legCode?: string | null;
   amount: number;
 };
 
@@ -22,6 +28,8 @@ export type SnapshotSection = {
   code: string;
   nameVi: string;
   isProxy?: boolean;
+  /** Mã hạng mục cha — snapshot đã ghi từ lâu, nay khai kiểu để bộ xuất nghiệm thu suy Chi hộ kế thừa. */
+  parentCode?: string | null;
   lines: SnapshotLine[];
 };
 
@@ -64,6 +72,70 @@ export function parseSnapshot(json: string | null | undefined): CostSheetSnapsho
   }
 }
 
+export type SnapshotEntry = { sectionCode: string; sectionName: string; line: SnapshotLine };
+export type SnapshotPair = { key: string; before: SnapshotEntry | null; after: SnapshotEntry | null };
+
+const nameKey = (sectionCode: string, line: SnapshotLine) => `n:${sectionCode}‖${line.itemName}`;
+
+function flatten(snap: CostSheetSnapshot): SnapshotEntry[] {
+  return snap.sections.flatMap((s) => s.lines.map((l) => ({ sectionCode: s.code, sectionName: s.nameVi, line: l })));
+}
+
+/**
+ * GHÉP CẶP dòng giữa hai snapshot — HAI LƯỢT, và thứ tự hai lượt là điều cốt lõi.
+ *
+ * Lượt 1 khớp theo `stableKey` khi CẢ HAI bên đều có. Lượt 2 khớp phần còn lại theo (mã hạng mục ‖
+ * tên dòng).
+ *
+ * ⚠ Vì sao KHÔNG dùng một khoá duy nhất "stableKey nếu có, không thì tên": snapshot cũ (trước khi
+ * khoá bền đi vào snapshot) không có `stableKey`, snapshot mới thì có. Khoá một lượt sinh ra `n:…`
+ * ở một bên và `k:…` ở bên kia ⇒ MỌI dòng hiện thành "xoá hết + thêm lại" dù không đổi một đồng.
+ * Đây đúng là ca dùng hằng ngày: bản HỢP ĐỒNG ký từ lâu đem so với bản NGHIỆM THU vừa lưu. Đã tái
+ * hiện trên T002 trước khi sửa: 0 changed / 2 added / 2 removed, chênh CO báo −61.100.000 giả.
+ *
+ * Dùng chung cho màn So sánh và bộ xuất nghiệm thu — hai màn hình phải nói cùng một chuyện về cùng
+ * một dòng tiền.
+ */
+export function pairSnapshotLines(before: CostSheetSnapshot, after: CostSheetSnapshot): SnapshotPair[] {
+  const bRest = flatten(before);
+  const aRest = flatten(after);
+  const pairs: SnapshotPair[] = [];
+
+  const aByStable = new Map<string, SnapshotEntry>();
+  for (const e of aRest) if (e.line.stableKey) aByStable.set(e.line.stableKey, e);
+
+  const bLeft: SnapshotEntry[] = [];
+  const takenA = new Set<SnapshotEntry>();
+  for (const b of bRest) {
+    const a = b.line.stableKey ? aByStable.get(b.line.stableKey) : undefined;
+    if (a) {
+      pairs.push({ key: `k:${b.line.stableKey}`, before: b, after: a });
+      takenA.add(a);
+    } else bLeft.push(b);
+  }
+
+  // Lượt 2 — phần chưa khớp, theo tên. Một tên chỉ ghép được một lần: hai dòng trùng tên trong cùng
+  // hạng mục thì dòng thứ hai rơi về added/removed thay vì ghép bừa vào nhau.
+  const aLeftByName = new Map<string, SnapshotEntry[]>();
+  for (const a of aRest) {
+    if (takenA.has(a)) continue;
+    const k = nameKey(a.sectionCode, a.line);
+    if (!aLeftByName.has(k)) aLeftByName.set(k, []);
+    aLeftByName.get(k)!.push(a);
+  }
+  for (const b of bLeft) {
+    const k = nameKey(b.sectionCode, b.line);
+    const a = aLeftByName.get(k)?.shift();
+    if (a) takenA.add(a);
+    pairs.push({ key: k, before: b, after: a ?? null });
+  }
+  for (const a of aRest) {
+    if (takenA.has(a)) continue;
+    pairs.push({ key: a.line.stableKey ? `k:${a.line.stableKey}` : nameKey(a.sectionCode, a.line), before: null, after: a });
+  }
+  return pairs;
+}
+
 function lineEqual(a: SnapshotLine, b: SnapshotLine): boolean {
   return (
     a.lineType === b.lineType &&
@@ -72,6 +144,9 @@ function lineEqual(a: SnapshotLine, b: SnapshotLine): boolean {
     (a.unitPrice ?? null) === (b.unitPrice ?? null) &&
     (a.fixedAmount ?? null) === (b.fixedAmount ?? null) &&
     (a.percentVal ?? null) === (b.percentVal ?? null) &&
+    // Đổi nhãn chặng KHÔNG đổi một đồng nào, nhưng nó đổi cách bản xuất nghiệm thu gom khối — gán
+    // nhầm tỉnh mà màn So sánh báo "không đổi" thì không còn đường nào phát hiện.
+    (a.legCode ?? null) === (b.legCode ?? null) &&
     a.amount === b.amount
   );
 }
@@ -81,29 +156,14 @@ function lineEqual(a: SnapshotLine, b: SnapshotLine): boolean {
  * added = chỉ có ở after; removed = chỉ có ở before; changed = khác giá trị; unchanged = giống hệt.
  */
 export function diffSnapshots(before: CostSheetSnapshot, after: CostSheetSnapshot): SnapshotDiff {
-  type Entry = { sectionCode: string; sectionName: string; line: SnapshotLine };
-  const index = (snap: CostSheetSnapshot) => {
-    const m = new Map<string, Entry>();
-    for (const s of snap.sections) {
-      for (const l of s.lines) {
-        const key = l.stableKey ? `k:${l.stableKey}` : `n:${s.code}‖${l.itemName}`;
-        m.set(key, { sectionCode: s.code, sectionName: s.nameVi, line: l });
-      }
-    }
-    return m;
-  };
-  const bMap = index(before);
-  const aMap = index(after);
-  const keys = new Set([...bMap.keys(), ...aMap.keys()]);
-
   const lines: LineDiff[] = [];
   let addedCount = 0;
   let removedCount = 0;
   let changedCount = 0;
 
-  for (const key of keys) {
-    const b = bMap.get(key);
-    const a = aMap.get(key);
+  for (const pair of pairSnapshotLines(before, after)) {
+    const b = pair.before;
+    const a = pair.after;
     const sectionCode = (a ?? b)!.sectionCode;
     const sectionName = (a ?? b)!.sectionName;
     const itemName = (a ?? b)!.line.itemName;

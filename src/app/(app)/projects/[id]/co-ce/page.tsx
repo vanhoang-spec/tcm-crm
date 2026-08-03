@@ -12,11 +12,13 @@ import { CostSheetBuilder, type CostSheetData, type TemplateOption } from "../..
 import { ApproveCostSheetActions } from "../../../bidding/approve-costsheet-actions";
 import { sendCostSheetToLiquidation } from "../../actions";
 import { RevisionCompare, type RevisionData } from "./revision-compare";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 
 export default async function ProjectCoCePage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("projects.view");
   const { id } = await params;
+  // Gắn vai trò cho bản snapshot là thao tác SỬA bảng CO/CE — dùng đúng mã quyền của builder.
+  const canTagRevision = await hasPermission("bidding.costsheet.edit");
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -89,6 +91,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
           isSponsored: false, // template không mang cờ tài trợ — tick khi dựng sheet thật
           stockResvLineId: null,
           stockRefUnitPrice: null,
+          legCode: "", // template không mang nhãn chặng — gắn khi dựng bảng thật
           note: "",
         })),
       })),
@@ -140,6 +143,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
             isSponsored: l.isSponsored,
             stockResvLineId: l.stockResvLineId,
             stockRefUnitPrice: l.stockRefUnitPrice == null ? null : Number(l.stockRefUnitPrice),
+            legCode: l.legCode ?? "",
             note: l.note ?? "",
           })),
         })),
@@ -230,11 +234,14 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
               createdAt: r.createdAt,
               createdByName: r.createdBy?.fullName ?? null,
               note: r.note,
+              kind: r.kind,
               ceTotal: Number(r.ceTotal),
               coTotal: Number(r.coTotal),
               marginPct: r.marginPct,
               snapshotJson: r.snapshotJson,
             }))}
+            projectId={id}
+            canTag={canTagRevision}
           />
 
           {/* Chuyển sang Nghiệm thu */}

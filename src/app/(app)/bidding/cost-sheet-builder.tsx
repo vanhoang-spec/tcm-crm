@@ -14,6 +14,7 @@ import {
   taxGrossUp,
   LINE_TYPES,
   TAX_TYPES,
+  REVISION_KINDS,
   MAX_SECTION_DEPTH,
   type LineType,
   type TaxType,
@@ -55,6 +56,8 @@ export type LineData = {
   stockResvLineId: string | null;
   /** K3 — đơn giá tham chiếu của hàng lấy từ kho. Khác null = DÒNG KHO: SL khoá, đơn giá thật = 0. */
   stockRefUnitPrice: number | null;
+  /** LOF-V1 — nhãn CHẶNG (tỉnh/điểm/đợt) để gom khi xuất bản nghiệm thu. Thuần nhãn, không tính tiền. */
+  legCode: string;
   note: string;
 };
 
@@ -144,6 +147,7 @@ function blankLine(sectionKey: string): Line {
     isSponsored: false,
     stockResvLineId: null,
     stockRefUnitPrice: null,
+    legCode: "",
     note: "",
   };
 }
@@ -579,10 +583,25 @@ export function CostSheetBuilder({
         </div>
       )}
 
-      <div className="flex items-center gap-3 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
         <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
           {pending ? tCommon("saving") : t("submitApprove")}
         </button>
+        {/* Đánh dấu VAI TRÒ của bản lưu này. Không chọn = bản làm việc nội bộ (đa số) — cố ý để
+            trống mặc định, ép chọn sẽ khiến người dùng gắn bừa và bản xuất nghiệm thu lấy nhầm bản.
+            KHÔNG dùng state: người dùng chọn xong bấm Lưu ngay, và React 19 tự reset ô sau mỗi lần
+            chạy action — reset về "bản nội bộ" ở đây là hành vi ĐÚNG cho lần lưu kế tiếp. */}
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {t("revisionKindLabel")}
+          <select name="revisionKind" defaultValue="" className="h-9 rounded-lg border border-border-strong bg-surface px-2 text-xs">
+            <option value="">{t("revisionKindNone")}</option>
+            {REVISION_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {t(`revisionKind${k}` as "revisionKindQUOTE")}
+              </option>
+            ))}
+          </select>
+        </label>
         {data?.approvedByName && (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
             <CheckCircle2 className="h-4 w-4" />
@@ -816,6 +835,7 @@ function LinesTable({
           <tr>
             <th className="px-2 py-2">{t("colType")}</th>
             <th className="px-2 py-2">{t("colItem")}</th>
+            <th className="px-2 py-2" title={t("colLegHint")}>{t("colLeg")}</th>
             <th className="px-2 py-2">{t("colQty")}</th>
             <th className="px-2 py-2">{t("colUnit")}</th>
             <th className="px-2 py-2 text-right">{t("colUnitPrice")}</th>
@@ -836,7 +856,7 @@ function LinesTable({
           })}
           {lines.length === 0 && (
             <tr>
-              <td colSpan={12} className="px-2 py-4 text-center text-muted-foreground">{t("none")}</td>
+              <td colSpan={13} className="px-2 py-4 text-center text-muted-foreground">{t("none")}</td>
             </tr>
           )}
         </tbody>
@@ -884,6 +904,18 @@ function LineRow({
       <td className="px-1 py-1">
         <input value={l.itemName} onChange={(e) => updateLine(l.key, { itemName: e.target.value })} className={cn(cellInput, "min-w-[130px]")} />
         {isStock && <Badge tone="brand">{t("stockLineBadge")}</Badge>}
+      </td>
+      {/* Nhãn CHẶNG (tỉnh/điểm/đợt) — thuần nhãn, không vào một công thức tiền nào. Gõ tay: danh
+          sách tỉnh của mỗi chiến dịch khác nhau, đẻ bảng danh mục cho nó là thêm màn quản trị mà
+          không ai được lợi. Bản xuất nghiệm thu gom theo đúng chuỗi này. */}
+      <td className="px-1 py-1">
+        <input
+          value={l.legCode}
+          onChange={(e) => updateLine(l.key, { legCode: e.target.value })}
+          placeholder={t("colLegPlaceholder")}
+          maxLength={40}
+          className={cn(cellInput, "w-24")}
+        />
       </td>
       {l.lineType === "QTY_PRICE" ? (
         <>

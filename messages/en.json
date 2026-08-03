@@ -1310,7 +1310,15 @@
       "untitledSection": "(untitled section)",
       "stockLineBadge": "Stock",
       "stockQtyLocked": "Quantity is locked to the approved reservation — cancel the reservation to change it.",
-      "stockRefPriceHint": "REFERENCE unit price for stock taken from the warehouse: excluded from cost, used only to allocate the client price on the quotation and to suggest make-up."
+      "stockRefPriceHint": "REFERENCE unit price for stock taken from the warehouse: excluded from cost, used only to allocate the client price on the quotation and to suggest make-up.",
+      "colLeg": "Leg",
+      "colLegHint": "Province / site / wave for this line. A label only — it never affects money. Used to group the acceptance sheet sent to the client.",
+      "colLegPlaceholder": "e.g. Binh Duong",
+      "revisionKindLabel": "Mark this version as",
+      "revisionKindNone": "Internal draft",
+      "revisionKindQUOTE": "Quotation",
+      "revisionKindCONTRACT": "Contract",
+      "revisionKindACCEPTANCE": "Acceptance"
     },
     "rounds": {
       "title": "Deal rounds",
@@ -1667,7 +1675,13 @@
       "printBtn": "Print / Save PDF",
       "printBack": "Back to CO/CE tab",
       "printSwitchInternal": "View internal version",
-      "printSwitchClient": "View client version"
+      "printSwitchClient": "View client version",
+      "revKind": "Role",
+      "revKindHint": "What this version is in the client file. The acceptance export compares the CONTRACT version against the ACCEPTANCE one.",
+      "revKindNone": "— Internal draft —",
+      "revKindQUOTE": "Quotation",
+      "revKindCONTRACT": "Contract",
+      "revKindACCEPTANCE": "Acceptance"
     },
     "liquidation": {
       "title": "Liquidation & Handover",
@@ -1733,7 +1747,8 @@
       "msErrRequired": "Enter a name and a % (0–100).",
       "msErrHasInvoices": "Milestone already has issued invoices — cannot delete.",
       "msPickLabel": "Billing milestone",
-      "msPickNone": "— No milestone —"
+      "msPickNone": "— No milestone —",
+      "acceptanceExport": "Export acceptance sheet"
     },
     "operations": {
       "title": "Operations — Outsourced Labor (CTV)",
@@ -2004,6 +2019,37 @@
       "errNeedReason": "A reason is required.",
       "errFileRejected": "File rejected (over 15MB or unsupported type).",
       "errGeneric": "Could not save."
+    },
+    "groups": {
+      "title": "Campaign groups",
+      "subtitle": "Group projects that belong to one multi-phase campaign (e.g. KUN slide 10 provinces = phase 1 + phase 2) to see the totals in one place.",
+      "backToList": "Back to projects",
+      "empty": "No groups yet.",
+      "namePlaceholder": "KUN slide — 10 provinces",
+      "colCode": "Group code",
+      "colName": "Group name",
+      "colNote": "Note",
+      "colProjects": "Projects",
+      "colCo": "Total CO",
+      "colCe": "Client billable",
+      "colInvoiced": "Invoiced",
+      "memberCount": "{count} projects",
+      "addBtn": "Add group",
+      "saveBtn": "Save",
+      "cancelBtn": "Cancel",
+      "editBtn": "Edit",
+      "deactivateBtn": "Deactivate",
+      "activateBtn": "Reactivate",
+      "rollupHint": "These figures are re-added on every load from each project live cost sheet and issued invoices — the group stores no totals of its own.",
+      "assignTitle": "Campaign group",
+      "assignDesc": "Assign this project to a multi-phase campaign. A grouping label only — it changes no cost sheet, contract or invoice.",
+      "assignNone": "— Not in any group —",
+      "assignBtn": "Save group",
+      "manageLink": "Manage groups →",
+      "errorCode": "Group code must be 2–10 characters, uppercase letters and digits only.",
+      "errorName": "Group name is too short.",
+      "errorCodeExists": "That group code already exists.",
+      "errorNotFound": "Group not found."
     }
   },
   "guest": {

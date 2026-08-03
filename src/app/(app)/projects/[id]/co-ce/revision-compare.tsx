@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { formatNumber, formatDateTime } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { parseSnapshot, diffSnapshots, type LineDiff } from "@/lib/costsheet-diff";
+import { REVISION_KINDS } from "@/lib/bidding";
+import { tagRevisionKind } from "@/app/(app)/bidding/actions";
 
 export type RevisionData = {
   id: string;
@@ -14,6 +16,8 @@ export type RevisionData = {
   createdAt: Date;
   createdByName: string | null;
   note: string | null;
+  /** LOF-V1 — vai trò trong hồ sơ khách; null = bản nội bộ. */
+  kind: string | null;
   ceTotal: number;
   coTotal: number;
   marginPct: number;
@@ -24,7 +28,7 @@ function money(v: number, locale: Locale) {
   return formatNumber(v, locale);
 }
 
-export function RevisionCompare({ revisions }: { revisions: RevisionData[] }) {
+export function RevisionCompare({ revisions, projectId, canTag }: { revisions: RevisionData[]; projectId: string; canTag: boolean }) {
   const t = useTranslations("projects.coce");
   const locale = useLocale() as Locale;
 
@@ -56,6 +60,7 @@ export function RevisionCompare({ revisions }: { revisions: RevisionData[] }) {
                 <th className="py-2 pr-3">{t("createdBy")}</th>
                 <th className="py-2 pr-3 text-right">{t("coTotal")}</th>
                 <th className="py-2 pr-3 text-right">{t("ceTotal")}</th>
+                <th className="py-2 pr-3" title={t("revKindHint")}>{t("revKind")}</th>
                 <th className="py-2 pr-3">{t("note")}</th>
               </tr>
             </thead>
@@ -71,6 +76,15 @@ export function RevisionCompare({ revisions }: { revisions: RevisionData[] }) {
                   <td className="py-2 pr-3 text-muted-foreground">{r.createdByName ?? "—"}</td>
                   <td className="py-2 pr-3 text-right text-muted-foreground">{money(r.coTotal, locale)}</td>
                   <td className="py-2 pr-3 text-right text-muted-foreground">{money(r.ceTotal, locale)}</td>
+                  <td className="py-2 pr-3">
+                    {canTag ? (
+                      <KindPicker projectId={projectId} revisionId={r.id} value={r.kind} t={t} />
+                    ) : r.kind ? (
+                      <Badge tone="brand">{t(`revKind${r.kind}` as "revKindCONTRACT")}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="py-2 pr-3 text-muted-foreground">{r.note ?? "—"}</td>
                 </tr>
               ))}
@@ -149,6 +163,48 @@ export function RevisionCompare({ revisions }: { revisions: RevisionData[] }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Gắn vai trò cho một bản snapshot — đổi là gửi luôn, không có nút Lưu riêng.
+ *
+ * Đây là siêu dữ liệu một-ô nên bắt bấm thêm nút Lưu chỉ tạo trạng thái "đã chọn nhưng chưa lưu"
+ * mà người dùng không nhìn ra. Action tự bỏ qua khi giá trị không đổi.
+ */
+function KindPicker({
+  projectId,
+  revisionId,
+  value,
+  t,
+}: {
+  projectId: string;
+  revisionId: string;
+  value: string | null;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const [pending, setPending] = useState(false);
+  return (
+    <select
+      defaultValue={value ?? ""}
+      disabled={pending}
+      onChange={async (e) => {
+        setPending(true);
+        try {
+          await tagRevisionKind(projectId, revisionId, e.target.value);
+        } finally {
+          setPending(false);
+        }
+      }}
+      className="h-8 rounded-md border border-border-strong bg-surface px-1.5 text-xs disabled:opacity-50"
+    >
+      <option value="">{t("revKindNone")}</option>
+      {REVISION_KINDS.map((k) => (
+        <option key={k} value={k}>
+          {t(`revKind${k}` as "revKindCONTRACT")}
+        </option>
+      ))}
+    </select>
   );
 }
 

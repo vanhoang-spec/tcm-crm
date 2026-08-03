@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit, toNum } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
-import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH } from "@/lib/bidding";
+import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, isRevisionKind, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
 import { syncFinanceCostLines } from "@/lib/finance";
 import { lockCreativeTasksForProject } from "@/lib/creative";
@@ -308,6 +308,10 @@ export async function saveCostSheet(
   const ceTotal = Number(formData.get("ceTotal") ?? 0) || 0;
   const templateId = toNullable(String(formData.get("templateId") ?? ""));
   const overrideNote = String(formData.get("overrideNote") ?? "").trim();
+  // LOF-V1 — vai trò của bản lưu này trong hồ sơ khách. Rỗng/không hợp lệ = bản làm việc nội bộ
+  // (đa số các lần lưu), KHÔNG báo lỗi: người dùng không chọn gì là ý định hợp lệ, không phải sai.
+  const rawKind = String(formData.get("revisionKind") ?? "").trim();
+  const revisionKind = isRevisionKind(rawKind) ? rawKind : null;
 
   const rawPayload = String(formData.get("sectionsJson") ?? "{}");
   // Lỗi validator ở đây là lỗi NGƯỜI DÙNG sửa được (thiếu tên hạng mục, dòng % nằm trong Chi hộ…)
@@ -457,6 +461,9 @@ export async function saveCostSheet(
           isSponsored: l.isSponsored,
           stockResvLineId: l.stockResvLineId ?? null,
           stockRefUnitPrice: l.stockRefUnitPrice ?? null,
+          // Nhãn chặng vào snapshot vì bản xuất nghiệm thu GOM theo nó, mà bản xuất đọc từ
+          // snapshot chứ không đọc bảng sống — thiếu ở đây là mọi dòng rơi hết vào khối "Chung".
+          legCode: l.legCode || null,
           amount: lineAmount(l),
         })),
     })),
@@ -590,6 +597,7 @@ export async function saveCostSheet(
               isSponsored: l.isSponsored,
               stockResvLineId: l.stockResvLineId ?? null,
               stockRefUnitPrice: l.stockRefUnitPrice == null ? null : BigInt(Math.round(l.stockRefUnitPrice)),
+              legCode: l.legCode || null,
               sort: idx,
               note: l.note || null,
             };
@@ -626,6 +634,7 @@ export async function saveCostSheet(
         chiHo: BigInt(chiHo),
         marginPct: Math.round(marginPct * 100) / 100,
         note: marginOverrideNote ?? null,
+        kind: revisionKind,
         createdById: staffId,
         snapshotJson,
       },
@@ -1046,4 +1055,30 @@ export async function markFinished(
   revalidatePath("/creative"); // FINISHED mở cửa sổ grace 7 ngày cho task Creative — cập nhật đếm ngược/khóa
   revalidatePath("/reminders"); // rơi khỏi getBiddingReminders/getTimelineOverdueItems
   return {};
+}
+
+/**
+ * LOF-V1 — gắn/gỡ VAI TRÒ của một bản snapshot (QUOTE | CONTRACT | ACCEPTANCE), rỗng = gỡ nhãn.
+ *
+ * Có đường gắn HỒI TỐ vì các bản đã lưu trước đợt này không có nhãn — trong đó có đúng hai bản của
+ * T013 mà bản xuất nghiệm thu cần. Không có nó thì phải lưu lại CO/CE chỉ để đánh dấu, mà lưu lại
+ * là đẻ thêm một revision không có nội dung gì mới.
+ *
+ * KHÔNG tạo revision mới: đây là siêu dữ liệu về bản snapshot, không phải thay đổi số.
+ */
+export async function tagRevisionKind(projectId: string, revisionId: string, kind: string) {
+  await requirePermission("bidding.costsheet.edit");
+  const rev = await prisma.costSheetRevision.findUnique({
+    where: { id: revisionId },
+    select: { id: true, revNo: true, kind: true, costSheet: { select: { projectId: true } } },
+  });
+  // Chống sửa chéo dự án: id đến từ URL/form nên phải kiểm nó thuộc đúng dự án đang mở.
+  if (!rev || rev.costSheet.projectId !== projectId) return;
+
+  const next = isRevisionKind(kind) ? kind : null;
+  if (next === rev.kind) return;
+  await prisma.costSheetRevision.update({ where: { id: revisionId }, data: { kind: next } });
+  await audit(projectId, `revision:${rev.revNo}:kind`, rev.kind, next, await getCurrentStaffId(), "tag revision kind");
+  revalidatePath(`/projects/${projectId}/co-ce`);
+  revalidatePath(`/projects/${projectId}/liquidation`);
 }

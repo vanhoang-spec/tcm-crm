@@ -138,6 +138,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           isSponsored: false, // template không mang cờ tài trợ — tick khi dựng sheet thật
           stockResvLineId: null, // template không mang liên kết kho — chèn từ panel "Kho đã duyệt"
           stockRefUnitPrice: null,
+          legCode: "", // template không mang nhãn chặng — gắn khi dựng bảng thật
           note: "",
         })),
       })),
@@ -190,6 +191,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
             isSponsored: l.isSponsored,
             stockResvLineId: l.stockResvLineId,
             stockRefUnitPrice: l.stockRefUnitPrice == null ? null : Number(l.stockRefUnitPrice),
+            legCode: l.legCode ?? "",
             note: l.note ?? "",
           })),
         })),

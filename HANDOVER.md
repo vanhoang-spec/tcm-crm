@@ -124,7 +124,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 99 model Prisma · 59 migration · 69 file `src/lib` · 3172 key i18n × 2 ngôn ngữ · 124 mã quyền.
+**Quy mô:** 100 model Prisma · 60 migration · 70 file `src/lib` · 3216 key i18n × 2 ngôn ngữ · 124 mã quyền.
 
 ---
 
@@ -867,6 +867,55 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** đọc số thực chi từ Payroll (module ⑦ chưa
       có) · sửa/xoá từng lần chi đã tạo (chỉ có đảo + huỷ) · đính hoá đơn/chứng từ vào khoản chi ·
       biểu đồ theo tháng · nhắc hạn thanh toán qua notification · phân quyền theo NHÓM chi phí.
+
+22. **MỘT NGUỒN CO → NHIỀU BẢN TRÌNH KHÁCH — LOF-V1 XONG 04/08/2026** (migration
+    `20260806000000_lof_v1_leg_kind_project_group`). Bài toán thật: file A3 gửi khách
+    (`LOF x TCM_Nghiem thu phase 1_Kun_5 tinh.xlsx`) khớp TỪNG ĐỒNG với CO/CE T013 trong app
+    (HĐ 7.270.970.056 = rev1 · NT 7.557.818.278 = rev2 · chênh 286.848.222), nhưng A3 vẫn phải ghép
+    tay **78 cột Excel** vì app thiếu 3 thứ: chiều TỈNH, vai trò của từng bản, và bản xuất nghiệm thu.
+    - **KHÔNG làm CE theo dòng** (đã bác ở PLAN-HISTORY:2008 — mâu thuẫn make-up engine) và **KHÔNG
+      nhân dòng vật lý theo tỉnh** (phá `stableKey` ⇒ mất dấu tạm ứng/thanh toán của 217 dòng T013).
+      Ba thứ mới đều là NHÃN hoặc chỉ tác động lúc TRÌNH BÀY — bất biến "không tạo hệ tổng tiền song
+      song" (mục 6) nguyên vẹn.
+    - **`CostLine.legCode`** — nhãn CHẶNG (tỉnh/điểm/đợt), người dùng tự gõ, không có danh mục, trần
+      40 ký tự. Mỗi dòng TỰ mang nhãn (không kế thừa lúc đọc) để chỉ có một nguồn sự thật.
+    - **`CostSheetRevision.kind`** = `QUOTE|CONTRACT|ACCEPTANCE`, null = bản nội bộ (đa số). Trước đó
+      vai trò chỉ nằm trong `note` tự do nên máy không biết "so cặp nào ra cột chênh lệch". Có đường
+      gắn HỒI TỐ (`tagRevisionKind`) vì bản cũ không có nhãn — và **không tạo revision mới**: đây là
+      siêu dữ liệu về bản chụp, không phải thay đổi số.
+    - **`lib/costsheet-acceptance.ts`** (thuần) + route `/api/acceptance-export`: gom theo chặng, mỗi
+      chặng một khối HĐ · NT · chênh lệch. Giá khách từng dòng suy ra bằng ĐÚNG chuỗi và ĐÚNG phép
+      phân bổ của BM02 (`quotationChain` → trọng số → dư dồn dòng lớn nhất) ⇒ Σ dòng = serviceSubtotal
+      TUYỆT ĐỐI. Nút hiện ở tab Nghiệm thu, chỉ khi đã đánh dấu ĐỦ CẢ HAI bản.
+    - ⚠ **`pairSnapshotLines` ghép cặp HAI LƯỢT — đừng gộp lại thành một khoá.** Lượt 1 theo
+      `stableKey` khi CẢ HAI bên có, lượt 2 theo (mã hạng mục ‖ tên). Khoá một lượt kiểu "stableKey
+      nếu có, không thì tên" sinh ra `n:…` ở bản CŨ và `k:…` ở bản MỚI ⇒ **mọi dòng hiện thành "xoá
+      hết + thêm lại"** dù không đổi một đồng. Đây đúng là ca dùng hằng ngày (hợp đồng ký từ lâu so
+      với nghiệm thu vừa lưu). Đã tái hiện bằng số trên T002 trước khi sửa: 0 changed / 2 added /
+      2 removed, chênh CO báo **−61.100.000 giả**. Sau khi vá: 2 changed / 0 / 0.
+      ⚠ 3 snapshot của T013 (194/210/217 dòng) đều KHÔNG có `stableKey` — nhánh theo tên không phải
+      phòng xa, nó là đường chạy thật của dữ liệu hiện có.
+    - `lineEqual` nay so cả `legCode`: đổi nhãn không đổi đồng nào nhưng đổi cách bản xuất gom khối —
+      báo "không đổi" là bịt đường phát hiện gán nhầm tỉnh.
+    - **`ProjectGroup` + `Project.groupId`** — nhóm CHIẾN DỊCH, khuôn `ClientGroup` (mục 10.12): chỉ
+      bật/tắt, KHÔNG có đường xoá; `code` KHÔNG vào mã sinh nào. Trang `/projects/groups` chỉ ĐỌC VÀ
+      CỘNG, không lưu tổng nào. Gán bằng action HẸP `assignProjectGroup` ngay trên trang dự án —
+      không đi qua form sửa dự án (bài học `assignClientGroup`: form đầy đủ chặn 64/68 khách).
+      Seed one-shot gom **T013 + T025**; **T014 Go Kart CỐ Ý đứng riêng** (quyết định chủ dự án).
+    - **Quyền: 0 mã mới.** Dùng lại `bidding.costsheet.edit` (gắn vai trò), `bidding.project.manage`
+      (nhóm), `projects.view` (route xuất). Đo trên dev.db: grant **1245 → 1245**.
+    - **Verify bằng số thật, đối chiếu file A3:** HĐ 7.270.970.056 · NT 7.557.818.278 · chênh tổng
+      286.848.222 · **Σ chênh từng dòng 260.771.111** (= dòng "TỔNG CỘNG" của file gốc; 286.848.222 là
+      dòng "TỔNG CHƯA VAT" — hai tầng đều khớp). Σ tiền khách mỗi bên = subtotal tuyệt đối. Đọc lại
+      file Excel đã xuất: khớp trong sai số làm tròn <1đ (file gốc có phần thập phân).
+    - **CHƯA LÀM (cố ý):** số nghiệm thu theo tỉnh làm SỐ CHÍNH THỨC trong DB (hoá đơn theo tỉnh) ·
+      sổ phát sinh có lý do theo tỉnh (kiểu sheet ẩn `Update phat sinh Phu Tho`) · lọc dự án theo
+      nhóm · nhóm lồng nhóm · mở `CostSheet.version="LIQUID"`.
+    - ⚠ **CÒN TREO, cần quyết định với Hà (A3):** mã dự án lệch — A3 dùng **`T016LOF26A3`**, app dùng
+      **`T013LO226A3`**; và khách LOF đang có **HAI bản ghi** (`LO2 · Malto - LOF` giữ 3 dự án KUN,
+      `LOF · LOF Vietnam` giữ 1 dự án). Chưa xử lý gì trong đợt này.
+    - ⚠ File `Source/KUN/(inter TCM)_CECO Liquid_KUN 3 TINH MEKONG.xlsx` **mã hoá AES**, chưa đọc
+      được — cần mật khẩu nếu muốn đối chiếu chiến dịch Mekong.
 
 ---
 

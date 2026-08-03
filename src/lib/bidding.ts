@@ -35,6 +35,20 @@ export function taxGrossUp(taxType: string | null | undefined): number {
   return TAX_GROSSUP[taxType ?? "VAT"] ?? 1;
 }
 
+/**
+ * LOF-V1 — VAI TRÒ của một bản snapshot trong hồ sơ gửi khách.
+ *
+ * `CostSheetRevision.kind = null` (đa số) = bản làm việc nội bộ. Ba giá trị dưới đây đánh dấu ba
+ * cột mốc mà khách nhìn thấy; bản xuất nghiệm thu cần biết "so CONTRACT với ACCEPTANCE" chứ không
+ * đoán từ `note` tự do. Một bảng ĐƯỢC PHÉP có nhiều bản cùng kind (hợp đồng điều chỉnh, nghiệm thu
+ * bổ sung) — nơi dùng tự chọn bản mới nhất.
+ */
+export const REVISION_KINDS = ["QUOTE", "CONTRACT", "ACCEPTANCE"] as const;
+export type RevisionKind = (typeof REVISION_KINDS)[number];
+export function isRevisionKind(v: string | null | undefined): v is RevisionKind {
+  return REVISION_KINDS.includes(v as RevisionKind);
+}
+
 /** Phòng ban nhận Order (department code → tên hiển thị trong notification, luôn tiếng Việt).
  *  5 phòng ở Bidding + HR/IT bổ sung cho ORDER tự sinh từ Master Timeline (dự án lớn). */
 export const ORDER_DEPARTMENT_LABELS: Record<string, string> = {

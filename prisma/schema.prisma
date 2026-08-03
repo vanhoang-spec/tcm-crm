@@ -684,6 +684,8 @@ model Project {
   /// CỜ TRẠNG THÁI, không phải lịch sử: lịch sử nằm ở sổ cái StockDocument (bất biến). Tự set khi
   /// thủ kho xác nhận xuất đồ tái sử dụng, tự xoá khi holding của dự án về 0.
   stockCampaignOpenedAt DateTime?
+  /// LOF-V1 — nhóm chiến dịch (xem model ProjectGroup). null = dự án đứng riêng, là ĐA SỐ.
+  groupId               String?
 
   stockDocuments    StockDocument[] @relation("StockDocProject")
   stockDocumentsFrom StockDocument[] @relation("StockDocFromProject")
@@ -693,9 +695,35 @@ model Project {
   planningJobs      PlanningJob[]
   files             ProjectFile[]
   isoDocs           ProjectIsoDoc[]
+  group             ProjectGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([ownerTeamId, statusId])
   @@map("project")
+}
+
+/// LOF-V1 — NHÓM CHIẾN DỊCH: gom nhiều dự án của cùng một chiến dịch nhiều giai đoạn (vd KUN
+/// đường trượt 10 tỉnh = phase 1 (5 tỉnh) + phase 2 (5 tỉnh)) để xem tổng CO/CE, hoá đơn, công nợ
+/// một chỗ. Trước đây "phase" chỉ nằm trong `Project.name` nên máy không nối được hai dự án.
+///
+/// Khuôn theo ClientGroup (KH-H1): chỉ bật/tắt, KHÔNG có đường xoá — xoá nhóm đang được dự án trỏ
+/// vào là mất dấu vết gom. Nhóm THUẦN NHÃN GOM: mỗi dự án vẫn giữ nguyên CostSheet, Contract, hoá
+/// đơn của riêng nó; trang nhóm chỉ ĐỌC và CỘNG, không lưu tổng nào (bất biến "không tạo hệ thống
+/// tổng tiền song song", HANDOVER mục 6).
+///
+/// ⚠ `code` KHÔNG đi vào bất kỳ mã sinh nào (khác `Client.code` 3 ký tự — mã đó nằm trong mã lô
+/// kho và mã dự án). Đổi code nhóm không hỏng dữ liệu cũ.
+model ProjectGroup {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  note      String?
+  isActive  Boolean  @default(true) // tắt = ẩn khỏi ô chọn khi gán mới; dự án cũ giữ nguyên nhóm
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("project_group")
 }
 
 /// SỔ ĐĂNG KÝ HỒ SƠ ISO — chỉ giữ phần CON NGƯỜI làm.
@@ -1010,6 +1038,12 @@ model CostSheetRevision {
   chiHo        BigInt   @default(0)
   marginPct    Float    @default(0)
   note         String?
+  /// LOF-V1 — bản này ĐÓNG VAI GÌ trong hồ sơ khách: QUOTE | CONTRACT | ACCEPTANCE.
+  /// null = bản làm việc nội bộ (đa số). Trước đây vai trò chỉ nằm trong `note` tự do nên máy
+  /// không biết "so cặp nào ra cột chênh lệch" — bản xuất nghiệm thu cần đúng thông tin này.
+  /// Một sheet ĐƯỢC PHÉP có nhiều bản cùng kind (hợp đồng điều chỉnh); bản xuất mặc định lấy bản
+  /// mới nhất của mỗi kind và vẫn cho chọn tay.
+  kind         String?
   createdById  String?
   createdAt    DateTime @default(now())
   snapshotJson String // JSON: { sections: [{code,nameVi,isProxy,lines:[{itemName,lineType,quantity,unit,unitPrice,fixedAmount,percentVal,amount}]}], totals }
@@ -1093,6 +1127,13 @@ model CostLine {
   /// bày: (a) trọng số chia tiền khách trên báo giá, (b) gợi ý make-up trong builder.
   /// KHÔNG vào coTotal / ceTotal / margin / trần chi. Khác null = đây LÀ dòng lấy từ kho.
   stockRefUnitPrice BigInt?
+  /// LOF-V1 — nhãn CHẶNG của dòng: tỉnh / điểm / đợt (vd "Bình Dương", "Phú Thọ"). THUẦN NHÃN:
+  /// không vào coTotal / ceTotal / margin / trần chi, không có bảng danh mục, người dùng tự gõ.
+  /// Dùng để GOM khi xuất bản nghiệm thu gửi khách (mỗi chặng một khối HĐ · NT · chênh lệch) —
+  /// thay 78 cột Excel làm tay của team Account. Dòng không gắn nhãn rơi vào khối "Chung".
+  /// Mỗi dòng TỰ mang nhãn (không kế thừa từ hạng mục lúc đọc) để chỉ có một nguồn sự thật;
+  /// nút "áp nhãn cho cả nhánh" ở builder chỉ là tiện ích điền hộ.
+  legCode      String?
   sort         Int     @default(0)
   note         String?
 

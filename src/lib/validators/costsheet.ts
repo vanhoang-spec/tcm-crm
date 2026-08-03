@@ -38,6 +38,12 @@ export const costLineSchema = z.object({
   stockResvLineId: z.string().trim().nullable().optional().default(null),
   /** K3 — đơn giá tham chiếu của dòng lấy từ kho; khác null = dòng kho (unitPrice bị ép về 0). */
   stockRefUnitPrice: z.coerce.number().nullable().optional().default(null),
+  /**
+   * LOF-V1 — nhãn CHẶNG (tỉnh/điểm/đợt) để gom khi xuất bản nghiệm thu. Thuần nhãn, người dùng tự
+   * gõ, không có danh mục. Trần 40 ký tự: nhãn dài hơn thế là đang bị dùng nhầm làm ghi chú, mà
+   * ghi chú đã có ô riêng — và nhãn còn phải vừa tiêu đề cột trên bản xuất Excel.
+   */
+  legCode: z.string().trim().max(40).optional().default(""),
   note: z.string().trim().optional().default(""),
 });
 

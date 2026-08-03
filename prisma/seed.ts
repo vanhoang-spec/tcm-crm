@@ -400,6 +400,27 @@ async function main() {
     if (assigned.count > 0) console.log(`  nhóm ${g.code}: gán ${assigned.count} pháp nhân`);
   }
 
+  // ── Nhóm chiến dịch (LOF-V1) — gom các PHASE của cùng một chiến dịch ──
+  // KUN đường trượt 10 tỉnh chạy làm 2 phase, mỗi phase là một dự án riêng trong app; trước đây
+  // "phase" chỉ nằm trong TÊN dự án nên không nối được hai bên. KUN Go Kart là chiến dịch KHÁC của
+  // cùng khách — CỐ Ý không gán (quyết định chủ dự án 04/08/2026).
+  // Chỉ gán khi dự án CHƯA có nhóm: chạy lại trên production không đè chỉnh tay của Account.
+  const projectGroupsSeed = [
+    { code: "KUN10T", name: "KUN đường trượt 10 tỉnh", memberCodes: ["T013LO226A3", "T025LO226A3"] },
+  ];
+  for (const g of projectGroupsSeed) {
+    const group = await prisma.projectGroup.upsert({
+      where: { code: g.code },
+      update: {},
+      create: { code: g.code, name: g.name },
+    });
+    const assigned = await prisma.project.updateMany({
+      where: { code: { in: g.memberCodes }, groupId: null },
+      data: { groupId: group.id },
+    });
+    if (assigned.count > 0) console.log(`  nhóm chiến dịch ${g.code}: gán ${assigned.count} dự án`);
+  }
+
   // ── MODULE ② — OptionSet mới ──
   const projectTypes = await seedOptionSet("project_type", "Nhóm dự án", [
     { code: "EVENT", labelVi: "Sự kiện / Hội nghị", labelEn: "Event / Conference" },

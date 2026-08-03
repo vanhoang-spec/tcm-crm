@@ -914,8 +914,24 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - ⚠ **CÒN TREO, cần quyết định với Hà (A3):** mã dự án lệch — A3 dùng **`T016LOF26A3`**, app dùng
       **`T013LO226A3`**; và khách LOF đang có **HAI bản ghi** (`LO2 · Malto - LOF` giữ 3 dự án KUN,
       `LOF · LOF Vietnam` giữ 1 dự án). Chưa xử lý gì trong đợt này.
-    - ⚠ File `Source/KUN/(inter TCM)_CECO Liquid_KUN 3 TINH MEKONG.xlsx` **mã hoá AES**, chưa đọc
-      được — cần mật khẩu nếu muốn đối chiếu chiến dịch Mekong.
+    - **KUN 3 TỈNH MEKONG — ĐÃ ĐỌC, QUYẾT ĐỊNH KHÔNG NHẬP** (chủ dự án 04/08/2026: "cũ rồi").
+      Chiến dịch RIÊNG và SỚM HƠN 10 tỉnh: Sóc Trăng · Vĩnh Long · Tiền Giang, T12/2025–T1/2026,
+      đã quyết toán xong. HĐ 3.903.382.666 → NT 4.118.581.555 (chưa VAT, sau phí 10%: 4.293.720.933
+      → 4.530.439.711). File `Source/KUN/(inter TCM)_CECO Liquid_KUN 3 TINH MEKONG.xlsx` **mã hoá
+      AES** — mật khẩu nhận riêng, KHÔNG ghi vào repo.
+      Đọc file này để KIỂM CHỨNG thiết kế LOF-V1, và nó khớp: cùng khung 4 luồng việc × N tỉnh, hai
+      khối Hợp đồng/Nghiệm thu xếp dọc, phí agency 10% + VAT 8%, cột "Số tỉnh". Dòng **"Phát sinh
+      theo từng tỉnh (−VAT)"** chính là cột chênh lệch theo chặng mà bản xuất nghiệm thu sinh ra.
+    - **HAI THỨ FILE MEKONG CÓ MÀ APP CHƯA CÓ** (ghi lại để khỏi phải giải mã đọc lại):
+      · **Margin theo TỪNG LUỒNG VIỆC** — file tính riêng cho mỗi hạng mục lớn (Địa điểm 40,3% ·
+        Vận hành 41,6% · POSM 33,8% · Retouch 33,3%; nghiệm thu 39,4/45,9/44,4/33,3). App chỉ có
+        MỘT margin ở cấp bảng. Đáng làm nếu BGĐ muốn soi luồng nào ăn mòn margin — đợt riêng.
+      · **Sổ "CO phát sinh được duyệt (kèm HĐ)"** — mỗi dòng phát sinh có mã PID (`HA 2525-20`),
+        phòng chịu (OPE/PCC/ACC), tỉnh, lý do, và phân loại **"Trả thay" vs "Phát sinh"**. Đây là
+        lớp chi tiết DƯỚI cột chênh lệch; app hiện chỉ có ghi chú tự do trên revision.
+    - ⚠ **CẦN XÁC NHẬN:** khối hợp đồng của file Mekong ghi **"Hợp đồng TCM – Prowtech"**, không phải
+      TCM – LOF. Nếu Mekong ký qua Prowtech thì đó là cấu trúc thương mại KHÁC với 10 tỉnh (khách
+      hàng là ai, hoá đơn xuất cho ai) — ảnh hưởng nếu sau này quyết định nhập vào app.
 
 ---
 

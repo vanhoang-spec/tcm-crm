@@ -1666,6 +1666,16 @@ async function main() {
   }
 
   // ── Cơ sở tri thức (KB) — danh mục động + vài tài liệu mẫu (dạng link, không cần file thật) ──
+  // MKT-1: loại nội dung bài đăng — đi thẳng vào prompt AI để bám đúng mục đích bài, nên admin
+  // thêm/bớt item ở /settings/options/mkt_content_type là AI đổi theo, không cần sửa code.
+  await seedOptionSet("mkt_content_type", "Loại nội dung bài MKT", [
+    { code: "RECAP", labelVi: "Recap sau sự kiện", labelEn: "Event recap" },
+    { code: "TEASER", labelVi: "Teaser trước sự kiện", labelEn: "Pre-event teaser" },
+    { code: "BTS", labelVi: "Hậu trường (BTS)", labelEn: "Behind the scenes" },
+    { code: "MILESTONE", labelVi: "Thành tựu / kỷ niệm", labelEn: "Milestone / celebration" },
+    { code: "RECRUIT", labelVi: "Tuyển dụng", labelEn: "Recruitment" },
+    { code: "OTHER", labelVi: "Khác", labelEn: "Other" },
+  ]);
   const kbCategories = await seedOptionSet("kb_category", "Danh mục cơ sở tri thức", [
     { code: "GENERAL", labelVi: "Chung", labelEn: "General" },
     { code: "CREDENTIALS", labelVi: "Năng lực (Credentials)", labelEn: "Credentials" },
@@ -2103,6 +2113,14 @@ async function main() {
     // CO/CE trở lại. Nay chốt cứng trong seed đúng bằng những gì production đang có.
     code === "bidding.costsheet.approve" ||
     code === "bidding.margin_override" ||
+    // MKT post (04/08/2026): 4 mã dưới TÁCH KHỎI base. `mkt.view` CỐ Ý ở lại base (mọi người xem
+    // được bài công ty sắp đăng), 4 mã còn lại là viết / duyệt-đăng / sửa link frame / gọi AI —
+    // thiếu 4 dòng này thì DB dựng-từ-đầu cấp cả cho 20 vai. Role đích cấp lại ngay ở
+    // extraByGroup/extraByRole dưới, khớp đúng roleFilter của 4 backfill `20260804_mkt_*`.
+    code === "mkt.post.manage" ||
+    code === "mkt.review" ||
+    code === "mkt.frames.manage" ||
+    code === "mkt.generate" ||
     // KB theo khách (H2): SOẠN nội dung chỉ Account + BGĐ — xem extraByGroup. Thiếu dòng này thì
     // seed MỚI (migrate reset, hoặc dựng lại production) cấp quyền soạn cho cả 20 role có base
     // grant, ngược hẳn chính sách mà backfill 20260801_client_kb_h2_manage đang thực thi.
@@ -2157,11 +2175,19 @@ async function main() {
       "inventory.transfer.approve",
       "iso.manage",
       "iso.export",
+      // MKT post: BGĐ có cả 4 mã hẹp — vừa duyệt đăng vừa cắt được chi phí AI khi cần.
+      "mkt.post.manage",
+      "mkt.review",
+      "mkt.frames.manage",
+      "mkt.generate",
     ],
     // Account duyệt đề xuất xuất kho của dự án MÌNH phụ trách (PIC/Leader) — quyết định flow K2
     // Account là PIC của dự án nên là người đính hồ sơ ISO cho chính dự án mình.
-    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate", "iso.manage", "iso.export"],
-    CREATIVE: ["ai.brainstorm"],
+    // MKT post: Account NỘP bài (ý chính + ảnh) nhưng KHÔNG có `mkt.generate` — quyết định chủ dự
+    // án 04/08/2026: nút AI tốn tiền theo lượt, chỉ HR + BGĐ được bấm.
+    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate", "iso.manage", "iso.export", "mkt.post.manage"],
+    // Creative dựng frame ảnh cho 2 kênh nên giữ 2 link thư mục frame.
+    CREATIVE: ["ai.brainstorm", "mkt.frames.manage"],
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
     HR: ["ai.brainstorm", "ai.content"],
     FINANCE: ["ai.costsheet", "inventory.reservation.approve"],
@@ -2178,7 +2204,10 @@ async function main() {
   const extraByRole: Record<string, string[]> = {
     // HR theo dõi học + là vế 2 của duyệt giữ chỗ. Kỳ kiểm ISO do HR chủ trì (file gốc là file của
     // HR) nên HR Manager đính hồ sơ và xuất báo cáo được.
-    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export"],
+    // ⚠ MKT post đi theo MÃ ROLE, KHÔNG theo nhóm HR: nhóm HR còn có `ADMIN_STAFF` (hành chính),
+    // cấp theo nhóm là lặp lại đúng bẫy SECURITY_GUARD-trong-nhóm-WAREHOUSE đã phải vá (mục 10.15).
+    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate"],
+    HR_STAFF: ["mkt.review", "mkt.generate"],
     CFO: [...EXEC_EXTRA, ...BIDDING_APPROVE_EXTRA], // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
     // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
@@ -2432,6 +2461,36 @@ async function main() {
       key: "20260802_overhead_over_budget",
       codes: ["overhead.spend.over_budget"],
       roleFilter: (r) => r.groupCode === "BOD" || r.code === "CFO",
+    },
+    // 04/08/2026 MKT-1 — bài đăng LinkedIn/Fanpage. `mkt.view` mở rộng như `iso.view` (loại đúng
+    // hai role vận hành hẹp); 4 mã còn lại nằm trong isRestricted nên trên DB ĐANG CHẠY chỉ có
+    // đường này cấp được. roleFilter dưới đây phải khớp ĐÚNG extraByGroup/extraByRole ở trên —
+    // lệch một vai là hai đường mâu thuẫn, đúng loại lỗ hổng đã phải vá 30/07.
+    {
+      key: "20260804_mkt_view",
+      codes: ["mkt.view"],
+      roleFilter: (r) => r.code !== "WAREHOUSE_KEEPER" && r.code !== "SECURITY_GUARD",
+    },
+    {
+      key: "20260804_mkt_post_manage",
+      codes: ["mkt.post.manage"],
+      roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "BOD",
+    },
+    {
+      key: "20260804_mkt_review",
+      codes: ["mkt.review"],
+      roleFilter: (r) => r.code === "HR_MANAGER" || r.code === "HR_STAFF" || r.groupCode === "BOD",
+    },
+    {
+      key: "20260804_mkt_frames",
+      codes: ["mkt.frames.manage"],
+      roleFilter: (r) => r.groupCode === "CREATIVE" || r.groupCode === "BOD",
+    },
+    // AI tốn tiền theo LƯỢT — cố ý KHÔNG cấp cho Account (họ chỉ nộp ý chính).
+    {
+      key: "20260804_mkt_generate",
+      codes: ["mkt.generate"],
+      roleFilter: (r) => r.code === "HR_MANAGER" || r.code === "HR_STAFF" || r.groupCode === "BOD",
     },
     // 29/07/2026 Kho v2 K4 — điều chuyển kho nay phải qua duyệt (trước K4 ai lập được là chạy
     // thẳng vào sổ cái). Người duyệt = OPE Manager (chủ vận hành kho) + BGĐ; Thủ kho KHÔNG tự duyệt
@@ -2822,7 +2881,7 @@ async function main() {
     staff: [ceo.email, thao.email, yen.email, ha.email],
     brands: brandNames,
     clients: clientsSeed.map((c) => c.code),
-    optionSets: ["project_type", "contract_type", "fail_reason", "channel", "client_status", "client_classification", "complexity", "project_status", "kb_category", "inventory_category"],
+    optionSets: ["project_type", "contract_type", "fail_reason", "channel", "client_status", "client_classification", "complexity", "project_status", "kb_category", "inventory_category", "mkt_content_type"],
     projects: projSeed.map((p) => p.code),
   });
 }

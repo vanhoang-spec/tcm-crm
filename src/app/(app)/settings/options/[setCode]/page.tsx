@@ -35,6 +35,7 @@ export default async function SettingsOptionsPage({ params }: { params: Promise<
     timeline_status: tIndex("timelineStatusTitle"),
     creative_task_type: tIndex("creativeTaskTypeTitle"),
     kb_category: tIndex("kbCategoryTitle"),
+    mkt_content_type: tIndex("mktContentTypeTitle"),
     inventory_category: tIndex("inventoryCategoryTitle"),
     leave_type: tIndex("leaveTypeTitle"),
   };

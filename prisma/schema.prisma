@@ -230,6 +230,11 @@ model Staff {
   clientKbLessonsUpdated      ClientKbLesson[]          @relation("ClientKbLessonUpdatedBy")
   clientKbSourcesUploaded     ClientKbSource[]          @relation("ClientKbSourceUploadedBy")
   clientKbAttempts            ClientKbAttempt[]         @relation("ClientKbAttemptStaff")
+  mktPostsCreated             MktPost[]                 @relation("MktPostCreatedBy")
+  mktPostImagesUploaded       MktPostImage[]            @relation("MktPostImageUploadedBy")
+  mktPostVariantsPosted       MktPostVariant[]          @relation("MktPostVariantPostedBy")
+  mktInsightReportsCreated    MktInsightReport[]        @relation("MktInsightReportCreatedBy")
+  mktInsightFilesUploaded     MktInsightFile[]          @relation("MktInsightFileUploadedBy")
 
   @@map("staff")
 }
@@ -276,6 +281,7 @@ model OptionItem {
   creativeRatiosAsType        CreativeAllocationRatio[] @relation("CreativeRatioTaskType")
   inventoryItemsAsCategory    InventoryItem[]           @relation("InventoryItemCategory")
   shiftAssignmentsAsLeaveType ShiftAssignment[]         @relation("ShiftAssignmentLeaveType")
+  mktPostsAsContentType       MktPost[]                 @relation("MktPostContentType")
 
   @@unique([setId, code])
   @@map("option_item")
@@ -695,6 +701,7 @@ model Project {
   planningJobs      PlanningJob[]
   files             ProjectFile[]
   isoDocs           ProjectIsoDoc[]
+  mktPosts          MktPost[]
   group             ProjectGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([ownerTeamId, statusId])
@@ -2827,4 +2834,136 @@ model OverheadSpend {
   @@index([itemId, month])
   @@index([status])
   @@map("overhead_spend")
+}
+
+// ─────────────────────────────────────────────────────────
+// MKT POST — bài đăng LinkedIn / Fanpage (không đánh số module, nằm ngoài chuỗi ①…⑨)
+//
+// Flow: Account viết Ý CHÍNH + ảnh (đã chèn frame NGOÀI app) → AI DeepSeek viết content RIÊNG từng
+// kênh → HR sửa bản cuối, copy đăng TAY lên LinkedIn/Fanpage rồi đánh dấu ĐÃ ĐĂNG → hằng quý HR
+// upload file export Meta/LinkedIn cho AI phân tích. App KHÔNG gọi API mạng xã hội — đăng tay là
+// chủ đích (quyết định chủ dự án 04/08/2026).
+// Nhịp mục tiêu: LinkedIn 1 bài/tuần · Fanpage 1–2 bài/tuần (hằng ở lib/mkt.ts).
+// ─────────────────────────────────────────────────────────
+
+/// Bài gốc. `keyPoints` là NGUỒN DỮ KIỆN DUY NHẤT mà AI được phép dùng — prompt cấm bịa số liệu
+/// ngoài đây, nên ý chính viết sơ sài thì bài AI cũng rỗng theo.
+model MktPost {
+  id            String   @id @default(cuid())
+  title         String
+  /// Ý chính gạch đầu dòng do Account viết. Render whitespace-pre-wrap.
+  keyPoints     String
+  /// OptionItem của set "mkt_content_type" (RECAP|TEASER|BTS|MILESTONE|RECRUIT|OTHER) — đi vào
+  /// prompt để AI bám đúng mục đích bài. Nullable ở DB, form BẮT BUỘC chọn.
+  contentTypeId String?
+  /// Dự án liên quan — TUỲ CHỌN: bài tuyển dụng / kỷ niệm không gắn dự án nào.
+  projectId     String?
+  /// Link thư mục ảnh gốc trên Drive/OneDrive — tuỳ chọn, chỉ để mở xem.
+  driveUrl      String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  contentType OptionItem?      @relation("MktPostContentType", fields: [contentTypeId], references: [id])
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy   Staff?           @relation("MktPostCreatedBy", fields: [createdById], references: [id])
+  images      MktPostImage[]
+  variants    MktPostVariant[]
+
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("mkt_post")
+}
+
+/// Ảnh đính kèm bài (đã chèn frame sẵn ngoài app). File nằm ở storage/mkt-uploads, CHỈ đọc qua
+/// route có auth /api/mkt-image/[id] — mirror ClientKbSource.
+model MktPostImage {
+  id           String   @id @default(cuid())
+  postId       String
+  fileKey      String
+  fileMime     String
+  fileName     String
+  fileSize     Int
+  sort         Int      @default(0)
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  post       MktPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  uploadedBy Staff?  @relation("MktPostImageUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([postId, sort])
+  @@map("mkt_post_image")
+}
+
+/// Bản của MỘT kênh. Mỗi bài tối đa 1 dòng/kênh; dòng được tạo lúc createPost theo kênh đã chọn.
+model MktPostVariant {
+  id           String    @id @default(cuid())
+  postId       String
+  /// LINKEDIN | FANPAGE — hard-code vì đi thẳng vào prompt AI và phép đếm nhịp đăng, KHÔNG OptionSet.
+  channel      String
+  /// DRAFT (chưa viết) → AI_DRAFTED (AI đã viết) → POSTED (HR đã đăng tay + đánh dấu).
+  /// Đường lùi duy nhất là unmarkPosted. Mọi lần đổi trạng thái đi qua updateMany có status trong
+  /// `where` + kiểm count === 0 (khuôn moveBudget, overhead/actions.ts) — chống double-click.
+  status       String    @default("DRAFT")
+  /// Bản AI trả lần gần nhất — giữ lại để đối chiếu HR đã sửa gì so với máy.
+  aiDraft      String?
+  aiDraftedAt  DateTime?
+  /// Bản CUỐI để copy đi đăng. Bấm AI là GHI ĐÈ cả aiDraft lẫn finalContent (hộp xác nhận cảnh báo).
+  finalContent String    @default("")
+  postedAt     DateTime?
+  /// Link bài đã đăng thật trên kênh — tuỳ chọn, HR dán lúc đánh dấu.
+  postUrl      String?
+  postedById   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  post     MktPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postedBy Staff?  @relation("MktPostVariantPostedBy", fields: [postedById], references: [id])
+
+  @@unique([postId, channel])
+  @@index([channel, status])
+  @@index([postedAt])
+  @@map("mkt_post_variant")
+}
+
+/// Báo cáo insights MỘT quý. `aiResult` là text dài, render whitespace-pre-wrap + nút Copy.
+model MktInsightReport {
+  id          String    @id @default(cuid())
+  year        Int
+  quarter     Int // 1..4
+  /// Ghi chú HR — đi vào prompt làm ngữ cảnh định tính cho AI.
+  note        String?
+  /// Kết quả phân tích lần gần nhất; chạy lại là GHI ĐÈ (hộp xác nhận cảnh báo).
+  aiResult    String?
+  aiRanAt     DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy Staff?           @relation("MktInsightReportCreatedBy", fields: [createdById], references: [id])
+  files     MktInsightFile[]
+
+  @@unique([year, quarter])
+  @@map("mkt_insight_report")
+}
+
+/// File export từ Meta/LinkedIn (xlsx/csv/pdf) — nguyên liệu AI đọc qua lib/ai/extract-text.ts.
+/// CỐ Ý không có route tải về: upload chỉ để model đọc, giống file đính kèm của module AI.
+model MktInsightFile {
+  id           String   @id @default(cuid())
+  reportId     String
+  /// LINKEDIN | FANPAGE | OTHER — chỉ dùng để ghi header khối text khi ghép prompt.
+  channel      String   @default("OTHER")
+  fileKey      String
+  fileMime     String
+  fileName     String
+  fileSize     Int
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  report     MktInsightReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  uploadedBy Staff?           @relation("MktInsightFileUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([reportId])
+  @@map("mkt_insight_file")
 }

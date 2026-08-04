@@ -46,6 +46,7 @@ export const PERMISSION_MODULES = [
   "kb",
   "iso",
   "overhead",
+  "mkt",
   "settings",
   "system",
 ] as const;
@@ -68,6 +69,7 @@ export const PERMISSION_MODULE_LABELS: Record<string, { labelVi: string; labelEn
   kb: { labelVi: "Cơ sở tri thức", labelEn: "Knowledge base" },
   iso: { labelVi: "Hồ sơ ISO", labelEn: "ISO records" },
   overhead: { labelVi: "Chi phí văn phòng", labelEn: "Overhead costs" },
+  mkt: { labelVi: "Bài đăng MKT", labelEn: "Marketing posts" },
   settings: { labelVi: "Cài đặt", labelEn: "Settings" },
   system: { labelVi: "Hệ thống", labelEn: "System" },
 };
@@ -210,6 +212,16 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "overhead.spend.record", module: "overhead", labelVi: "Ghi nhận khoản chi", labelEn: "Record a spend" },
   { code: "overhead.spend.pay", module: "overhead", labelVi: "Xác nhận đã thanh toán", labelEn: "Confirm payment", sensitive: true },
   { code: "overhead.spend.over_budget", module: "overhead", labelVi: "Chi vượt ngân sách (kèm giải trình)", labelEn: "Spend over budget (with justification)", sensitive: true },
+
+  // ── Bài đăng MKT ──
+  // KHÔNG phải mã tiền → KHÔNG khai vào MONEY_POLICY. Nhưng 4 mã dưới `mkt.view` vẫn phải nằm
+  // trong `isRestricted` của seed, nếu không thì DB dựng-từ-đầu cấp quyền viết/duyệt/AI cho cả 20
+  // vai — đúng lớp lỗ hổng đã phải vá 30/07 (HANDOVER 10.15).
+  { code: "mkt.view", module: "mkt", labelVi: "Xem bài đăng MKT & phân tích quý", labelEn: "View marketing posts & quarterly insights" },
+  { code: "mkt.post.manage", module: "mkt", labelVi: "Tạo / sửa / xoá bài đăng (ý chính + ảnh)", labelEn: "Create / edit / delete marketing posts" },
+  { code: "mkt.review", module: "mkt", labelVi: "Sửa bản cuối, đánh dấu đã đăng, quản lý phân tích quý", labelEn: "Edit final content, mark as posted, manage insights" },
+  { code: "mkt.frames.manage", module: "mkt", labelVi: "Sửa link thư mục frame (LinkedIn / Fanpage)", labelEn: "Edit frame folder links" },
+  { code: "mkt.generate", module: "mkt", labelVi: "Dùng AI viết bài & phân tích insights", labelEn: "Use AI to draft posts & analyse insights", sensitive: true },
 
   // ── Cài đặt ──
   { code: "settings.view", module: "settings", labelVi: "Vào trang Cài đặt", labelEn: "Open settings", sensitive: true },

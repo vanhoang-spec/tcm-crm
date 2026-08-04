@@ -17,6 +17,7 @@ import {
   Sparkles,
   FileCheck,
   Receipt,
+  Megaphone,
 } from "lucide-react";
 
 export type NavItem = {
@@ -49,6 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   { module: "✦", labelKey: "creative", href: "/creative", icon: Palette, status: "active", permission: "creative.view" },
   { module: "⑧", labelKey: "inventory", href: "/inventory", icon: Warehouse, status: "active", permission: "inventory.view" },
   { module: "④", labelKey: "finance", href: "/finance", icon: Wallet, status: "active", permission: "finance.view" },
+  { module: null, labelKey: "mkt", href: "/mkt", icon: Megaphone, status: "active", permission: "mkt.view" },
   { module: "⑤", labelKey: "staff", href: "/staff", icon: UsersRound, status: "active", permission: "staff.view" },
   { module: "⑥", labelKey: "kpi", href: "/kpi", icon: Award, status: "active", permission: "kpi.view" },
   { module: "⑦", labelKey: "payroll", href: "/payroll", icon: Banknote, status: "soon", permission: "payroll.view" },

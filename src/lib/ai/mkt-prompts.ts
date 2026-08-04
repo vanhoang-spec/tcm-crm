@@ -1,0 +1,157 @@
+/**
+ * Prompt cho module MKT post — viết bài LinkedIn/Fanpage và phân tích insights quý.
+ *
+ * Hai loại output khác nhau, cố ý:
+ *  - Viết bài: trả JSON `{"content": "..."}` để ghi thẳng vào DB sau khi Zod duyệt (mktAiContentSchema).
+ *  - Phân tích quý: trả TEXT THUẦN cho người đọc, render whitespace-pre-wrap (repo không có
+ *    markdown renderer — xem chú thích ở ai-shared.tsx).
+ *
+ * ⚠ Ràng buộc nặng nhất của bộ này: Ý CHÍNH do Account viết là NGUỒN DỮ KIỆN DUY NHẤT. Bài đăng
+ * là bộ mặt công ty trên kênh công khai — một con số bịa sẽ đi thẳng ra ngoài, không ai chặn được
+ * sau khi đã đăng. Vì vậy luật "không bịa" ở đây gắt hơn mọi prompt khác trong repo.
+ *
+ * File này KHÔNG import prisma/server-only — chỉ dựng chuỗi.
+ */
+
+import type { AiMessage } from "./deepseek";
+import type { MktChannel, QuarterStats } from "@/lib/mkt";
+import { MKT_WEEKLY_TARGET } from "@/lib/mkt";
+
+const AGENCY = `TCM là agency Below The Line tại Việt Nam: event, activation, roadshow, booth/POSM,
+nhân sự hiện trường.`;
+
+const GROUNDING = `QUY TẮC BẮT BUỘC:
+- CHỈ dùng dữ kiện có trong Ý CHÍNH và phần thông tin dự án được cung cấp. TUYỆT ĐỐI không bịa số
+  liệu, tên khách hàng, quy mô, kết quả, giải thưởng. Ý chính không nêu thì bài KHÔNG có.
+- Không viết câu chung chung đúng với mọi agency ("luôn tận tâm", "chuyên nghiệp hàng đầu").
+- Viết bằng tiếng Việt.
+- Chỉ trả về JSON đúng khuôn {"content":"..."} — không lời dẫn, không bọc markdown.`;
+
+const LINKEDIN_SYSTEM = `Bạn viết nội dung cho trang LinkedIn của TCM. ${AGENCY}
+Người đọc là khách hàng doanh nghiệp (brand manager, trade marketing) và đối tác trong ngành — bài
+viết đại diện hình ảnh CÔNG TY.
+
+Nhiệm vụ: từ Ý CHÍNH gạch đầu dòng bên dưới, viết MỘT bài đăng LinkedIn hoàn chỉnh.
+
+Giọng văn: nghiêm túc, chuyên nghiệp, tự tin kiểu B2B; xưng "TCM" hoặc "chúng tôi". Vào thẳng giá
+trị, không chào hỏi xã giao, không kể lể.
+
+${GROUNDING}
+- Độ dài 150–300 từ. Mở bằng 1–2 câu hook; thân bài triển khai đủ các ý chính theo mạch tự nhiên
+  (KHÔNG lặp lại nguyên văn gạch đầu dòng); kết bằng một câu định vị TCM hoặc lời mời kết nối.
+- Xuống dòng trắng giữa các đoạn cho dễ đọc trên LinkedIn.
+- Hashtag chừng mực: 3–5 cái, đặt ở dòng cuối cùng.
+- KHÔNG dùng emoji, hoặc tối đa 1–2 chỗ thật sự đắt.`;
+
+const FANPAGE_SYSTEM = `Bạn viết nội dung cho Fanpage Facebook của TCM. ${AGENCY}
+Người đọc là cộng đồng ngành event, các bạn trẻ quan tâm nghề tổ chức sự kiện, và khách hàng theo
+dõi fanpage.
+
+Nhiệm vụ: từ Ý CHÍNH gạch đầu dòng bên dưới, viết MỘT bài đăng Facebook hoàn chỉnh.
+
+Giọng văn: casual, trẻ trung, gần gũi, có năng lượng — như người trong team kể chuyện; xưng "nhà
+TCM" hoặc "team TCM". Được phép chơi chữ nhẹ nhàng.
+
+${GROUNDING}
+- Độ dài 80–200 từ. Câu ngắn, đoạn ngắn 1–3 câu, dễ lướt trên điện thoại.
+- Emoji dùng tự nhiên (khoảng 2–6 cái), đặt đúng chỗ — KHÔNG spam đầu mỗi dòng.
+- Kết bằng một câu mời tương tác hợp ngữ cảnh (mời xem ảnh, đặt câu hỏi, mời follow/ứng tuyển).
+- Hashtag: 3–6 cái ở dòng cuối cùng.`;
+
+/** Nhắc AI bám mục đích của từng loại nội dung — nhãn lấy từ OptionSet nên admin sửa được. */
+const PURPOSE_HINT = `Bám đúng mục đích của LOẠI NỘI DUNG được nêu: recap thì tổng kết giá trị đã
+làm được; teaser thì gợi tò mò mà không hứa hẹn quá đà; hậu trường thì tôn vinh đội ngũ; thành tựu
+thì ghi nhận cột mốc; tuyển dụng thì nêu rõ vị trí và lời mời ứng tuyển.`;
+
+export type MktVariantInput = {
+  title: string;
+  keyPoints: string;
+  contentTypeLabel: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  clientName: string | null;
+  imageCount: number;
+};
+
+export function mktVariantPrompt(channel: MktChannel, input: MktVariantInput): AiMessage[] {
+  const lines = [
+    "BÀI CẦN VIẾT",
+    `Tiêu đề làm việc (nội bộ, không cần lặp nguyên văn): ${input.title}`,
+    `Loại nội dung: ${input.contentTypeLabel ?? "Khác"}`,
+  ];
+  if (input.projectCode) {
+    const client = input.clientName ? ` · Khách hàng: ${input.clientName}` : "";
+    lines.push(`Dự án liên quan: ${input.projectCode} — ${input.projectName ?? ""}${client}`);
+  }
+  if (input.imageCount > 0) {
+    lines.push(`Bài sẽ đăng kèm ${input.imageCount} ảnh — KHÔNG cần mô tả lại ảnh trong bài.`);
+  }
+  lines.push("", "Ý CHÍNH (nguồn dữ kiện duy nhất):", input.keyPoints);
+
+  return [
+    { role: "system", content: `${channel === "LINKEDIN" ? LINKEDIN_SYSTEM : FANPAGE_SYSTEM}\n- ${PURPOSE_HINT}` },
+    { role: "user", content: lines.join("\n") },
+  ];
+}
+
+// ─────────────────────────────────────────────────────────
+// Phân tích insights quý
+// ─────────────────────────────────────────────────────────
+
+const INSIGHTS_SYSTEM = `Bạn là chuyên viên phân tích social media cho TCM. ${AGENCY}
+TCM đăng bài trên 2 kênh: LinkedIn (giọng B2B) và Fanpage Facebook (giọng trẻ trung).
+
+Bạn nhận được ba nguồn:
+(1) SỐ BÀI ĐÃ ĐĂNG theo tuần do CRM tự đếm — đây là số CHUẨN về nhịp đăng, tin tuyệt đối;
+(2) SỐ LIỆU TRÍCH TỪ FILE EXPORT của Meta/LinkedIn do HR tải lên (reach, tương tác, follower…);
+(3) GHI CHÚ của HR.
+
+Mục tiêu nhịp đăng đã cam kết: LinkedIn ${MKT_WEEKLY_TARGET.LINKEDIN.min} bài/tuần · Fanpage ${MKT_WEEKLY_TARGET.FANPAGE.min}–${MKT_WEEKLY_TARGET.FANPAGE.max} bài/tuần.
+
+Viết BÁO CÁO PHÂN TÍCH QUÝ bằng tiếng Việt, TEXT THUẦN có đề mục viết HOA (KHÔNG markdown, không
+bảng, không dấu # hay *), theo đúng 4 phần:
+1. NHỊP ĐĂNG — so số bài thực đăng từng kênh với mục tiêu; nêu ĐÍCH DANH các tuần trống bài.
+2. HIỆU QUẢ TỪNG KÊNH — đọc số liệu trong file export; chỉ ra bài/loại nội dung hoạt động tốt và
+   kém. Số liệu nào file không có thì ghi "chưa có số liệu" — TUYỆT ĐỐI không bịa số.
+3. SO SÁNH HAI KÊNH — khác biệt rút ra được từ dữ liệu, loại nội dung nào hợp kênh nào.
+4. KHUYẾN NGHỊ QUÝ TỚI — 3 đến 6 việc cụ thể làm được ngay (tần suất, loại nội dung, khung giờ,
+   cách viết); mỗi khuyến nghị phải bám vào một con số hoặc quan sát đã nêu ở trên.
+
+Thiếu dữ liệu ở đâu thì nói thẳng thiếu ở đó, không suy diễn bù.`;
+
+export type MktInsightsInput = {
+  year: number;
+  quarter: number;
+  stats: QuarterStats;
+  note: string | null;
+  /** Mỗi phần tử là một khối text đã gắn header tên file + kênh. */
+  fileBlocks: string[];
+};
+
+const dmy = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+export function mktInsightsPrompt(input: MktInsightsInput): AiMessage[] {
+  const { stats } = input;
+  const liTarget = stats.weekCount * MKT_WEEKLY_TARGET.LINKEDIN.min;
+  const fpMin = stats.weekCount * MKT_WEEKLY_TARGET.FANPAGE.min;
+  const fpMax = stats.weekCount * MKT_WEEKLY_TARGET.FANPAGE.max;
+
+  const lines = [
+    `KỲ PHÂN TÍCH: Quý ${input.quarter}/${input.year} (${stats.weekCount} tuần)`,
+    "",
+    "SỐ BÀI ĐÃ ĐĂNG THEO TUẦN (CRM tự đếm — nguồn chuẩn về nhịp):",
+    `- Tổng quý: LinkedIn ${stats.totals.LINKEDIN} bài (mục tiêu ${liTarget}) · Fanpage ${stats.totals.FANPAGE} bài (mục tiêu ${fpMin}–${fpMax})`,
+    ...stats.weeks.map((w) => `- Tuần ${dmy(w.start)}: LinkedIn ${w.counts.LINKEDIN} · Fanpage ${w.counts.FANPAGE}`),
+    "",
+    "SỐ LIỆU TỪ FILE EXPORT:",
+    input.fileBlocks.length > 0 ? input.fileBlocks.join("\n\n") : "(HR chưa tải file export nào)",
+    "",
+    "GHI CHÚ CỦA HR:",
+    input.note?.trim() || "(không có)",
+  ];
+
+  return [
+    { role: "system", content: INSIGHTS_SYSTEM },
+    { role: "user", content: lines.join("\n") },
+  ];
+}

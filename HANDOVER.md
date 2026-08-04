@@ -121,10 +121,11 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) |
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Hồ sơ ISO | `/iso` | Xong (sổ đăng ký 25 loại hồ sơ / dự án, 8 loại app tự chấm, tab `/projects/[id]/iso`, xuất Excel 33 cột — xem mục 10.20) |
+| — | Bài đăng MKT | `/mkt` | Xong (bài LinkedIn/Fanpage: Account nộp ý chính + ảnh → AI DeepSeek viết riêng từng kênh → HR duyệt, copy đăng tay; banner nhịp tuần; phân tích insights quý — xem mục 10.23) |
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 100 model Prisma · 61 migration · 70 file `src/lib` · 3222 key i18n × 2 ngôn ngữ · 124 mã quyền.
+**Quy mô:** 105 model Prisma · 62 migration · 72 file `src/lib` · 3330 key i18n × 2 ngôn ngữ · 129 mã quyền.
 
 ---
 
@@ -232,10 +233,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 ## 10. Hạn chế đã biết / nợ kỹ thuật (cố ý, không phải bug)
 
 1. **RBAC đã chặn thật toàn app bằng ma trận quyền.** Không còn là "nominal".
-   - **danh mục 124 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
+   - **danh mục 129 quyền nằm ở CODE** (`src/lib/permission-catalog.ts`), **grant nằm ở DB** (bảng `role_permission`), sửa ở `/settings/roles` tab **"Ma trận quyền"**. Danh mục để ở code vì mỗi mã phải có một chỗ `requirePermission()` tương ứng — thêm dòng vào DB sẽ tạo quyền không ai kiểm.
      Ngoại lệ (kiểm bằng `hasPermission()` **bên trong** action đã có `requirePermission` khác ở đầu — đừng đi tìm `requirePermission` tương ứng): `finance.vendor_payment.over_cap` trong `createVendorPayment` VÀ trong `createCtvBatchPayments` (đề xuất thanh toán đợt CTV, operations/actions.ts); `finance.invoice.over_cap` trong `createClientInvoice` (trần mềm theo CO/CE sống — cửa Nghiệm thu vẫn trần cứng).
    - **~316 điểm chặn**: ~220 server action + 79 page + 9 route API (27/07 đợt 3+4: PO 4 action + kế hoạch thu 2 + NCC 2 + trang P&L/Vendors; 27–28/07 Kho v2: 2 action + 1 trang danh mục cây, rồi 7 action đề xuất + 3 trang `/inventory/requests`). Biên bản nghiệm thu làm NGOÀI hệ thống bằng Word (quyết định chủ dự án 27/07) — flow trong app dừng ở "Chuyển sang Nghiệm thu" (Account) → kế toán xuất hóa đơn; bản in-app cũ nằm ở commit eb76699 nếu cần khôi phục. Guard là `requirePermission("<mã>")` ở **câu lệnh đầu tiên** của mỗi page/action; route API dùng `hasPermission()` rồi trả 403.
-   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 124 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
+   - **Role `ADMIN` là sàn cứng trong code** — luôn đủ 129 quyền, không có dòng grant nào trong DB. Cố ý, để không ai tự khoá mình ra khỏi chính trang sửa ma trận.
    - **Cố ý KHÔNG gác**: 11 action (đăng nhập/đổi mật khẩu, cổng khách, avatar & thông báo của chính mình), 9 trang (`(auth)`, `(guest)`, `/profile`, `/reminders`, `/orgchart`, `/ai` — trang AI tự lọc từng tính năng bên trong), 2 route API (`notifications/poll`, `staff-avatar`).
    - Ba cơ chế cũ **đã bị thay**: `requireAdmin()` (xoá hẳn), `getDashboardScope()` và `getAiVisibility()` nay đọc từ ma trận thay vì phòng ban/danh sách email cứng.
    - **Tài khoản VẬN HÀNH không có email** (thủ kho, bảo vệ — chốt 28/07/2026): `Staff.email` ở hệ này là TÊN ĐĂNG NHẬP chứ không phải hộp thư, nên KHÔNG cần cột mới. Người dùng gõ tên ngắn (`thukho`), `normalizeLoginId()` tự ghép `@tcm.local` (`lib/auth-session.ts`); `isAllowedLoginDomain` cho phép `@tcmbtl.com` + `tcm.local`/`tcm.internal`, còn `isMailableDomain` (chỉ `@tcmbtl.com`) gác "Quên mật khẩu" — tài khoản nội bộ không có hộp thư nên admin cấp lại mật khẩu ở `/settings/staff`. Ô đăng nhập là `type="text"` (để `type="email"` thì trình duyệt chặn tên không có `@`).
@@ -968,6 +969,62 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       nhóm + điền khung; còn **gắn kind cho T013 (rev1=CONTRACT, rev2=ACCEPTANCE) làm qua UI tab
       So sánh**, và **import T025 chạy lại script** (dựng lại theo đúng 3 bẫy ở trên — nguồn là file
       20Jul còn nguyên trên OneDrive).
+
+23. **BÀI ĐĂNG MKT — MKT-1 XONG 04/08/2026** (migration `20260807000000_mkt_posts`, 5 bảng MỚI
+    `mkt_*`). Đưa cả vòng content lên 2 kênh vào app: Account nộp Ý CHÍNH + ảnh → AI DeepSeek viết
+    bản RIÊNG từng kênh → HR sửa bản cuối, **copy đăng TAY**, đánh dấu đã đăng → hằng quý AI phân
+    tích insights. Nav đặt giữa `/finance` và `/staff`.
+    - ⚠ **App KHÔNG gọi API mạng xã hội — đăng tay là CHỦ ĐÍCH**, không phải nợ kỹ thuật. Đừng
+      "hoàn thiện" bằng cách nối Meta/LinkedIn API mà chưa hỏi chủ dự án.
+    - **`MktPost.keyPoints` là NGUỒN DỮ KIỆN DUY NHẤT của AI.** Cả 2 prompt đều cấm bịa số liệu/tên
+      khách/kết quả ngoài ý chính — bài đăng là bộ mặt công ty trên kênh công khai, một con số bịa
+      đi thẳng ra ngoài và không thu về được. Ý chính viết sơ sài thì bài AI rỗng theo, đó là đúng.
+    - **Một bài → N `MktPostVariant`** (`@@unique([postId, channel])`), mỗi kênh vòng đời riêng
+      `DRAFT → AI_DRAFTED → POSTED`. Giữ cả `aiDraft` (bản máy) lẫn `finalContent` (bản HR sửa) để
+      đối chiếu HR đã sửa gì. Mọi lần đổi trạng thái đi qua `updateMany` có status trong `where` +
+      kiểm `count === 0` (khuôn `moveBudget` của overhead) — chống double-click VÀ chống race với
+      lượt gọi AI dài tới 75s.
+    - ⚠ **Nhịp đăng tính bằng GIỜ ĐỊA PHƯƠNG** (`weekStartLocal` dùng `getDay/getDate`, TUYỆT ĐỐI
+      không `getUTC*`) — đúng bug đã phải vá ở Kho v2 K4. Đã test bằng số: bài đăng **02:41 sáng thứ
+      Hai rơi vào TUẦN MỚI**, không bị đẩy về tuần trước. 17/17 ca của `computeWeeklyCadence` +
+      `buildQuarterStats` pass trước khi nối UI.
+    - **Quyền: 5 mã mới (124 → 129)**. `mkt.view` ở base (20 vai, loại thủ kho + bảo vệ như
+      `iso.view`); 4 mã còn lại trong `isRestricted` + cấp lại qua `extraByGroup`/`extraByRole` +
+      5 backfill `20260804_mkt_*`. Đo được **GIỐNG HỆT NHAU** trên DB dựng-từ-đầu và DB đang chạy:
+      view 20 · post.manage 4 (Account+BGĐ) · review 3 (HR_MANAGER+HR_STAFF+BGĐ) · frames.manage 3
+      (Creative+BGĐ) · generate 3 = **+33 dòng** (1245 → 1278). `db:seed` lần hai no-op.
+      ⚠ **HR đi theo MÃ ROLE, KHÔNG theo nhóm `HR`** — nhóm đó còn chứa `ADMIN_STAFF` (hành chính),
+      cấp theo nhóm là lặp lại đúng bẫy SECURITY_GUARD-trong-nhóm-WAREHOUSE ở mục 10.15.
+    - ⚠ **`mkt.generate` chỉ HR + BGĐ, CỐ Ý không cho Account** (quyết định chủ dự án 04/08/2026:
+      AI tính tiền theo LƯỢT). Account chỉ nộp ý chính. Kiểm bằng `hasPermission` BÊN TRONG action
+      đã có `requirePermission("mkt.view")` ở đầu — đặc quyền THÊM, mirror `clients.kb.generate`.
+      Đã verify sống: đóng vai Account Staff, lấy `$ACTION_ID` của nút AI rồi POST thẳng ⇒ server
+      trả `NO_GENERATE_PERM`, `aiDraftedAt` KHÔNG đổi (không có lượt gọi DeepSeek nào).
+    - **`extract-text.ts` thêm 2 nhánh** (csv + xlsx qua `exceljs` vốn đã là dependency) — THUẦN
+      THÊM, 3 nhánh cũ không đổi hành vi. Verify 4 ca: xlsx thật đọc 6000 ký tự + truncated · csv
+      nguyên văn · **xlsx hỏng trả null không throw** · png vẫn null như cũ.
+    - **Ảnh**: hằng MIME/size ở `lib/mkt.ts` (file THUẦN) chứ KHÔNG ở `mkt-storage.ts` — storage
+      import `fs/promises`, kéo vào client component là build hỏng mà tsc/eslint không bắt được.
+      Route `/api/mkt-image/[id]` mirror `/api/project-file/[id]` (**có** kiểm belongs-to), KHÔNG
+      mirror `/api/client-kb/[id]`. Verify: chưa đăng nhập → **401**.
+    - **Ô CHỮ đều CONTROLLED** (tiêu đề, ý chính, bản cuối, ghi chú, 2 link frame) — React 19 gọi
+      `requestFormReset` sau MỌI lần chạy action kể cả khi TRẢ LỖI. Verify: gõ xong ý chính, bỏ tick
+      cả 2 kênh, bị chặn ⇒ **157 ký tự ý chính còn nguyên**. Bản cuối đồng bộ lại khi AI vừa ghi
+      bằng mẫu "điều chỉnh state lúc render", KHÔNG dùng `useEffect` (eslint chặn).
+    - ⚠ **`export type { X }` trong file `"use server"` làm VỠ RUNTIME** (`ReferenceError: MktChannel
+      is not defined`) — loader server-action của Next cố export nó như giá trị. `export type Foo =
+      {...}` (khai báo) thì không sao. Đã vấp và gỡ; tsc/eslint đều KHÔNG bắt được, chỉ thấy khi mở
+      trang.
+    - **Verify AI bằng bài thật** (cùng một ý chính, 2 kênh): LinkedIn 899 ký tự giọng B2B, 5
+      hashtag, 0 emoji · Fanpage 105 từ, 4 emoji, 6 hashtag, mời xem ảnh. **Không dòng nào chứa số
+      liệu ngoài ý chính.** Phân tích quý: AI **tự phát hiện file CSV mâu thuẫn với số CRM và từ
+      chối dùng**, đồng thời nhận ra file xlsx là báo cáo tài chính chứ không phải LinkedIn
+      Analytics → ghi "chưa có số liệu" thay vì bịa.
+    - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** gọi API đăng bài tự động · nhắc nhịp qua
+      notification (chỉ có banner trên trang — quyết định chủ dự án) · backdate `postedAt` · route
+      tải file insights về (chỉ AI đọc) · lịch sử phiên bản bản cuối · 2 người cùng sửa bản cuối thì
+      người lưu sau thắng, im lặng · sửa/xoá từng ảnh sau khi đã đăng vẫn cho phép (ảnh là đính kèm,
+      không phải nội dung audit).
 
 ---
 

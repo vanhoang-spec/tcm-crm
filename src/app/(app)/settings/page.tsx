@@ -33,6 +33,7 @@ import {
   Plane,
   ShieldCheck,
   Award,
+  Megaphone,
 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { requirePermission } from "@/lib/permissions";
@@ -71,6 +72,7 @@ export default async function SettingsPage() {
     { href: "/settings/finance", icon: Wallet, title: t("financeTitle"), desc: t("financeDesc") },
     { href: "/settings/communication", icon: MessagesSquare, title: t("communicationTitle"), desc: t("communicationDesc") },
     { href: "/settings/options/kb_category", icon: BookOpen, title: t("kbCategoryTitle"), desc: t("kbCategoryDesc") },
+    { href: "/settings/options/mkt_content_type", icon: Megaphone, title: t("mktContentTypeTitle"), desc: t("mktContentTypeDesc") },
     { href: "/settings/ai", icon: Sparkles, title: t("aiTitle"), desc: t("aiDesc") },
     { href: "/settings/creative", icon: Coins, title: t("creativeCostTitle"), desc: t("creativeCostDesc") },
     { href: "/settings/warehouses", icon: Warehouse, title: t("warehousesTitle"), desc: t("warehousesDesc") },

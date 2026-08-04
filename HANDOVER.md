@@ -1030,7 +1030,37 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `205f740`** (04/08/2026 09:18) — LOF-V1 + V1b, xem mục 10.22. Chạy
+**Production đang chạy `08247f9`** (04/08/2026 15:57) — MKT-1, xem mục 10.23. Chạy
+`bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. 1 migration mới áp sạch
+(`mkt_posts`, 5 bảng). Backup TRƯỚC deploy ở hai nơi: `~/backup/*-20260804-155711*` trên server và
+`D:/TCM/backup-prod-20260804-155711/` trên máy dev.
+
+⚠ **Sáng 04/08 đường ngoài cổng 2222 TIMEOUT hai lần** (app vẫn chạy bình thường qua nginx, chỉ SSH
+không vào được); chiều cùng ngày đường LAN vào tốt và `deploy.sh` tự chọn đúng. Nếu lần sau cả hai
+đường đều tắc thì nhờ IT kiểm NAT cổng 2222 trên router — không phải lỗi server.
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| CO/CE sheet / dòng | 5 / 483 | **5 / 483** |
+| overhead khoản / lần chi | 50 / 167 | **50 / 167** |
+| dòng grant quyền | 1245 | **1278** (+33 = 5 mã MKT) |
+| `integrity_check` | — | **ok**, `foreign_key_check` 0 dòng |
+
+Quyền MKT đo trên production **giống hệt** bản dựng-từ-đầu: view 20 · post.manage 4 · review 3 ·
+frames.manage 3 · generate 3. Đủ 5 marker `20260804_mkt_*`, OptionSet `mkt_content_type` 6 item.
+Health check: `/login` 200 · `/mkt`, `/mkt/new`, `/mkt/insights` đều 307 về login · `/api/mkt-image/x`
+**401**. Bảng MKT trống (0 bài, 0 báo cáo) — đúng, chưa ai nhập.
+
+⚠ **Việc cần làm trước khi dùng thật:** Creative dựng ~5 frame/kênh, để lên Drive rồi dán 2 link vào
+card "Thư mục frame ảnh" trên `/mkt` (đang trống). Danh mục loại nội dung sửa ở
+`/settings/options/mkt_content_type`.
+
+---
+
+### Deploy trước đó — 04/08/2026 lúc 09:18
+
+**Production khi đó chạy `205f740`** — LOF-V1 + V1b, xem mục 10.22. Chạy
 `bash scripts/deploy.sh` đường ngoài cổng 2222, fingerprint khớp. 2 migration mới áp sạch
 (`lof_v1_leg_kind_project_group`, `project_group_framework_ce`). Backup TRƯỚC deploy:
 `backup-prod-20260804-091825`; backup TRƯỚC khi ghi dữ liệu: `dev.db.bak-20260804-092118` —

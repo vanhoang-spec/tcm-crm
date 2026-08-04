@@ -973,7 +973,33 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `a158fa6`** (02/08/2026 13:42) — ISO-1 + OVH-1, xem mục 10.20 và 10.21. Chạy
+**Production đang chạy `205f740`** (04/08/2026 09:18) — LOF-V1 + V1b, xem mục 10.22. Chạy
+`bash scripts/deploy.sh` đường ngoài cổng 2222, fingerprint khớp. 2 migration mới áp sạch
+(`lof_v1_leg_kind_project_group`, `project_group_framework_ce`). Backup TRƯỚC deploy:
+`backup-prod-20260804-091825`; backup TRƯỚC khi ghi dữ liệu: `dev.db.bak-20260804-092118` —
+cả hai đều ở hai nơi (server `~/backup/` + máy dev `D:/TCM/`).
+
+**Dữ liệu LOF đã replay lên production đúng kế hoạch ở mục 10.22** (seed tự tạo nhóm; hai việc còn
+lại chạy script trên server mirror đúng action của app — `tagRevisionKind` và đường ghi
+`saveCostSheet`, script ghi có CHỐT CHẶN tự hủy nếu coTotal lệch bản đã verify trên dev):
+
+| | production sau replay |
+|---|---|
+| nhân sự / khách / dự án / grant | **36 / 68 / 25 / 1245 — không đổi** |
+| CO/CE sheet / dòng | 4 / 327 → **5 / 483** (+T025: 61 section · 156 dòng) |
+| T013 | rev1=**CONTRACT** 7.270.970.056 · rev2=**ACCEPTANCE** 7.557.818.278 · rev3 bản sống |
+| T025 | rev1=**CONTRACT** · CE **6.710.745.555** · pseudo-CO 6.411.555.554 (khớp hệt dev) |
+| nhóm KUN10T | CE khung 13.981.715.611 · Σ phase 14.268.563.833 · **chênh +286.848.222** ✓ |
+| `integrity_check` / `foreign_key_check` | **ok** / 0 dòng |
+
+Health check: `/login` 200 · `/projects/groups` 307 về login · `[jobs] scheduler bật`. Không còn
+file tạm nào trên server.
+
+---
+
+### Deploy trước đó — 02/08/2026 lúc 13:42
+
+**Production khi đó chạy `a158fa6`** — ISO-1 + OVH-1, xem mục 10.20 và 10.21. Chạy
 `bash scripts/deploy.sh` **đường ngoài cổng 2222**, fingerprint khớp. 3 migration mới áp sạch
 (`project_iso_docs`, `overhead_costs`, `overhead_spend_note`). Backup TRƯỚC deploy ở HAI nơi:
 `~/backup/*-20260802-134201*` trên server và `D:/TCM/backup-prod-20260802-134201/` trên máy dev.

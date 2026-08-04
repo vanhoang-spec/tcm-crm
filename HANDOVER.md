@@ -125,7 +125,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 105 model Prisma · 62 migration · 72 file `src/lib` · 3330 key i18n × 2 ngôn ngữ · 129 mã quyền.
+**Quy mô:** 105 model Prisma · 61 migration · 72 file `src/lib` · 3353 key i18n × 2 ngôn ngữ · 129 mã quyền.
 
 ---
 
@@ -1026,11 +1026,88 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       người lưu sau thắng, im lặng · sửa/xoá từng ảnh sau khi đã đăng vẫn cho phép (ảnh là đính kèm,
       không phải nội dung audit).
 
+24. **DASHBOARD — DASH-1 XONG 04/08/2026** (KHÔNG migration, KHÔNG mã quyền mới). Thiết kế lại
+    trang `/` cho chuyên nghiệp hơn: dải hero mang màu thương hiệu · dải "Cần chú ý" · 2 biểu đồ.
+    Số liệu và phân quyền KHÔNG đổi — 18/18 mốc số đo lại khớp bản trước khi sửa.
+    - **Bộ thành phần của Dashboard nằm ở `components/ui/stat-ratio.tsx`** (chỉ `app/(app)/page.tsx`
+      dùng) + `components/ui/dashboard-charts.tsx`. Cả hai là **server component**: lớp hover làm
+      bằng CSS `group-hover`, không gửi thêm byte JS nào.
+    - ⚠ **CẤM đặt `transition-colors` lên phần tử có nền lấy từ biến đổi theo theme**
+      (`bg-surface`, `bg-brand-50`…). Nền sẽ KẸT ở màu của lần vẽ đầu tiên và không đổi khi bấm
+      sáng/tối — đã tái hiện: bản dev kẹt màu sáng ở cả hai theme, bản build kẹt màu tối ở cả hai,
+      trong khi mọi thẻ không có transition đổi đúng. Đã quét cả app: 18 file dùng
+      `transition-colors` nhưng KHÔNG file nào đặt cạnh nền theo biến theme, nên chỗ khác không dính.
+    - ⚠ **Chỉ 3 token brand ĐỔI GIÁ TRỊ ở dark mode: `brand-50`, `brand-100`, `brand-950`.**
+      `brand-600`/`brand-700` giữ nguyên màu sáng trên nền tối ⇒ **chữ số tô bằng chúng chỉ đạt ~2,7**.
+      Vì vậy chữ số lớn luôn `text-foreground`; màu thương hiệu chỉ nằm ở nền tint, thanh tỷ lệ và
+      viền — ba chỗ không mang chữ.
+    - ⚠ **Dải hero dừng ở `brand-700`, KHÔNG chạy tới `brand-500`**: chữ trắng 72% trên brand-500 đo
+      được 2,61 và trên brand-600 là 3,37 (dưới AA 4,5); trên brand-700 thì 100%/90%/72% lần lượt
+      đạt 7,24 / 6,19 / 4,54. Hoạ tiết vạch chéo 45° lấy từ nét cắt của logo — không phải hoa văn tuỳ ý.
+    - **Bộ màu biểu đồ `--chart-1/2/3` (globals.css) ĐÃ QUA BỘ KIỂM MÙ MÀU** — PASS cả 5 phép ở
+      nền sáng lẫn tối, ΔE thấp nhất 29,8. ⚠ Đổi màu thì **phải chạy lại bộ kiểm**. Hai điều đã đo
+      và phải giữ: (a) **KHÔNG dùng cặp xanh lá/đỏ cho hai chuỗi trong cùng biểu đồ** — đo ΔE 5,0
+      dưới mắt deutan, gần như dính làm một; (b) **KHÔNG mượn `--success/--warning/--danger`** tô
+      series — màu trạng thái phải để dành cho trạng thái.
+    - ⚠ **`getProjectStageMix` lọc CẢ BA chặng theo cùng `fiscalYear`** nên ba số cộng lại đúng bằng
+      tổng dự án của năm, và chặng `EXECUTION` bằng ĐÚNG `runningProjectsYtd` của card phía trên.
+      Bản phác thảo ban đầu định ghép 19 dự án bidding (KHÔNG lọc năm) với 6 dự án thực thi (CÓ lọc
+      năm) vào một vòng tròn — hai mẫu số khác nhau, cộng lại thành một "tổng" vô nghĩa. Chặng đầu
+      suy bằng PHÉP TRỪ, không liệt kê mã, để admin thêm trạng thái mới thì tổng không lệch âm thầm.
+    - **`getCashflowTrend` dùng đúng 3 nguồn và đúng chặn `lt: now` của `getCashflowMtd`** ⇒ cột cuối
+      biểu đồ bằng đúng card "Đã thu / Đã chi (tháng này)". ⚠ Là dữ liệu dòng tiền → chỉ nạp khi
+      `scope.canSeeCashflow`, nằm trong cùng khối được gác.
+    - **Dùng thanh chồng ngang, KHÔNG donut** (so góc kém chính xác hơn so chiều dài). Nhãn chỉ đặt
+      vào TRONG mảnh khi mảnh ≥14% bề ngang; màu chữ trong mảnh chọn theo độ sáng của NỀN MẢNH —
+      trắng trên #0068e6 (5,09) và #7c3aed (5,70), nhưng phải đổi sang mực đậm trên cam #ea580c
+      (trắng chỉ 3,56 · mực đậm 5,40).
+    - ⚠ **Lưới bộ phận KHÔNG dùng mẹo "gap-px trên nền bg-border" để vẽ đường kẻ** — mẹo đó chỉ đẹp
+      khi số ô chia hết cho số cột, mà nhân viên Account chỉ thấy ĐÚNG 1 ô ⇒ lộ 3/4 chiều ngang là
+      mảng xám đặc. Mỗi dòng là một thẻ độc lập.
+    - **Đo tương phản 166 phần tử mỗi theme:** nền sáng **166/166 đạt AA**; nền tối còn 12 chỗ chữ
+      đỏ ở **3,64** — đó là token `--danger` CÓ SẴN của app (dùng hàng trăm nơi), **cố ý không sửa
+      token toàn cục trong một việc thiết kế Dashboard**. Bù lại mức nghiêm trọng không bao giờ chỉ
+      dựa vào màu: luôn có **số + % + chiều dài thanh** đi kèm.
+    - **Đã gỡ khối "Lộ trình module"** (nội dung mô tả các module là "đang xây" trong khi đã xong) +
+      2 key i18n đi kèm. Sửa lại `subtitle` cho đúng thực tế.
+    - ⚠ **Biểu đồ xu hướng hiện gần như TRỐNG và đó không phải lỗi:** dev.db lẫn production mới có
+      **1 ClientPayment + 1 Advance**, tức 1/6 tháng có phát sinh. Biểu đồ hiện câu "Mới n/6 tháng có
+      phát sinh" thay vì vẽ hình rỗng; sẽ tự dày lên khi kế toán ghi nhận thu/chi đều.
+    - **CHƯA LÀM (cố ý):** không thêm chỉ tiêu tiền mới nào (đã cân nhắc dòng "chênh lệch dự kiến
+      cuối tháng" rồi bỏ — dễ bị đọc nhầm thành số dư tiền mặt thật) · không đổi token màu toàn app ·
+      chưa có bảng dữ liệu thay thế cho biểu đồ (table view).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `08247f9`** (04/08/2026 15:57) — MKT-1, xem mục 10.23. Chạy
+**Production đang chạy `b276b4e`** (04/08/2026 18:32) — DASH-1 thiết kế lại Dashboard, xem mục 10.24.
+Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **Không có migration
+mới** (61 migration, "No pending migrations to apply") và **không có mã quyền mới**. Backup TRƯỚC
+deploy ở hai nơi: `~/backup/*-20260804-183222*` trên server và `D:/TCM/backup-prod-20260804-183222/`
+trên máy dev.
+
+Đối chiếu production SAU deploy — **không đổi một dòng nào**, đúng như mong đợi với một thay đổi
+thuần giao diện:
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| CO/CE sheet / dòng | 5 / 483 | **5 / 483** |
+| overhead khoản / lần chi | 50 / 167 | **50 / 167** |
+| dòng grant quyền | 1278 | **1278 — không đổi** |
+| `integrity_check` | — | **ok**, `foreign_key_check` 0 dòng |
+
+Health check: `/login` 200 · `/`, `/finance/debt`, `/reminders`, `/bidding` đều 307 về login khi chưa
+đăng nhập · pm2 `online`, **restart 0**, `[jobs] scheduler bật`. ⚠ **Error log KHÔNG thêm dòng nào** —
+lần ghi cuối là `2026-08-01 20:24`, tức 3 ngày TRƯỚC lần deploy này; mấy dòng
+`Failed to find Server Action` trong đó là rác cũ, không phải do bản này.
+
+---
+
+### Deploy trước đó — 04/08/2026 lúc 15:57
+
+**Production khi đó chạy `08247f9`** — MKT-1, xem mục 10.23. Chạy
 `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. 1 migration mới áp sạch
 (`mkt_posts`, 5 bảng). Backup TRƯỚC deploy ở hai nơi: `~/backup/*-20260804-155711*` trên server và
 `D:/TCM/backup-prod-20260804-155711/` trên máy dev.

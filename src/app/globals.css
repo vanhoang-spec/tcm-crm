@@ -38,6 +38,27 @@
   --accent-chat-bg: #f3e8ff;
 
   --radius: 10px;
+
+  /* Đổ bóng thẻ — khai theo biến để đảo được ở dark mode (bóng xám của theme sáng gần như tàng
+     hình trên nền tối, phải chuyển sang bóng đen đậm hơn mới còn tách được lớp). */
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 2px 6px -1px rgb(15 23 42 / 0.06);
+  /* Bóng sâu hơn — cho thẻ trắng đặt trên khối nền có sắc, để còn tách được lớp. */
+  --shadow-lift: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+
+  /*
+   * Bộ màu BIỂU ĐỒ. KHÔNG đổi giá trị theo theme — đã kiểm trên CẢ hai nền.
+   *
+   * ⚠ Ba màu này CỐ Ý không dùng lại --success/--warning/--danger: màu trạng thái phải để dành
+   * riêng cho trạng thái, nếu đem tô series thì người đọc không phân biệt được "chuỗi thứ 2" với
+   * "đang cảnh báo". Cũng KHÔNG dùng cặp xanh lá/đỏ quen thuộc cho hai chuỗi trong cùng một biểu
+   * đồ: đo được ΔE 5,0 dưới mắt mù màu deutan — gần như dính làm một.
+   *
+   * Đã chạy scripts/validate_palette.js (skill dataviz): PASS cả 5 phép ở light (#ffffff) lẫn
+   * dark (#0f1830); CVD ΔE thấp nhất 29,8 (ngưỡng mục tiêu ≥ 8). Đổi màu thì PHẢI chạy lại.
+   */
+  --chart-1: #0068e6;
+  --chart-2: #ea580c;
+  --chart-3: #7c3aed;
 }
 
 @theme inline {
@@ -71,6 +92,10 @@
   --color-accent-chat: var(--accent-chat);
   --color-accent-chat-bg: var(--accent-chat-bg);
 
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -99,6 +124,9 @@
 
     --accent-chat: #a78bfa;
     --accent-chat-bg: #2e1a5c;
+
+    --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.5), 0 2px 6px -1px rgb(0 0 0 / 0.4);
+    --shadow-lift: 0 6px 16px -4px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.5);
   }
 }
 
@@ -121,6 +149,9 @@
   --brand-50: #061d40;
   --brand-100: #0a3269;
   --brand-950: #eef6ff;
+
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.5), 0 2px 6px -1px rgb(0 0 0 / 0.4);
+  --shadow-lift: 0 6px 16px -4px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.5);
 }
 
 body {

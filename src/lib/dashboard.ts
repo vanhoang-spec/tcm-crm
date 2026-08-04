@@ -118,6 +118,88 @@ export async function getCashflowMtd(now: Date): Promise<CashflowMtd> {
   return { inActual, inRemaining, inOverdue, outActual, outRemaining };
 }
 
+// ── Khối 2b: Thu/chi thực tế 6 tháng (biểu đồ xu hướng) ─
+
+export type CashflowMonth = { year: number; month: number; inActual: number; outActual: number };
+
+/**
+ * Thu/chi ĐÃ PHÁT SINH của `months` tháng gần nhất, cũ → mới.
+ *
+ * Dùng ĐÚNG 3 nguồn của `inActual`/`outActual` trong getCashflowMtd, và cũng chặn `lt: now` — nên
+ * cột cuối cùng của biểu đồ BẰNG ĐÚNG con số trên card "Đã thu / Đã chi (tháng này)". Hai chỗ lệch
+ * nhau trên cùng một trang là lỗi nặng hơn hẳn việc thiếu biểu đồ.
+ *
+ * ⚠ Đây là dữ liệu dòng tiền — người gọi PHẢI gác `dashboard.cashflow` như khối cashflow.
+ * Nạp một lượt cả cửa sổ rồi gom ở JS (3 truy vấn, không phải 3×N).
+ */
+export async function getCashflowTrend(now: Date, months = 6): Promise<CashflowMonth[]> {
+  const from = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+
+  const [payments, vendorPaid, advances] = await Promise.all([
+    prisma.clientPayment.findMany({ where: { paidDate: { gte: from, lt: now } }, select: { paidDate: true, amount: true } }),
+    prisma.vendorPayment.findMany({ where: { status: "PAID", paidDate: { gte: from, lt: now } }, select: { paidDate: true, amount: true } }),
+    prisma.advance.findMany({
+      where: { disbursedAt: { gte: from, lt: now }, status: { not: "CANCELED" } },
+      select: { disbursedAt: true, amount: true },
+    }),
+  ]);
+
+  const buckets: CashflowMonth[] = [];
+  const index = new Map<string, CashflowMonth>();
+  for (let i = 0; i < months; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - (months - 1) + i, 1);
+    const row = { year: d.getFullYear(), month: d.getMonth() + 1, inActual: 0, outActual: 0 };
+    buckets.push(row);
+    index.set(`${row.year}-${row.month}`, row);
+  }
+  // Giờ ĐỊA PHƯƠNG (getFullYear/getMonth), khớp startOfMonth ở trên — đừng đổi sang getUTC*.
+  const add = (d: Date | null, amount: bigint | number, key: "inActual" | "outActual") => {
+    if (!d) return;
+    const row = index.get(`${d.getFullYear()}-${d.getMonth() + 1}`);
+    if (row) row[key] += Number(amount);
+  };
+  for (const p of payments) add(p.paidDate, p.amount, "inActual");
+  for (const v of vendorPaid) add(v.paidDate, v.amount, "outActual");
+  for (const a of advances) add(a.disbursedAt, a.amount, "outActual");
+
+  return buckets;
+}
+
+// ── Khối 2c: Cơ cấu dự án theo chặng (biểu đồ thanh chồng) ─
+
+/** Ba chặng gom từ 8 mã trạng thái. `EXECUTION` khớp ĐÚNG EXECUTION_STATUS_CODES. */
+export type ProjectStage = "BIDDING" | "EXECUTION" | "CLOSED";
+export type ProjectStageMix = { stage: ProjectStage; count: number }[];
+
+const CLOSED_STATUS_CODES = ["FAILED", "CANCELED"] as const;
+
+/**
+ * Cơ cấu dự án của NĂM TÀI CHÍNH hiện tại theo 3 chặng — ba số cộng lại đúng bằng tổng dự án của
+ * năm, nên biểu đồ tự chứng minh được nó không bỏ sót mã trạng thái nào.
+ *
+ * ⚠ Cùng bộ lọc `fiscalYear` cho cả ba chặng. Bản phác thảo ban đầu định ghép 19 dự án bidding
+ * (KHÔNG lọc năm) với 6 dự án thực thi (CÓ lọc năm) vào một vòng tròn — hai mẫu số khác nhau, cộng
+ * lại thành một "tổng" vô nghĩa. `EXECUTION` ở đây bằng đúng `runningProjectsYtd` của card phía trên.
+ */
+export async function getProjectStageMix(now: Date, teamCode?: string): Promise<ProjectStageMix> {
+  const ownerTeam = teamCode ? { ownerTeam: { code: teamCode } } : {};
+  const fiscalYear = now.getFullYear();
+
+  const [execution, closed, total] = await Promise.all([
+    prisma.project.count({ where: { fiscalYear, status: { code: { in: [...EXECUTION_STATUS_CODES] } }, ...ownerTeam } }),
+    prisma.project.count({ where: { fiscalYear, status: { code: { in: [...CLOSED_STATUS_CODES] } }, ...ownerTeam } }),
+    prisma.project.count({ where: { fiscalYear, ...ownerTeam } }),
+  ]);
+
+  // Chặng đầu suy ra bằng phép trừ, KHÔNG liệt kê ["BIDDING","PENDING"]: admin thêm mã trạng thái
+  // mới trong Settings là dự án đó vẫn được đếm, thay vì rơi ra ngoài và làm tổng lệch âm thầm.
+  return [
+    { stage: "BIDDING", count: Math.max(0, total - execution - closed) },
+    { stage: "EXECUTION", count: execution },
+    { stage: "CLOSED", count: closed },
+  ];
+}
+
 // ── Khối 3: Tiến độ task theo bộ phận ──────────────────
 
 export type DeptTaskRatio = { key: string; deptCode: string; teamCode: string | null; overdue: number; total: number };

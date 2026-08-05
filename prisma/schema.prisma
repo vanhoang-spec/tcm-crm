@@ -419,29 +419,32 @@ model ClientGroup {
 }
 
 model Client {
-  id               String   @id @default(cuid())
-  code             String   @unique // đúng 3 ký tự — vd LOF, DHG, CTL (validate ở app layer)
-  name             String
-  legalNameVi      String? // tên pháp lý đầy đủ tiếng Việt trên đăng ký kinh doanh — khác `name` (tên gọi/brand)
-  legalNameEn      String?
-  taxCode          String? // Mã số thuế (MST) — nullable: khách nhập từ danh sách cũ có thể chưa có, bổ sung trước khi ký hợp đồng (xem lib/client-profile.ts)
-  brandId          String
-  industryId       String? // option_set "client_industry" — nullable cùng lý do taxCode
-  statusId         String // Tình trạng: Tiềm năng|Active|Inactive — option_set "client_status"
-  classificationId String? // Phân loại vendor-list — option_set "client_classification" — nullable cùng lý do taxCode
-  isNew            Boolean  @default(true)
-  introducerId     String? // null = "Khác" (không phải nhân viên công ty) — liên quan tính commission, xem CommissionScheme
-  ownerTeamId      String? // team đang phụ trách — null = khách cấp BGĐ/chưa giao team ACC cụ thể (mirror Project.ownerTeamId)
-  groupId          String? // ClientGroup — null = khách lẻ. Chỉ để gom nhóm + neo KB dùng chung.
-  paymentTermDays  Int      @default(90)
-  address          String?
-  phone            String?
-  email            String?
-  bankAccount      String? // Tài khoản ngân hàng — nullable cùng lý do taxCode
-  note             String?
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(cuid())
+  code              String   @unique // đúng 3 ký tự — vd LOF, DHG, CTL (validate ở app layer)
+  name              String
+  legalNameVi       String? // tên pháp lý đầy đủ tiếng Việt trên đăng ký kinh doanh — khác `name` (tên gọi/brand)
+  legalNameEn       String?
+  taxCode           String? // Mã số thuế (MST) — nullable: khách nhập từ danh sách cũ có thể chưa có, bổ sung trước khi ký hợp đồng (xem lib/client-profile.ts)
+  brandId           String
+  industryId        String? // option_set "client_industry" — nullable cùng lý do taxCode
+  statusId          String // Tình trạng: Tiềm năng|Active|Inactive — option_set "client_status"
+  classificationId  String? // Phân loại vendor-list — option_set "client_classification" — nullable cùng lý do taxCode
+  isNew             Boolean  @default(true)
+  introducerId      String? // null = "Khác" (không phải nhân viên công ty) — liên quan tính commission, xem CommissionScheme
+  ownerTeamId       String? // team đang phụ trách — null = khách cấp BGĐ/chưa giao team ACC cụ thể (mirror Project.ownerTeamId)
+  groupId           String? // ClientGroup — null = khách lẻ. Chỉ để gom nhóm + neo KB dùng chung.
+  /// CO/CE v3 — template báo giá mặc định của khách (mã trong registry CODE `lib/quote-templates.ts`,
+  /// khuôn iso-catalog). Null = chưa gán → menu xuất hiện các template mẫu chung.
+  quoteTemplateCode String?
+  paymentTermDays   Int      @default(90)
+  address           String?
+  phone             String?
+  email             String?
+  bankAccount       String? // Tài khoản ngân hàng — nullable cùng lý do taxCode
+  note              String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   brand          Brand        @relation(fields: [brandId], references: [id])
   industry       OptionItem?  @relation("ClientIndustry", fields: [industryId], references: [id])
@@ -1055,24 +1058,28 @@ model CostSheet {
 /// + so sánh 2 phiên bản (item nào thêm/xóa/sửa, chênh bao nhiêu tiền). isBaseline = bản hợp đồng gốc.
 /// snapshotJson chứa toàn bộ sections+lines lúc lưu (xem src/lib/costsheet-diff.ts để so sánh).
 model CostSheetRevision {
-  id           String   @id @default(cuid())
-  costSheetId  String
-  revNo        Int // tăng dần theo costSheet
-  isBaseline   Boolean  @default(false) // đánh dấu bản gốc (thường tạo lúc vào Processing)
-  ceTotal      BigInt   @default(0)
-  coTotal      BigInt   @default(0)
-  chiHo        BigInt   @default(0)
-  marginPct    Float    @default(0)
-  note         String?
+  id            String   @id @default(cuid())
+  costSheetId   String
+  revNo         Int // tăng dần theo costSheet
+  isBaseline    Boolean  @default(false) // đánh dấu bản gốc (thường tạo lúc vào Processing)
+  ceTotal       BigInt   @default(0)
+  coTotal       BigInt   @default(0)
+  chiHo         BigInt   @default(0)
+  marginPct     Float    @default(0)
+  note          String?
   /// LOF-V1 — bản này ĐÓNG VAI GÌ trong hồ sơ khách: QUOTE | CONTRACT | ACCEPTANCE.
   /// null = bản làm việc nội bộ (đa số). Trước đây vai trò chỉ nằm trong `note` tự do nên máy
   /// không biết "so cặp nào ra cột chênh lệch" — bản xuất nghiệm thu cần đúng thông tin này.
   /// Một sheet ĐƯỢC PHÉP có nhiều bản cùng kind (hợp đồng điều chỉnh); bản xuất mặc định lấy bản
   /// mới nhất của mỗi kind và vẫn cho chọn tay.
-  kind         String?
-  createdById  String?
-  createdAt    DateTime @default(now())
-  snapshotJson String // JSON: { sections: [{code,nameVi,isProxy,lines:[{itemName,lineType,quantity,unit,unitPrice,fixedAmount,percentVal,amount}]}], totals }
+  kind          String?
+  /// CO/CE v3 — bản này sinh ra từ đâu: "IMPORT" = từ file khách trả về (CE-4). Null = lưu tay.
+  origin        String?
+  /// Khoá file khách trả (storage/costsheet-imports) — giữ lại để đối chiếu về sau.
+  importFileKey String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  snapshotJson  String // JSON: { sections: [{code,nameVi,isProxy,lines:[{itemName,lineType,quantity,unit,unitPrice,fixedAmount,percentVal,amount}]}], totals }
 
   costSheet              CostSheet   @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
   createdBy              Staff?      @relation("CostSheetRevisionCreatedBy", fields: [createdById], references: [id])
@@ -1102,6 +1109,11 @@ model CostSheetSection {
   departmentCode  String?
   proxyFeeType    String? // PCT | FIXED
   proxyFeeVal     Float?
+  /// CO/CE v3 — PHÍ QUẢN LÝ BÁO KHÁCH của mục LAYER 1 (10 / 5 / nhập tay). Null = mục CHƯA áp phí
+  /// (chính là điều kiện "thiếu mục" chặn xuất báo giá). Chỉ có nghĩa trên mục gốc không Chi hộ.
+  /// ⚠ ĐỪNG NHẦM với `CostSheet.mgmtFeePct` — đó là phí quản lý NỘI BỘ cộng vào CO
+  /// (tham số computeCostSheetTotals). Hai đại lượng khác nhau hoàn toàn.
+  clientFeePct    Float?
   parentSectionId String? // N-cấp (Mục→Nhóm→Sub-nhóm→...) — chỉ áp dụng nhánh THƯỜNG; mục Chi hộ (isProxy) luôn ở gốc (parentSectionId null), xem lib/bidding.ts flattenSectionTree.
 
   costSheet CostSheet          @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
@@ -1162,6 +1174,23 @@ model CostLine {
   legCode           String?
   sort              Int     @default(0)
   note              String?
+
+  /// ── CO/CE v3 — CE THEO DÒNG (CE-1, 05/08/2026) ─────────────────────────────────────────────
+  /// Cả 5 cột dưới đây null = dòng thuộc bảng CHẾ ĐỘ CŨ (CE vẫn ở cấp bảng, phân bổ BM02 khi in).
+  /// Nhận diện chế độ: `sheetHasLineCe` trong lib/bidding.ts — KHÔNG có cột cờ riêng.
+  /// CE SL/đơn giá của dòng (hoặc của NHÓM nếu dòng là đại diện nhóm — xem ceGroupKey).
+  ceQuantity  Float?
+  ceUnitPrice BigInt?
+  /// Khoá GỘP N dòng CO → 1 dòng CE khách nhìn (mirror nếp `stockResvLineId` của cặp kho K3:
+  /// đặt trên MỌI dòng của nhóm, sinh kiểu stableKey, sống sót vòng xoá-tạo-lại của saveCostSheet).
+  /// Dòng ĐẦU TIÊN theo sort của nhóm là ĐẠI DIỆN — ceName/ceQuantity/ceUnitPrice đọc từ nó.
+  /// ⚠ Cặp kho K3 là nhóm CÓ SẴN: không trộn thêm dòng khác vào cặp (validator chặn).
+  ceGroupKey  String?
+  /// Nhãn CE hiển thị cho khách — chỉ có nghĩa trên dòng đại diện; null = dùng itemName.
+  ceName      String?
+  /// %VAT của dòng taxType=VAT (8 | 10). Null = chưa chọn → trần chi GIỮ = net (quyết định Q4).
+  /// Chỉ vào TRẦN CHI (payCap), KHÔNG vào amount/coTotal — VAT là thuế khấu trừ.
+  vatPct      Float?
 
   costSheet CostSheet        @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
   section   CostSheetSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -1567,6 +1596,10 @@ model FinanceCostLine {
   /// tổng mọi khoản chi của dòng: thanh toán NCC + tạm ứng NV + tạm ứng chuyển thẳng NCC.
   /// Không dùng `amount` làm trần: phần gross-up là thuế công ty nộp hộ, không trao cho ai.
   netAmount   BigInt   @default(0)
+  /// CO/CE v3 — TRẦN CHI hiệu lực của dòng: dòng VAT đã chọn % thì = netAmount × (1 + vatPct/100)
+  /// (số phải trả NCC gồm VAT); còn lại = netAmount (Q4: VAT chưa chọn % giữ trần cũ). Ba cửa
+  /// kiểm trần ở finance/actions.ts đọc CỘT NÀY thay vì netAmount từ CE-1. Backfill = netAmount.
+  payCap      BigInt   @default(0)
   /// Dòng thuộc hạng mục Chi hộ (CostSheetSection.isProxy). Chi hộ là tiền ứng giùm khách, NẰM
   /// NGOÀI giá vốn (bất biến #2) — nên nó có trần chi riêng theo từng dòng như mọi dòng khác,
   /// nhưng KHÔNG được cộng vào trần cấp dự án (xem projectDisbursement) và không vào margin.

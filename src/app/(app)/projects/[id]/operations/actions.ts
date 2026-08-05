@@ -488,7 +488,7 @@ export async function createCtvBatchPayments(batchId: string, _prev: CtvPaymentS
 
   const lines = await prisma.financeCostLine.findMany({
     where: { id: { in: [...groups.keys()] } },
-    select: { id: true, projectId: true, itemName: true, netAmount: true, isStale: true },
+    select: { id: true, projectId: true, itemName: true, netAmount: true, payCap: true, isStale: true },
   });
   const lineById = new Map(lines.map((l) => [l.id, l]));
   for (const lineId of groups.keys()) {
@@ -510,7 +510,7 @@ export async function createCtvBatchPayments(batchId: string, _prev: CtvPaymentS
       prisma.advance.aggregate({ where: { financeCostLineId: lineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
       prisma.vendorPayment.aggregate({ where: { financeCostLineId: lineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
     ]);
-    const remaining = toNum(line.netAmount) - toNum(advAgg._sum.amount ?? BigInt(0)) - toNum(payAgg._sum.amount ?? BigInt(0));
+    const remaining = toNum(line.payCap) - toNum(advAgg._sum.amount ?? BigInt(0)) - toNum(payAgg._sum.amount ?? BigInt(0));
     if (total > remaining) overLines.push(line.itemName);
   }
   if (overLines.length > 0) {
@@ -538,7 +538,7 @@ export async function createCtvBatchPayments(batchId: string, _prev: CtvPaymentS
           tx.advance.aggregate({ where: { financeCostLineId: lineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
           tx.vendorPayment.aggregate({ where: { financeCostLineId: lineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
         ]);
-        const remaining = toNum(line.netAmount) - toNum(advAgg._sum.amount ?? BigInt(0)) - toNum(payAgg._sum.amount ?? BigInt(0));
+        const remaining = toNum(line.payCap) - toNum(advAgg._sum.amount ?? BigInt(0)) - toNum(payAgg._sum.amount ?? BigInt(0));
         const over = total > remaining;
         if (over && !overCapNote) throw new Error("EXCEED_LINE");
         await tx.vendorPayment.create({

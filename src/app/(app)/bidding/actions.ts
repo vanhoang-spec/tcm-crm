@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit, toNum } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
-import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, isRevisionKind, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH } from "@/lib/bidding";
+import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, isRevisionKind, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH, computeCeAggregates, sheetHasLineCe, type CeSectionInput } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
 import { syncFinanceCostLines } from "@/lib/finance";
 import { lockCreativeTasksForProject } from "@/lib/creative";
@@ -396,9 +396,44 @@ export async function saveCostSheet(
         customTaxAmount: l.customTaxAmount ?? null,
       })),
   }));
-  const totals = computeCostSheetTotals(flattenSectionTree(sectionTree), mgmtFeePct, contingencyPct);
+  const flatSections = flattenSectionTree(sectionTree);
+  const totals = computeCostSheetTotals(flatSections, mgmtFeePct, contingencyPct);
   const coTotal = totals.coTotal;
   const chiHo = totals.chiHo;
+
+  // ── CO/CE v3: nhận diện chế độ CE THEO DÒNG và suy tổng CE ở server ──────────────────────────
+  // isProxy phải lấy bản ĐÃ KẾ THỪA (nhánh con của Chi hộ cũng là Chi hộ) — flattenSectionTree bỏ
+  // key khỏi output nên ghép lại theo VỊ TRÍ: nó map 1-1 giữ nguyên thứ tự sectionTree.
+  const proxyByKey = new Map(sectionTree.map((s, i) => [s.key, flatSections[i].isProxy]));
+  const ceSections: CeSectionInput[] = payload.sections.map((s) => ({
+    key: s.key,
+    parentKey: s.parentKey ?? null,
+    isProxy: proxyByKey.get(s.key) ?? s.isProxy,
+    clientFeePct: s.clientFeePct ?? null,
+    lines: payload.lines
+      .filter((l) => l.sectionKey === s.key)
+      .map((l) => ({
+        lineType: l.lineType,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        fixedAmount: l.fixedAmount ?? null,
+        percentVal: l.percentVal ?? null,
+        taxType: l.taxType,
+        customTaxAmount: l.customTaxAmount ?? null,
+        ceQuantity: l.ceQuantity ?? null,
+        ceUnitPrice: l.ceUnitPrice ?? null,
+        ceGroupKey: l.ceGroupKey ?? null,
+        ceName: l.ceName ?? null,
+        vatPct: l.vatPct ?? null,
+        isSponsored: l.isSponsored,
+        itemName: l.itemName,
+      })),
+  }));
+  const serviceCeLines = ceSections.filter((s) => !s.isProxy).flatMap((s) => s.lines);
+  const lineCeMode = serviceCeLines.length > 0 && sheetHasLineCe(serviceCeLines);
+  // Chế độ mới: ceTotal do SERVER suy (bỏ qua input cấp bảng — không tin số từ client), margin theo
+  // Q1 (CE dịch vụ + phí, trước VAT). Chế độ cũ: giữ nguyên đường hiện tại, không đổi một hành vi nào.
+  const ceAgg = lineCeMode ? computeCeAggregates(ceSections, vatPct, coTotal) : null;
 
   // Prefix mã lấy từ phòng ban (Department.costPrefix, sửa được ở /settings/teams) — tra 1 lần
   // cho cả bảng rồi ánh xạ về từng section.
@@ -413,7 +448,10 @@ export async function saveCostSheet(
 
   const minMargin = await getNumberSetting("bidding", "min_margin_pct", 31);
   const threshold = await getNumberSetting("bidding", "auto_approve_threshold", 100_000_000);
-  const marginPct = computeMarginPct(ceTotal, coTotal);
+  // ceTotalEff = tổng khách trả đủ (gồm phí + VAT) — ngữ nghĩa ceTotal giữ nguyên cho mọi nơi
+  // đang khoá vào nó (trần hoá đơn, CE khung nhóm dự án, báo cáo).
+  const ceTotalEff = ceAgg ? ceAgg.ceTotalDerived : ceTotal;
+  const marginPct = ceAgg ? ceAgg.marginPctNew : computeMarginPct(ceTotal, coTotal);
   const staffId = await getCurrentStaffId();
 
   // Khoá BỀN của từng dòng: nhận khoá builder gửi lên, chỉ sinh mới khi THIẾU (payload cũ) hoặc
@@ -441,6 +479,8 @@ export async function saveCostSheet(
       code: s.code,
       nameVi: s.nameVi,
       isProxy: s.isProxy,
+      // CO/CE v3 — phí quản lý báo khách theo mục vào snapshot: bản xuất + diff đọc snapshot.
+      clientFeePct: s.clientFeePct ?? null,
       parentCode: s.parentKey ? (codeByKey.get(s.parentKey) ?? null) : null,
       lines: payload.lines
         .filter((l) => l.sectionKey === s.key)
@@ -465,9 +505,22 @@ export async function saveCostSheet(
           // snapshot chứ không đọc bảng sống — thiếu ở đây là mọi dòng rơi hết vào khối "Chung".
           legCode: l.legCode || null,
           amount: lineAmount(l),
+          // CO/CE v3 — CE theo dòng vào snapshot: diff v1↔v2 (CE-4) so trên chính các field này.
+          ceQuantity: l.ceQuantity ?? null,
+          ceUnitPrice: l.ceUnitPrice ?? null,
+          ceGroupKey: l.ceGroupKey ?? null,
+          ceName: l.ceName ?? null,
+          vatPct: l.vatPct ?? null,
         })),
     })),
-    totals: { coTotal, ceTotal, chiHo, marginPct: Math.round(marginPct * 100) / 100 },
+    totals: {
+      coTotal,
+      ceTotal: ceTotalEff,
+      chiHo,
+      marginPct: Math.round(marginPct * 100) / 100,
+      // Chỉ có ở bảng chế độ mới — người đọc snapshot phân biệt được hai chế độ bằng sự có mặt này.
+      ...(ceAgg ? { ceService: ceAgg.ceService, feeTotal: ceAgg.feeTotal, cePreVat: ceAgg.cePreVat } : {}),
+    },
   });
 
   // Cổng margin: dưới ngưỡng KHÔNG chặn LƯU — chỉ chặn DUYỆT.
@@ -488,7 +541,7 @@ export async function saveCostSheet(
 
   // Duyệt theo ngưỡng (FR-12): margin đạt + dưới ngưỡng giá trị + không phải budget-down → auto-approve.
   // Margin override → coi như CEO đã duyệt. Còn lại → chờ duyệt (approvedBy null).
-  const autoApprove = marginPct >= minMargin && ceTotal < threshold && scenario !== "BUDGET_DOWN";
+  const autoApprove = marginPct >= minMargin && ceTotalEff < threshold && scenario !== "BUDGET_DOWN";
   const approvedNow = autoApprove || marginOverrideById != null;
 
   const existing = await prisma.costSheet.findFirst({
@@ -499,7 +552,7 @@ export async function saveCostSheet(
   const sheetData = {
     scenario,
     templateId,
-    ceTotal: BigInt(ceTotal),
+    ceTotal: BigInt(ceTotalEff),
     coTotal: BigInt(coTotal),
     chiHo: BigInt(chiHo),
     vatPct,
@@ -545,6 +598,7 @@ export async function saveCostSheet(
           departmentCode: section.departmentCode || null,
           proxyFeeType: section.proxyFeeType ?? null,
           proxyFeeVal: section.proxyFeeVal ?? null,
+          clientFeePct: section.clientFeePct ?? null,
         },
       });
       idByKey.set(section.key, createdSection.id);
@@ -600,6 +654,12 @@ export async function saveCostSheet(
               legCode: l.legCode || null,
               sort: idx,
               note: l.note || null,
+              // CO/CE v3 — CE theo dòng + %VAT (null = chế độ cũ / chưa chọn)
+              ceQuantity: l.ceQuantity ?? null,
+              ceUnitPrice: l.ceUnitPrice == null ? null : BigInt(Math.round(l.ceUnitPrice)),
+              ceGroupKey: l.ceGroupKey ?? null,
+              ceName: l.ceName || null,
+              vatPct: l.vatPct ?? null,
             };
           }),
         });
@@ -629,7 +689,7 @@ export async function saveCostSheet(
         costSheetId: sheetId,
         revNo,
         isBaseline: revNo === 1,
-        ceTotal: BigInt(ceTotal),
+        ceTotal: BigInt(ceTotalEff),
         coTotal: BigInt(coTotal),
         chiHo: BigInt(chiHo),
         marginPct: Math.round(marginPct * 100) / 100,

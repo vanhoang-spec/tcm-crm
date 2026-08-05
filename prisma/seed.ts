@@ -2113,6 +2113,11 @@ async function main() {
     // CO/CE trở lại. Nay chốt cứng trong seed đúng bằng những gì production đang có.
     code === "bidding.costsheet.approve" ||
     code === "bidding.margin_override" ||
+    // CO/CE v3 (CE-1): hai mã GATE CỘT tiền trên màn hình CO/CE — Total CO/margin nhạy ngang giá
+    // vốn, trần chi mở rộng thêm cho PCC/OPE/PRO. Tách khỏi base để dựng-lại-DB không tự cấp cho
+    // 20 vai; role đích cấp ở extraByGroup/extraByRole + backfill 20260805_coce_view_* khớp nhau.
+    code === "bidding.costsheet.view_cost" ||
+    code === "bidding.costsheet.view_paycap" ||
     // MKT post (04/08/2026): 4 mã dưới TÁCH KHỎI base. `mkt.view` CỐ Ý ở lại base (mọi người xem
     // được bài công ty sắp đăng), 4 mã còn lại là viết / duyệt-đăng / sửa link frame / gọi AI —
     // thiếu 4 dòng này thì DB dựng-từ-đầu cấp cả cho 20 vai. Role đích cấp lại ngay ở
@@ -2180,18 +2185,24 @@ async function main() {
       "mkt.review",
       "mkt.frames.manage",
       "mkt.generate",
+      // CO/CE v3: BGĐ thấy đủ cả hai cột tiền.
+      "bidding.costsheet.view_cost",
+      "bidding.costsheet.view_paycap",
     ],
     // Account duyệt đề xuất xuất kho của dự án MÌNH phụ trách (PIC/Leader) — quyết định flow K2
     // Account là PIC của dự án nên là người đính hồ sơ ISO cho chính dự án mình.
     // MKT post: Account NỘP bài (ý chính + ảnh) nhưng KHÔNG có `mkt.generate` — quyết định chủ dự
     // án 04/08/2026: nút AI tốn tiền theo lượt, chỉ HR + BGĐ được bấm.
-    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate", "iso.manage", "iso.export", "mkt.post.manage"],
+    ACCOUNT: ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.trend", "inventory.request.approve", "clients.kb.manage", "clients.kb.generate", "iso.manage", "iso.export", "mkt.post.manage", "bidding.costsheet.view_cost", "bidding.costsheet.view_paycap"],
     // Creative dựng frame ảnh cho 2 kênh nên giữ 2 link thư mục frame.
     CREATIVE: ["ai.brainstorm", "mkt.frames.manage"],
     PLANNING: ["ai.brainstorm", "ai.content", "ai.canva"],
+    // CO/CE v3: OPE/PRO cần thấy TRẦN CHI để làm việc với NCC — nhưng không thấy CE/margin/Total CO.
+    OPERATIONS: ["bidding.costsheet.view_paycap"],
+    PRODUCTION: ["bidding.costsheet.view_paycap"],
     HR: ["ai.brainstorm", "ai.content"],
-    FINANCE: ["ai.costsheet", "inventory.reservation.approve"],
-    PURCHASING: ["purchasing.po.manage", "purchasing.po.receive"],
+    FINANCE: ["ai.costsheet", "inventory.reservation.approve", "bidding.costsheet.view_cost", "bidding.costsheet.view_paycap"],
+    PURCHASING: ["purchasing.po.manage", "purchasing.po.receive", "bidding.costsheet.view_paycap"],
     // ⚠ CỐ Ý KHÔNG có `WAREHOUSE: WAREHOUSE_EXTRA` ở đây. Nhóm WAREHOUSE chứa CẢ `SECURITY_GUARD`
     // (bảo vệ điểm kho) — cấp 4 mã xác nhận thực xuất/thực nhập + chuyển lô + XUẤT HỦY theo NHÓM
     // chính là lỗ hổng vừa vá ở backfill `20260728_kho_k2_keeper`, chỉ tái sinh ở đường khác.
@@ -2480,6 +2491,20 @@ async function main() {
       key: "20260804_mkt_review",
       codes: ["mkt.review"],
       roleFilter: (r) => r.code === "HR_MANAGER" || r.code === "HR_STAFF" || r.groupCode === "BOD",
+    },
+    {
+      // CO/CE v3 (CE-1) — hai mã gate cột tiền: roleFilter khớp ĐÚNG đường cấp ở
+      // isRestricted + extraByGroup/extraByRole để DB dựng-từ-đầu và DB đang chạy ra cùng kết quả.
+      key: "20260805_coce_view_cost",
+      codes: ["bidding.costsheet.view_cost"],
+      roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "FINANCE" || r.groupCode === "BOD",
+    },
+    {
+      key: "20260805_coce_view_paycap",
+      codes: ["bidding.costsheet.view_paycap"],
+      roleFilter: (r) =>
+        r.groupCode === "ACCOUNT" || r.groupCode === "FINANCE" || r.groupCode === "BOD" ||
+        r.groupCode === "PURCHASING" || r.groupCode === "OPERATIONS" || r.groupCode === "PRODUCTION",
     },
     {
       key: "20260804_mkt_frames",

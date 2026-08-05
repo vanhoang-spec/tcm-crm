@@ -98,6 +98,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "bidding.gonogo", module: "bidding", labelVi: "Quyết định Go / No-go", labelEn: "Decide Go / No-go", sensitive: true },
   { code: "bidding.costsheet.edit", module: "bidding", labelVi: "Sửa & lưu bảng CO/CE", labelEn: "Edit & save cost sheet" },
   { code: "bidding.costsheet.approve", module: "bidding", labelVi: "Duyệt / từ chối CO/CE", labelEn: "Approve / reject cost sheet", sensitive: true },
+  // CO/CE v3 (CE-1) — hai mã GATE CỘT trên màn hình CO/CE, kiểm lúc RENDER (số bị gate không vào
+  // HTML). Không có requirePermission riêng: chúng quyết "thấy cột nào", không mở thêm hành động.
+  { code: "bidding.costsheet.view_cost", module: "bidding", labelVi: "Xem giá vốn & margin trên CO/CE (Total CO)", labelEn: "View cost & margin on cost sheet (Total CO)", sensitive: true },
+  { code: "bidding.costsheet.view_paycap", module: "bidding", labelVi: "Xem trần thanh toán NCC trên CO/CE", labelEn: "View supplier payment cap on cost sheet", sensitive: true },
   { code: "bidding.margin_override", module: "bidding", labelVi: "Ghi đè margin dưới ngưỡng 31%", labelEn: "Override margin below 31% floor", sensitive: true },
   { code: "bidding.contract.manage", module: "bidding", labelVi: "Nhập & xác nhận hợp đồng", labelEn: "Enter & confirm contract", sensitive: true },
   { code: "bidding.status.change", module: "bidding", labelVi: "Đổi trạng thái dự án (Processing / Huỷ / Nghiệm thu / Finished)", labelEn: "Change project status", sensitive: true },

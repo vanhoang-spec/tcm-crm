@@ -57,7 +57,7 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
   // Mỗi dòng CO nội bộ (non-proxy) = MỘT dòng chi phí, khoá theo stableKey nên không còn gộp
   // nhầm hai dòng trùng tên ở hai hạng mục khác nhau. Dòng chưa có stableKey (dữ liệu trước khi
   // có trường này) bị BỎ QUA thay vì gộp bừa — đã backfill toàn bộ nên trên thực tế không xảy ra.
-  const liveLines = new Map<string, { itemCode: string | null; sectionCode: string; sectionName: string; itemName: string; specs: string | null; amount: bigint; netAmount: bigint; isProxy: boolean; vendorId: string | null; sort: number }>();
+  const liveLines = new Map<string, { itemCode: string | null; sectionCode: string; sectionName: string; itemName: string; specs: string | null; amount: bigint; netAmount: bigint; payCap: bigint; isProxy: boolean; vendorId: string | null; sort: number }>();
   let sortCounter = 0;
   let skippedNoKey = 0;
 
@@ -87,6 +87,31 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
       // của nó bằng 0. Để nó vào đây thì dự án có "dòng chi phí" với trần 0, và phiếu chi cấp dự án
       // báo "vượt trần" thay vì "chưa có dòng chi phí". Phần phải mua nằm ở dòng mua bù cùng cặp.
       if (l.stockRefUnitPrice != null) continue;
+      // PERCENT_OF_TOTAL là dòng suy ra, không gross-up → net chính bằng amount đã lưu; khỏi
+      // phải tính lại directCo ở đây (và khỏi rủi ro lệch làm tròn so với lúc lưu CO/CE).
+      const netAmount =
+        l.lineType === "PERCENT_OF_TOTAL"
+          ? l.amount
+          : BigInt(
+              computeLineNetAmount(
+                {
+                  lineType: l.lineType,
+                  quantity: l.quantity,
+                  unitPrice: Number(l.unitPrice),
+                  fixedAmount: l.fixedAmount == null ? null : Number(l.fixedAmount),
+                  percentVal: l.percentVal,
+                  taxType: l.taxType,
+                  customTaxAmount: l.customTaxAmount == null ? null : Number(l.customTaxAmount),
+                },
+                0,
+              ),
+            );
+      // CO/CE v3 — TRẦN CHI hiệu lực: dòng VAT đã chọn % thì số phải trả NCC GỒM VAT; còn lại
+      // giữ net (Q4: VAT chưa chọn % giữ trần cũ). Cùng công thức payCapFor (lib/bidding.ts).
+      const payCap =
+        l.taxType === "VAT" && l.vatPct != null && l.vatPct > 0
+          ? BigInt(Math.round(Number(netAmount) * (1 + l.vatPct / 100)))
+          : netAmount;
       liveLines.set(financeLineKey(l.stableKey), {
         itemCode: l.itemCode,
         sectionCode: s.code,
@@ -95,25 +120,8 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
         specs: l.specs,
         amount: l.amount,
         isProxy,
-        // PERCENT_OF_TOTAL là dòng suy ra, không gross-up → net chính bằng amount đã lưu; khỏi
-        // phải tính lại directCo ở đây (và khỏi rủi ro lệch làm tròn so với lúc lưu CO/CE).
-        netAmount:
-          l.lineType === "PERCENT_OF_TOTAL"
-            ? l.amount
-            : BigInt(
-                computeLineNetAmount(
-                  {
-                    lineType: l.lineType,
-                    quantity: l.quantity,
-                    unitPrice: Number(l.unitPrice),
-                    fixedAmount: l.fixedAmount == null ? null : Number(l.fixedAmount),
-                    percentVal: l.percentVal,
-                    taxType: l.taxType,
-                    customTaxAmount: l.customTaxAmount == null ? null : Number(l.customTaxAmount),
-                  },
-                  0,
-                ),
-              ),
+        netAmount,
+        payCap,
         vendorId: l.vendorId,
         sort: sortCounter++,
       });
@@ -139,6 +147,7 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
           specs: live.specs,
           amount: live.amount,
           netAmount: live.netAmount,
+          payCap: live.payCap,
           isProxy: live.isProxy,
           vendorId: live.vendorId,
           sort: live.sort,
@@ -159,6 +168,7 @@ export async function syncFinanceCostLines(projectId: string): Promise<{
           specs: live.specs,
           amount: live.amount,
           netAmount: live.netAmount,
+          payCap: live.payCap,
           isProxy: live.isProxy,
           vendorId: live.vendorId,
           sort: live.sort,
@@ -188,8 +198,10 @@ export type LineDisbursement = {
   paid: number;
   /** Tổng đã chi ra = advanced + paid. */
   disbursed: number;
-  /** Trần = số THỰC TRẢ của dòng (đã bóc gross-up thuế). */
+  /** Số thực trả (đã bóc gross-up thuế) — để hiển thị đối chiếu. */
   netAmount: number;
+  /** CO/CE v3 — TRẦN hiệu lực: VAT đã chọn % thì gồm VAT, còn lại = netAmount. */
+  cap: number;
   /** Còn được chi thêm. Âm = đã lỡ chi vượt (dữ liệu cũ trước khi có trần này). */
   remaining: number;
 };
@@ -206,15 +218,17 @@ export type LineDisbursement = {
  */
 export async function lineDisbursement(financeCostLineId: string): Promise<LineDisbursement> {
   const [line, advAgg, payAgg] = await Promise.all([
-    prisma.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true } }),
+    prisma.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true, payCap: true } }),
     prisma.advance.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
     prisma.vendorPayment.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
   ]);
   const advanced = Number(advAgg._sum.amount ?? BigInt(0));
   const paid = Number(payAgg._sum.amount ?? BigInt(0));
   const netAmount = Number(line?.netAmount ?? BigInt(0));
+  // CO/CE v3 — trần hiệu lực đọc từ payCap (VAT đã chọn % thì gồm VAT; backfill = netAmount).
+  const cap = Number(line?.payCap ?? BigInt(0));
   const disbursed = advanced + paid;
-  return { advanced, paid, disbursed, netAmount, remaining: netAmount - disbursed };
+  return { advanced, paid, disbursed, netAmount, cap, remaining: cap - disbursed };
 }
 
 export type ProjectDisbursement = {
@@ -249,7 +263,7 @@ export async function projectDisbursement(projectId: string): Promise<ProjectDis
   // "Không thuộc dòng Chi hộ": tạm ứng LUÔN gắn dòng (cột bắt buộc) → chỉ cần dòng non-proxy;
   // phiếu chi có thể không gắn dòng (khoản cấp dự án) → không gắn dòng HOẶC dòng non-proxy.
   const [capAgg, lineCount, advAgg, payAgg] = await Promise.all([
-    prisma.financeCostLine.aggregate({ where: { projectId, isStale: false, isProxy: false }, _sum: { netAmount: true } }),
+    prisma.financeCostLine.aggregate({ where: { projectId, isStale: false, isProxy: false }, _sum: { payCap: true } }),
     prisma.financeCostLine.count({ where: { projectId, isStale: false, isProxy: false } }),
     prisma.advance.aggregate({
       where: { projectId, status: { not: "CANCELED" }, financeCostLine: { isProxy: false } },
@@ -260,7 +274,7 @@ export async function projectDisbursement(projectId: string): Promise<ProjectDis
       _sum: { amount: true },
     }),
   ]);
-  const capBase = Number(capAgg._sum.netAmount ?? BigInt(0));
+  const capBase = Number(capAgg._sum.payCap ?? BigInt(0));
   const advanced = Number(advAgg._sum.amount ?? BigInt(0));
   const paid = Number(payAgg._sum.amount ?? BigInt(0));
   const disbursed = advanced + paid;

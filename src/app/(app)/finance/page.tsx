@@ -80,8 +80,9 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
       const advanced = l.advances.filter((a) => a.status !== "CANCELED").reduce((s, a) => s + toNum(a.amount), 0);
       const paid = l.vendorPayments.reduce((s, p) => s + toNum(p.amount), 0);
       const amount = toNum(l.amount);
-      // TRẦN là netAmount (đã bóc gross-up thuế), và trừ CẢ tạm ứng lẫn thanh toán NCC.
-      const netAmount = toNum(l.netAmount);
+      // TRẦN hiệu lực là payCap (CO/CE v3: VAT đã chọn % thì gồm VAT; còn lại = netAmount) —
+      // hiển thị phải khớp đúng con số server chặn, không thì UI nói một đằng chặn một nẻo.
+      const netAmount = toNum(l.payCap);
       return {
         id: l.id,
         sectionName: l.sectionName,

@@ -130,7 +130,8 @@ export async function requestAdvance(
         tx.vendorPayment.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
       ]);
       const already = Number(agg._sum.amount ?? 0) + Number(payAgg._sum.amount ?? 0);
-      if (Number(amount) > Number(line.netAmount) - already) throw new Error("EXCEED_LINE");
+      // CO/CE v3 — trần hiệu lực payCap (VAT đã chọn % thì gồm VAT)
+      if (Number(amount) > Number(line.payCap) - already) throw new Error("EXCEED_LINE");
       if (quota && recipientStaffId) {
         const open = await tx.advance.findMany({
           where: { advanceType: "STAFF", recipientStaffId, status: { in: ["REQUESTED", "DISBURSED"] } },
@@ -349,7 +350,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
     if (Number(amount) > disb.remaining) return { error: t("errExceedLine", { remaining: disb.remaining }), values: keep };
     try {
       await prisma.$transaction(async (tx) => {
-        const line = await tx.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { netAmount: true, projectId: true } });
+        const line = await tx.financeCostLine.findUnique({ where: { id: financeCostLineId }, select: { payCap: true, projectId: true } });
         if (!line) throw new Error("LINE_NOT_FOUND");
         if (po && po.projectId !== line.projectId) throw new Error("PO_PROJECT_MISMATCH");
         const [advAgg, payAgg] = await Promise.all([
@@ -357,7 +358,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
           tx.vendorPayment.aggregate({ where: { financeCostLineId, status: { not: "CANCELED" } }, _sum: { amount: true } }),
         ]);
         const already = Number(advAgg._sum.amount ?? 0) + Number(payAgg._sum.amount ?? 0);
-        if (Number(amount) > Number(line.netAmount) - already) throw new Error("EXCEED_LINE");
+        if (Number(amount) > Number(line.payCap) - already) throw new Error("EXCEED_LINE");
         await tx.vendorPayment.create({
           data: {
             vendorId,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LINE_TYPES, TAX_TYPES, MAX_SECTION_DEPTH } from "@/lib/bidding";
+import { LINE_TYPES, TAX_TYPES, MAX_SECTION_DEPTH, VAT_PCT_OPTIONS } from "@/lib/bidding";
 
 /**
  * CO/CE builder gửi toàn bộ section+line qua 1 hidden input JSON (`sectionsJson`) thay vì
@@ -45,6 +45,15 @@ export const costLineSchema = z.object({
    */
   legCode: z.string().trim().max(40).optional().default(""),
   note: z.string().trim().optional().default(""),
+  /** CO/CE v3 — CE theo dòng. Null = bảng chế độ cũ (CE cấp bảng). ceUnitPrice cho phép âm như unitPrice. */
+  ceQuantity: z.coerce.number().min(0).nullable().optional().default(null),
+  ceUnitPrice: z.coerce.number().nullable().optional().default(null),
+  /** Khoá gộp N dòng CO → 1 dòng CE (đặt trên MỌI dòng của nhóm; dòng đầu là đại diện). */
+  ceGroupKey: z.string().trim().nullable().optional().default(null),
+  /** Nhãn CE hiển thị cho khách — chỉ có nghĩa trên dòng đại diện. */
+  ceName: z.string().trim().max(300).nullable().optional().default(null),
+  /** %VAT theo dòng (chỉ taxType=VAT) — hai mức luật hiện hành; đổi luật sửa VAT_PCT_OPTIONS. */
+  vatPct: z.coerce.number().nullable().optional().default(null),
 });
 
 export const costSectionSchema = z.object({
@@ -62,6 +71,12 @@ export const costSectionSchema = z.object({
   departmentCode: z.string().trim().optional().default(""),
   proxyFeeType: z.enum(["PCT", "FIXED"]).nullable().optional(),
   proxyFeeVal: z.coerce.number().min(0).nullable().optional(),
+  /**
+   * CO/CE v3 — phí quản lý BÁO KHÁCH của mục layer 1 (10 / 5 / nhập tay, 0–100). Null = chưa áp
+   * (điều kiện "thiếu mục" chặn xuất). superRefine chốt: chỉ mục GỐC không Chi hộ được mang giá trị.
+   * ⚠ Khác hẳn CostSheet.mgmtFeePct (phí nội bộ cộng vào CO) — đừng nhầm.
+   */
+  clientFeePct: z.coerce.number().min(0).max(100).nullable().optional().default(null),
 });
 
 export const costSheetPayloadSchema = z
@@ -86,6 +101,41 @@ export const costSheetPayloadSchema = z
           path: ["lines"],
           message: `Dòng "${l.itemName}" thuộc hạng mục Chi hộ nên không được dùng loại % trên tổng.`,
         });
+      }
+    }
+
+    // ── CO/CE v3 ──────────────────────────────────────────────────────────────
+    // %VAT chỉ hợp lệ trên dòng VAT và chỉ hai mức luật hiện hành.
+    for (const l of payload.lines) {
+      if (l.vatPct != null && l.taxType !== "VAT") {
+        ctx.addIssue({ code: "custom", path: ["lines"], message: `Dòng "${l.itemName}" không phải VAT nên không được mang %VAT.` });
+      }
+      if (l.vatPct != null && !VAT_PCT_OPTIONS.includes(l.vatPct as (typeof VAT_PCT_OPTIONS)[number])) {
+        ctx.addIssue({ code: "custom", path: ["lines"], message: `Dòng "${l.itemName}" có %VAT ${l.vatPct} — chỉ nhận ${VAT_PCT_OPTIONS.join(" hoặc ")}.` });
+      }
+      // Cặp kho K3 là nhóm CÓ SẴN (in gộp theo stockResvLineId) — không trộn thêm vào nhóm CE khác.
+      if (l.stockResvLineId && l.ceGroupKey) {
+        ctx.addIssue({ code: "custom", path: ["lines"], message: `Dòng kho "${l.itemName}" không được gộp vào nhóm CE khác — cặp kho đã tự in gộp.` });
+      }
+    }
+    // Nhóm CE phải nằm TRỌN trong MỘT hạng mục (không gộp xuyên mục — khách nhìn dòng theo mục).
+    const groupSection = new Map<string, string>();
+    for (const l of payload.lines) {
+      if (!l.ceGroupKey) continue;
+      const seen = groupSection.get(l.ceGroupKey);
+      if (seen === undefined) groupSection.set(l.ceGroupKey, l.sectionKey);
+      else if (seen !== l.sectionKey) {
+        ctx.addIssue({ code: "custom", path: ["lines"], message: `Nhóm CE của dòng "${l.itemName}" vắt qua hai hạng mục — chỉ gộp dòng trong cùng một mục.` });
+      }
+    }
+    // Phí quản lý báo khách: chỉ mục GỐC, không Chi hộ.
+    for (const s of payload.sections) {
+      if (s.clientFeePct == null) continue;
+      if (s.parentKey) {
+        ctx.addIssue({ code: "custom", path: ["sections"], message: `Mục con "${s.nameVi}" không được mang phí quản lý — phí áp ở mục lớn (layer 1).` });
+      }
+      if (s.isProxy) {
+        ctx.addIssue({ code: "custom", path: ["sections"], message: `Mục Chi hộ "${s.nameVi}" nằm ngoài phí quản lý.` });
       }
     }
 

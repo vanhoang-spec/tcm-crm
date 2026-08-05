@@ -38,7 +38,7 @@ export default async function VendorPaymentsPage() {
     itemName: l.itemName,
     sectionName: l.sectionName,
     remaining:
-      toNum(l.netAmount) -
+      toNum(l.payCap) -
       l.advances.reduce((s, a) => s + toNum(a.amount), 0) -
       l.vendorPayments.reduce((s, p) => s + toNum(p.amount), 0),
   }));
@@ -47,7 +47,7 @@ export default async function VendorPaymentsPage() {
   // lib/finance.ts (Σ netAmount dòng còn hiệu lực, KHÔNG gồm Chi hộ, trừ đã ứng và đã lập phiếu).
   // Ở đây chỉ để HIỂN THỊ; server vẫn tính lại trong transaction trước khi ghi.
   const [capLines, advByProject, payByProject] = await Promise.all([
-    prisma.financeCostLine.groupBy({ by: ["projectId"], where: { isStale: false, isProxy: false }, _sum: { netAmount: true } }),
+    prisma.financeCostLine.groupBy({ by: ["projectId"], where: { isStale: false, isProxy: false }, _sum: { payCap: true } }),
     prisma.advance.groupBy({
       by: ["projectId"],
       where: { status: { not: "CANCELED" }, financeCostLine: { isProxy: false } },
@@ -59,7 +59,7 @@ export default async function VendorPaymentsPage() {
       _sum: { amount: true },
     }),
   ]);
-  const capBaseBy = new Map(capLines.map((r) => [r.projectId, toNum(r._sum.netAmount ?? BigInt(0))]));
+  const capBaseBy = new Map(capLines.map((r) => [r.projectId, toNum(r._sum.payCap ?? BigInt(0))]));
   const advBy = new Map(advByProject.map((r) => [r.projectId, toNum(r._sum.amount ?? BigInt(0))]));
   const payBy = new Map(payByProject.map((r) => [r.projectId ?? "", toNum(r._sum.amount ?? BigInt(0))]));
   const projectCaps: Record<string, { remaining: number; hasLines: boolean }> = {};

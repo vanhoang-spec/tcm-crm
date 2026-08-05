@@ -125,7 +125,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 105 model Prisma · 61 migration · 72 file `src/lib` · 3353 key i18n × 2 ngôn ngữ · 129 mã quyền.
+**Quy mô:** 106 model Prisma · 64 migration · 83 file `src/lib` · 3394 key i18n × 2 ngôn ngữ · 131 mã quyền.
 
 ---
 
@@ -1077,11 +1077,92 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       cuối tháng" rồi bỏ — dễ bị đọc nhầm thành số dư tiền mặt thật) · không đổi token màu toàn app ·
       chưa có bảng dữ liệu thay thế cho biểu đồ (table view).
 
+25. **TRƯỞNG TEAM + PLANNING THEO TEAM + MƯỢN NGƯỜI — PLN-1 XONG 05/08/2026** (2 migration
+    `20260808000000_team_lead` + `20260808010000_planning_loan_request`). Bối cảnh: Planning giải thể
+    (mục 10.18) và chưa tuyển được người, nên việc Planning trở thành việc NỘI BỘ mỗi team Account.
+    - **`Team.leadStaffId` = Trưởng team** (FK optional → Staff). Đã gán theo quyết định chủ dự án:
+      A1 = HỒ HỒNG PHƯỚC, A3 = TRẦN THU HÀ (email `ttha@` — KHÔNG phải `tthha@`, đã vấp một lần).
+      Sửa ở `/settings/teams`. Seed gán một lần có marker, không đè chỉnh tay.
+    - **Order Planning gửi về TRƯỞNG TEAM của team dự án** (không phải mọi người có cờ
+      `isPlanningStaff`): trưởng team nhận thông báo rồi TỰ GÁN người trong team. Nguồn "ai làm được
+      Planning" 3 tầng trong `lib/planning.ts` — cờ `isPlanningStaff` → thành viên team → trưởng team.
+    - **Ô "Giao cho" ĐÓNG lại chỉ còn người TRONG team dự án** (đảo quyết định cũ ở mục 10.18 — thời
+      đó chưa có trưởng team nên phải mở). Muốn dùng người team khác phải đi luồng MƯỢN.
+    - **Luồng mượn người team khác** — bảng `PlanningLoanRequest`: trưởng team A xin mượn → trưởng
+      team B duyệt VÀ CHỌN ĐÍCH DANH người cho mượn → người đó vào được ô "Giao cho" của dự án đó
+      (phạm vi theo DỰ ÁN, không phải mượn vĩnh viễn). Từ chối phải có lý do.
+    - ⚠ **Loại trừ NGƯỜI GỬI khỏi danh sách nhận thông báo phải kiểm rỗng**: trưởng team tự gửi order
+      cho chính team mình thì người nhận = chính mình − chính mình = RỖNG → từng tạo notification
+      không có ai nhận. Đã vá: rỗng thì vẫn báo cho người gửi.
+    - Không mã quyền mới; đã deploy (xem §11, commit `c41cc6c`).
+
+26. **CO/CE v3 — CE-1 XONG 05/08/2026: nền số liệu + trần chi VAT** (migration VIẾT TAY
+    `20260809000000_coce_v3_ce1` — bẫy RedefineTables lần 4, `migrate diff` đòi DROP TABLE
+    `finance_cost_line`). Đợt 1/4 của kế hoạch CO/CE v3 (CE theo dòng, thuế theo dòng, phí theo mục,
+    vòng review khách — toàn bộ quyết định đã chốt nằm ở plan `playful-hatching-lampson.md` và mockup
+    `coce-v2-mockup.html`). **CE-1 THUẦN NỀN — chưa có UI nào đổi**; builder mới là CE-2.
+    - **Schema (10 cột mới, đều nullable/additive):** `CostLine` + `ceQuantity`/`ceUnitPrice` (CE theo
+      dòng), `ceGroupKey`/`ceName` (GỘP N dòng CO → 1 dòng CE khách nhìn — mirror tiền lệ cặp kho K3;
+      leader mang ceName/ceQ/ceP), `vatPct` (8|10, CHỈ dòng VAT; null = chưa chọn — Q4);
+      `CostSheetSection.clientFeePct` (phí QL BÁO KHÁCH theo mục L1 — ⚠ ĐỪNG NHẦM `CostSheet.mgmtFeePct`
+      là phí NỘI BỘ cộng vào CO); `CostSheetRevision.origin`/`importFileKey` (CE-4);
+      `Client.quoteTemplateCode` (CE-3); `FinanceCostLine.payCap` (backfill = netAmount, 377 dòng).
+    - **Hai phát hiện làm đợt này gọn** (đọc trước khi sửa engine): (a) cột "Total CO" của thiết kế
+      ≡ `CostLine.amount` sẵn có — `TAX_GROSSUP {VAT:1, TNCN:1/0.9, TNDN:1/0.8}` ở `bidding.ts` trùng
+      từng đồng spec, KHÔNG đổi công thức nào, `coTotal` giữ nguyên ngữ nghĩa; (b) trần chi hiện hành
+      đã là `netAmount` → chỉ dòng VAT trần NỞ thêm (không có khoản chi cũ nào hồi tố thành vượt trần).
+    - **Trần chi NCC nay đọc từ `payCap`**: `payCapFor(line)` = VAT có `vatPct` → `net×(1+pct/100)`,
+      còn lại = net. `syncFinanceCostLines` ghi; **cả 7 điểm tiêu thụ** (2 cửa kiểm trong transaction ở
+      `finance/actions.ts`, hiển thị `/finance`, `/finance/vendor-payments`, `operations/actions.ts`,
+      `lineDisbursement`/`projectDisbursement` ở `lib/finance.ts`) đổi ĐỒNG LOẠT — UI không bao giờ
+      lệch với server. Đã verify chức năng: set vatPct=10 dòng 6.400.000 → payCap 7.040.000, gỡ → về net.
+    - **Engine thuần mới ở `lib/bidding.ts`** (30/30 test số): `payCapFor` · `taxDisplayAmount` ·
+      `ceRowsOf` (gộp theo `ceGroupKey`, dòng đầu làm leader) · `sheetHasLineCe` (nhận diện chế độ:
+      mọi dòng ngoài Chi hộ có `ceUnitPrice` — KHÔNG có cột cờ) · `computeCeAggregates` (ceService,
+      phí theo mục kế thừa gốc, cePreVat, `ceTotalDerived = round(cePreVat×(1+vatPct/100))` — GIỮ
+      ngữ nghĩa ceTotal cũ, `marginPctNew` theo Q1: (CE dv + phí − coTotal)/(CE dv + phí), trước VAT)
+      · `sectionNumber` (I/II → 1/2 → 1.1 → a/b/c).
+    - **`saveCostSheet`**: sheet chế độ mới thì server TỰ suy `ceTotal` (bỏ qua input) + margin Q1;
+      sheet cũ giữ nguyên đường cũ 100%. Snapshot revision mở rộng (line +5 trường, section
+      +clientFeePct, totals +{ceService, feeTotal, cePreVat} khi chế độ mới). Validator chặn:
+      vatPct chỉ trên dòng VAT và chỉ 8|10 · nhóm `ceGroupKey` nằm TRỌN trong một mục · dòng kho K3
+      cấm ceGroupKey · clientFeePct chỉ mục gốc không Chi hộ.
+    - **Quyền: 2 mã mới (129 → 131)** — `bidding.costsheet.view_cost` (thấy Total CO + margin + CE:
+      ACCOUNT + kế toán + CFO + BGĐ = 6 vai) và `bidding.costsheet.view_paycap` (thấy trần chi NCC:
+      thêm PUR/OPE/PRO = 12 vai). Là mã GATE CỘT kiểm lúc RENDER (số bị gate không vào HTML — bài học
+      KB-H2), KHÔNG có `requirePermission` riêng — đã ghi chú thẳng trong catalog. Backfill 2 marker
+      `20260805_coce_view_*`, roleFilter theo MÃ ROLE. Đo: DB dựng-từ-đầu và dev.db khớp nhau tuyệt
+      đối ở cả 2 mã (6/12 vai, cùng danh sách); chênh tổng 16 dòng giữa hai bản là chênh CŨ đã giải
+      thích ở mục 10.15, không phải do đợt này. `db:seed` lần 2 no-op (1296 → 1296).
+    - **Verify:** coTotal cả 5 bảng (T002/T005/T006/T013/T025) không đổi MỘT ĐỒNG sau migration + seed
+      · payCap = netAmount trên toàn bộ 377 dòng (trần PIT/CIT giữ nguyên) · tsc/eslint/i18n 0-0/build
+      sạch · `/finance` hiển thị trần không đổi trên browser.
+    - **CE-2/3/4 CHƯA LÀM** (builder một màn hình theo mockup v4 · xuất template A4 ngang + multi-sheet
+      + stableKey ẩn · import file khách + diff màu) — kế hoạch chi tiết trong plan file, làm tiếp theo
+      đúng thứ tự.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `b276b4e`** (04/08/2026 18:32) — DASH-1 thiết kế lại Dashboard, xem mục 10.24.
+**Production đang chạy `c41cc6c`** (05/08/2026 11:19) — PLN-1 Trưởng team + Planning theo team +
+luồng mượn người, xem mục 10.25. Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**,
+fingerprint khớp. 2 migration mới áp sạch (`team_lead`, `planning_loan_request`), không mã quyền mới
+(grant giữ 1278). Backup TRƯỚC deploy ở hai nơi: `~/backup/` trên server và
+`D:/TCM/backup-prod-20260805-111951/` trên máy dev. Health check: `/login` 200 · `[jobs] scheduler
+bật` · không file mồ côi.
+
+⚠ **Nginx production có 2 lỗi cấu hình đã chẩn đoán sáng 05/08 (nguyên nhân app "không mở được")**,
+bản vá đã đặt sẵn ở `~/nginx-fix/` trên server (map miễn rate-limit cho GET prefetch `?_rsc=` — POST
+vẫn bị giới hạn; gỡ proxy mồ côi trỏ cổng 3100 của `tcm-crm-test` cũ; redirect IP → domain). **Chủ dự
+án phải tự chạy** (cần sudo): `ssh -i ~/.ssh/tcm_deploy tcm@192.168.1.111 -t 'sudo bash ~/nginx-fix/apply.sh'`
+— script tự kiểm `nginx -t` và tự khôi phục nếu hỏng. Chưa chạy thì thi thoảng vẫn tái diễn 429/timeout.
+
+---
+
+### Deploy trước đó — 04/08/2026 lúc 18:32
+
+**Production khi đó chạy `b276b4e`** — DASH-1 thiết kế lại Dashboard, xem mục 10.24.
 Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **Không có migration
 mới** (61 migration, "No pending migrations to apply") và **không có mã quyền mới**. Backup TRƯỚC
 deploy ở hai nơi: `~/backup/*-20260804-183222*` trên server và `D:/TCM/backup-prod-20260804-183222/`

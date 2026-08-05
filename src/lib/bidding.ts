@@ -310,6 +310,193 @@ export function computeLineNetAmount(line: CostLineCalcInput, percentBase: numbe
   return Math.round(line.quantity * line.unitPrice);
 }
 
+// ─────────────────────────────────────────────────────────
+// CO/CE v3 (CE-1) — CE theo dòng · gộp nhóm CE · %VAT theo dòng · phí quản lý theo mục L1.
+// MỌI đại lượng mới sống ở đây (bất biến "không hệ tổng song song"); server luôn tính lại khi lưu.
+// ─────────────────────────────────────────────────────────
+
+/** Hai mức %VAT hợp lệ theo luật hiện hành — đổi luật thì sửa đúng chỗ này. */
+export const VAT_PCT_OPTIONS = [8, 10] as const;
+
+export type CeLineCalcInput = CostLineCalcInput & {
+  ceQuantity?: number | null;
+  ceUnitPrice?: number | null;
+  ceGroupKey?: string | null;
+  ceName?: string | null;
+  vatPct?: number | null;
+  isSponsored?: boolean;
+  itemName?: string;
+  stockRefUnitPrice?: number | null;
+};
+
+/**
+ * TRẦN CHI hiệu lực của 1 dòng — dòng VAT đã chọn % thì số phải trả NCC GỒM VAT (net × (1+%/100));
+ * còn lại giữ nguyên net (PIT/CIT/OTHER: phần gross-up là thuế nộp hộ; VAT chưa chọn % giữ trần cũ
+ * theo quyết định Q4 05/08/2026 — an toàn tiền hơn là tự nở hàng loạt).
+ */
+export function payCapFor(line: CeLineCalcInput, percentBase: number): number {
+  const net = computeLineNetAmount(line, percentBase);
+  if ((line.taxType ?? "VAT") === "VAT" && line.vatPct != null && line.vatPct > 0) {
+    return Math.round(net * (1 + line.vatPct / 100));
+  }
+  return net;
+}
+
+/** Tiền THUẾ hiển thị của 1 dòng (suy lúc đọc, không lưu): VAT theo %, còn lại = amount − net. */
+export function taxDisplayAmount(line: CeLineCalcInput, percentBase: number): number {
+  const net = computeLineNetAmount(line, percentBase);
+  if ((line.taxType ?? "VAT") === "VAT") {
+    return line.vatPct != null ? Math.round((net * line.vatPct) / 100) : 0;
+  }
+  return computeLineAmount(line, percentBase) - net;
+}
+
+/** Một dòng CE khách nhìn — có thể là 1 dòng CO đơn lẻ hoặc N dòng CO gộp qua ceGroupKey. */
+export type CeRow<L extends CeLineCalcInput> = {
+  /** Dòng đại diện (dòng đầu theo thứ tự truyền vào) — mang ceName/ceQuantity/ceUnitPrice. */
+  leader: L;
+  coLines: L[];
+  ceName: string;
+  ceQuantity: number;
+  ceUnitPrice: number | null;
+  /** CE của hàng = ceQuantity × ceUnitPrice; dòng tài trợ (leader.isSponsored) = 0 như nếp BM02. */
+  ceAmount: number;
+  /** Σ CO (đã gross-up) của cả nhóm — mẫu đối chiếu margin hàng. */
+  coSum: number;
+};
+
+/**
+ * GỘP dòng CO thành các hàng CE khách nhìn, theo `ceGroupKey` (mirror nếp cặp kho K3 in gộp).
+ * Dòng không có khoá → hàng 1-1. Thứ tự hàng theo lần xuất hiện đầu tiên của nhóm.
+ */
+export function ceRowsOf<L extends CeLineCalcInput>(lines: L[], percentBase: number): CeRow<L>[] {
+  const rows: CeRow<L>[] = [];
+  const byGroup = new Map<string, CeRow<L>>();
+  for (const l of lines) {
+    const key = l.ceGroupKey ?? null;
+    if (key && byGroup.has(key)) {
+      const row = byGroup.get(key)!;
+      row.coLines.push(l);
+      row.coSum += computeLineAmount(l, percentBase);
+      continue;
+    }
+    const ceQuantity = l.ceQuantity ?? 0;
+    const ceUnitPrice = l.ceUnitPrice ?? null;
+    const row: CeRow<L> = {
+      leader: l,
+      coLines: [l],
+      ceName: (l.ceName ?? l.itemName ?? "").trim() || (l.itemName ?? ""),
+      ceQuantity,
+      ceUnitPrice,
+      ceAmount: l.isSponsored ? 0 : Math.round(ceQuantity * (ceUnitPrice ?? 0)),
+      coSum: computeLineAmount(l, percentBase),
+    };
+    rows.push(row);
+    if (key) byGroup.set(key, row);
+  }
+  return rows;
+}
+
+/**
+ * Bảng đã ở CHẾ ĐỘ CE THEO DÒNG chưa — mọi hàng CE ngoài Chi hộ có đơn giá CE.
+ * (Nhận diện bằng dữ liệu, không có cột cờ; bảng cũ → false → giữ nguyên đường phân bổ BM02.)
+ */
+export function sheetHasLineCe(serviceLines: CeLineCalcInput[]): boolean {
+  if (serviceLines.length === 0) return false;
+  return ceRowsOf(serviceLines, 0).every((r) => r.ceUnitPrice != null);
+}
+
+export type CeSectionInput = {
+  key: string;
+  parentKey: string | null;
+  isProxy: boolean;
+  clientFeePct?: number | null;
+  lines: CeLineCalcInput[];
+};
+
+export type CeAggregates = {
+  /** Σ CE các hàng dịch vụ (ngoài Chi hộ) — số to nhất trên header. */
+  ceService: number;
+  /** Phí quản lý báo khách theo từng mục L1: sectionKey → tiền phí. */
+  feeBySection: Map<string, number>;
+  feeTotal: number;
+  /** = ceService + feeTotal (trước VAT). */
+  cePreVat: number;
+  /** = cePreVat × (1 + vatPct/100) — GIỮ ngữ nghĩa ceTotal cũ (tổng khách trả đủ). */
+  ceTotalDerived: number;
+  /** Q1 (05/08/2026): margin trên (CE dịch vụ + phí), TRƯỚC VAT. */
+  marginPctNew: number;
+  /** Mục L1 dịch vụ chưa áp phí (clientFeePct null) — chặn xuất báo giá khi còn phần tử. */
+  missingFeeSectionKeys: string[];
+};
+
+/**
+ * Bộ tổng CE của bảng CHẾ ĐỘ MỚI. `sections` là danh sách mục ĐÃ PHẲNG kèm parentKey; phí chỉ đọc
+ * trên mục gốc không Chi hộ; CE mục con cộng dồn lên mục gốc để nhân %. Chi hộ ngoài cả CE lẫn phí.
+ */
+export function computeCeAggregates(sections: CeSectionInput[], vatPct: number, coTotal: number): CeAggregates {
+  const byKey = new Map(sections.map((s) => [s.key, s]));
+  const rootOf = (s: CeSectionInput): CeSectionInput => {
+    let cur = s;
+    const seen = new Set<string>([cur.key]);
+    while (cur.parentKey) {
+      const p = byKey.get(cur.parentKey);
+      if (!p || seen.has(p.key)) break;
+      seen.add(p.key);
+      cur = p;
+    }
+    return cur;
+  };
+
+  let ceService = 0;
+  const ceByRoot = new Map<string, number>();
+  for (const s of sections) {
+    if (s.isProxy) continue;
+    const root = rootOf(s);
+    if (root.isProxy) continue; // nhánh con của Chi hộ kế thừa tính chất Chi hộ
+    const ce = ceRowsOf(s.lines, 0).reduce((sum, r) => sum + r.ceAmount, 0);
+    ceService += ce;
+    ceByRoot.set(root.key, (ceByRoot.get(root.key) ?? 0) + ce);
+  }
+
+  const feeBySection = new Map<string, number>();
+  const missingFeeSectionKeys: string[] = [];
+  let feeTotal = 0;
+  for (const s of sections) {
+    if (s.parentKey || s.isProxy) continue; // chỉ mục GỐC dịch vụ
+    const ce = ceByRoot.get(s.key) ?? 0;
+    if (s.clientFeePct == null) {
+      missingFeeSectionKeys.push(s.key);
+      continue;
+    }
+    const fee = Math.round((ce * s.clientFeePct) / 100);
+    feeBySection.set(s.key, fee);
+    feeTotal += fee;
+  }
+
+  const cePreVat = ceService + feeTotal;
+  const ceTotalDerived = Math.round(cePreVat * (1 + vatPct / 100));
+  const marginPctNew = cePreVat > 0 ? ((cePreVat - coTotal) / cePreVat) * 100 : 0;
+  return { ceService, feeBySection, feeTotal, cePreVat, ceTotalDerived, marginPctNew, missingFeeSectionKeys };
+}
+
+/** Số La Mã cho đánh số mục L1 (đủ dùng tới 20 mục). */
+const ROMAN_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"];
+
+/**
+ * Đánh số phân cấp cho mục theo vị trí trong cây: L1 → I/II/III · L2 → 1/2/3 · L3 → 1.1/1.2
+ * (ghép số của L2 cha) · L4 → a/b/c. `indexPath` là chuỗi chỉ số 0-based từ gốc xuống node.
+ * Dùng chung builder + export + trang in — một nguồn cho mọi nơi hiển thị STT.
+ */
+export function sectionNumber(indexPath: number[]): string {
+  const depth = indexPath.length;
+  const i = indexPath[depth - 1] ?? 0;
+  if (depth <= 1) return ROMAN_NUMERALS[i] ?? String(i + 1);
+  if (depth === 2) return String(i + 1);
+  if (depth === 3) return `${indexPath[1] + 1}.${i + 1}`;
+  return String.fromCharCode(97 + (i % 26)); // a/b/c…
+}
+
 /** Prefix dùng khi hạng mục chưa gán phòng ban, hoặc phòng đó không có costPrefix. */
 export const DEFAULT_COST_PREFIX = "GEN";
 

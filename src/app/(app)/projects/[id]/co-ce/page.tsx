@@ -250,6 +250,10 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
             )}
           </section>
 
+          {/* ⚠ Khối so sánh phiên bản mang NGUYÊN `snapshotJson` xuống client — trong đó có totals
+              (coTotal/ceTotal/ceService/phí) và giá từng dòng. Gate bằng ĐÚNG mã quyền của cột giá
+              vốn, nếu không thì mọi số vừa giấu ở lưới lại lộ nguyên trong HTML thô của khối này. */}
+          {canViewCost && (
           <RevisionCompare
             revisions={sheet.revisions.map<RevisionData>((r) => ({
               id: r.id,
@@ -267,6 +271,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
             projectId={id}
             canTag={canTagRevision}
           />
+          )}
 
           {/* Chuyển sang Nghiệm thu */}
           <section className="rounded-xl border border-border bg-surface p-5">

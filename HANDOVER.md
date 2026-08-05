@@ -1137,9 +1137,60 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **Verify:** coTotal cả 5 bảng (T002/T005/T006/T013/T025) không đổi MỘT ĐỒNG sau migration + seed
       · payCap = netAmount trên toàn bộ 377 dòng (trần PIT/CIT giữ nguyên) · tsc/eslint/i18n 0-0/build
       sạch · `/finance` hiển thị trần không đổi trên browser.
-    - **CE-2/3/4 CHƯA LÀM** (builder một màn hình theo mockup v4 · xuất template A4 ngang + multi-sheet
-      + stableKey ẩn · import file khách + diff màu) — kế hoạch chi tiết trong plan file, làm tiếp theo
-      đúng thứ tự.
+    - **CE-2 ĐÃ XONG** — xem ngay dưới đây. **CE-3/4 CHƯA LÀM** (xuất template A4 ngang + multi-sheet
+      + stableKey ẩn · import file khách + diff màu) — kế hoạch chi tiết trong plan file.
+
+27. **CO/CE v3 — CE-2 XONG 05/08/2026: builder MỘT MÀN HÌNH** (KHÔNG migration, KHÔNG mã quyền mới).
+    Viết lại phần TRÌNH BÀY của `cost-sheet-builder.tsx` theo đúng mockup v4 đã chốt; GIỮ NGUYÊN state
+    phẳng + payload `sectionsJson` + đường lưu `saveCostSheet`.
+    - **Lưới**: STT phân cấp (`sectionNumber`: I/II → 1/2 → 1.1 → a/b) · freeze 2 cột đầu + 2 hàng
+      header · màu theo tầng · khối CE | CO | Total CO | Trần chi NCC | Margin · dải KPI realtime
+      sticky · thanh cuộn ngang NỔI đồng bộ 2 chiều · bộ chọn "xem đến cấp 1 / 1–2 / 1–3 / tất cả".
+    - **HAI CHẾ ĐỘ trên cùng component**, nhận diện bằng `sheetHasLineCe` (dữ liệu, không cột cờ).
+      Bảng cũ giữ nguyên hành vi (ô ceTotal nhập tay + make-up cũ); bảng mới thì ceTotal chỉ ĐỌC vì
+      server tự suy. Banner "Chuyển sang CE theo dòng" là TỰ NGUYỆN (Q2).
+    - ⚠ **Convert dùng ĐÚNG phép phân bổ BM02** (factor + residual dồn hàng lớn nhất): Σ CE dòng =
+      serviceSubtotal TUYỆT ĐỐI — verify T005/T006/T013 (T013: 6.870.743.889). Nhưng **tổng cuối lệch
+      ≤ số mục gốc**: phí quản lý chế độ mới làm tròn THEO TỪNG MỤC, BM02 làm tròn một lần cho cả
+      bảng (T006 và T013 lệch đúng 1đ). Banner nói thẳng điều này — đừng "sửa" bằng cách ép ceTotal
+      bằng số cũ, sẽ đẻ ra hệ tổng song song.
+    - **Gộp N dòng CO → 1 hàng CE**: tick chọn nhiều dòng CÙNG mục → `ceGroupKey`; dòng đầu làm đại
+      diện mang ceName/ceQ/ceP, các dòng con thụt vào dưới. CE hàng gộp mặc định = Σ CE các dòng đang
+      gộp nên tổng KHÔNG đổi ngay lúc gộp. ⚠ **Cặp kho K3 TỰ GỘP theo `stockResvLineId`** mà không
+      cần ceGroupKey (validator cấm đặt khoá lên dòng kho) — bất biến "khách chỉ thấy MỘT dòng" giữ
+      nguyên ở chế độ mới.
+    - ⚠ **BUG ĐÃ VÁ, ĐỌC TRƯỚC KHI SỬA HÀM setLines**: bản đầu dùng cờ `first` đặt NGOÀI updater để
+      chọn dòng đại diện. React StrictMode gọi updater HAI LẦN ở dev ⇒ lượt hai coi mọi dòng là thành
+      viên và **cả nhóm MẤT giá CE**, tổng báo khách tụt đúng phần của nhóm, im lặng. Bắt được lúc
+      verify browser (tổng tụt 19.237.033 trên T006). Nay chốt dòng đại diện + giá CE TRƯỚC updater —
+      đúng tiền lệ đã ghi ở `addLine`. **Mọi updater trong builder phải THUẦN.**
+    - **Xoá dòng đại diện → bầu dòng kế tiếp** (`ceGroupHeirIndex`, hàm thuần ở `lib/bidding.ts`, có
+      test): không có bước này thì nhóm còn lại mất trắng giá CE và bảng rơi khỏi chế độ mới trong
+      im lặng.
+    - **Phí quản lý báo khách theo mục L1**: panel 10% / 5% / nhập tay, một mục một mức (mục đã chọn
+      mức khác thì khoá), cảnh báo ĐÍCH DANH mục còn thiếu; dòng phí + TỔNG trước VAT + VAT + SỐ TIỀN
+      THANH TOÁN nằm CUỐI LƯỚI đúng vị trí quen trong file Excel.
+    - **Thuế đổi từng dòng bất kỳ lúc nào** (VAT 8/10 · TNCN · TNDN · Khác): rời VAT thì xoá `vatPct`,
+      rời OTHER thì xoá `customTaxAmount` (client dọn, server dọn lại). Dòng kho ép `vatPct=null` trong
+      stock guard của `saveCostSheet`.
+    - ⚠ **GATE CỘT QUYẾT ĐỊNH TẠI SERVER, KHÔNG phải ở JSX**: thiếu `view_cost` thì trang KHÔNG select
+      `ceQuantity`/`ceUnitPrice`/`ceTotal` vào payload và builder thành CHỈ ĐỌC (`canEdit = view_cost &&
+      costsheet.edit`). Cho lưu bằng payload đã bị tước là ghi đè CE thành rỗng — mất số của Account.
+    - ⚠ **LỖ HỔNG ĐÃ VÁ, DỄ TÁI DIỄN**: khối "So sánh phiên bản" (`RevisionCompare`) truyền NGUYÊN
+      `snapshotJson` xuống client — trong đó có `totals` (coTotal/ceTotal/ceService/phí) và giá TỪNG
+      DÒNG. Giấu số ở lưới mà để khối này không gác là mọi thứ lộ nguyên trong HTML thô. Nay gác bằng
+      `view_cost`. Ba ô tiền ở khối mobile của `/bidding/[id]` cũng vậy. **Thêm bất kỳ khối nào mang
+      snapshot hay tổng tiền thì phải gác cùng mã quyền.**
+    - **Verify trên T006 + T002 thật, đối chiếu bằng số:** convert → Σ CE 332.511.182 (khớp BM02) ·
+      phí 33.251.119 · trước VAT 365.762.301 · coTotal 246.310.558 và Chi hộ 188.173.000 KHÔNG đổi ·
+      gộp 3 dòng → hàng gộp 19.237.033, tổng giữ nguyên, margin nhóm 25,9% · **LƯU THẬT**: DB ra
+      ceTotal 365.762.301 (server tự suy), coTotal không lệch một đồng, rev 2, 32/34 dòng dịch vụ có
+      CE (2 dòng còn lại là thành viên nhóm), 6 dòng Chi hộ không CE, 4 mục có `clientFeePct`,
+      snapshot có đủ `ceService/feeTotal/cePreVat` · **trần chi chạy suốt end-to-end**: đặt VAT 8%
+      trên T002 → lưu → `/finance` hiện 6.912.000 thay cho 6.400.000 · **act-as OPE**: HTML thô không
+      còn CE/Total CO/margin/snapshot, vẫn thấy trần chi 7.425.000, không có nút Lưu.
+    - **CHƯA LÀM (cố ý, đúng phạm vi CE-2):** kéo-thả sắp xếp dòng · sửa tên mục Chi hộ · nút "xem
+      với vai" (mockup có, bản thật CỐ Ý bỏ — cột thấy được gắn chặt theo quyền của chính user).
 
 ---
 

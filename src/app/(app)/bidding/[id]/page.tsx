@@ -395,20 +395,25 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           </p>
         )}
 
-        {/* Mobile: tóm tắt CO/CE/margin + trạng thái duyệt + nút Duyệt/Từ chối (nếu đang chờ) */}
+        {/* Mobile: tóm tắt CO/CE/margin + trạng thái duyệt + nút Duyệt/Từ chối (nếu đang chờ).
+            Ba ô tiền gate bằng `view_cost` — giấu ở lưới mà để hở ở đây là vô nghĩa. */}
         <div className="grid grid-cols-2 gap-2 text-xs sm:hidden">
-          <div className="rounded-lg border border-border p-2">
-            <span className="block text-muted-foreground">{tCostsheet("coTotal")}</span>
-            <span className="font-semibold text-foreground">{formatNumber(sheetCoTotal, locale)}</span>
-          </div>
-          <div className="rounded-lg border border-border p-2">
-            <span className="block text-muted-foreground">{tCostsheet("ceTotal")}</span>
-            <span className="font-semibold text-foreground">{formatNumber(sheetCeTotal, locale)}</span>
-          </div>
-          <div className="rounded-lg border border-border p-2">
-            <span className="block text-muted-foreground">{tCostsheet("margin")}</span>
-            <span className="font-semibold text-foreground">{formatNumber(sheetMarginPct, locale)}%</span>
-          </div>
+          {canViewCost && (
+            <>
+              <div className="rounded-lg border border-border p-2">
+                <span className="block text-muted-foreground">{tCostsheet("coTotal")}</span>
+                <span className="font-semibold text-foreground">{formatNumber(sheetCoTotal, locale)}</span>
+              </div>
+              <div className="rounded-lg border border-border p-2">
+                <span className="block text-muted-foreground">{tCostsheet("ceTotal")}</span>
+                <span className="font-semibold text-foreground">{formatNumber(sheetCeTotal, locale)}</span>
+              </div>
+              <div className="rounded-lg border border-border p-2">
+                <span className="block text-muted-foreground">{tCostsheet("margin")}</span>
+                <span className="font-semibold text-foreground">{formatNumber(sheetMarginPct, locale)}%</span>
+              </div>
+            </>
+          )}
           <div className="rounded-lg border border-border p-2">
             <Badge tone={sheetApprovalTone}>{sheetApprovalLabel}</Badge>
           </div>

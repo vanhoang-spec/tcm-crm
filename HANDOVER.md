@@ -1145,7 +1145,30 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `c41cc6c`** (05/08/2026 11:19) — PLN-1 Trưởng team + Planning theo team +
+**Production đang chạy `0121032`** (05/08/2026 16:36) — CE-1 nền số liệu CO/CE v3, xem mục 10.26.
+Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. 1 migration mới áp
+sạch (`coce_v3_ce1`, 10 cột + backfill payCap). Backup TRƯỚC deploy ở hai nơi: `~/backup/*-20260805-163318*`
+trên server và `D:/TCM/backup-prod-20260805-163318/` trên máy dev.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — khớp tuyệt đối:
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| coTotal 5 bảng CO/CE | (5 số) | **không đổi MỘT ĐỒNG** |
+| dòng grant quyền | 1278 | **1296** (+18 = 2 mã CE-1: view_cost 6 vai · view_paycap 12 vai) |
+| payCap vs netAmount | — | **375/375 dòng bằng nhau** (chưa dòng nào chọn % VAT — đúng Q4) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Đủ 2 marker `20260805_coce_view_*`. Health check: `/login` 200 · `[jobs] scheduler bật`.
+(Ghi chú: dev.db sandbox có T002 coTotal 18,9tr khác production 80tr — dữ liệu mẫu hai bên đã lệch
+từ 28/07, không phải do deploy.)
+
+---
+
+### Deploy trước đó — 05/08/2026 lúc 11:19
+
+**Production khi đó chạy `c41cc6c`** — PLN-1 Trưởng team + Planning theo team +
 luồng mượn người, xem mục 10.25. Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**,
 fingerprint khớp. 2 migration mới áp sạch (`team_lead`, `planning_loan_request`), không mã quyền mới
 (grant giữ 1278). Backup TRƯỚC deploy ở hai nơi: `~/backup/` trên server và

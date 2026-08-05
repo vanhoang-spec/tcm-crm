@@ -22,7 +22,30 @@ export type SnapshotLine = {
   /** LOF-V1 — nhãn chặng (tỉnh/điểm/đợt). Snapshot cũ không có → undefined. */
   legCode?: string | null;
   amount: number;
+  /**
+   * CO/CE v3 — GIÁ BÁN theo dòng. saveCostSheet đã ghi các trường này vào snapshot từ CE-1, nhưng
+   * bộ diff trước CE-5 KHÔNG khai và KHÔNG so ⇒ khách sửa giá bán mà giữ giá vốn thì mọi dòng bị
+   * xếp "unchanged" và màn So sánh báo "không có thay đổi" trong khi tổng CE đã lệch. Đã tái hiện
+   * bằng số: đổi ceUnitPrice 9.112.279 → 7.000.000 cho ra 0 dòng changed, tổng CE lệch −2.112.279.
+   * Đây đúng là ca dùng hằng ngày của vòng thương lượng với khách — ĐỪNG bỏ trường nào khỏi lineEqual.
+   */
+  ceQuantity?: number | null;
+  ceUnitPrice?: number | null;
+  ceGroupKey?: string | null;
+  ceName?: string | null;
+  vatPct?: number | null;
+  taxType?: string | null;
+  customTaxAmount?: number | null;
+  /** CE-5 — dòng khách yêu cầu BỎ: còn trong bảng, gạch ngang, CE = 0 cho tới khi Account quyết. */
+  ceDropped?: boolean;
 };
+
+/** Tiền khách trả của một dòng — dòng bị khách gạch bỏ hoặc dòng tài trợ đều bằng 0. */
+export function snapshotLineCeAmount(l: SnapshotLine): number {
+  if (l.ceDropped || l.isSponsored) return 0;
+  if (l.ceUnitPrice == null) return 0;
+  return Math.round((l.ceQuantity ?? 0) * l.ceUnitPrice);
+}
 
 export type SnapshotSection = {
   code: string;
@@ -47,7 +70,15 @@ export type LineDiff = {
   kind: DiffKind;
   before: SnapshotLine | null;
   after: SnapshotLine | null;
-  amountDelta: number; // after.amount - before.amount (VND)
+  amountDelta: number; // after.amount - before.amount (VND) — GIÁ VỐN
+  /** CE-5 — chênh lệch TIỀN KHÁCH TRẢ; đây mới là số của vòng thương lượng. */
+  ceDelta: number;
+  /**
+   * Hướng thay đổi để tô màu, ưu tiên theo TIỀN KHÁCH TRẢ (vòng review với khách nói về số này);
+   * dòng chỉ đổi giá vốn thì rơi về hướng của giá vốn. Cùng bảng màu với `import-panel.tsx`:
+   * tăng = xanh · giảm = cam · xoá = đỏ · thêm mới = xanh dương.
+   */
+  direction: "up" | "down" | "same";
 };
 
 export type SnapshotDiff = {
@@ -147,7 +178,17 @@ function lineEqual(a: SnapshotLine, b: SnapshotLine): boolean {
     // Đổi nhãn chặng KHÔNG đổi một đồng nào, nhưng nó đổi cách bản xuất nghiệm thu gom khối — gán
     // nhầm tỉnh mà màn So sánh báo "không đổi" thì không còn đường nào phát hiện.
     (a.legCode ?? null) === (b.legCode ?? null) &&
-    a.amount === b.amount
+    a.amount === b.amount &&
+    // CO/CE v3 — GIÁ BÁN + thuế theo dòng. Thiếu khối này là bộ diff mù với đúng loại thay đổi mà
+    // vòng thương lượng với khách sinh ra (xem chú thích ở SnapshotLine).
+    (a.ceQuantity ?? null) === (b.ceQuantity ?? null) &&
+    (a.ceUnitPrice ?? null) === (b.ceUnitPrice ?? null) &&
+    (a.ceGroupKey ?? null) === (b.ceGroupKey ?? null) &&
+    (a.ceName ?? null) === (b.ceName ?? null) &&
+    (a.vatPct ?? null) === (b.vatPct ?? null) &&
+    (a.taxType ?? null) === (b.taxType ?? null) &&
+    (a.customTaxAmount ?? null) === (b.customTaxAmount ?? null) &&
+    !!a.ceDropped === !!b.ceDropped
   );
 }
 
@@ -177,6 +218,10 @@ export function diffSnapshots(before: CostSheetSnapshot, after: CostSheetSnapsho
     else if (kind === "removed") removedCount++;
     else if (kind === "changed") changedCount++;
 
+    const amountDelta = (a?.line.amount ?? 0) - (b?.line.amount ?? 0);
+    const ceDelta = (a ? snapshotLineCeAmount(a.line) : 0) - (b ? snapshotLineCeAmount(b.line) : 0);
+    // Hướng theo TIỀN KHÁCH TRẢ trước; dòng chỉ đổi giá vốn thì mới rơi về hướng của giá vốn.
+    const ref = ceDelta !== 0 ? ceDelta : amountDelta;
     lines.push({
       sectionCode,
       sectionName,
@@ -184,7 +229,9 @@ export function diffSnapshots(before: CostSheetSnapshot, after: CostSheetSnapsho
       kind,
       before: b?.line ?? null,
       after: a?.line ?? null,
-      amountDelta: (a?.line.amount ?? 0) - (b?.line.amount ?? 0),
+      amountDelta,
+      ceDelta,
+      direction: ref > 0 ? "up" : ref < 0 ? "down" : "same",
     });
   }
 

@@ -426,6 +426,7 @@ export async function saveCostSheet(
         ceQuantity: l.ceQuantity ?? null,
         ceUnitPrice: l.ceUnitPrice ?? null,
         ceGroupKey: l.ceGroupKey ?? null,
+        ceDropped: !!l.ceDropped,
         ceName: l.ceName ?? null,
         vatPct: l.vatPct ?? null,
         isSponsored: l.isSponsored,
@@ -512,6 +513,7 @@ export async function saveCostSheet(
           ceQuantity: l.ceQuantity ?? null,
           ceUnitPrice: l.ceUnitPrice ?? null,
           ceGroupKey: l.ceGroupKey ?? null,
+          ceDropped: !!l.ceDropped,
           ceName: l.ceName ?? null,
           vatPct: l.vatPct ?? null,
         })),
@@ -661,6 +663,7 @@ export async function saveCostSheet(
               ceQuantity: l.ceQuantity ?? null,
               ceUnitPrice: l.ceUnitPrice == null ? null : BigInt(Math.round(l.ceUnitPrice)),
               ceGroupKey: l.ceGroupKey ?? null,
+              ceDropped: !!l.ceDropped,
               ceName: l.ceName || null,
               vatPct: l.vatPct ?? null,
             };
@@ -1140,7 +1143,23 @@ export async function tagRevisionKind(projectId: string, revisionId: string, kin
 
   const next = isRevisionKind(kind) ? kind : null;
   if (next === rev.kind) return;
-  await prisma.costSheetRevision.update({ where: { id: revisionId }, data: { kind: next } });
+
+  // CE-5 — MỘT bản mỗi vai trò (quyết định chủ dự án 05/08): gắn CONTRACT/ACCEPTANCE cho bản mới thì
+  // GỠ nhãn ở bản cũ. Không ép thì bộ xuất đối chiếu HĐ↔NT lặng lẽ lấy "bản mới nhất của mỗi nhãn",
+  // và người dùng không có cách nào biết mình đang so với bản nào.
+  const exclusive = next === "CONTRACT" || next === "ACCEPTANCE";
+  await prisma.$transaction(async (tx) => {
+    if (exclusive) {
+      const sheetId = await tx.costSheetRevision.findUnique({ where: { id: revisionId }, select: { costSheetId: true } });
+      if (sheetId) {
+        await tx.costSheetRevision.updateMany({
+          where: { costSheetId: sheetId.costSheetId, kind: next, NOT: { id: revisionId } },
+          data: { kind: null },
+        });
+      }
+    }
+    await tx.costSheetRevision.update({ where: { id: revisionId }, data: { kind: next } });
+  });
   await audit(projectId, `revision:${rev.revNo}:kind`, rev.kind, next, await getCurrentStaffId(), "tag revision kind");
   revalidatePath(`/projects/${projectId}/co-ce`);
   revalidatePath(`/projects/${projectId}/liquidation`);

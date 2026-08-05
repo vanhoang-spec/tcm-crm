@@ -6,11 +6,11 @@
 
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, ArrowUpRight, ArrowDownRight, Trash2, HelpCircle } from "lucide-react";
+import { Upload, ArrowUpRight, ArrowDownRight, Trash2, HelpCircle, GitBranch } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn, formatNumber } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { importClientQuotation, type ImportFormState } from "./import-actions";
+import { importClientQuotation, applyImportToNewVersion, type ImportFormState } from "./import-actions";
 
 export type ImportChangeView = {
   stableKey: string;
@@ -49,6 +49,9 @@ export function ImportPanel({
   const router = useRouter();
   const action = importClientQuotation.bind(null, projectId);
   const [state, formAction, pending] = useActionState<ImportFormState, FormData>(action, {});
+  // Hook RIÊNG cho nút áp: mỗi useActionState giữ lỗi của mình và không tự xoá cho nhau — gộp bằng
+  // ?? sẽ khiến lỗi CŨ của thao tác này che lỗi MỚI của thao tác kia (bài học OVH-1, HANDOVER 10.21).
+  const [applyState, applyAction, applyPending] = useActionState<ImportFormState, FormData>(applyImportToNewVersion.bind(null, projectId), {});
 
   // Import xong → đưa khoá file lên URL để trang dựng bản nháp (server đọc lại và khớp).
   if (state.fileKey && (!result || result.fileKey !== state.fileKey)) {
@@ -164,6 +167,28 @@ export function ImportPanel({
               <p className="mt-1 text-[11px] text-warning/80">{t("unmatchedHint")}</p>
             </div>
           )}
+
+          {/* CE-5 — Account rà xong mới bấm; đây là chỗ DUY NHẤT sinh version từ file khách. */}
+          {canEdit && (
+            <form action={applyAction} className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+              <input type="hidden" name="fileKey" value={result.fileKey} />
+              <button
+                type="submit"
+                disabled={applyPending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+                {applyPending ? t("applying") : t("applyBtn")}
+              </button>
+              <span className="text-[11px] text-muted-foreground">{t("applyBtnHint")}</span>
+            </form>
+          )}
+          {applyState.error && (
+            <p className="text-xs font-medium text-danger">
+              {applyState.error === "SAVE_FAILED" ? applyState.errorText : t(`error${applyState.error}` as "errorEMPTY")}
+            </p>
+          )}
+          {applyState.createdRevNo && <p className="text-xs font-medium text-success">{t("applyDone", { n: applyState.createdRevNo })}</p>}
 
           <p className="text-[11px] text-muted-foreground">{t("applyHint")}</p>
         </div>

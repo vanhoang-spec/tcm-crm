@@ -1417,7 +1417,12 @@
       "makeupFillAll": "Đổ CE cả bảng",
       "makeupFillSelected": "Đổ CE {n} dòng chọn",
       "readOnlyNote": "Bạn đang xem ở chế độ chỉ đọc — không có quyền sửa bảng CO/CE này.",
-      "exportClientMulti": "Xuất báo giá — nhiều sheet"
+      "exportClientMulti": "Xuất báo giá — nhiều sheet",
+      "droppedBadge": "Khách yêu cầu bỏ",
+      "droppedRestore": "Khôi phục",
+      "ceNoCoBadge": "Chưa có giá vốn",
+      "ceNoCoWarn": "{n} dòng có tiền báo khách nhưng giá vốn = 0 ({names}…) — bổ sung giá vốn, nếu không margin của bảng đang đẹp giả.",
+      "droppedWarn": "{n} dòng khách yêu cầu bỏ, đang để gạch ngang ({names}…) — bạn quyết xoá hẳn hay thương lượng khôi phục."
     },
     "rounds": {
       "title": "Vòng deal giá",
@@ -1806,8 +1811,20 @@
         "errorTOO_LARGE": "File quá lớn (tối đa 12MB).",
         "errorNO_SHEET": "Dự án chưa có bảng CO/CE.",
         "errorUNREADABLE": "Không đọc được file — cần đúng file .xlsx do hệ thống xuất ra.",
-        "errorNO_LINES": "Không tìm thấy dòng hạng mục nào trong file."
-      }
+        "errorNO_LINES": "Không tìm thấy dòng hạng mục nào trong file.",
+        "applyBtn": "Áp vào version mới",
+        "applying": "Đang áp…",
+        "applyBtnHint": "Tạo một phiên bản CO/CE mới với các thay đổi trên — vẫn qua ngưỡng margin và vào lịch sử như mọi lần lưu.",
+        "applyDone": "Đã tạo phiên bản v{n} từ phản hồi của khách. Xem khối So sánh phiên bản bên dưới.",
+        "errorLEGACY_MODE": "Bảng này còn ở chế độ CE tổng. Bấm nút chuyển sang CE theo dòng trên bảng trước, rồi áp lại.",
+        "errorNO_CHANGE": "File khách không có thay đổi nào để áp.",
+        "errorSAVE_FAILED": "Không lưu được phiên bản mới."
+      },
+      "comparePrev": "so với bản trước",
+      "diffCeBefore": "CE trước",
+      "diffCeAfter": "CE sau",
+      "kindDropped": "khách bỏ",
+      "needAcceptanceRev": "Chưa có phiên bản nào được gắn vai trò Nghiệm thu. Ở bảng Lịch sử phiên bản phía trên, đặt vai trò Nghiệm thu cho bản đã chốt với khách rồi quay lại đây."
     },
     "liquidation": {
       "title": "Nghiệm thu & Thanh lý",

@@ -52,6 +52,8 @@ export const costLineSchema = z.object({
   ceGroupKey: z.string().trim().nullable().optional().default(null),
   /** Nhãn CE hiển thị cho khách — chỉ có nghĩa trên dòng đại diện. */
   ceName: z.string().trim().max(300).nullable().optional().default(null),
+  /** CE-5 — khách yêu cầu bỏ dòng: CE = 0, dòng vẫn nằm trong bảng chờ Account quyết. */
+  ceDropped: z.coerce.boolean().optional().default(false),
   /** %VAT theo dòng (chỉ taxType=VAT) — hai mức luật hiện hành; đổi luật sửa VAT_PCT_OPTIONS. */
   vatPct: z.coerce.number().nullable().optional().default(null),
 });

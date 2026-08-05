@@ -42,6 +42,87 @@ export async function loadCurrentCeRows(projectId: string): Promise<CurrentCeSna
   };
 }
 
+/**
+ * CE-5 — dựng payload `{ sections, lines }` ĐÚNG SHAPE mà `costSheetPayloadSchema` đòi, đọc thẳng
+ * từ DB. Mirror `co-ce/page.tsx` (khối dựng CostSheetData cho builder) nhưng KHÔNG mirror quirk
+ * `maxMarkupPct → chuỗi rỗng` của nó: `z.coerce.number("")` cho ra **0** chứ không phải null, tức
+ * sẽ âm thầm đặt trần markup = 0% cho mọi dòng.
+ *
+ * Dùng để áp phản hồi của khách rồi gọi lại chính `saveCostSheet` — một đường ghi duy nhất.
+ */
+export async function buildSheetPayloadFromDb(projectId: string): Promise<{
+  sheet: { id: string; scenario: string; vatPct: number; agencyFeePct: number; mgmtFeePct: number; contingencyPct: number; discountPct: number; templateId: string | null };
+  payload: { sections: unknown[]; lines: unknown[] };
+} | null> {
+  const { prisma } = await import("./prisma");
+  const { toNum } = await import("./utils");
+  const sheet = await prisma.costSheet.findFirst({
+    where: { projectId, version: "CTRACT" },
+    orderBy: { createdAt: "desc" },
+    include: { sections: { orderBy: { sort: "asc" }, include: { lines: { orderBy: { sort: "asc" } } } } },
+  });
+  if (!sheet) return null;
+
+  const sections = sheet.sections.map((s) => ({
+    key: s.id,
+    parentKey: s.parentSectionId,
+    code: s.code,
+    icon: s.icon ?? "",
+    nameVi: s.nameVi,
+    nameEn: s.nameEn ?? "",
+    colorSlot: s.colorSlot ?? "neutral",
+    isProxy: s.isProxy,
+    departmentCode: s.departmentCode ?? "",
+    proxyFeeType: s.proxyFeeType,
+    proxyFeeVal: s.proxyFeeVal,
+    clientFeePct: s.clientFeePct,
+  }));
+  const lines = sheet.sections.flatMap((s) =>
+    s.lines.map((l) => ({
+      sectionKey: s.id,
+      stableKey: l.stableKey ?? "",
+      itemName: l.itemName,
+      specs: l.specs ?? "",
+      lineType: l.lineType,
+      quantity: l.quantity,
+      unit: l.unit ?? "",
+      unitPrice: toNum(l.unitPrice),
+      fixedAmount: l.fixedAmount == null ? null : toNum(l.fixedAmount),
+      percentVal: l.percentVal,
+      taxType: l.taxType,
+      customTaxAmount: l.customTaxAmount == null ? null : toNum(l.customTaxAmount),
+      vendorId: l.vendorId ?? "",
+      isLocked: l.isLocked,
+      maxMarkupPct: l.maxMarkupPct, // number | null — KHÔNG đổi sang chuỗi (xem chú thích trên)
+      isSponsored: l.isSponsored,
+      stockResvLineId: l.stockResvLineId,
+      stockRefUnitPrice: l.stockRefUnitPrice == null ? null : toNum(l.stockRefUnitPrice),
+      legCode: l.legCode ?? "",
+      note: l.note ?? "",
+      ceQuantity: l.ceQuantity,
+      ceUnitPrice: l.ceUnitPrice == null ? null : toNum(l.ceUnitPrice),
+      ceGroupKey: l.ceGroupKey,
+      ceName: l.ceName ?? "",
+      vatPct: l.vatPct,
+      ceDropped: l.ceDropped,
+    })),
+  );
+
+  return {
+    sheet: {
+      id: sheet.id,
+      scenario: sheet.scenario,
+      vatPct: sheet.vatPct,
+      agencyFeePct: sheet.agencyFeePct,
+      mgmtFeePct: sheet.mgmtFeePct,
+      contingencyPct: sheet.contingencyPct,
+      discountPct: sheet.discountPct,
+      templateId: sheet.templateId,
+    },
+    payload: { sections, lines },
+  };
+}
+
 /** Đọc lại file đã lưu rồi khớp — trang gọi khi URL có `?import=<key>`. Lỗi đọc → null, không ném. */
 export async function matchSavedImport(projectId: string, fileKey: string): Promise<ImportMatchResult | null> {
   const base = await loadCurrentCeRows(projectId);

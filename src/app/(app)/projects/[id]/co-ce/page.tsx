@@ -111,6 +111,7 @@ export default async function ProjectCoCePage({
           ceQuantity: null, // mẫu không mang CE — bảng dựng từ mẫu bắt đầu ở chế độ cũ
           ceUnitPrice: null,
           ceGroupKey: null,
+          ceDropped: false,
           ceName: "",
           vatPct: null,
         })),
@@ -171,6 +172,7 @@ export default async function ProjectCoCePage({
             ceQuantity: canViewCost ? l.ceQuantity : null,
             ceUnitPrice: canViewCost && l.ceUnitPrice != null ? toNum(l.ceUnitPrice) : null,
             ceGroupKey: l.ceGroupKey,
+            ceDropped: l.ceDropped,
             ceName: l.ceName ?? "",
             vatPct: l.vatPct,
           })),
@@ -203,6 +205,7 @@ export default async function ProjectCoCePage({
         }
       : null;
 
+  const hasAcceptanceRev = (sheet?.revisions ?? []).some((r) => r.kind === "ACCEPTANCE");
   const goNogoBlocked = project.goNogoStatus === "PENDING";
   const pendingApproval = !!sheet && !sheet.approvedById && !sheet.rejectedAt;
   const sentRev = sheet?.sentToLiquidationRevision ?? null;
@@ -330,15 +333,23 @@ export default async function ProjectCoCePage({
                     : t("sentToLiquidationNone")}
                 </p>
               </div>
-              <form action={sendCostSheetToLiquidation.bind(null, id)}>
-                <button
-                  type="submit"
-                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-warning px-4 text-sm font-medium text-white hover:bg-warning/90"
-                >
-                  <ArrowRight className="h-4 w-4" />
-                  {t("sendToLiquidation")}
-                </button>
-              </form>
+              {/* CE-5 — mốc thanh lý lấy từ bản ĐÃ GẮN vai trò Nghiệm thu; chưa gắn thì chặn ngay
+                  ở đây để người dùng thấy lý do, thay vì để action lặng lẽ không làm gì. */}
+              {hasAcceptanceRev ? (
+                <form action={sendCostSheetToLiquidation.bind(null, id)}>
+                  <button
+                    type="submit"
+                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-warning px-4 text-sm font-medium text-white hover:bg-warning/90"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                    {t("sendToLiquidation")}
+                  </button>
+                </form>
+              ) : (
+                <p className="max-w-xs rounded-lg border border-warning/40 bg-warning-bg px-3 py-2 text-xs font-medium text-warning">
+                  {t("needAcceptanceRev")}
+                </p>
+              )}
             </div>
           </section>
         </>

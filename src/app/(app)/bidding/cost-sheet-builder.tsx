@@ -88,6 +88,8 @@ export type LineData = {
   ceUnitPrice: number | null;
   /** Khoá GỘP N dòng CO → 1 dòng CE khách nhìn; chỉ dòng ĐẠI DIỆN (đầu nhóm) mang ceName/ceQ/ceP. */
   ceGroupKey: string | null;
+  /** CE-5 — khách yêu cầu bỏ dòng: hiện gạch ngang, CE = 0, có nút Khôi phục. */
+  ceDropped: boolean;
   ceName: string;
   /** % VAT theo dòng (8|10) — CHỈ dòng VAT; null = chưa chọn (trần chi giữ = net, Q4). */
   vatPct: number | null;
@@ -186,6 +188,7 @@ function blankLine(sectionKey: string): Line {
     ceQuantity: null,
     ceUnitPrice: null,
     ceGroupKey: null,
+    ceDropped: false,
     ceName: "",
     vatPct: null,
   };
@@ -686,6 +689,21 @@ export function CostSheetBuilder({
   const l1Names = new Map(serviceRoots.map((s, i) => [s.key, `${sectionNumber([i])} — ${s.nameVi || t("untitledSection")}`]));
   const feeBuckets: { rate: number; fixed: boolean }[] = [{ rate: 10, fixed: true }, { rate: 5, fixed: true }, ...customRates.map((r) => ({ rate: r, fixed: false }))];
 
+  // CE-5 — hai danh sách cho dải cảnh báo: dòng khách yêu cầu bỏ, và dòng có tiền báo khách nhưng
+  // chưa có giá vốn (thường là dòng khách tự thêm khi import). Suy từ state, không lưu cột nào.
+  const proxyKeySet = effectiveProxyKeys(sections);
+  const droppedLines = lines.filter((l) => l.ceDropped).map((l) => l.itemName || t("colItem"));
+  const ceNoCoLines = lines
+    .filter(
+      (l) =>
+        !proxyKeySet.has(l.sectionKey) &&
+        !l.ceDropped &&
+        l.stockRefUnitPrice == null &&
+        Math.round((l.ceQuantity ?? 0) * (l.ceUnitPrice ?? 0)) > 0 &&
+        computeLineAmount(ceInput(l), totals.directCo) === 0,
+    )
+    .map((l) => l.itemName || t("colItem"));
+
   return (
     <form action={formAction} className="space-y-4">
       {state.error && (
@@ -1068,6 +1086,18 @@ export function CostSheetBuilder({
           ) : (
             <p className="text-[11px] font-medium text-success">{t("feeOk")}</p>
           )}
+          {/* CE-5 — dòng khách tự thêm: có tiền báo khách mà chưa có giá vốn ⇒ margin của bảng đang
+              đẹp GIẢ. Cảnh báo mềm (không chặn lưu) vì Account có thể đang nhập dở. */}
+          {ceNoCoLines.length > 0 && (
+            <p className="rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-[11px] font-medium text-brand-700">
+              {t("ceNoCoWarn", { n: ceNoCoLines.length, names: ceNoCoLines.slice(0, 3).join(" · ") })}
+            </p>
+          )}
+          {droppedLines.length > 0 && (
+            <p className="rounded-lg border border-danger/40 bg-danger-bg px-2.5 py-1.5 text-[11px] font-medium text-danger">
+              {t("droppedWarn", { n: droppedLines.length, names: droppedLines.slice(0, 3).join(" · ") })}
+            </p>
+          )}
         </section>
       )}
 
@@ -1419,14 +1449,22 @@ function LineRow({ line: l, stt, depth, proxy, ctx, ceRole }: { line: Line; stt:
   const net = computeLineNetAmount(input, percentBase);
   const tax = taxDisplayAmount(input, percentBase);
   const pay = payCapFor(input, percentBase);
-  const ceA = l.isSponsored ? 0 : Math.round((l.ceQuantity ?? 0) * (l.ceUnitPrice ?? 0));
+  // CE-5 — dòng khách yêu cầu BỎ: CE về 0 (giống nếp dòng tài trợ), CO vẫn tính vì hàng vẫn phải
+  // mua chừng nào Account chưa quyết xoá hẳn. Phải khớp `ceRowsOf` ở lib/bidding.ts.
+  const ceA = l.isSponsored || l.ceDropped ? 0 : Math.round((l.ceQuantity ?? 0) * (l.ceUnitPrice ?? 0));
   const mg = ceRole === "single" && !proxy && ceA > 0 ? ((ceA - amount) / ceA) * 100 : null;
+  /** Dòng khách tự thêm: có tiền báo khách nhưng CHƯA có giá vốn — tô xanh dương + vào dải cảnh báo. */
+  // Loại trừ dòng LẤY TỪ KHO: nó có CO = 0 do SỐ HỌC (hàng đã trả tiền ở hợp đồng trước), không
+  // phải do thiếu giá vốn — cảnh báo ở đó là cảnh báo oan.
+  const ceNoCo = ceMode && !proxy && l.stockRefUnitPrice == null && !l.ceDropped && ceA > 0 && amount === 0;
   // K3 — dòng LẤY TỪ KHO: số lượng khoá theo mức đã duyệt, ô đơn giá nhập GIÁ THAM CHIẾU (giá thật
   // luôn = 0 nên Trước thuế hiện 0). Loại dòng/thuế/khoá/markup/tài trợ đều không áp dụng.
   const isStock = l.stockRefUnitPrice != null;
   const availableTypes = proxy ? LINE_TYPES.filter((lt) => lt !== "PERCENT_OF_TOTAL") : LINE_TYPES;
   const selectable = canEdit && ceMode && ceRole === "single" && !proxy && !l.stockResvLineId;
-  const bg = "bg-surface";
+  // Nền dòng: khách bỏ → xám nhạt · khách thêm chưa có giá vốn → xanh DƯƠNG (cố ý khác xanh lá của
+  // dòng tăng tiền, theo quyết định chủ dự án 05/08 để hai thứ không lẫn nhau).
+  const bg = l.ceDropped ? "bg-surface-2" : ceNoCo ? "bg-brand-50" : "bg-surface";
 
   return (
     <tr className={cn(bg, "border-t border-border/60")}>
@@ -1452,9 +1490,27 @@ function LineRow({ line: l, stt, depth, proxy, ctx, ceRole }: { line: Line; stt:
         )}
       </td>
       <td className={cn("sticky left-12 z-10 px-2 py-1", bg)} style={{ paddingLeft: 8 + depth * 14 }}>
-        <input value={l.itemName} onChange={(e) => ctx.updateLine(l.key, { itemName: e.target.value })} disabled={!canEdit} placeholder={t("colItem")} className={cn(cellInput, "min-w-[150px] font-medium")} />
+        <input
+          value={l.itemName}
+          onChange={(e) => ctx.updateLine(l.key, { itemName: e.target.value })}
+          disabled={!canEdit}
+          placeholder={t("colItem")}
+          className={cn(cellInput, "min-w-[150px] font-medium", l.ceDropped && "text-muted-foreground line-through")}
+        />
         <input value={l.specs} onChange={(e) => ctx.updateLine(l.key, { specs: e.target.value })} disabled={!canEdit} placeholder={t("specsPlaceholder")} className={cn(cellInput, "mt-0.5 min-w-[150px] text-[10px] text-muted-foreground")} />
         {isStock && <Badge tone="brand">{t("stockLineBadge")}</Badge>}
+        {/* CE-5 — khách yêu cầu bỏ dòng: Account tự quyết xoá hẳn hay thương lượng khôi phục. */}
+        {l.ceDropped && (
+          <span className="mt-0.5 flex flex-wrap items-center gap-1">
+            <Badge tone="danger">{t("droppedBadge")}</Badge>
+            {canEdit && (
+              <button type="button" onClick={() => ctx.updateLine(l.key, { ceDropped: false })} className="text-[10px] font-medium text-brand-600 hover:underline">
+                {t("droppedRestore")}
+              </button>
+            )}
+          </span>
+        )}
+        {ceNoCo && <Badge tone="brand">{t("ceNoCoBadge")}</Badge>}
       </td>
       {showCE && (
         ceRole === "member" ? (

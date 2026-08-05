@@ -1417,7 +1417,12 @@
       "makeupFillAll": "Fill CE for all",
       "makeupFillSelected": "Fill CE for {n} selected",
       "readOnlyNote": "You are viewing this cost sheet read-only — you do not have permission to edit it.",
-      "exportClientMulti": "Export quotation — multi-sheet"
+      "exportClientMulti": "Export quotation — multi-sheet",
+      "droppedBadge": "Client dropped",
+      "droppedRestore": "Restore",
+      "ceNoCoBadge": "No cost yet",
+      "ceNoCoWarn": "{n} lines are billed to the client but have zero cost ({names}…) — add the cost, otherwise the sheet margin looks better than it is.",
+      "droppedWarn": "{n} lines the client asked to drop are struck through ({names}…) — decide whether to delete them or negotiate them back."
     },
     "rounds": {
       "title": "Deal rounds",
@@ -1806,8 +1811,20 @@
         "errorTOO_LARGE": "File too large (max 12MB).",
         "errorNO_SHEET": "This project has no cost sheet yet.",
         "errorUNREADABLE": "Could not read the file — it must be the .xlsx this system exported.",
-        "errorNO_LINES": "No item rows found in the file."
-      }
+        "errorNO_LINES": "No item rows found in the file.",
+        "applyBtn": "Apply as new version",
+        "applying": "Applying…",
+        "applyBtnHint": "Creates a new cost sheet version with the changes above — still passes the margin floor and is recorded in history like any save.",
+        "applyDone": "Version v{n} created from the client feedback. See the version comparison below.",
+        "errorLEGACY_MODE": "This sheet still uses a single CE total. Switch it to per-line CE first, then apply again.",
+        "errorNO_CHANGE": "The client file has no changes to apply.",
+        "errorSAVE_FAILED": "Could not save the new version."
+      },
+      "comparePrev": "vs previous",
+      "diffCeBefore": "CE before",
+      "diffCeAfter": "CE after",
+      "kindDropped": "client dropped",
+      "needAcceptanceRev": "No version carries the Acceptance role yet. In the version history above, set Acceptance on the version agreed with the client, then come back."
     },
     "liquidation": {
       "title": "Liquidation & Handover",

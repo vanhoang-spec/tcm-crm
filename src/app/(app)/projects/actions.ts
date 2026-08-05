@@ -438,18 +438,25 @@ export async function sendCostSheetToLiquidation(projectId: string) {
     orderBy: { createdAt: "desc" },
   });
   if (!sheet) return;
-  const latestRev = await prisma.costSheetRevision.findFirst({
-    where: { costSheetId: sheet.id },
+  // CE-5 — chốt bản ĐÃ GẮN NHÃN NGHIỆM THU, không phải "bản mới nhất".
+  //
+  // ⚠ Trước CE-5 hàm này luôn lấy revNo lớn nhất, trong khi bộ xuất đối chiếu HĐ↔NT
+  // (`api/acceptance-export`) lại chọn theo `kind`. Hai cơ chế chốt bản chạy song song và không nói
+  // chuyện với nhau: người dùng gắn nhãn Nghiệm thu cho v5 rồi lỡ lưu v6 là mốc thanh lý âm thầm
+  // nhảy sang v6, còn file đối chiếu vẫn in v5.
+  const acceptanceRev = await prisma.costSheetRevision.findFirst({
+    where: { costSheetId: sheet.id, kind: "ACCEPTANCE" },
     orderBy: { revNo: "desc" },
   });
-  if (!latestRev) return;
+  // Chưa chốt bản nghiệm thu → KHÔNG tự đoán. Trang hiện hướng dẫn gắn nhãn trước.
+  if (!acceptanceRev) return;
 
   const staffId = await getCurrentStaffId();
   await prisma.costSheet.update({
     where: { id: sheet.id },
-    data: { sentToLiquidationRevisionId: latestRev.id, sentToLiquidationAt: new Date(), sentToLiquidationById: staffId },
+    data: { sentToLiquidationRevisionId: acceptanceRev.id, sentToLiquidationAt: new Date(), sentToLiquidationById: staffId },
   });
-  await audit("cost_sheet", sheet.id, "SEND_TO_LIQUIDATION", { revNo: latestRev.revNo });
+  await audit("cost_sheet", sheet.id, "SEND_TO_LIQUIDATION", { revNo: acceptanceRev.revNo });
   revalidateProject(projectId);
 }
 

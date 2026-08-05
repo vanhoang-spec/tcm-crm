@@ -328,6 +328,8 @@ export type CeLineCalcInput = CostLineCalcInput & {
   itemName?: string;
   stockRefUnitPrice?: number | null;
   stockResvLineId?: string | null;
+  /** CE-5 — khách yêu cầu bỏ dòng: CE = 0 nhưng CO vẫn tính (xem `ceRowsOf`). */
+  ceDropped?: boolean;
 };
 
 /**
@@ -364,6 +366,8 @@ export type CeRow<L extends CeLineCalcInput> = {
   ceAmount: number;
   /** Σ CO (đã gross-up) của cả nhóm — mẫu đối chiếu margin hàng. */
   coSum: number;
+  /** CE-5 — khách yêu cầu BỎ hàng này: hiện gạch ngang, CE = 0, chờ Account quyết. */
+  dropped: boolean;
 };
 
 /**
@@ -393,8 +397,11 @@ export function ceRowsOf<L extends CeLineCalcInput>(lines: L[], percentBase: num
       ceName: (l.ceName ?? l.itemName ?? "").trim() || (l.itemName ?? ""),
       ceQuantity,
       ceUnitPrice,
-      ceAmount: l.isSponsored ? 0 : Math.round(ceQuantity * (ceUnitPrice ?? 0)),
+      // CE-5: dòng KHÁCH YÊU CẦU BỎ không tính tiền khách (giống hệt nếp dòng tài trợ). CO vẫn
+      // tính bình thường — hàng vẫn phải mua chừng nào Account chưa quyết xoá hẳn.
+      ceAmount: l.isSponsored || l.ceDropped ? 0 : Math.round(ceQuantity * (ceUnitPrice ?? 0)),
       coSum: computeLineAmount(l, percentBase),
+      dropped: !!l.ceDropped,
     };
     rows.push(row);
     if (key) byGroup.set(key, row);

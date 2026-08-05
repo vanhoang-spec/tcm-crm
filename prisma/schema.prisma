@@ -1191,6 +1191,12 @@ model CostLine {
   /// %VAT của dòng taxType=VAT (8 | 10). Null = chưa chọn → trần chi GIỮ = net (quyết định Q4).
   /// Chỉ vào TRẦN CHI (payCap), KHÔNG vào amount/coTotal — VAT là thuế khấu trừ.
   vatPct      Float?
+  /// CE-5 — KHÁCH YÊU CẦU BỎ dòng này khỏi báo giá. Dòng vẫn nằm trong bảng, hiển thị GẠCH NGANG,
+  /// CE = 0; Account tự quyết: xoá hẳn, hay thương lượng khôi phục nguyên/một phần (quyết định chủ
+  /// dự án 05/08/2026 — KHÔNG xoá tự động, vì dòng đã xoá là mất dấu để thương lượng lại).
+  /// ⚠ Cột này tác động cách tính CE: `ceRowsOf` bỏ qua dòng dropped khi cộng CE và khi xuất báo
+  /// giá. CO của dòng vẫn tính bình thường — hàng vẫn phải mua nếu Account chưa quyết bỏ.
+  ceDropped   Boolean   @default(false)
 
   costSheet CostSheet        @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
   section   CostSheetSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)

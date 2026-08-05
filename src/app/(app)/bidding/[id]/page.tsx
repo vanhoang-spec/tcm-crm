@@ -148,6 +148,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           ceQuantity: null, // mẫu không mang CE — bảng dựng từ mẫu bắt đầu ở chế độ cũ
           ceUnitPrice: null,
           ceGroupKey: null,
+          ceDropped: false,
           ceName: "",
           vatPct: null,
         })),
@@ -208,6 +209,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
             ceQuantity: canViewCost ? l.ceQuantity : null,
             ceUnitPrice: canViewCost && l.ceUnitPrice != null ? toNum(l.ceUnitPrice) : null,
             ceGroupKey: l.ceGroupKey,
+            ceDropped: l.ceDropped,
             ceName: l.ceName ?? "",
             vatPct: l.vatPct,
           })),

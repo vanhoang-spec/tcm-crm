@@ -12,11 +12,20 @@ import { CostSheetBuilder, type CostSheetData, type TemplateOption } from "../..
 import { ApproveCostSheetActions } from "../../../bidding/approve-costsheet-actions";
 import { sendCostSheetToLiquidation } from "../../actions";
 import { RevisionCompare, type RevisionData } from "./revision-compare";
+import { ImportPanel, type ImportResultView } from "./import-panel";
+import { matchSavedImport } from "@/lib/costsheet-import-server";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 
-export default async function ProjectCoCePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectCoCePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ import?: string }>;
+}) {
   await requirePermission("projects.view");
   const { id } = await params;
+  const { import: importKey } = await searchParams;
   // Gắn vai trò cho bản snapshot là thao tác SỬA bảng CO/CE — dùng đúng mã quyền của builder.
   const canTagRevision = await hasPermission("bidding.costsheet.edit");
   // CE-2 — GATE CỘT theo quyền, quyết định TẠI SERVER: số bị gate không được vào HTML (bài học
@@ -169,6 +178,31 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
       }
     : null;
 
+  // CE-4 — có `?import=<key>` thì đọc lại file khách đã gửi và khớp với bảng hiện tại. Kết quả
+  // THUẦN TRÌNH BÀY: không ghi gì, Account rà xong tự sửa trên builder rồi bấm Lưu.
+  const importResult = canViewCost && importKey ? await matchSavedImport(id, importKey) : null;
+  const importView: ImportResultView | null =
+    importResult && importKey
+      ? {
+          fileKey: importKey,
+          changed: importResult.changed.map((c) => ({
+            stableKey: c.stableKey,
+            name: c.name,
+            fileName: c.fileName,
+            matchedBy: c.matchedBy,
+            beforeQty: c.before.qty,
+            beforePrice: c.before.unitPrice,
+            beforeAmount: c.before.amount,
+            afterQty: c.after.qty,
+            afterPrice: c.after.unitPrice,
+            afterAmount: c.after.amount,
+            direction: c.direction,
+          })),
+          unmatched: importResult.unmatchedInFile.map((u) => ({ name: u.name, amount: u.total, sheet: u.sheet, row: u.row })),
+          missing: importResult.missingInFile.map((x) => ({ name: x.name, amount: x.ceAmount })),
+        }
+      : null;
+
   const goNogoBlocked = project.goNogoStatus === "PENDING";
   const pendingApproval = !!sheet && !sheet.approvedById && !sheet.rejectedAt;
   const sentRev = sheet?.sentToLiquidationRevision ?? null;
@@ -253,6 +287,9 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
               />
             )}
           </section>
+
+          {/* CE-4 — vòng review với khách: nhận lại file khách đã sửa, đối chiếu từng dòng. */}
+          {canViewCost && <ImportPanel projectId={id} result={importView} canEdit={canEditSheet} />}
 
           {/* ⚠ Khối so sánh phiên bản mang NGUYÊN `snapshotJson` xuống client — trong đó có totals
               (coTotal/ceTotal/ceService/phí) và giá từng dòng. Gate bằng ĐÚNG mã quyền của cột giá

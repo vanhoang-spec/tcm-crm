@@ -1230,6 +1230,39 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       thật · chọn bố cục/mẫu ngay trên hộp thoại xuất (hiện là 2 link + `?template=`) · xuất PDF từ
       server (vẫn dùng trang in + Ctrl-P).
 
+29. **CO/CE v3 — CE-4 XONG 05/08/2026: đọc file khách trả về + đối chiếu từng dòng.**
+    **CO/CE v3 HOÀN TẤT — không còn đợt nào.** (KHÔNG migration — `origin`/`importFileKey` đã có từ
+    CE-1; KHÔNG mã quyền mới — dùng `bidding.costsheet.edit`.)
+    - ⚠ **IMPORT KHÔNG BAO GIỜ GHI VÀO BẢNG CO/CE.** Action chỉ kiểm đọc được, lưu file GỐC vào
+      storage rồi trả khoá; trang dùng khoá đó đọc lại và ĐỐI CHIẾU. Muốn thành số thật thì Account
+      sửa trên builder rồi bấm Lưu như mọi lần — đi qua đủ margin gate, validator, revision. Tự ghi
+      là bỏ qua toàn bộ chốt chặn đó cho một file người ngoài công ty gửi vào.
+    - **Khớp HAI LƯỢT** (`matchImportedLines`), đúng tinh thần `pairSnapshotLines`: cột ẩn `__key`
+      trước, phần còn lại theo TÊN. Khách xoá cột ẩn thì cả file rơi về lượt 2 và dòng bị đổi tên rơi
+      vào panel "không khớp" — **KHÔNG đoán bừa**.
+    - ⚠ **Dòng khối CHI HỘ phải được BỎ QUA** (tham số `ignore`): chúng có trong file khách nhưng nằm
+      ngoài phạm vi mặc cả CE. Không bỏ qua thì mỗi lần import có 6 dòng nhiễu ở panel rà, người dùng
+      quen tay bỏ qua cả panel rồi bỏ sót dòng lạ THẬT.
+    - ⚠ **BUG ĐÃ VÁ — ô STT phải là SỐ THẬT, đừng dùng bộ parse tiền**: bộ parse bóc mọi ký tự không
+      phải chữ số nên nhãn footer "PHÍ QUẢN LÝ DỰ ÁN (10%)" ra 10, "Thuế GTGT (0%)" ra 0 ⇒ dòng phí,
+      dòng VAT và cả câu điều khoản bị đọc thành HẠNG MỤC. Tái hiện được: bản một sheet đọc ra 42
+      dòng thay vì 32. Nay có `sttNumber` riêng, chỉ nhận số thật hoặc chuỗi toàn chữ số.
+    - **Khách ĐỔI TÊN mà không đổi tiền vẫn được báo** (direction `same`): đó là yêu cầu đổi cách gọi
+      hạng mục trên báo giá; im lặng thì Account gửi lại bản dùng tên cũ và khách tưởng bị phớt lờ.
+    - **Sheet TỔNG HỢP bị bỏ qua khi đọc** — ở đó mỗi dòng là MỘT MỤC, gộp vào sẽ đếm tiền hai lần.
+    - `loadCurrentCeRows`/`matchSavedImport` nằm ở `lib/costsheet-import-server.ts` chứ KHÔNG ở file
+      `"use server"`: mọi export của file action là endpoint gọi được từ client và phải serialize
+      được, mà hai hàm này trả `Set`.
+    - **Verify 16/16 test vòng tròn + chạy thật qua giao diện.** Vòng tròn: xuất → đóng vai khách sửa
+      (giảm tiền, tăng tiền, đổi tên, xoá 1 dòng, thêm 1 dòng) → đọc lại → khớp. Trên browser với
+      file thật: **2 dòng khách sửa số** (19.237.033 → 11.542.220 và 3.239.921 → 5.239.921, tô đúng
+      cam/xanh) · **1 dòng khách xoá** (Gift exchange table — 3.374.918, gạch đỏ) · **0 dòng không
+      khớp** vì dòng đổi tên được khoá ẩn cứu. Import lại file CHƯA SỬA → 0/0/0. Bố cục nhiều sheet
+      cho kết quả y hệt bố cục một sheet.
+    - **CHƯA LÀM (cố ý):** tự áp thay đổi vào builder bằng một nút (Account tự sửa theo bảng đối
+      chiếu — an toàn hơn, và chỉ có vài dòng mỗi vòng) · đọc file .xls cũ hoặc CSV · gắn
+      `origin="IMPORT"` tự động khi lưu (hàm `tagRevisionAsImport` đã có, chưa nối nút).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

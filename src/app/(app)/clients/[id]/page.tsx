@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { formatDate, formatDateTime, formatNumber, pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { addCareNote, addContact, assignClientGroup, transferClientAction } from "../actions";
+import { addCareNote, addContact, assignClientGroup, setClientQuoteTemplate, transferClientAction } from "../actions";
+import { QUOTE_TEMPLATES } from "@/lib/quote-templates";
 import { MAX_CONTACTS } from "@/lib/validators/client";
 import { getMissingClientProfileFields } from "@/lib/client-profile";
 import { hasPermission, requirePermission } from "@/lib/permissions";
@@ -87,6 +88,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const transferWithId = transferClientAction.bind(null, client.id);
   const assignGroupWithId = assignClientGroup.bind(null, client.id);
   const addCareNoteWithId = addCareNote.bind(null, client.id);
+  const setTemplateWithId = setClientQuoteTemplate.bind(null, client.id);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -316,6 +318,25 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               </select>
               <button type="submit" className="h-9 rounded-lg border border-border-strong px-3 text-xs font-medium hover:bg-surface-2">
                 {t("groupAssignBtn")}
+              </button>
+            </form>
+          </section>
+
+          {/* CE-3 — mẫu báo giá mặc định của khách này (route xuất đọc từ đây). */}
+          <section className="rounded-xl border border-border bg-surface p-5">
+            <h2 className="text-sm font-semibold text-foreground">{t("quoteTemplateTitle")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("quoteTemplateDesc")}</p>
+            <form action={setTemplateWithId} className="mt-3 flex flex-wrap items-center gap-2">
+              <select name="quoteTemplateCode" defaultValue={client.quoteTemplateCode ?? ""} className={smallInput + " min-w-0 flex-1"}>
+                <option value="">{t("quoteTemplateDefault")}</option>
+                {QUOTE_TEMPLATES.map((tp) => (
+                  <option key={tp.code} value={tp.code}>
+                    {locale === "vi" ? tp.labelVi : tp.labelEn}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="h-9 rounded-lg border border-border-strong px-3 text-xs font-medium hover:bg-surface-2">
+                {t("quoteTemplateBtn")}
               </button>
             </form>
           </section>

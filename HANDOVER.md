@@ -1192,6 +1192,44 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý, đúng phạm vi CE-2):** kéo-thả sắp xếp dòng · sửa tên mục Chi hộ · nút "xem
       với vai" (mockup có, bản thật CỐ Ý bỏ — cột thấy được gắn chặt theo quyền của chính user).
 
+28. **CO/CE v3 — CE-3 XONG 05/08/2026: xuất báo giá theo mẫu, A4 ngang, nhiều sheet, cột khoá ẩn**
+    (KHÔNG migration — cột `Client.quoteTemplateCode` đã có từ CE-1; KHÔNG mã quyền mới).
+    - **`lib/quote-templates.ts` — danh mục mẫu Ở CODE** (khuôn `iso-catalog.ts`): `BM02` (mặc định,
+      8 cột, có khối ISO + điều khoản + chữ ký) và `COMPACT` (bỏ Mô tả + Ghi chú, không điều khoản).
+      Mỗi mã ứng với một cách trình bày CÓ THẬT trong bộ xuất — thêm dòng vào DB sẽ đẻ ra mẫu không
+      ai render được. Gán mẫu cho khách bằng action HẸP `setClientQuoteTemplate` ngay trên trang chi
+      tiết khách (tiền lệ `assignClientGroup` — form sửa khách bắt hồ sơ đầy đủ mà 64/68 khách đang
+      thiếu). Route xuất nhận `?template=` để xem thử mà không đụng hồ sơ khách.
+    - ⚠ **NHÁNH KÉP trong `buildQuotationModel`**: sheet chế độ CE THEO DÒNG thì dòng khách lấy
+      THẲNG từ dòng (`ceRowsOf`, đã gộp), **KHÔNG suy ngược từ ceTotal rồi phân bổ**; footer dựng từ
+      chính các dòng (Σ CE → các dòng phí TÁCH THEO MỨC % → trước VAT → VAT → tổng). Sheet cũ giữ
+      nguyên 100% chuỗi BM02 + phân bổ. Bất biến **Σ dòng in = dòng footer đầu** verify cho CẢ HAI
+      nhánh: T006 332.511.182 · T013 6.870.743.889.
+    - **Bản khách nay in A4 NGANG, fit bề ngang** (quyết định 05/08 — trước là A4 dọc, bảng CE nhiều
+      cột bị bóp chữ). Áp cho MỌI sheet của file và cho cả trang in (`@page size: A4 landscape`).
+    - **Bố cục `?layout=multi`**: sheet đầu TỔNG HỢP (mỗi mục L1 một dòng rồi tới chuỗi phí/VAT/tổng)
+      + mỗi mục L1 một sheet. `l1Blocks` dựng trong CÙNG lượt `walk` với `rows` nên hai bố cục không
+      thể lệch số. ⚠ Tên sheet cắt 31 ký tự + thay `: \ / ? * [ ]` và khử trùng — Excel ném lỗi ghi
+      file nếu tên dài/có ký tự cấm.
+    - **Cột ẩn `__key`** (hằng `STABLE_KEY_HEADER`) ở cuối MỌI sheet bản khách, mang `stableKey` của
+      dòng (hàng gộp mang khoá dòng ĐẠI DIỆN) — đường quay về của CE-4 khi khách trả file. Verify
+      đọc ngược: T006 38 khoá · T013 217 khoá, khớp model kể cả khối Chi hộ.
+    - ⚠ **Route xuất CHẶN 409 khi bảng chế độ CE còn mục L1 chưa áp phí quản lý**, kể tên đích danh:
+      thiếu phí thì bản gửi khách THIẾU đúng phần phí của mục đó mà không ai thấy. Bản NỘI BỘ vẫn
+      xuất được (không có phí báo khách). Verify sống: bỏ phí mục I của T006 → `/quotation?mode=client`
+      trả 409 "Chưa áp phí quản lý cho: I. PLAN / KẾ HOẠCH (FOC)", `mode=internal` vẫn 200.
+    - ⚠ **Hai công thức Excel "cộng 2 dòng trên" chỉ đúng cho chuỗi BM02 CŨ (5 dòng cố định)** — chế
+      độ CE có số dòng phí thay đổi theo số mức %, nên ở nhánh mới chỉ dòng Σ ĐẦU dùng công thức,
+      còn lại ghi giá trị. Đừng "thống nhất" hai nhánh bằng cách áp lại công thức theo chỉ số.
+    - **Verify (34/34 test đọc-ngược-file + browser thật):** 4 đường xuất đều 200 · A4 ngang +
+      fitToWidth trên MỌI sheet của cả 2 bố cục · Σ dòng mỗi sheet mục = subtotal mục đó (T013: 5
+      mục, từ 340.038.230 tới 2.566.069.966) · sheet TỔNG HỢP Σ = Σ subtotal · COMPACT bỏ đúng 2 cột
+      · gán mẫu cho khách rồi xuất KHÔNG truyền `?template=` ra file **trùng byte tuyệt đối** bản
+      COMPACT (152.526 vs BM02 154.916) → route đọc đúng mẫu của khách · audit log ghi cũ→mới.
+    - **CHƯA LÀM (cố ý):** mẫu riêng theo từng khách (AEON…) — chỗ cắm đã có, thêm khi khách yêu cầu
+      thật · chọn bố cục/mẫu ngay trên hộp thoại xuất (hiện là 2 link + `?template=`) · xuất PDF từ
+      server (vẫn dùng trang in + Ctrl-P).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

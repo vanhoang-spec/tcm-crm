@@ -17,9 +17,13 @@
 import {
   clientBillableTotal,
   computeCostSheetTotals,
+  computeCeAggregates,
   computeLineAmount,
   computeMarginPct,
+  ceRowsOf,
   flattenSectionTree,
+  sheetHasLineCe,
+  type CeSectionInput,
   type CostLineCalcInput,
   type SectionTreeNode,
 } from "./bidding";
@@ -42,6 +46,11 @@ export type QuotationRow =
       total: number | null;
       taxLabel: string | null;
       note: string | null;
+      /**
+       * CE-3 — khoá khớp khi khách trả file về (CE-4 đọc lại). Đi vào một CỘT ẨN của bản Excel gửi
+       * khách; hàng gộp mang khoá của dòng ĐẠI DIỆN. Không hiện trên trang in, không vào tổng nào.
+       */
+      stableKey?: string | null;
     };
 
 export type QuotationFooterRow = { label: string; amount: number | null; strong?: boolean };
@@ -67,6 +76,15 @@ export type QuotationModel = {
   terms: string[];
   /** Chỉ bản nội bộ: lý do ghi đè margin dưới sàn. */
   marginOverrideNote: string | null;
+  /**
+   * CE-3 — mỗi mục LAYER 1 dịch vụ một khối, để xuất Excel bố cục NHIỀU SHEET (mỗi mục một sheet +
+   * sheet TỔNG HỢP). Bố cục một sheet vẫn dùng `rows`; hai đường đọc cùng một nguồn số.
+   */
+  l1Blocks: { label: string; rows: QuotationRow[]; subtotal: number }[];
+  /** Mục L1 dịch vụ chưa áp phí quản lý — route xuất chặn và kể tên (chỉ có ở chế độ CE theo dòng). */
+  missingFeeSections: string[];
+  /** Bảng đang ở chế độ CE THEO DÒNG (giá khách lấy thẳng từ dòng, không phân bổ). */
+  lineCeMode: boolean;
   /** Bản khách: MỘT bên (form BM02) — company + name + title. Bản nội bộ: 2 chức danh. */
   signature: { company: string | null; name: string; title: string }[];
 };
@@ -85,6 +103,13 @@ export type QuotationLine = CostLineCalcInput & {
   stockResvLineId?: string | null;
   /** K3 — đơn giá tham chiếu hàng lấy từ kho; > 0 = dòng kho, dùng làm TRỌNG SỐ chia tiền khách. */
   stockRefUnitPrice?: number | null;
+  /** CO/CE v3 — giá CE theo dòng; khác null trên MỌI hàng dịch vụ = bảng ở chế độ CE theo dòng. */
+  ceQuantity?: number | null;
+  ceUnitPrice?: number | null;
+  ceGroupKey?: string | null;
+  ceName?: string | null;
+  /** Khoá bền của dòng — vào cột ẩn bản Excel gửi khách để CE-4 khớp lại khi khách trả file. */
+  stableKey?: string | null;
 };
 
 export type QuotationSection = {
@@ -95,6 +120,8 @@ export type QuotationSection = {
   isProxy: boolean;
   proxyFeeType: string | null;
   proxyFeeVal: number | null;
+  /** CO/CE v3 — phí quản lý BÁO KHÁCH của mục L1 (null = chưa áp → chặn xuất ở chế độ CE theo dòng). */
+  clientFeePct?: number | null;
   lines: QuotationLine[];
 };
 
@@ -199,6 +226,26 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
 
   const chain = quotationChain(src.ceTotal, src.vatPct, src.agencyFeePct);
 
+  // ── CO/CE v3 — NHÁNH KÉP ────────────────────────────────────────────────────────────────────
+  // Bảng chế độ CE THEO DÒNG: giá khách lấy THẲNG từ dòng (ceQuantity × ceUnitPrice), KHÔNG suy
+  // ngược từ ceTotal rồi phân bổ. Bảng cũ giữ nguyên 100% đường phân bổ BM02 ở dưới.
+  const serviceLinesFlat: QuotationLine[] = [];
+  const collectService = (n: TreeNode) => {
+    if (!n.effectiveProxy) serviceLinesFlat.push(...n.lines);
+    n.children.forEach(collectService);
+  };
+  tree.forEach(collectService);
+  const lineCeMode = mode === "client" && sheetHasLineCe(serviceLinesFlat);
+  const ceSections: CeSectionInput[] = src.sections.map((s) => ({
+    key: s.id,
+    parentKey: s.parentSectionId,
+    isProxy: s.isProxy,
+    clientFeePct: s.clientFeePct,
+    lines: s.lines,
+  }));
+  const ceAgg = lineCeMode ? computeCeAggregates(ceSections, src.vatPct, totals.coTotal) : null;
+  const sectionNameById = new Map(src.sections.map((s) => [s.id, s.nameVi]));
+
   // Phân bổ serviceSubtotal theo tỉ trọng CO của các dòng non-proxy KHÔNG-tài-trợ; dư làm tròn dồn
   // vào dòng lớn nhất → Σ dòng = serviceSubtotal TUYỆT ĐỐI. Dòng tài trợ nhận đơn giá would-be
   // (cùng hệ số) nhưng Thành tiền trống.
@@ -244,8 +291,13 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
   const rows: QuotationRow[] = [];
   const proxyRows: QuotationRow[] = [];
   let stt = 0;
+  /** Tiền của một mục (không tính mục con) — chế độ CE theo dòng đọc thẳng CE, còn lại theo lineTotal. */
+  const ownTotal = (n: TreeNode): number =>
+    lineCeMode && !n.effectiveProxy
+      ? ceRowsOf(n.lines, totals.directCo).reduce((s, r) => s + r.ceAmount, 0)
+      : n.lines.reduce((s, l) => s + (lineTotal(l, n.effectiveProxy) ?? 0), 0);
   const subtreeTotal = (n: TreeNode): number => {
-    let sum = n.lines.reduce((s, l) => s + (lineTotal(l, n.effectiveProxy) ?? 0), 0);
+    let sum = ownTotal(n);
     for (const c of n.children) sum += subtreeTotal(c);
     return sum;
   };
@@ -277,6 +329,31 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
 
   const walk = (n: TreeNode, depth: number, label: string, into: QuotationRow[]) => {
     into.push({ kind: "section", depth, label: `${label}. ${n.nameVi}`, subtotal: depth === 1 ? subtreeTotal(n) : null });
+    // Chế độ CE THEO DÒNG: mỗi hàng CE (đã gộp theo ceGroupKey / cặp kho) = MỘT dòng khách nhìn,
+    // số lấy thẳng từ dòng. Không đụng nhánh phân bổ bên dưới.
+    if (lineCeMode && !n.effectiveProxy) {
+      for (const r of ceRowsOf(n.lines, totals.directCo)) {
+        stt++;
+        const l = r.leader;
+        into.push({
+          kind: "line",
+          depth,
+          stt,
+          itemCode: l.itemCode,
+          name: r.ceName,
+          specs: l.specs,
+          unit: l.unit,
+          qty: r.ceQuantity || null,
+          unitPrice: r.ceUnitPrice,
+          total: l.isSponsored ? null : r.ceAmount,
+          taxLabel: null,
+          note: l.isSponsored && !l.note ? SPONSORED_NOTE : l.note,
+          stableKey: l.stableKey ?? null,
+        });
+      }
+      n.children.forEach((c, i) => walk(c, depth + 1, `${label}.${i + 1}`, into));
+      return;
+    }
     for (const g of groupLines(n.lines)) {
       const l = g[0];
       stt++;
@@ -300,6 +377,7 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
           total: merged,
           taxLabel: null,
           note: l.note,
+          stableKey: l.stableKey ?? null,
         });
         continue;
       }
@@ -320,26 +398,65 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
         total,
         taxLabel: mode === "internal" ? TAX_LABELS[l.taxType ?? ""] ?? null : null,
         note: sponsoredNote ?? l.note,
+        stableKey: l.stableKey ?? null,
       });
     }
     n.children.forEach((c, i) => walk(c, depth + 1, `${label}.${i + 1}`, into));
   };
   let topIdx = 0;
   let proxyTopIdx = 0;
+  const l1Blocks: QuotationModel["l1Blocks"] = [];
   for (const root of tree) {
     if (root.effectiveProxy) {
       proxyTopIdx++;
       walk(root, 1, roman(proxyTopIdx), proxyRows);
     } else {
       topIdx++;
+      // Mỗi mục L1 dựng thêm vào khối riêng (bố cục nhiều sheet) — CÙNG một lượt walk để hai bố
+      // cục không bao giờ lệch số; `rows` vẫn là bản phẳng cho bố cục một sheet.
+      const before = rows.length;
       walk(root, 1, roman(topIdx), rows);
+      l1Blocks.push({ label: `${roman(topIdx)}. ${root.nameVi}`, rows: rows.slice(before), subtotal: subtreeTotal(root) });
     }
   }
 
   const margin = computeMarginPct(src.ceTotal, totals.coTotal);
   // Footer bản khách = đúng chuỗi BM02; dòng cuối = ceTotal (số đã duyệt) TUYỆT ĐỐI.
+  // Chế độ CE THEO DÒNG: chuỗi footer dựng từ CHÍNH các dòng (Σ CE → các dòng phí gộp theo mức →
+  // trước VAT → VAT → tổng), KHÔNG suy ngược từ ceTotal. Phí tách theo mức % để khách đọc được
+  // mục nào chịu mức nào — đúng yêu cầu vòng 5.
+  const feeRowsByRate: QuotationFooterRow[] = [];
+  if (ceAgg) {
+    const byRate = new Map<number, { amount: number; labels: string[] }>();
+    src.sections.forEach((s) => {
+      if (s.parentSectionId || s.isProxy || s.clientFeePct == null) return;
+      const amt = ceAgg.feeBySection.get(s.id) ?? 0;
+      const cur = byRate.get(s.clientFeePct) ?? { amount: 0, labels: [] };
+      cur.amount += amt;
+      cur.labels.push(sectionNameById.get(s.id) ?? "");
+      byRate.set(s.clientFeePct, cur);
+    });
+    for (const [rate, v] of [...byRate.entries()].sort((a, b) => b[0] - a[0])) {
+      feeRowsByRate.push({ label: `PHÍ QUẢN LÝ DỰ ÁN (${rate}%)`, amount: v.amount, strong: true });
+    }
+  }
   const footer: QuotationFooterRow[] =
-    mode === "client"
+    ceAgg
+      ? [
+          { label: "TỔNG GIÁ TRỊ DỊCH VỤ/TOTAL SERVICE VALUE", amount: ceAgg.ceService, strong: true },
+          ...feeRowsByRate,
+          { label: "TỔNG GIÁ TRỊ DỊCH VỤ", amount: ceAgg.cePreVat, strong: true },
+          { label: `Thuế GTGT (${src.vatPct}%)`, amount: ceAgg.ceTotalDerived - ceAgg.cePreVat, strong: true },
+          { label: "TỔNG GIÁ TRỊ DỊCH VỤ (đã bao gồm thuế GTGT)", amount: ceAgg.ceTotalDerived, strong: true },
+          ...(totals.chiHo > 0
+            ? [
+                { label: "Chi phí chi hộ (theo thực tế)", amount: totals.proxySubtotal },
+                { label: "Phí dịch vụ chi hộ", amount: totals.proxyFeeAmt },
+                { label: "TỔNG THANH TOÁN", amount: clientBillableTotal(ceAgg.ceTotalDerived, totals.chiHo), strong: true },
+              ]
+            : []),
+        ]
+      : mode === "client"
       ? [
           { label: "TỔNG GIÁ TRỊ DỊCH VỤ/TOTAL SERVICE VALUE", amount: chain.serviceSubtotal, strong: true },
           { label: `PHÍ AGENCY/AGENCY FEES (${src.agencyFeePct}%)`, amount: chain.feeAmt, strong: true },
@@ -426,6 +543,9 @@ export function buildQuotationModel(src: QuotationSource, mode: QuotationMode): 
           ]
         : ["Bản nội bộ — KHÔNG gửi khách hàng. Thành tiền là CO đã gross-up thuế (TNCN ÷0,9 · TNDN ÷0,8)."],
     marginOverrideNote: mode === "internal" ? src.marginOverrideNote : null,
+    l1Blocks,
+    missingFeeSections: (ceAgg?.missingFeeSectionKeys ?? []).map((k) => sectionNameById.get(k) ?? k),
+    lineCeMode,
     signature:
       mode === "client"
         ? [{ company: src.company.legalNameVi, name: src.company.signerName, title: src.company.signerTitle }]

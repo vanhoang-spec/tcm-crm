@@ -80,6 +80,9 @@ export default async function CostSheetPrintPage({
   return (
     // Nền trắng chữ đen cố định cho bản in — không theo dark mode.
     <div className="min-h-screen bg-white text-black">
+      {/* A4 NGANG cho bản in (quyết định chủ dự án 05/08/2026, khớp file Excel) — bảng CE nhiều
+          cột in dọc bị bóp chữ. Chỉ có tác dụng lúc in, không đổi gì trên màn hình. */}
+      <style>{"@page { size: A4 landscape; margin: 10mm; }"}</style>
       {/* Thanh công cụ — biến mất khi in (nằm ngoài #costsheet-print-area) */}
       <div className="flex items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50 px-6 py-3 print:hidden">
         <div className="flex items-center gap-3 text-sm">

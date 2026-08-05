@@ -264,7 +264,11 @@
       "groupAssignTitle": "Client group",
       "groupAssignDesc": "Assign or remove this client's group. Works even when the client profile is not yet complete — grouping is classification, not a contract prerequisite.",
       "groupAssignBtn": "Save group",
-      "openKb": "Knowledge base"
+      "openKb": "Knowledge base",
+      "quoteTemplateTitle": "Client quotation template",
+      "quoteTemplateDesc": "Excel/PDF exports for every project of this client use the selected template. Changing it does not touch any figure.",
+      "quoteTemplateDefault": "Default (BM02)",
+      "quoteTemplateBtn": "Save template"
     },
     "import": {
       "title": "Import clients from Excel",
@@ -1412,7 +1416,8 @@
       "makeupFactor": "Factor:",
       "makeupFillAll": "Fill CE for all",
       "makeupFillSelected": "Fill CE for {n} selected",
-      "readOnlyNote": "You are viewing this cost sheet read-only — you do not have permission to edit it."
+      "readOnlyNote": "You are viewing this cost sheet read-only — you do not have permission to edit it.",
+      "exportClientMulti": "Export quotation — multi-sheet"
     },
     "rounds": {
       "title": "Deal rounds",
@@ -1775,7 +1780,8 @@
       "revKindNone": "— Internal draft —",
       "revKindQUOTE": "Quotation",
       "revKindCONTRACT": "Contract",
-      "revKindACCEPTANCE": "Acceptance"
+      "revKindACCEPTANCE": "Acceptance",
+      "exportClientMulti": "Export quotation — multi-sheet"
     },
     "liquidation": {
       "title": "Liquidation & Handover",

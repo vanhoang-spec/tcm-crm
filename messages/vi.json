@@ -264,7 +264,11 @@
       "groupAssignTitle": "Nhóm khách hàng",
       "groupAssignDesc": "Gán hoặc gỡ nhóm cho khách này. Đổi được ngay cả khi hồ sơ khách chưa đủ để ký hợp đồng — gán nhóm là phân loại, không phải điều kiện ký.",
       "groupAssignBtn": "Lưu nhóm",
-      "openKb": "Kho kiến thức"
+      "openKb": "Kho kiến thức",
+      "quoteTemplateTitle": "Mẫu báo giá gửi khách",
+      "quoteTemplateDesc": "Bản xuất Excel/PDF của mọi dự án thuộc khách này dùng mẫu đã chọn. Đổi mẫu không đụng tới số liệu.",
+      "quoteTemplateDefault": "Mặc định (BM02)",
+      "quoteTemplateBtn": "Lưu mẫu"
     },
     "import": {
       "title": "Nhập khách hàng từ Excel",
@@ -1412,7 +1416,8 @@
       "makeupFactor": "Hệ số:",
       "makeupFillAll": "Đổ CE cả bảng",
       "makeupFillSelected": "Đổ CE {n} dòng chọn",
-      "readOnlyNote": "Bạn đang xem ở chế độ chỉ đọc — không có quyền sửa bảng CO/CE này."
+      "readOnlyNote": "Bạn đang xem ở chế độ chỉ đọc — không có quyền sửa bảng CO/CE này.",
+      "exportClientMulti": "Xuất báo giá — nhiều sheet"
     },
     "rounds": {
       "title": "Vòng deal giá",
@@ -1775,7 +1780,8 @@
       "revKindNone": "— Bản nội bộ —",
       "revKindQUOTE": "Báo giá",
       "revKindCONTRACT": "Hợp đồng",
-      "revKindACCEPTANCE": "Nghiệm thu"
+      "revKindACCEPTANCE": "Nghiệm thu",
+      "exportClientMulti": "Xuất báo giá — nhiều sheet"
     },
     "liquidation": {
       "title": "Nghiệm thu & Thanh lý",

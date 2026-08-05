@@ -377,6 +377,10 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
                 <a href={`/api/costsheet/${project.id}/quotation?mode=client`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
                   <FileSpreadsheet className="h-3.5 w-3.5" /> {tCostsheet("exportClientXlsx")}
                 </a>
+                {/* Bố cục nhiều sheet: mỗi mục lớn một sheet + sheet TỔNG HỢP — cùng một model số. */}
+                <a href={`/api/costsheet/${project.id}/quotation?mode=client&layout=multi`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> {tCostsheet("exportClientMulti")}
+                </a>
                 <a href={`/api/costsheet/${project.id}/quotation?mode=internal`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
                   <FileSpreadsheet className="h-3.5 w-3.5" /> {tCostsheet("exportInternalXlsx")}
                 </a>

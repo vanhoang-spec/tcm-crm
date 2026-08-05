@@ -12,6 +12,7 @@ import {
   OTHER_INTRODUCER,
 } from "@/lib/validators/client";
 import { requirePermission } from "@/lib/permissions";
+import { QUOTE_TEMPLATES } from "@/lib/quote-templates";
 
 function toNullable(v: string | undefined) {
   return v && v.trim() !== "" ? v : null;
@@ -368,6 +369,40 @@ export async function assignClientGroup(clientId: string, formData: FormData) {
   ]);
 
   revalidatePath("/clients");
+  revalidatePath(`/clients/${clientId}`);
+}
+
+/**
+ * CE-3 — chọn MẪU BÁO GIÁ mặc định cho khách. Action HẸP đặt ngay trên trang chi tiết khách, theo
+ * đúng tiền lệ `assignClientGroup`: form sửa khách bắt hồ sơ đầy đủ (MST, địa chỉ…) mà phần lớn
+ * khách đang thiếu, gom vào đó là không ai đổi được mẫu.
+ */
+export async function setClientQuoteTemplate(clientId: string, formData: FormData) {
+  await requirePermission("clients.manage");
+  const raw = String(formData.get("quoteTemplateCode") ?? "").trim();
+  // Rỗng = dùng mẫu mặc định. Mã lạ bị bỏ qua thay vì lưu — danh mục mẫu nằm ở CODE, lưu mã không
+  // có trong đó là sinh ra khách không xuất được báo giá.
+  const code = raw === "" ? null : QUOTE_TEMPLATES.find((t) => t.code === raw)?.code ?? null;
+
+  const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId }, select: { quoteTemplateCode: true } });
+  if (client.quoteTemplateCode === code) return;
+
+  const staffId = await getCurrentStaffId();
+  await prisma.$transaction([
+    prisma.client.update({ where: { id: clientId }, data: { quoteTemplateCode: code } }),
+    prisma.auditLog.create({
+      data: {
+        entityType: "client",
+        entityId: clientId,
+        field: "quoteTemplateCode",
+        oldValue: client.quoteTemplateCode,
+        newValue: code,
+        action: "UPDATE",
+        changedBy: staffId,
+      },
+    }),
+  ]);
+
   revalidatePath(`/clients/${clientId}`);
 }
 

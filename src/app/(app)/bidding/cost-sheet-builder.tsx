@@ -491,13 +491,18 @@ export function CostSheetBuilder({
     if (!mergeSameSection) return;
     const groupKey = newStableKey();
     const keys = new Set(selectedLines.map((l) => l.key));
-    let first = true;
+    // Dòng ĐẠI DIỆN + giá CE của nhóm chốt TRƯỚC updater (updater phải THUẦN — StrictMode gọi nó
+    // hai lần ở dev; dùng cờ "first" bên ngoài thì lượt hai coi mọi dòng là thành viên và cả nhóm
+    // MẤT giá CE, tổng báo khách tụt đúng phần của nhóm. Cùng lý do với addLine ở trên).
+    const leaderKey = lines.find((l) => keys.has(l.key))!.key;
+    // Mặc định CE của hàng gộp = Σ CE các dòng đang gộp, để tổng KHÔNG đổi ngay lúc gộp; Account
+    // sửa lại sau nếu muốn chào khách con số khác.
+    const ceSum = selectedLines.reduce((s, l) => s + Math.round((l.ceQuantity ?? 0) * (l.ceUnitPrice ?? 0)), 0);
     setLines((ls) =>
       ls.map((l) => {
         if (!keys.has(l.key)) return l;
-        if (first) {
-          first = false;
-          return { ...l, ceGroupKey: groupKey, ceName: l.ceName || l.itemName, ceQuantity: l.ceQuantity ?? 1, ceUnitPrice: l.ceUnitPrice };
+        if (l.key === leaderKey) {
+          return { ...l, ceGroupKey: groupKey, ceName: l.ceName || l.itemName, ceQuantity: 1, ceUnitPrice: ceSum };
         }
         return { ...l, ceGroupKey: groupKey, ceQuantity: null, ceUnitPrice: null, ceName: "" };
       }),

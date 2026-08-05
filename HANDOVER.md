@@ -1234,7 +1234,37 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `0121032`** (05/08/2026 16:36) — CE-1 nền số liệu CO/CE v3, xem mục 10.26.
+**Production đang chạy `6f4c1aa`** (05/08/2026 18:22) — CE-2 builder một màn hình + CE-3 bộ xuất
+báo giá, xem mục 10.27 và 10.28. Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**,
+fingerprint khớp. **Không có migration mới** (64 migration, "No pending migrations to apply") và
+**không có mã quyền mới**. Backup TRƯỚC deploy ở hai nơi: `~/backup/*-20260805-182206*` trên server
+và `D:/TCM/backup-prod-20260805-182206/` trên máy dev.
+
+Đối chiếu production SAU deploy — **không đổi một dòng dữ liệu nào**, đúng như mong đợi với một
+đợt thuần giao diện + bộ xuất:
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| coTotal + ceTotal 5 bảng CO/CE | (10 số) | **không đổi MỘT ĐỒNG** |
+| dòng grant quyền | 1296 | **1296 — không đổi** |
+| dòng CO/CE | 483 | **483** |
+| payCap vs netAmount | 375/375 bằng nhau | **375/375** |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+⚠ **Production chưa có bảng nào ở chế độ CE THEO DÒNG** (`ceUnitPrice` 0 dòng · `clientFeePct` 0
+mục · `quoteTemplateCode` 0 khách) — ĐÚNG THIẾT KẾ: chuyển đổi là TỰ NGUYỆN (Q2), Account bấm nút
+"Chuyển sang CE theo dòng" trên từng bảng khi muốn. Mọi bảng hiện hành vẫn chạy đường BM02 cũ y
+nguyên. Các số CE ở mục 10.27/10.28 đo trên dev.db sandbox.
+
+Health check: `/login` 200 · `/clients` và `/projects/*/co-ce` 307 về login · hai route xuất
+(`?mode=client` và `&layout=multi`) trả **401** khi chưa đăng nhập · `[jobs] scheduler bật`.
+
+---
+
+### Deploy trước đó — 05/08/2026 lúc 16:36
+
+**Production khi đó chạy `0121032`** — CE-1 nền số liệu CO/CE v3, xem mục 10.26.
 Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. 1 migration mới áp
 sạch (`coce_v3_ce1`, 10 cột + backfill payCap). Backup TRƯỚC deploy ở hai nơi: `~/backup/*-20260805-163318*`
 trên server và `D:/TCM/backup-prod-20260805-163318/` trên máy dev.

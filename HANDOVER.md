@@ -1267,7 +1267,32 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `6f4c1aa`** (05/08/2026 18:22) — CE-2 builder một màn hình + CE-3 bộ xuất
+**Production đang chạy `6eff5b3`** (05/08/2026 18:41) — CE-4 đọc file khách trả về; **CO/CE v3
+HOÀN TẤT cả 4 đợt**, xem mục 10.26 → 10.29. Chạy `bash scripts/deploy.sh` **đường LAN
+192.168.1.111:22**, fingerprint khớp. **Không migration mới, không mã quyền mới.** Backup TRƯỚC
+deploy: `~/backup/*-20260805-184114*` trên server + `D:/TCM/backup-prod-20260805-184114/` máy dev.
+
+Đối chiếu production sau deploy — **không đổi một dòng dữ liệu nào**:
+
+| | production sau |
+|---|---|
+| nhân sự / khách / dự án | **36 / 68 / 25** |
+| coTotal + ceTotal 5 bảng CO/CE | **không đổi một đồng** |
+| dòng grant quyền / dòng CO/CE | **1296 / 483** |
+| revision `origin="IMPORT"` | **0** — chưa ai import, đúng như mong đợi |
+| `integrity_check` / `foreign_key_check` | **ok** / 0 dòng |
+
+Health check: `/login` 200 · `/projects/*/co-ce` 307 về login · `[jobs] scheduler bật`.
+
+⚠ Vẫn giữ nguyên ghi chú của lần deploy trước: **production chưa có bảng nào ở chế độ CE theo
+dòng** (`ceUnitPrice` 0 dòng · `clientFeePct` 0 mục · `quoteTemplateCode` 0 khách). Chuyển đổi là
+TỰ NGUYỆN — Account bấm nút trên từng bảng khi muốn.
+
+---
+
+### Deploy trước đó — 05/08/2026 lúc 18:22
+
+**Production khi đó chạy `6f4c1aa`** — CE-2 builder một màn hình + CE-3 bộ xuất
 báo giá, xem mục 10.27 và 10.28. Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**,
 fingerprint khớp. **Không có migration mới** (64 migration, "No pending migrations to apply") và
 **không có mã quyền mới**. Backup TRƯỚC deploy ở hai nơi: `~/backup/*-20260805-182206*` trên server

@@ -7,7 +7,7 @@ import { prisma } from "./prisma";
 import { ORDERABLE_DEPARTMENTS, cancelTasksForOrderItems } from "./projects";
 import { ORDER_DEPARTMENT_LABELS } from "./bidding";
 import { spawnTasksForCreativeOrder } from "./creative";
-import { spawnPlanningJobForOrder, orderRecipientWhere } from "./planning";
+import { spawnPlanningJobForOrder, orderRecipientWhere, orderRecipientIds } from "./planning";
 import { spawnTasksForDepartmentOrder, isDepartmentTaskDepartment } from "./department-tasks";
 
 /** Resolve phòng ban của 1 item timeline: ưu tiên department của PIC (ownerStaff), fallback departmentCode. */
@@ -136,12 +136,14 @@ export async function dispatchOrder(
   if (isDepartmentTaskDepartment(order.department)) await spawnTasksForDepartmentOrder(orderId); // PLANNING (thêm "Task từ timeline") + PCC/OPE/PRO
 
 
-  const recipients = await prisma.staff.findMany({ where: orderRecipientWhere(order.department) });
-  if (recipients.length > 0) {
+  // Người gửi hiệu dụng = tham số truyền vào, không có thì lấy người gửi cũ trên phiếu — khớp đúng
+  // giá trị vừa ghi ở lệnh update phía trên.
+  const recipientIds = await orderRecipientIds(order.department, order.project.ownerTeamId, sentById ?? order.sentById);
+  if (recipientIds.length > 0) {
     const deptLabel = ORDER_DEPARTMENT_LABELS[order.department] ?? order.department;
     await prisma.notification.createMany({
-      data: recipients.map((r) => ({
-        recipientStaffId: r.id,
+      data: recipientIds.map((id) => ({
+        recipientStaffId: id,
         type: "DEPARTMENT_ORDER_RECEIVED",
         title: `ORDER mới cho ${deptLabel} — dự án ${order.project.code}`,
         body: order.project.name,

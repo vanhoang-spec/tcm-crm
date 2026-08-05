@@ -2875,6 +2875,50 @@ async function main() {
     console.log(`🗂  Giải thể headcount Planning: xoá ${removed} nhân sự — phòng Planning giữ nguyên làm hạng mục công việc`);
   }
 
+  /*
+    Một-lần: gán TRƯỞNG TEAM cho A1/A3 (chủ dự án chốt 05/08/2026).
+      • A1 → HỒ HỒNG PHƯỚC      • A3 → TRẦN THU HÀ      • A2 để trống (hiện 0 người)
+
+    Trưởng team là người GÁN người làm Planning trong team và DUYỆT khi team khác xin mượn người.
+    CỐ Ý không suy từ vai `ACCOUNT_MANAGER`: hiện mỗi team đúng một người mang vai đó, nhưng đó là
+    TRÙNG HỢP chứ không phải ràng buộc — và đang có người mang chức danh "Account Manager" trong
+    `title` mà vai quyền lại là ACCOUNT_STAFF (Hà Uyên, Kim Yến), suy theo vai sẽ ra kết quả trái
+    với chức danh họ đang mang.
+
+    Chỉ gán khi ô đang TRỐNG, và có marker, nên admin đổi trưởng team ở /settings/teams về sau thì
+    chạy lại `db:seed` không đè lên.
+  */
+  const TEAM_LEAD_KEY = "20260805_team_leads";
+  const teamLeadMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: TEAM_LEAD_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!teamLeadMarker) {
+    const assigned: string[] = [];
+    for (const [teamCode, email] of [
+      ["A1", "hhphuoc@tcmbtl.com"],
+      ["A3", "ttha@tcmbtl.com"],
+    ] as const) {
+      const [team, lead] = await Promise.all([
+        prisma.team.findUnique({ where: { code: teamCode }, select: { id: true, leadStaffId: true } }),
+        prisma.staff.findUnique({ where: { email }, select: { id: true, fullName: true } }),
+      ]);
+      if (team && lead && !team.leadStaffId) {
+        await prisma.team.update({ where: { id: team.id }, data: { leadStaffId: lead.id } });
+        assigned.push(`${teamCode}=${lead.fullName}`);
+      }
+    }
+    await prisma.setting.create({
+      data: {
+        module: "seed",
+        key: TEAM_LEAD_KEY,
+        scope: "GLOBAL",
+        scopeRef: "",
+        value: JSON.stringify({ at: new Date().toISOString(), assigned }),
+      },
+    });
+    console.log(`👤 Trưởng team: ${assigned.length > 0 ? assigned.join(" · ") : "không gán thêm (đã có sẵn)"}`);
+  }
+
   console.log("✅ Seed hoàn tất:", {
     teams: [a1.code, a2.code, a3.code],
     staffTotal: STAFF_ROWS.length,

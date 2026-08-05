@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
-import { isPlanningJobLocked, isValidHours } from "@/lib/planning";
+import { isPlanningJobLocked, isValidHours, canAssignPlanningStage } from "@/lib/planning";
 import { ORDER_DEPARTMENT_LABELS } from "@/lib/bidding";
 import { requirePermission } from "@/lib/permissions";
 
@@ -51,6 +51,11 @@ export async function assignPlanningStage(jobId: string, stageId: string, formDa
   if (!job) return;
   const assigneeId = nullable(formData.get("assigneeId"));
   if (!assigneeId) return;
+
+  // ⚠ Chặn ở SERVER, không chỉ ở ô chọn: đóng dropdown mà để action nhận id tuỳ ý thì ai cũng bắn
+  // thẳng một assigneeId của team khác và luồng xin mượn người thành trang trí.
+  if (!(await canAssignPlanningStage(job.projectId, assigneeId))) return;
+
   const dueAt = dateOrNull(formData.get("dueAt"));
   const applyToRemaining = formData.get("applyToRemaining") === "on";
   const staffId = await getCurrentStaffId();

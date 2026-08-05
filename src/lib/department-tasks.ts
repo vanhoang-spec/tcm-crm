@@ -118,17 +118,21 @@ export async function getDepartmentTasks(projectId: string, department: Departme
 /**
  * Nhân sự active nhận được việc của 1 bộ phận — dùng cho select "Giao cho" (hiện Tên — email).
  *
- * ⚠ PLANNING đi đường KHÁC ba bộ phận còn lại: từ 01/08/2026 Planning không còn là phòng ban độc lập,
- * người làm Planning nằm rải trong các team Account và được đánh dấu bằng cờ `Staff.isPlanningStaff`
- * (xem chú thích cột trong schema.prisma). Lọc PLANNING theo `department.code` như cũ sẽ ra DANH SÁCH
- * RỖNG và không giao được việc cho ai.
+ * ⚠ PLANNING đi đường KHÁC ba bộ phận còn lại: từ 01/08/2026 Planning không còn là phòng ban độc
+ * lập, người làm Planning nằm trong các team Account. Lọc theo `department.code` sẽ ra DANH SÁCH
+ * RỖNG, mà lọc theo cờ `isPlanningStaff` thì HIỆN CŨNG RỖNG (chưa tuyển được ai) — cả hai đường đều
+ * dẫn tới ô chọn trống, không giao được việc cho ai.
  *
- * Nhãn kèm mã team khi có, để người giao biết mình đang mượn người của team khác — cố ý KHÔNG chặn
- * cứng theo team (hiện chỉ 1 người Planning cho 2 team).
+ * Nên với PLANNING, khi biết dự án nào thì lấy nhân sự của CHÍNH TEAM sở hữu dự án — cùng quy tắc
+ * với ô "Giao cho" của tab Planning (chốt 05/08/2026: muốn người team khác thì đi qua phiếu mượn).
  */
-export async function getDepartmentStaffOptions(department: DepartmentTaskDepartment) {
+export async function getDepartmentStaffOptions(department: DepartmentTaskDepartment, projectId?: string) {
+  const where =
+    department === "PLANNING" && projectId
+      ? { isActive: true, team: { ownedProjects: { some: { id: projectId } } } }
+      : orderRecipientWhere(department);
   const staff = await prisma.staff.findMany({
-    where: orderRecipientWhere(department),
+    where,
     include: { team: { select: { code: true } } },
     orderBy: { fullName: "asc" },
   });

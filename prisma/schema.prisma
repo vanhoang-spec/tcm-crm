@@ -17,18 +17,27 @@ datasource db {
 // ─────────────────────────────────────────────────────────
 
 model Team {
-  id        String   @id @default(cuid())
-  code      String   @unique // A1 | A2 | A3
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  code        String   @unique // A1 | A2 | A3
+  name        String
+  /// Trưởng team — người GÁN người làm Planning trong team, và là người DUYỆT khi team khác xin
+  /// mượn người của team này (xem lib/planning.ts). Khác hẳn hai thứ tên gần giống:
+  ///   • Department.leadStaffId = trưởng bộ phận Account, MỘT người cho cả 3 team;
+  ///   • Project.leaderId       = leader của TỪNG DỰ ÁN, không phải của team.
+  /// Null = team chưa có trưởng (A2 hiện 0 người) → rơi về lớp chống cuối trong planningRecipients().
+  leadStaffId String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  staff         Staff[]
-  ownedClients  Client[]         @relation("ClientOwnerTeam")
-  transfersFrom ClientTransfer[] @relation("TransferFromTeam")
-  transfersTo   ClientTransfer[] @relation("TransferToTeam")
-  ownedProjects Project[]        @relation("ProjectOwnerTeam")
+  lead            Staff?                @relation("TeamLead", fields: [leadStaffId], references: [id])
+  staff           Staff[]
+  ownedClients    Client[]              @relation("ClientOwnerTeam")
+  transfersFrom   ClientTransfer[]      @relation("TransferFromTeam")
+  transfersTo     ClientTransfer[]      @relation("TransferToTeam")
+  ownedProjects   Project[]             @relation("ProjectOwnerTeam")
+  loansAsBorrower PlanningLoanRequest[] @relation("LoanFromTeam")
+  loansAsLender   PlanningLoanRequest[] @relation("LoanToTeam")
 
   @@map("team")
 }
@@ -88,27 +97,27 @@ model RolePermission {
 }
 
 model Staff {
-  id            String    @id @default(cuid())
-  code          String?   @unique
-  fullName      String
-  email         String    @unique
-  phone         String?
-  title         String?
-  departmentId  String?
-  teamId        String?
-  roleId        String? // Role phân quyền (bảng phân quyền, /settings/roles) — nominal, chưa gate tính năng thật
-  avatarKey     String? // storageKey ảnh đại diện (storage/staff-avatars, xem lib/staff-avatar-storage.ts) — user tự đổi ở /profile
-  dateOfBirth   DateTime? // nullable ở DB (nhân sự seed cũ/legacy có thể thiếu) — form tạo mới BẮT BUỘC nhập (DD/MM/YYYY), enforce ở validator
-  firstWorkDate DateTime? // nullable ở DB (legacy) — form tạo mới BẮT BUỘC nhập (DD/MM/YYYY); "ngày đi làm đầu tiên" thật,
+  id              String    @id @default(cuid())
+  code            String?   @unique
+  fullName        String
+  email           String    @unique
+  phone           String?
+  title           String?
+  departmentId    String?
+  teamId          String?
+  roleId          String? // Role phân quyền (bảng phân quyền, /settings/roles) — nominal, chưa gate tính năng thật
+  avatarKey       String? // storageKey ảnh đại diện (storage/staff-avatars, xem lib/staff-avatar-storage.ts) — user tự đổi ở /profile
+  dateOfBirth     DateTime? // nullable ở DB (nhân sự seed cũ/legacy có thể thiếu) — form tạo mới BẮT BUỘC nhập (DD/MM/YYYY), enforce ở validator
+  firstWorkDate   DateTime? // nullable ở DB (legacy) — form tạo mới BẮT BUỘC nhập (DD/MM/YYYY); "ngày đi làm đầu tiên" thật,
   // CÓ THỂ khác createdAt (ngày được add vào CRM) — dùng cho tin nhắn Work Anniversary (xem lib/occasions.ts)
-  isActive      Boolean   @default(true)
+  isActive        Boolean   @default(true)
   /// TCM KHÔNG trả lương cho người này (thủ kho/bảo vệ điểm kho do bên thứ ba trả — quyết định chủ
   /// dự án 28/07/2026). VẪN xếp ca và hiện trên bảng công để THAM CHIẾU, nhưng bị loại khỏi mọi
   /// chỗ tiêu tiền: quỹ KPI 75/25 (lib/kpi.ts), quỹ lương Creative (lib/creative-cost.ts) và
   /// phép năm (lib/timekeeping.ts — phép là phúc lợi có lương).
   /// ⚠ ĐỪNG thay bằng cách nhập lương 0 ở PositionSalary: 0 ≠ null nên người đó vẫn nằm trong
   /// nhóm đủ điều kiện và VẪN ĂN share thật của quỹ KPI (xem kpi.ts, nhánh `salary == null`).
-  payrollExempt Boolean   @default(false)
+  payrollExempt   Boolean   @default(false)
   /// Người này LÀM function Planning (viết proposal, research, design brief) — quyết định chủ dự án
   /// 01/08/2026: bộ phận Planning độc lập giải thể, nhân sự Planning về thẳng các team Account, nên
   /// "ai là người Planning" KHÔNG còn suy được từ `departmentId` nữa.
@@ -118,9 +127,9 @@ model Staff {
   /// ⚠ CỐ Ý KHÔNG lọc thêm theo team ở ô chọn: hiện chỉ có 1 người Planning cho 2 team Account, lọc
   /// cứng theo team là team còn lại không giao được việc cho ai. Nhãn ô chọn có ghi tên team để người
   /// giao tự biết mình đang mượn người của team khác.
-  isPlanningStaff Boolean @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  isPlanningStaff Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // ── Đăng nhập (xem src/lib/password.ts + src/lib/auth-session.ts) ──
   passwordHash       String? // scrypt, định dạng "scrypt$N$r$p$salt$hash". null = chưa đặt → phải dùng mật khẩu mặc định
@@ -216,10 +225,14 @@ model Staff {
   stockRequestsConfirmed      StockRequest[]            @relation("StockRequestConfirmedBy")
   stockRequestsCanceled       StockRequest[]            @relation("StockRequestCanceledBy")
   departmentsLed              Department[]              @relation("DepartmentLead")
+  teamsLed                    Team[]                    @relation("TeamLead")
   shiftAssignments            ShiftAssignment[]         @relation("ShiftAssignmentStaff")
   scheduleWeeksConfirmed      ScheduleWeek[]            @relation("ScheduleWeekConfirmedBy")
   planningJobsRequested       PlanningJob[]             @relation("PlanningJobRequestedBy")
   planningJobsFinalConfirmed  PlanningJob[]             @relation("PlanningJobFinalConfirmedBy")
+  planningLoansRequested      PlanningLoanRequest[]     @relation("LoanRequestedBy")
+  planningLoansDecided        PlanningLoanRequest[]     @relation("LoanDecidedBy")
+  planningLoansLent           PlanningLoanRequest[]     @relation("LoanLentStaff")
   planningStagesAssigned      PlanningStage[]           @relation("PlanningStageAssignee")
   planningStagesAssignedBy    PlanningStage[]           @relation("PlanningStageAssignedBy")
   proposalVersionsSubmitted   PlanningProposalVersion[] @relation("ProposalVersionSubmittedBy")
@@ -430,20 +443,20 @@ model Client {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  brand          Brand       @relation(fields: [brandId], references: [id])
-  industry       OptionItem? @relation("ClientIndustry", fields: [industryId], references: [id])
-  status         OptionItem  @relation("ClientStatus", fields: [statusId], references: [id])
-  classification OptionItem? @relation("ClientClassification", fields: [classificationId], references: [id])
-  introducer     Staff?      @relation("ClientIntroducer", fields: [introducerId], references: [id])
+  brand          Brand        @relation(fields: [brandId], references: [id])
+  industry       OptionItem?  @relation("ClientIndustry", fields: [industryId], references: [id])
+  status         OptionItem   @relation("ClientStatus", fields: [statusId], references: [id])
+  classification OptionItem?  @relation("ClientClassification", fields: [classificationId], references: [id])
+  introducer     Staff?       @relation("ClientIntroducer", fields: [introducerId], references: [id])
   ownerTeam      Team?        @relation("ClientOwnerTeam", fields: [ownerTeamId], references: [id])
   group          ClientGroup? @relation(fields: [groupId], references: [id])
 
-  contacts  Contact[]
-  transfers ClientTransfer[]
-  projects  Project[]
-  careNotes CareNote[]
-  invoices  ClientInvoice[]
-  inventoryItemsOwned InventoryItem[] @relation("InventoryItemOwnerClient")
+  contacts            Contact[]
+  transfers           ClientTransfer[]
+  projects            Project[]
+  careNotes           CareNote[]
+  invoices            ClientInvoice[]
+  inventoryItemsOwned InventoryItem[]  @relation("InventoryItemOwnerClient")
   kbSpace             ClientKbSpace?
 
   @@index([groupId])
@@ -668,24 +681,24 @@ model Project {
   failReason  OptionItem? @relation("ProjectFailReason", fields: [failReasonId], references: [id])
   goNogoBy    Staff?      @relation("ProjectGoNogoBy", fields: [goNogoById], references: [id])
 
-  biddingRounds     BiddingRound[]
-  costSheets        CostSheet[]
-  contract          Contract?
-  notifications     Notification[]
-  orders            ProjectOrder[]
-  members           ProjectMember[]
-  timelineItems     TimelineItem[]
-  staffing          ProjectStaffing[]
-  guestInvites      GuestInvite[]
-  creativeTasks     CreativeTask[]
-  departmentTasks   DepartmentTask[]
-  financeCostLines  FinanceCostLine[]
-  advances          Advance[]
-  vendorPayments    VendorPayment[]
-  clientInvoices    ClientInvoice[]
-  ctvBatches        CtvBatch[]
-  collectionMilestones CollectionMilestone[]
-  purchaseOrders    PurchaseOrder[]
+  biddingRounds         BiddingRound[]
+  costSheets            CostSheet[]
+  contract              Contract?
+  notifications         Notification[]
+  orders                ProjectOrder[]
+  members               ProjectMember[]
+  timelineItems         TimelineItem[]
+  staffing              ProjectStaffing[]
+  guestInvites          GuestInvite[]
+  creativeTasks         CreativeTask[]
+  departmentTasks       DepartmentTask[]
+  financeCostLines      FinanceCostLine[]
+  advances              Advance[]
+  vendorPayments        VendorPayment[]
+  clientInvoices        ClientInvoice[]
+  ctvBatches            CtvBatch[]
+  collectionMilestones  CollectionMilestone[]
+  purchaseOrders        PurchaseOrder[]
   /// Kho v2 K4 — mốc mở KỲ CHIẾN DỊCH đang chạy (UTC-midnight). null = không có kỳ nào mở.
   /// CỜ TRẠNG THÁI, không phải lịch sử: lịch sử nằm ở sổ cái StockDocument (bất biến). Tự set khi
   /// thủ kho xác nhận xuất đồ tái sử dụng, tự xoá khi holding của dự án về 0.
@@ -693,16 +706,17 @@ model Project {
   /// LOF-V1 — nhóm chiến dịch (xem model ProjectGroup). null = dự án đứng riêng, là ĐA SỐ.
   groupId               String?
 
-  stockDocuments    StockDocument[] @relation("StockDocProject")
-  stockDocumentsFrom StockDocument[] @relation("StockDocFromProject")
-  stockRequests     StockRequest[]
-  inventoryHoldings ProjectHolding[]
-  inventoryItemsBound InventoryItem[] @relation("InventoryItemBoundProject")
-  planningJobs      PlanningJob[]
-  files             ProjectFile[]
-  isoDocs           ProjectIsoDoc[]
-  mktPosts          MktPost[]
-  group             ProjectGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  stockDocuments      StockDocument[]       @relation("StockDocProject")
+  stockDocumentsFrom  StockDocument[]       @relation("StockDocFromProject")
+  stockRequests       StockRequest[]
+  inventoryHoldings   ProjectHolding[]
+  inventoryItemsBound InventoryItem[]       @relation("InventoryItemBoundProject")
+  planningJobs        PlanningJob[]
+  planningLoans       PlanningLoanRequest[]
+  files               ProjectFile[]
+  isoDocs             ProjectIsoDoc[]
+  mktPosts            MktPost[]
+  group               ProjectGroup?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([ownerTeamId, statusId])
   @@map("project")
@@ -720,18 +734,18 @@ model Project {
 /// ⚠ `code` KHÔNG đi vào bất kỳ mã sinh nào (khác `Client.code` 3 ký tự — mã đó nằm trong mã lô
 /// kho và mã dự án). Đổi code nhóm không hỏng dữ liệu cũ.
 model ProjectGroup {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  note      String?
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  note        String?
   /// CE HỢP ĐỒNG KHUNG khách đã chốt cho CẢ chiến dịch (chưa VAT, sau phí agency) — nhập tay từ
   /// hợp đồng. SỐ THAM CHIẾU thuần (tiền lệ `Project.budget`): trang nhóm so nó với Σ ceTotal của
   /// các phase để lộ ra phát sinh/giảm trừ; không cộng vào bất kỳ báo cáo tiền nào. Ca thật: KUN
   /// khung 13.981.715.611 vs Σ phase sau nghiệm thu phase 1 = +286.848.222 phát sinh được duyệt.
   frameworkCe BigInt?
-  isActive  Boolean  @default(true) // tắt = ẩn khỏi ô chọn khi gán mới; dự án cũ giữ nguyên nhóm
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive    Boolean  @default(true) // tắt = ẩn khỏi ô chọn khi gán mới; dự án cũ giữ nguyên nhóm
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   projects Project[]
 
@@ -786,8 +800,8 @@ model ProjectFile {
   uploadedById String?
   createdAt    DateTime @default(now())
 
-  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy Staff?  @relation("ProjectFileUploadedBy", fields: [uploadedById], references: [id])
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy Staff?          @relation("ProjectFileUploadedBy", fields: [uploadedById], references: [id])
   isoDocs    ProjectIsoDoc[]
 
   @@index([projectId])
@@ -799,30 +813,30 @@ model ProjectFile {
 /// dự án (đã chốt với chủ dự án); mỗi đợt import ghi đè toàn bộ dòng của chính nó (replace-all, như
 /// saveCostSheet), không đụng đợt khác.
 model CtvBatch {
-  id            String   @id @default(cuid())
-  projectId     String
-  name          String? // vd "BM08 — đợt 1"
-  programFrom   String? // "Chương trình từ ngày" — giữ string, chỉ để in lại, không dùng tính toán
-  programTo     String? // "Đến ngày"
-  teamLeader    String? // "Nhóm trưởng"
-  workLocation  String? // "Địa điểm làm việc" — điền vào {DiaDiemLamViec} của biên bản
-  sourceFileKey String? // storageKey (lib/chat-storage.ts) của file Excel gốc đã import, để tải lại
+  id                       String   @id @default(cuid())
+  projectId                String
+  name                     String? // vd "BM08 — đợt 1"
+  programFrom              String? // "Chương trình từ ngày" — giữ string, chỉ để in lại, không dùng tính toán
+  programTo                String? // "Đến ngày"
+  teamLeader               String? // "Nhóm trưởng"
+  workLocation             String? // "Địa điểm làm việc" — điền vào {DiaDiemLamViec} của biên bản
+  sourceFileKey            String? // storageKey (lib/chat-storage.ts) của file Excel gốc đã import, để tải lại
   /// Dòng CO/CE MẶC ĐỊNH của cả đợt — dòng nào không tự gán riêng thì kế thừa dòng này. Đặt ở cấp
   /// đợt để sống sót qua import Excel replace-all (import xoá sạch gán theo từng dòng).
   /// SetNull: dòng CO biến mất ở bản CO/CE mới KHÔNG được kéo đổ dữ liệu đợt CTV.
   defaultFinanceCostLineId String?
-  createdById   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdById              String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
-  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy Staff?        @relation(fields: [createdById], references: [id])
-  rows      CtvContract[]
+  project                Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy              Staff?           @relation(fields: [createdById], references: [id])
+  rows                   CtvContract[]
   defaultFinanceCostLine FinanceCostLine? @relation("CtvBatchDefaultLine", fields: [defaultFinanceCostLineId], references: [id], onDelete: SetNull)
   /// Phiếu chi NCC sinh từ đợt này ("Đề xuất thanh toán") — kênh trả CTV thật của TCM là kế toán
   /// chuyển khoản theo BM08, nên tiền đi qua VendorPayment để ăn trần dòng CO + vào cashflow như
   /// mọi khoản chi khác (quyết định CEO 27/07/2026 — không dựng hệ thanh toán song song).
-  vendorPayments VendorPayment[]
+  vendorPayments         VendorPayment[]
 
   @@index([projectId])
   @@map("ctv_batch")
@@ -873,7 +887,7 @@ model CtvContract {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  batch CtvBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch           CtvBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
   financeCostLine FinanceCostLine? @relation("CtvRowLine", fields: [financeCostLineId], references: [id], onDelete: SetNull)
 
   @@index([batchId, sort])
@@ -1073,21 +1087,21 @@ model CostSheetRevision {
 /// Bản sao cấp instance của hạng mục (section) — sinh ra khi load template hoặc thêm tay,
 /// thuộc về 1 CostSheet cụ thể (khác CostsheetTemplateSection là bản mẫu dùng lại nhiều lần).
 model CostSheetSection {
-  id             String  @id @default(cuid())
-  costSheetId    String
-  code           String
-  icon           String?
-  nameVi         String
-  nameEn         String?
-  colorSlot      String?
-  sort           Int     @default(0)
-  isProxy        Boolean @default(false)
+  id              String  @id @default(cuid())
+  costSheetId     String
+  code            String
+  icon            String?
+  nameVi          String
+  nameEn          String?
+  colorSlot       String?
+  sort            Int     @default(0)
+  isProxy         Boolean @default(false)
   /// Phòng ban phụ trách hạng mục (Department.code) — quyết định prefix mã của MỌI dòng bên trong.
   /// Dòng thừa kế từ hạng mục, không gắn phòng riêng từng dòng (đã chốt: 217 dòng của T013 mà
   /// chọn tay từng dòng là không khả thi). Null = chưa gán, mã dòng rơi về prefix chung.
-  departmentCode String?
-  proxyFeeType   String? // PCT | FIXED
-  proxyFeeVal    Float?
+  departmentCode  String?
+  proxyFeeType    String? // PCT | FIXED
+  proxyFeeVal     Float?
   parentSectionId String? // N-cấp (Mục→Nhóm→Sub-nhóm→...) — chỉ áp dụng nhánh THƯỜNG; mục Chi hộ (isProxy) luôn ở gốc (parentSectionId null), xem lib/bidding.ts flattenSectionTree.
 
   costSheet CostSheet          @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
@@ -1099,35 +1113,35 @@ model CostSheetSection {
 }
 
 model CostLine {
-  id           String  @id @default(cuid())
-  costSheetId  String
-  sectionId    String
+  id                String  @id @default(cuid())
+  costSheetId       String
+  sectionId         String
   /// Định danh BỀN của dòng, do builder sinh một lần và đi theo payload qua MỌI lần lưu.
   /// Cần vì saveCostSheet xoá-tạo-lại toàn bộ section/line nên `id` đổi sau mỗi lần lưu, không
   /// dùng làm khoá liên kết được. Module ④ (FinanceCostLine.lineKey) khoá vào ĐÂY — nhờ vậy mã
   /// hiển thị `itemCode` được tự do đánh lại số mà không làm đứt liên kết tạm ứng/thanh toán.
   /// ĐỪNG đổi giá trị này khi sửa dòng; đổi = mất dấu tiền đã ứng.
-  stableKey    String?
+  stableKey         String?
   /// Mã hiển thị `{prefix phòng ban}-{số thứ tự}` — CHỈ để đọc, hệ thống tự đánh lại khi thêm/xoá.
-  itemCode     String?
-  lineType     String  @default("QTY_PRICE") // QTY_PRICE | FIXED | PERCENT_OF_TOTAL
-  itemName     String
-  specs        String?
-  quantity     Float   @default(1)
-  unit         String?
-  unitPrice    BigInt  @default(0) // dùng khi lineType=QTY_PRICE
-  fixedAmount  BigInt? // dùng khi lineType=FIXED
-  percentVal   Float? // dùng khi lineType=PERCENT_OF_TOTAL
-  taxType      String  @default("VAT") // VAT (khấu trừ, không gross-up) | TNCN (÷0,9) | TNDN (÷0,8) | OTHER (nhập tay customTaxAmount) — xem TAX_GROSSUP trong lib/bidding.ts
-  customTaxAmount BigInt? // chỉ dùng khi taxType=OTHER — số tiền thuế nhập tay, cộng thẳng vào base (không gross-up theo %)
-  amount       BigInt  @default(0) // computed theo lineType + gross-up thuế (tính app-side, xem công thức trong lib/bidding.ts)
-  vendorId     String?
-  isLocked     Boolean @default(false)
-  maxMarkupPct Float?
+  itemCode          String?
+  lineType          String  @default("QTY_PRICE") // QTY_PRICE | FIXED | PERCENT_OF_TOTAL
+  itemName          String
+  specs             String?
+  quantity          Float   @default(1)
+  unit              String?
+  unitPrice         BigInt  @default(0) // dùng khi lineType=QTY_PRICE
+  fixedAmount       BigInt? // dùng khi lineType=FIXED
+  percentVal        Float? // dùng khi lineType=PERCENT_OF_TOTAL
+  taxType           String  @default("VAT") // VAT (khấu trừ, không gross-up) | TNCN (÷0,9) | TNDN (÷0,8) | OTHER (nhập tay customTaxAmount) — xem TAX_GROSSUP trong lib/bidding.ts
+  customTaxAmount   BigInt? // chỉ dùng khi taxType=OTHER — số tiền thuế nhập tay, cộng thẳng vào base (không gross-up theo %)
+  amount            BigInt  @default(0) // computed theo lineType + gross-up thuế (tính app-side, xem công thức trong lib/bidding.ts)
+  vendorId          String?
+  isLocked          Boolean @default(false)
+  maxMarkupPct      Float?
   /// Cờ "TCM hỗ trợ" (form BM02: dòng tài trợ) — trên BÁO GIÁ dòng này hiện đơn giá nhưng Thành
   /// tiền ĐỂ TRỐNG và không tính tiền khách (CE dòng = 0), kèm ghi chú "TCM hỗ trợ dự án này".
   /// CHỈ tác động cách trình bày CE; CO của dòng vẫn tính bình thường (có thể có tiền hoặc 0).
-  isSponsored  Boolean @default(false)
+  isSponsored       Boolean @default(false)
   /// K3 — dòng thuộc CẶP "hàng lấy từ kho + hàng mua bù". Giá trị = `StockRequestLine.id` của đề
   /// xuất GIỮ CHỖ đã duyệt, đặt trên CẢ HAI dòng của cặp → cũng là khoá GỘP khi in báo giá BM02
   /// (2 dòng nội bộ thành 1 dòng khách nhìn). CỐ Ý không unique (hai dòng cùng khoá là đúng ý) và
@@ -1145,9 +1159,9 @@ model CostLine {
   /// thay 78 cột Excel làm tay của team Account. Dòng không gắn nhãn rơi vào khối "Chung".
   /// Mỗi dòng TỰ mang nhãn (không kế thừa từ hạng mục lúc đọc) để chỉ có một nguồn sự thật;
   /// nút "áp nhãn cho cả nhánh" ở builder chỉ là tiện ích điền hộ.
-  legCode      String?
-  sort         Int     @default(0)
-  note         String?
+  legCode           String?
+  sort              Int     @default(0)
+  note              String?
 
   costSheet CostSheet        @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
   section   CostSheetSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -1564,12 +1578,12 @@ model FinanceCostLine {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  vendor   Vendor?   @relation(fields: [vendorId], references: [id])
-  advances Advance[]
-  vendorPayments VendorPayment[]
-  ctvRows     CtvContract[] @relation("CtvRowLine")
-  ctvBatchesDefault CtvBatch[] @relation("CtvBatchDefaultLine")
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor             Vendor?             @relation(fields: [vendorId], references: [id])
+  advances           Advance[]
+  vendorPayments     VendorPayment[]
+  ctvRows            CtvContract[]       @relation("CtvRowLine")
+  ctvBatchesDefault  CtvBatch[]          @relation("CtvBatchDefaultLine")
   purchaseOrderLines PurchaseOrderLine[]
 
   @@unique([projectId, lineKey])
@@ -1620,43 +1634,43 @@ model Advance {
 
 /// Thanh toán cho NCC (khung best-practice): phiếu chi theo NCC/dự án, đánh dấu đã trả.
 model VendorPayment {
-  id          String    @id @default(cuid())
-  vendorId    String
-  projectId   String?
+  id                String    @id @default(cuid())
+  vendorId          String
+  projectId         String?
   /// Dòng chi phí CO/CE mà khoản chi này thuộc về — nguồn để tính "còn lại chưa thanh toán" cho
   /// TỪNG dòng item cost. Nullable: khoản chi cấp dự án không gắn dòng nào vẫn hợp lệ.
   financeCostLineId String?
-  amount      BigInt
-  dueDate     DateTime?
-  paidDate    DateTime?
-  status      String    @default("SCHEDULED") // SCHEDULED | PAID | CANCELED
-  invoiceNo   String?
-  note        String?
+  amount            BigInt
+  dueDate           DateTime?
+  paidDate          DateTime?
+  status            String    @default("SCHEDULED") // SCHEDULED | PAID | CANCELED
+  invoiceNo         String?
+  note              String?
   /// Lý do lập phiếu VƯỢT trần chi của dự án — có giá trị = phiếu đã vượt trần (hiện badge cảnh
   /// báo ở danh sách). Null = phiếu nằm trong trần. Đòi quyền finance.vendor_payment.over_cap.
-  overCapNote String?
+  overCapNote       String?
   /// Huỷ phiếu lập nhầm (chỉ khi CHƯA trả — phiếu đã trả phải "bỏ đánh dấu đã trả" trước).
   /// KHÔNG xoá bản ghi; phiếu huỷ bị loại khỏi trần chi, cashflow và danh sách.
-  canceledById String?
-  canceledAt   DateTime?
-  cancelNote   String?
+  canceledById      String?
+  canceledAt        DateTime?
+  cancelNote        String?
   /// Đợt CTV (BM08) sinh ra phiếu này qua "Đề xuất thanh toán CTV" — mỗi phiếu = tổng tiền các
   /// dòng CTV của MỘT dòng CO trong đợt. SetNull: xoá đợt không được xoá phiếu chi đã lập.
-  ctvBatchId  String?
+  ctvBatchId        String?
   /// PO (C3) mà phiếu chi này thanh toán — chân thứ 3 của đối chiếu ĐẶT ↔ NHẬN ↔ CHI. SetNull.
-  purchaseOrderId String?
-  createdById String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  purchaseOrderId   String?
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  vendor    Vendor   @relation(fields: [vendorId], references: [id])
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdBy Staff?   @relation("VendorPaymentCreatedBy", fields: [createdById], references: [id])
+  vendor          Vendor           @relation(fields: [vendorId], references: [id])
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy       Staff?           @relation("VendorPaymentCreatedBy", fields: [createdById], references: [id])
   // SetNull chứ không Cascade: dòng CO/CE biến mất (đổi tên/xoá ở bản mới) KHÔNG được làm mất
   // chứng từ đã chi — khoản chi vẫn còn, chỉ mất liên kết dòng.
   financeCostLine FinanceCostLine? @relation(fields: [financeCostLineId], references: [id], onDelete: SetNull)
-  ctvBatch  CtvBatch? @relation(fields: [ctvBatchId], references: [id], onDelete: SetNull)
-  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  ctvBatch        CtvBatch?        @relation(fields: [ctvBatchId], references: [id], onDelete: SetNull)
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
 
   @@index([vendorId, status])
   @@index([ctvBatchId])
@@ -1688,36 +1702,36 @@ model CollectionMilestone {
 }
 
 model ClientInvoice {
-  id          String    @id @default(cuid())
-  projectId   String
-  clientId    String
-  invoiceNo   String
-  invoiceDate DateTime
-  amount      BigInt
-  dueDate     DateTime?
-  note        String?
+  id               String    @id @default(cuid())
+  projectId        String
+  clientId         String
+  invoiceNo        String
+  invoiceDate      DateTime
+  amount           BigInt
+  dueDate          DateTime?
+  note             String?
   /// Đợt thu (C5) mà hóa đơn này thuộc về — để theo dõi tiến độ thu theo kế hoạch. SetNull: xoá
   /// đợt không được kéo đổ hóa đơn đã phát hành.
-  milestoneId String?
+  milestoneId      String?
   /// Lần gần nhất đã bắn nhắc nợ quá hạn. Chống spam: hóa đơn quá hạn 200 ngày mà nhắc mỗi 5 phút
   /// thì không ai đọc chuông nữa. Chu kỳ nhắc lại lấy từ setting finance.ar_reminder_repeat_days.
   arReminderSentAt DateTime?
   /// Lý do phát hành VƯỢT trần (CE + Chi hộ của CO/CE hiện hành trừ đã xuất) hoặc phát hành cho
   /// dự án CHƯA có CO/CE. Có giá trị = hóa đơn vượt trần (badge cảnh báo ở trang Công nợ).
   /// Đòi quyền finance.invoice.over_cap. Cửa Nghiệm thu có trần CỨNG riêng, không đi qua đây.
-  overCapNote String?
+  overCapNote      String?
   /// Huỷ hóa đơn (xuất nhầm số/sai tiền). KHÔNG xoá bản ghi — số hóa đơn đã phát hành phải truy
   /// được. Hóa đơn đã huỷ bị loại khỏi MỌI phép tính công nợ và khỏi điều kiện kết thúc dự án.
   /// Chỉ huỷ được khi chưa ghi nhận lần thu nào (có thu rồi thì phải đảo khoản thu trước).
-  voidedById  String?
-  voidedAt    DateTime?
-  voidNote    String?
-  createdById String?
-  createdAt   DateTime  @default(now())
+  voidedById       String?
+  voidedAt         DateTime?
+  voidNote         String?
+  createdById      String?
+  createdAt        DateTime  @default(now())
 
-  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  client    Client          @relation(fields: [clientId], references: [id])
-  createdBy Staff?          @relation("ClientInvoiceCreatedBy", fields: [createdById], references: [id])
+  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client    Client               @relation(fields: [clientId], references: [id])
+  createdBy Staff?               @relation("ClientInvoiceCreatedBy", fields: [createdById], references: [id])
   payments  ClientPayment[]
   milestone CollectionMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
 
@@ -1730,24 +1744,24 @@ model ClientInvoice {
 /// tạm ứng + phiếu chi — tránh đếm tiền hai lần khi phiếu chi lập theo PO); nó là làn CAM KẾT để
 /// đối chiếu 3 chiều: ĐẶT (PO) ↔ NHẬN (receivedQty) ↔ CHI (VendorPayment gắn purchaseOrderId).
 model PurchaseOrder {
-  id        String    @id @default(cuid())
-  code      String    @unique // {project.code}-PO{n}
-  projectId String
-  vendorId  String
-  status    String    @default("OPEN") // OPEN | RECEIVED | CANCELED
-  note      String?
-  orderedById String?
-  orderedAt   DateTime  @default(now())
+  id           String    @id @default(cuid())
+  code         String    @unique // {project.code}-PO{n}
+  projectId    String
+  vendorId     String
+  status       String    @default("OPEN") // OPEN | RECEIVED | CANCELED
+  note         String?
+  orderedById  String?
+  orderedAt    DateTime  @default(now())
   /// Huỷ PO đặt nhầm — giữ bản ghi + lý do (không xoá chứng từ). Chỉ huỷ khi CHƯA gắn phiếu chi.
   canceledById String?
   canceledAt   DateTime?
   cancelNote   String?
-  updatedAt DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
 
-  project  Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  vendor   Vendor              @relation(fields: [vendorId], references: [id])
-  lines    PurchaseOrderLine[]
-  payments VendorPayment[]
+  project       Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor        Vendor              @relation(fields: [vendorId], references: [id])
+  lines         PurchaseOrderLine[]
+  payments      VendorPayment[]
   stockRequests StockRequest[]
 
   @@index([projectId])
@@ -1755,21 +1769,21 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderLine {
-  id              String  @id @default(cuid())
-  purchaseOrderId String
+  id                String    @id @default(cuid())
+  purchaseOrderId   String
   /// Dòng CO/CE mà khoản đặt hàng này thuộc về — BẮT BUỘC lúc tạo (server validate; cột nullable
   /// chỉ để SetNull: dòng CO biến mất ở bản mới không được kéo đổ chứng từ đặt hàng).
   financeCostLineId String?
-  itemName  String
-  quantity  Float  @default(1)
-  unitPrice BigInt @default(0)
-  amount    BigInt @default(0) // = quantity × unitPrice, server tính lại — không tin client
+  itemName          String
+  quantity          Float     @default(1)
+  unitPrice         BigInt    @default(0)
+  amount            BigInt    @default(0) // = quantity × unitPrice, server tính lại — không tin client
   /// Nhận hàng ghi NGAY TRÊN DÒNG (không dựng chứng từ nhập kho riêng — phần lớn hàng event giao
   /// thẳng ra site): SL đã nhận + ai + lúc nào. Nhận thiếu nhìn thấy ngay ở receivedQty < quantity.
-  receivedQty  Float     @default(0)
-  receivedById String?
-  receivedAt   DateTime?
-  note String?
+  receivedQty       Float     @default(0)
+  receivedById      String?
+  receivedAt        DateTime?
+  note              String?
 
   purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   financeCostLine FinanceCostLine? @relation(fields: [financeCostLineId], references: [id], onDelete: SetNull)
@@ -2066,11 +2080,11 @@ model Warehouse {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  balances      StockBalance[]
-  stockRequestsTo StockRequest[] @relation("StockRequestToWarehouse")
-  documentsFrom StockDocument[] @relation("StockDocFromWarehouse")
-  documentsTo   StockDocument[] @relation("StockDocToWarehouse")
-  requests      StockRequest[] @relation("StockRequestWarehouse")
+  balances        StockBalance[]
+  stockRequestsTo StockRequest[]  @relation("StockRequestToWarehouse")
+  documentsFrom   StockDocument[] @relation("StockDocFromWarehouse")
+  documentsTo     StockDocument[] @relation("StockDocToWarehouse")
+  requests        StockRequest[]  @relation("StockRequestWarehouse")
 
   @@map("warehouse")
 }
@@ -2105,43 +2119,43 @@ model InventoryCategory {
 /// (buildItemCode; phần con giữ hậu tố `-N`). Trạng thái/tình trạng KHÔNG sửa tay — đổi qua phiếu
 /// CHUYỂN ĐỔI LÔ (CONVERT) chạy số lượng giữa 2 mã. Item cũ (trước v2) để các cột mới null.
 model InventoryItem {
-  id           String   @id @default(cuid())
-  code         String   @unique
-  name         String
-  categoryId   String? // DEPRECATED (kho v2 dùng catNodeId) — option_set "inventory_category", giữ cột không dùng
-  unit         String? // ĐVT free text (cái, bộ, cuộn...)
-  isReusable   Boolean  @default(true) // true = Tái sử dụng (phải trả về kho) | false = Dùng một lần
-  partCount    Int      @default(1) // 1 = item thường/phần con; 2..4 = bộ cha (không stockable)
-  parentItemId String?
-  partNo       Int?
+  id                  String    @id @default(cuid())
+  code                String    @unique
+  name                String
+  categoryId          String? // DEPRECATED (kho v2 dùng catNodeId) — option_set "inventory_category", giữ cột không dùng
+  unit                String? // ĐVT free text (cái, bộ, cuộn...)
+  isReusable          Boolean   @default(true) // true = Tái sử dụng (phải trả về kho) | false = Dùng một lần
+  partCount           Int       @default(1) // 1 = item thường/phần con; 2..4 = bộ cha (không stockable)
+  parentItemId        String?
+  partNo              Int?
   // ── Kho v2 — thuộc tính lô (nullable: item trước v2 không có) ──
-  catNodeId      String? // node cây danh mục v2 (nhóm gốc cho ký tự đầu của mã)
-  statusCode     String? // R|P|C|W|L|D — xem ITEM_STATUS_CODES lib/inventory.ts; đổi qua phiếu CONVERT
-  conditionCode  String? // B|P|S — brand new / mới một phần / second hand; đổi qua phiếu CONVERT
-  ownerClientId  String? // null = hàng TCM (segment mã "TCM"); BẮT BUỘC khi node gốc isClientOwned
-  boundProjectId String? // bắt buộc app-layer khi statusCode=P (hàng theo chính xác dự án)
-  expiryDate     DateTime? // hàng khách có date — hết hạn: chặn xuất dùng, chỉ còn phiếu DESTROY
-  clientDocNo    String? // số phiếu xuất kho của KHÁCH khi gửi hàng (nhóm isClientOwned)
+  catNodeId           String? // node cây danh mục v2 (nhóm gốc cho ký tự đầu của mã)
+  statusCode          String? // R|P|C|W|L|D — xem ITEM_STATUS_CODES lib/inventory.ts; đổi qua phiếu CONVERT
+  conditionCode       String? // B|P|S — brand new / mới một phần / second hand; đổi qua phiếu CONVERT
+  ownerClientId       String? // null = hàng TCM (segment mã "TCM"); BẮT BUỘC khi node gốc isClientOwned
+  boundProjectId      String? // bắt buộc app-layer khi statusCode=P (hàng theo chính xác dự án)
+  expiryDate          DateTime? // hàng khách có date — hết hạn: chặn xuất dùng, chỉ còn phiếu DESTROY
+  clientDocNo         String? // số phiếu xuất kho của KHÁCH khi gửi hàng (nhóm isClientOwned)
   /// K4 — MỨC cảnh báo hạn dùng ĐÃ nhắc (YELLOW|ORANGE|RED|EXPIRED). KHÔNG phải cờ một-lần: chỉ
   /// bắn khi mức hiện tại NGHIÊM TRỌNG HƠN mức đã lưu → một lô được nhắc đủ 4 mốc mà không spam.
   /// Gia hạn date thì reset null để nhắc lại từ đầu.
   expiryReminderLevel String?
-  seq            Int? // số thứ tự 001–999 trong tổ hợp mã (suy lại được từ code — lưu để đọc nhanh)
-  isActive     Boolean  @default(true)
-  note         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  seq                 Int? // số thứ tự 001–999 trong tổ hợp mã (suy lại được từ code — lưu để đọc nhanh)
+  isActive            Boolean   @default(true)
+  note                String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  category OptionItem?     @relation("InventoryItemCategory", fields: [categoryId], references: [id], onDelete: SetNull)
-  parent   InventoryItem?  @relation("InventoryItemParts", fields: [parentItemId], references: [id], onDelete: Cascade)
-  parts    InventoryItem[] @relation("InventoryItemParts")
+  category     OptionItem?        @relation("InventoryItemCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  parent       InventoryItem?     @relation("InventoryItemParts", fields: [parentItemId], references: [id], onDelete: Cascade)
+  parts        InventoryItem[]    @relation("InventoryItemParts")
   catNode      InventoryCategory? @relation("InventoryItemCatNode", fields: [catNodeId], references: [id], onDelete: SetNull)
   ownerClient  Client?            @relation("InventoryItemOwnerClient", fields: [ownerClientId], references: [id], onDelete: SetNull)
   boundProject Project?           @relation("InventoryItemBoundProject", fields: [boundProjectId], references: [id], onDelete: SetNull)
 
-  balances StockBalance[]
-  lines    StockDocumentLine[]
-  holdings ProjectHolding[]
+  balances       StockBalance[]
+  lines          StockDocumentLine[]
+  holdings       ProjectHolding[]
   convertLinesIn StockDocumentLine[] @relation("StockLineConvertTo")
   requestLines   StockRequestLine[]
 
@@ -2412,6 +2426,42 @@ model PlanningJob {
   @@map("planning_job")
 }
 
+/// Phiếu XIN MƯỢN NGƯỜI làm Planning từ team khác (chốt 05/08/2026).
+///
+/// Từ đợt này ô "Giao cho" của tab Planning CHỈ hiện nhân sự thuộc team sở hữu dự án. Muốn dùng
+/// người của team khác thì trưởng team đi mượn lập phiếu này, và TRƯỞNG TEAM ĐƯỢC MƯỢN là người
+/// đồng ý — đồng ý thì phải CHỌN ĐÍCH DANH người cho mượn luôn, chứ không đồng ý chung chung.
+///
+/// ⚠ Không có ràng buộc unique cho "mỗi dự án chỉ một phiếu chờ": SQLite không làm được unique có
+/// điều kiện (chỉ áp cho status = PENDING). Chống trùng nằm ở `createLoanRequest`.
+model PlanningLoanRequest {
+  id         String @id @default(cuid())
+  projectId  String
+  fromTeamId String // team đi mượn = team sở hữu dự án
+  toTeamId   String // team được mượn
+  status     String @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELED
+  reason     String // lý do xin mượn — bắt buộc, để trưởng team kia có căn cứ mà quyết
+
+  requestedById String
+  requestedAt   DateTime @default(now())
+
+  decidedById  String?
+  decidedAt    DateTime?
+  lentStaffId  String? // người được cho mượn — chỉ có khi APPROVED
+  decisionNote String? // lý do từ chối — bắt buộc khi REJECTED
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromTeam    Team    @relation("LoanFromTeam", fields: [fromTeamId], references: [id])
+  toTeam      Team    @relation("LoanToTeam", fields: [toTeamId], references: [id])
+  requestedBy Staff   @relation("LoanRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   Staff?  @relation("LoanDecidedBy", fields: [decidedById], references: [id])
+  lentStaff   Staff?  @relation("LoanLentStaff", fields: [lentStaffId], references: [id])
+
+  @@index([projectId, status])
+  @@index([toTeamId, status])
+  @@map("planning_loan_request")
+}
+
 /// 1 khâu của job — 3 khâu cố định RESEARCH | DESIGN_BRIEF | PROPOSAL, tạo sẵn cùng job.
 /// Mỗi khâu: giao cho ai + timeline expect; hoàn thành = link kết quả + giờ (bội 0.25, tối thiểu 0.25).
 /// Khâu PROPOSAL không dùng resultLinkUrl — kết quả đi qua bảng version (nhiều vòng review).
@@ -2580,8 +2630,8 @@ model ClientKbSpace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  client  Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  group   ClientGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  client  Client?          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  group   ClientGroup?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   topics  ClientKbTopic[]
   sources ClientKbSource[]
 
@@ -2710,32 +2760,32 @@ model ClientKbAttempt {
 
 /// Bản ngân sách của MỘT năm tài chính.
 model OverheadBudget {
-  id         String @id @default(cuid())
-  fiscalYear Int    @unique
+  id            String  @id @default(cuid())
+  fiscalYear    Int     @unique
   /// DRAFT → PENDING_CFO → PENDING_CEO → LOCKED, hoặc REJECTED (CFO/CEO trả về, HR sửa rồi trình lại).
   /// Bản 2026 import từ Excel vào thẳng LOCKED vì BOD đã duyệt ngoài app.
-  status     String @default("DRAFT")
+  status        String  @default("DRAFT")
   /// storageKey file Excel gốc đã import (storage/ai-uploads) — giữ để đối chiếu về sau.
   sourceFileKey String?
   note          String?
 
-  submittedAt    DateTime?
-  submittedById  String?
-  cfoApprovedAt  DateTime?
+  submittedAt     DateTime?
+  submittedById   String?
+  cfoApprovedAt   DateTime?
   cfoApprovedById String?
-  ceoApprovedAt  DateTime?
+  ceoApprovedAt   DateTime?
   ceoApprovedById String?
-  rejectedAt     DateTime?
-  rejectedById   String?
-  rejectedNote   String?
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectedNote    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  submittedBy   Staff? @relation("OverheadBudgetSubmittedBy", fields: [submittedById], references: [id])
-  cfoApprovedBy Staff? @relation("OverheadBudgetCfoBy", fields: [cfoApprovedById], references: [id])
-  ceoApprovedBy Staff? @relation("OverheadBudgetCeoBy", fields: [ceoApprovedById], references: [id])
-  rejectedBy    Staff? @relation("OverheadBudgetRejectedBy", fields: [rejectedById], references: [id])
+  submittedBy   Staff?         @relation("OverheadBudgetSubmittedBy", fields: [submittedById], references: [id])
+  cfoApprovedBy Staff?         @relation("OverheadBudgetCfoBy", fields: [cfoApprovedById], references: [id])
+  ceoApprovedBy Staff?         @relation("OverheadBudgetCeoBy", fields: [ceoApprovedById], references: [id])
+  rejectedBy    Staff?         @relation("OverheadBudgetRejectedBy", fields: [rejectedById], references: [id])
   items         OverheadItem[]
 
   @@map("overhead_budget")
@@ -2743,27 +2793,27 @@ model OverheadBudget {
 
 /// Một KHOẢN CHI trong ngân sách năm (1 dòng của sheet "Total 2026").
 model OverheadItem {
-  id       String @id @default(cuid())
-  budgetId String
+  id            String  @id @default(cuid())
+  budgetId      String
   /// Mã hiển thị kiểu "TCM26-01".
   /// ⚠ CHỈ ĐỂ HIỂN THỊ — khoá liên kết tiền là `id`. Repo đã trả giá đúng bài này với
   /// `CostLine.itemCode` và phải thêm `stableKey` (xem src/lib/finance.ts): mã do người gõ thì đổi
   /// lúc nào cũng được, dùng nó nối tiền là mất dấu khoản chi.
-  pidCode  String
-  name     String
+  pidCode       String
+  name          String
   /// "CHI PHÍ THUÊ - MƯỚN - VP" | "DI CHUYỂN - VẬN HÀNH" | "CP VẬN HÀNH" | "LƯƠNG - CHÍNH SÁCH PHÚC LỢI"…
   /// Nhãn tự do theo file gốc, KHÔNG phải OptionSet — danh mục này do kế toán tự đặt theo từng năm.
   categoryLabel String
   /// "Hàng tháng" | "Khi phát sinh" | "1 năm/lần" — cột "Loại đề nghị" của file gốc.
-  requestKind   String @default("MONTHLY")
+  requestKind   String  @default("MONTHLY")
   /// MANUAL = kế toán nhập thực chi · PAYROLL = số thực chi đọc từ module ⑦ Lương (chưa làm).
   /// 3 khoản lương/BHXH/công đoàn để PAYROLL: hiện chỉ hiện ngân sách, ô thực chi TRỐNG và KHÔNG
   /// cho nhập tay — có hai nguồn số cho cùng một khoản là chắc chắn lệch.
-  actualSource  String @default("MANUAL")
-  sort     Int     @default(0)
+  actualSource  String  @default("MANUAL")
+  sort          Int     @default(0)
   /// Bớt khoản = tắt cờ này, KHÔNG xoá — các năm trước còn khoản chi trỏ vào (mirror Vendor/ClientGroup).
-  isActive Boolean @default(true)
-  note     String?
+  isActive      Boolean @default(true)
+  note          String?
 
   budget       OverheadBudget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   budgetMonths OverheadBudgetMonth[]
@@ -2792,10 +2842,10 @@ model OverheadBudgetMonth {
 
 /// MỘT LẦN CHI thực tế. Vòng đời + đường đảo mượn nguyên khuôn `VendorPayment`.
 model OverheadSpend {
-  id     String @id @default(cuid())
-  itemId String
-  month  Int // 1..12 — tháng ghi nhận chi phí, KHÔNG nhất thiết trùng tháng thanh toán
-  name   String
+  id           String    @id @default(cuid())
+  itemId       String
+  month        Int // 1..12 — tháng ghi nhận chi phí, KHÔNG nhất thiết trùng tháng thanh toán
+  name         String
   expectedDate DateTime?
 
   /// Số THỰC TRẢ ra ngoài (chưa gross-up thuế) — đây là con số dùng đối chiếu ngân sách.
@@ -2813,8 +2863,8 @@ model OverheadSpend {
   paidDate DateTime?
   paidById String?
 
-  requestedById String?
-  createdById   String?
+  requestedById  String?
+  createdById    String?
   /// Bắt buộc khi khoản chi làm vượt ngân sách của khoản đó — "vượt phải giải trình".
   overBudgetNote String?
   cancelNote     String?

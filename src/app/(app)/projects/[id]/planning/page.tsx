@@ -8,7 +8,9 @@ import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { isPlanningJobLocked, orderRecipientWhere, type PlanningStageCode } from "@/lib/planning";
+import { isPlanningJobLocked, approvedLoanStaff, type PlanningStageCode } from "@/lib/planning";
+import { getCurrentStaffId } from "@/lib/current-staff";
+import { LoanPanel, type LoanRow } from "./loan-panel";
 import { getDepartmentTasks, getDepartmentStaffOptions, toDepartmentTaskBoardData } from "@/lib/department-tasks";
 import { DepartmentTaskBoard } from "../department-task-board";
 import {
@@ -18,7 +20,7 @@ import {
   requestProposalRevision,
   confirmFinalProposal,
 } from "./actions";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, hasPermission } from "@/lib/permissions";
 
 const input =
   "h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
@@ -45,15 +47,89 @@ export default async function ProjectPlanningPage({ params }: { params: Promise<
         versions: { orderBy: { versionNo: "desc" }, include: { submittedBy: true, reviewedBy: true } },
       },
     }),
-    // Người nhận khâu Planning = ai có cờ `isPlanningStaff`, KHÔNG phải ai thuộc phòng "PLANNING":
-    // bộ phận Planning độc lập đã giải thể 01/08/2026, nhân sự về thẳng các team Account.
-    prisma.staff.findMany({ where: orderRecipientWhere("PLANNING"), orderBy: { fullName: "asc" } }),
+    // Ô "Giao cho" CHỈ hiện nhân sự của chính team sở hữu dự án (chốt 05/08/2026). Trước đây ô này
+    // cố ý cho chọn cả người team khác; nay muốn mượn người phải đi qua luồng xin duyệt — để cả hai
+    // đường thì bước duyệt chỉ là trang trí (bài học đã trả giá ở Kho v2 K4).
+    // Người đã được duyệt cho mượn được nối thêm vào danh sách bên dưới.
+    prisma.staff.findMany({
+      where: { isActive: true, team: { ownedProjects: { some: { id } } } },
+      orderBy: [{ isPlanningStaff: "desc" }, { fullName: "asc" }],
+    }),
     prisma.department.findUnique({ where: { code: "PLANNING" }, include: { lead: true } }),
     prisma.project.findUnique({ where: { id }, include: { status: true } }),
     getDepartmentTasks(id, "PLANNING"),
-    getDepartmentStaffOptions("PLANNING"),
+    getDepartmentStaffOptions("PLANNING", id),
   ]);
   if (!project) notFound();
+
+  // ── Xin mượn người team khác ──────────────────────────────────────────────
+  // Ô "Giao cho" chỉ còn người trong team, nên người đã được DUYỆT cho mượn phải được nối thêm vào
+  // đây — nếu không thì duyệt xong vẫn không gán được, luồng mượn thành cụt.
+  const [meId, loans, loanTeams, lentExtra] = await Promise.all([
+    getCurrentStaffId(),
+    prisma.planningLoanRequest.findMany({
+      where: { projectId: id },
+      orderBy: { requestedAt: "desc" },
+      select: {
+        id: true, status: true, reason: true, decisionNote: true, requestedById: true, toTeamId: true,
+        fromTeam: { select: { code: true } },
+        toTeam: { select: { code: true } },
+        requestedBy: { select: { fullName: true } },
+        lentStaff: { select: { fullName: true } },
+      },
+    }),
+    prisma.team.findMany({
+      where: { isActive: true, NOT: { id: project.ownerTeamId ?? "" } },
+      select: { id: true, code: true, name: true },
+      orderBy: { code: "asc" },
+    }),
+    approvedLoanStaff(id),
+  ]);
+
+  const toRow = (l: (typeof loans)[number]): LoanRow => ({
+    id: l.id,
+    status: l.status,
+    reason: l.reason,
+    fromTeamCode: l.fromTeam.code,
+    toTeamCode: l.toTeam.code,
+    requestedByName: l.requestedBy?.fullName ?? null,
+    lentStaffName: l.lentStaff?.fullName ?? null,
+    decisionNote: l.decisionNote,
+  });
+  const pendingLoan = loans.find((l) => l.status === "PENDING") ?? null;
+  // Trưởng team ĐƯỢC MƯỢN mới thấy nút quyết. Người có settings.teams.manage vượt được, để team
+  // vắng trưởng không kẹt — khớp đúng điều kiện `canDecide` bên server.
+  const lenderTeam = pendingLoan
+    ? await prisma.team.findUnique({ where: { id: pendingLoan.toTeamId }, select: { leadStaffId: true } })
+    : null;
+  const canOverride = await hasPermission("settings.teams.manage");
+  const canDecidePending = !!pendingLoan && ((!!meId && lenderTeam?.leadStaffId === meId) || canOverride);
+  const lenderMembers = canDecidePending && pendingLoan
+    ? await prisma.staff.findMany({
+        where: { teamId: pendingLoan.toTeamId, isActive: true },
+        select: { id: true, fullName: true },
+        orderBy: [{ isPlanningStaff: "desc" }, { fullName: "asc" }],
+      })
+    : [];
+
+  const loanPanel = (
+    <LoanPanel
+      projectId={id}
+      pending={pendingLoan ? toRow(pendingLoan) : null}
+      history={loans.filter((l) => l.status !== "PENDING").map(toRow)}
+      teams={loanTeams}
+      lenderMembers={lenderMembers}
+      canDecidePending={canDecidePending}
+      canCancelPending={!!pendingLoan && !!meId && pendingLoan.requestedById === meId}
+      canRequest={!!project.ownerTeamId}
+    />
+  );
+
+  // Danh sách chọn người: người trong team + người ngoài team ĐÃ được duyệt cho mượn.
+  const assignableStaff = [
+    ...planningStaff.map((s) => ({ id: s.id, fullName: s.fullName })),
+    ...lentExtra.filter((x) => !planningStaff.some((s) => s.id === x.id)).map((x) => ({ id: x.id, fullName: `${x.fullName}${x.teamCode ? ` (${x.teamCode})` : ""}` })),
+  ];
 
   const deptTaskBoardData = deptTasks.map((task) => toDepartmentTaskBoardData(task, project.status.code, project.finishedAt));
   const deptTaskSection = (
@@ -77,13 +153,14 @@ export default async function ProjectPlanningPage({ params }: { params: Promise<
           <p className="text-sm text-foreground">{t("noJob")}</p>
           <p className="mt-1 text-xs text-muted-foreground">{t("noJobHint")}</p>
         </div>
+        {loanPanel}
         {deptTaskSection}
       </div>
     );
   }
 
   const locked = isPlanningJobLocked(job.project.status.code, job.finalConfirmedAt);
-  const staffOptions = planningStaff;
+  const staffOptions = assignableStaff;
   const stageByCode = new Map(job.stages.map((s) => [s.stage, s]));
   const latestVersion = job.versions[0] ?? null;
   const proposalStage = stageByCode.get("PROPOSAL");
@@ -273,6 +350,8 @@ export default async function ProjectPlanningPage({ params }: { params: Promise<
       )}
 
       <p className="text-xs text-muted-foreground sm:hidden">{t("mobileNote")}</p>
+
+      {loanPanel}
 
       {/* Task từ timeline — bên cạnh luồng Proposal cũ, KHÔNG thay thế. */}
       {deptTaskSection}

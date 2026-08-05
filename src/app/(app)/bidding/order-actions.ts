@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { ORDER_DEPARTMENT_LABELS } from "@/lib/bidding";
 import { formatDateTime } from "@/lib/utils";
 import { spawnTasksForCreativeOrder } from "@/lib/creative";
-import { spawnPlanningJobForOrder, orderRecipientWhere } from "@/lib/planning";
+import { spawnPlanningJobForOrder, orderRecipientIds } from "@/lib/planning";
 import { spawnTasksForDepartmentOrder, isDepartmentTaskDepartment } from "@/lib/department-tasks";
 
 function toNullable(v: string) {
@@ -141,11 +141,11 @@ export async function createDepartmentOrder(projectId: string, department: strin
   // Order PLANNING/PCC/OPE/PRO → tự sinh DepartmentTask (board "Task từ timeline"/task nội bộ bộ phận).
   if (isDepartmentTaskDepartment(department)) await spawnTasksForDepartmentOrder(orderId);
 
-  const recipients = await prisma.staff.findMany({ where: orderRecipientWhere(department) });
-  if (recipients.length > 0) {
+  const recipientIds = await orderRecipientIds(department, project.ownerTeamId, staffId);
+  if (recipientIds.length > 0) {
     await prisma.notification.createMany({
-      data: recipients.map((r) => ({
-        recipientStaffId: r.id,
+      data: recipientIds.map((id) => ({
+        recipientStaffId: id,
         type: "DEPARTMENT_ORDER_RECEIVED",
         title: `Order ${ORDER_DEPARTMENT_LABELS[department]} — dự án ${project.code}`,
         body: project.name,

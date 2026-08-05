@@ -70,10 +70,122 @@ export function orderRecipientWhere(department: string) {
     : { department: { code: department }, isActive: true };
 }
 
+/** Nhân sự đủ tư cách LÀM việc Planning của một team — dùng cho ô "Giao cho" và cho phép gán. */
+export async function planningStaffOfTeam(teamId: string) {
+  return prisma.staff.findMany({
+    where: { teamId, isActive: true },
+    select: { id: true, fullName: true, email: true, isPlanningStaff: true },
+    orderBy: [{ isPlanningStaff: "desc" }, { fullName: "asc" }],
+  });
+}
+
 /**
- * Người tự nhận việc Planning của một dự án — ưu tiên người Planning CÙNG TEAM với dự án, không có
- * thì lấy toàn công ty. CHỈ trả về khi còn đúng MỘT ứng viên: nhiều hơn một là có lựa chọn thật sự,
- * máy chọn hộ sẽ giao nhầm người mà không ai biết → để trống cho người giao tay (đường cũ vẫn còn).
+ * AI NHẬN THÔNG BÁO khi có order Planning cho một dự án — ba tầng, dừng ở tầng đầu tiên có người.
+ *
+ *   ① Người đã tick "nhân sự Planning" và CÙNG TEAM với dự án
+ *        → ngày công ty tuyển được người Planning chuyên trách, chỉ cần tick một ô là tự thu hẹp
+ *          về đúng người đó, không phải sửa code.
+ *   ② Chưa có ai được tick → TRƯỞNG TEAM của dự án
+ *        → chốt 05/08/2026: Leader nhận việc rồi tự gán người trong team mình.
+ *   ③ Dự án chưa gán team, hoặc team chưa có trưởng (A2 đang vậy) → mọi người đã tick toàn công ty,
+ *      không có nữa thì trưởng của các team còn lại.
+ *
+ * ⚠ Lớp ③ là CHỐNG CÂM, đừng bỏ: thiếu nó thì dự án chưa gán team sẽ gửi order đi mà không một ai
+ * nhận được thông báo — đúng lỗi im lặng đã gặp khi phòng Planning giải thể.
+ */
+export async function planningRecipientIds(ownerTeamId: string | null): Promise<string[]> {
+  const flagged = await prisma.staff.findMany({
+    where: { isPlanningStaff: true, isActive: true },
+    select: { id: true, teamId: true },
+  });
+
+  if (ownerTeamId) {
+    const sameTeam = flagged.filter((s) => s.teamId === ownerTeamId);
+    if (sameTeam.length > 0) return sameTeam.map((s) => s.id); // ①
+
+    const team = await prisma.team.findUnique({
+      where: { id: ownerTeamId },
+      select: { lead: { select: { id: true, isActive: true } } },
+    });
+    if (team?.lead?.isActive) return [team.lead.id]; // ②
+  }
+
+  // ③ chống câm
+  if (flagged.length > 0) return flagged.map((s) => s.id);
+  const leads = await prisma.team.findMany({
+    where: { isActive: true, lead: { isActive: true } },
+    select: { leadStaffId: true },
+  });
+  return leads.flatMap((t) => (t.leadStaffId ? [t.leadStaffId] : []));
+}
+
+/**
+ * Được phép GÁN người này vào khâu Planning của dự án này không?
+ *
+ * Hai đường hợp lệ, không có đường thứ ba:
+ *   ① Người thuộc chính team sở hữu dự án và đang làm việc;
+ *   ② Người của team khác NHƯNG đã có phiếu mượn được duyệt cho đúng dự án này và đúng tên người đó.
+ *
+ * ⚠ Đây là chốt chặn ở SERVER cho quyết định "đóng ô Giao cho". Bỏ hàm này đi thì ô chọn chỉ còn là
+ * gợi ý: ai cũng bắn thẳng một `assigneeId` bất kỳ và luồng xin mượn người thành trang trí.
+ */
+export async function canAssignPlanningStage(projectId: string, assigneeId: string): Promise<boolean> {
+  const [project, assignee] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, select: { ownerTeamId: true } }),
+    prisma.staff.findUnique({ where: { id: assigneeId }, select: { teamId: true, isActive: true } }),
+  ]);
+  if (!project || !assignee?.isActive) return false;
+  if (project.ownerTeamId && assignee.teamId === project.ownerTeamId) return true; // ①
+
+  const loan = await prisma.planningLoanRequest.findFirst({
+    where: { projectId, status: "APPROVED", lentStaffId: assigneeId },
+    select: { id: true },
+  });
+  return loan !== null; // ②
+}
+
+/** Người ngoài team đã được duyệt cho mượn — nối thêm vào ô "Giao cho". */
+export async function approvedLoanStaff(projectId: string) {
+  const loans = await prisma.planningLoanRequest.findMany({
+    where: { projectId, status: "APPROVED", lentStaff: { isActive: true } },
+    select: { lentStaff: { select: { id: true, fullName: true, team: { select: { code: true } } } } },
+  });
+  return loans.flatMap((l) => (l.lentStaff ? [{ id: l.lentStaff.id, fullName: l.lentStaff.fullName, teamCode: l.lentStaff.team?.code ?? null }] : []));
+}
+
+/**
+ * AI NHẬN THÔNG BÁO khi gửi ORDER — một cửa duy nhất cho CẢ HAI đường gửi order
+ * (`order-actions.createDepartmentOrder` và `project-orders.dispatchOrder`).
+ *
+ * PLANNING đi qua ba tầng ở `planningRecipientIds`; các bộ phận còn lại vẫn báo cả bộ phận như cũ.
+ * Người VỪA BẤM GỬI bị loại khỏi danh sách — tự báo cho chính mình là thông báo rác.
+ */
+export async function orderRecipientIds(
+  department: string,
+  ownerTeamId: string | null,
+  senderId: string | null,
+): Promise<string[]> {
+  const ids =
+    department === "PLANNING"
+      ? await planningRecipientIds(ownerTeamId)
+      : (await prisma.staff.findMany({ where: orderRecipientWhere(department), select: { id: true } })).map((s) => s.id);
+
+  const unique = [...new Set(ids)];
+  const withoutSender = unique.filter((id) => id !== senderId);
+  // ⚠ Loại người gửi, NHƯNG không để danh sách rỗng. Ca thật: trưởng team A1 tự gửi order Planning
+  // cho team mình — anh ấy là người nhận duy nhất, loại đi là không một ai được báo, đúng lỗi câm mà
+  // ba tầng ở trên sinh ra để tránh. Việc vẫn là của anh ấy, nên báo cho chính anh ấy mới đúng.
+  return withoutSender.length > 0 ? withoutSender : unique;
+}
+
+/**
+ * Người TỰ NHẬN việc Planning khi order vừa gửi — chỉ trả về khi còn đúng MỘT ứng viên đã được tick
+ * "nhân sự Planning". Nhiều hơn một là có lựa chọn thật, máy chọn hộ sẽ giao nhầm người mà không ai
+ * biết.
+ *
+ * ⚠ Từ 05/08/2026 hàm này CỐ Ý không rơi về trưởng team: chủ dự án chốt "Leader tự gán người làm".
+ * Chưa tuyển được người Planning chuyên trách thì job sinh ra ở trạng thái CHƯA GÁN và trưởng team
+ * là người bấm gán — chứ không phải máy gán bừa cho chính trưởng team rồi coi như xong việc.
  */
 async function resolveAutoPlanner(ownerTeamId: string | null): Promise<string | null> {
   const all = await prisma.staff.findMany({

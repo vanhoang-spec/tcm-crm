@@ -9,7 +9,10 @@ import { requirePermission } from "@/lib/permissions";
 export default async function SettingsTeamsPage() {
   await requirePermission("settings.teams.manage");
   const [teams, t] = await Promise.all([
-    prisma.team.findMany({ orderBy: { code: "asc" } }),
+    prisma.team.findMany({
+      orderBy: { code: "asc" },
+      include: { staff: { where: { isActive: true }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } } },
+    }),
     getTranslations("settings.teams"),
   ]);
 
@@ -26,7 +29,7 @@ export default async function SettingsTeamsPage() {
 
       <div className="space-y-3">
         {teams.map((tm) => (
-          <TeamRow key={tm.id} team={tm} />
+          <TeamRow key={tm.id} team={tm} members={tm.staff} />
         ))}
         <TeamCreateForm />
       </div>

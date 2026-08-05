@@ -34,6 +34,10 @@ function toDateInput(d: Date | null): string {
 export default async function BiddingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("bidding.view");
   const { id } = await params;
+  // CE-2 — GATE CỘT theo quyền, quyết định TẠI SERVER: số bị gate không được vào HTML (bài học
+  // KB-H2). PUR/OPE/PRO thấy diễn giải + CO trước thuế + trần chi; không thấy CE/Total CO/margin.
+  const canViewCost = await hasPermission("bidding.costsheet.view_cost");
+  const canViewPaycap = await hasPermission("bidding.costsheet.view_paycap");
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -120,6 +124,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
         isProxy: s.isProxy,
         proxyFeeType: s.proxyFeeType,
         proxyFeeVal: s.proxyFeeVal,
+        clientFeePct: null, // mẫu không mang phí báo khách — Account chọn mức khi dựng bảng thật
         lines: s.lines.map((l) => ({
           stableKey: "", // hydrate() ở builder sinh khoá khi nạp mẫu
           itemName: l.itemName,
@@ -140,6 +145,11 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           stockRefUnitPrice: null,
           legCode: "", // template không mang nhãn chặng — gắn khi dựng bảng thật
           note: "",
+          ceQuantity: null, // mẫu không mang CE — bảng dựng từ mẫu bắt đầu ở chế độ cũ
+          ceUnitPrice: null,
+          ceGroupKey: null,
+          ceName: "",
+          vatPct: null,
         })),
       })),
     };
@@ -173,6 +183,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           departmentCode: s.departmentCode ?? "",
           proxyFeeType: s.proxyFeeType,
           proxyFeeVal: s.proxyFeeVal,
+          clientFeePct: s.clientFeePct,
           lines: s.lines.map((l) => ({
             stableKey: l.stableKey ?? "",
             itemName: l.itemName,
@@ -193,6 +204,12 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
             stockRefUnitPrice: l.stockRefUnitPrice == null ? null : Number(l.stockRefUnitPrice),
             legCode: l.legCode ?? "",
             note: l.note ?? "",
+            // Giá CE là số bị gate: KHÔNG đưa vào payload khi thiếu quyền (nhãn gộp thì giữ).
+            ceQuantity: canViewCost ? l.ceQuantity : null,
+            ceUnitPrice: canViewCost && l.ceUnitPrice != null ? toNum(l.ceUnitPrice) : null,
+            ceGroupKey: l.ceGroupKey,
+            ceName: l.ceName ?? "",
+            vatPct: l.vatPct,
           })),
         })),
       }
@@ -214,6 +231,9 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
   // bấm một nút rồi văng ra không lời giải thích thì tệ hơn là không thấy nút.
   const pendingApproval = !!sheet && !sheet.approvedById && !sheet.rejectedAt;
   const canApproveCostSheet = pendingApproval && (await hasPermission("bidding.costsheet.approve"));
+  // Sửa bảng đòi CẢ quyền sửa LẪN quyền xem giá vốn: payload đã bị tước số CE khi thiếu view_cost,
+  // cho lưu là ghi đè CE thành rỗng — mất số của Account mà không ai thấy.
+  const canEditCostSheet = canViewCost && (await hasPermission("bidding.costsheet.edit"));
   const sheetCoTotal = sheet ? toNum(sheet.coTotal) : 0;
   const sheetCeTotal = sheet ? toNum(sheet.ceTotal) : 0;
   const sheetMarginPct = sheet ? computeMarginPct(sheetCeTotal, sheetCoTotal) : 0;
@@ -412,6 +432,9 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
               allTemplates={allTemplates}
               vendors={vendors.map((v) => ({ id: v.id, label: v.name }))}
               stockReservations={stockReservations}
+              canViewCost={canViewCost}
+              canViewPaycap={canViewPaycap}
+              canEdit={canEditCostSheet}
             />
           </div>
         )}

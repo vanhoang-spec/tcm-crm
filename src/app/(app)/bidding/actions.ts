@@ -373,6 +373,9 @@ export async function saveCostSheet(
       l.taxType = "VAT";
       l.customTaxAmount = null;
       l.isSponsored = false;
+      // %VAT vô nghĩa trên dòng giá 0 (trần chi = 0 × bất kỳ % nào) — xoá để không ai đọc nhầm là
+      // dòng này có hoá đơn VAT phải trả.
+      l.vatPct = null;
     }
   }
 

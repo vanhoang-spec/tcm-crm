@@ -19,6 +19,11 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
   const { id } = await params;
   // Gắn vai trò cho bản snapshot là thao tác SỬA bảng CO/CE — dùng đúng mã quyền của builder.
   const canTagRevision = await hasPermission("bidding.costsheet.edit");
+  // CE-2 — GATE CỘT theo quyền, quyết định TẠI SERVER: số bị gate không được vào HTML (bài học
+  // KB-H2). PUR/OPE/PRO thấy diễn giải + CO trước thuế + trần chi; không thấy CE/Total CO/margin.
+  const canViewCost = await hasPermission("bidding.costsheet.view_cost");
+  const canViewPaycap = await hasPermission("bidding.costsheet.view_paycap");
+  const canEditSheet = canTagRevision && canViewCost;
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -73,6 +78,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
         isProxy: s.isProxy,
         proxyFeeType: s.proxyFeeType,
         proxyFeeVal: s.proxyFeeVal,
+        clientFeePct: null, // mẫu không mang phí báo khách — Account chọn mức khi dựng bảng thật
         lines: s.lines.map((l) => ({
           stableKey: "", // hydrate() ở builder sinh khoá khi nạp mẫu
           itemName: l.itemName,
@@ -93,6 +99,11 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
           stockRefUnitPrice: null,
           legCode: "", // template không mang nhãn chặng — gắn khi dựng bảng thật
           note: "",
+          ceQuantity: null, // mẫu không mang CE — bảng dựng từ mẫu bắt đầu ở chế độ cũ
+          ceUnitPrice: null,
+          ceGroupKey: null,
+          ceName: "",
+          vatPct: null,
         })),
       })),
     };
@@ -108,7 +119,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
         mgmtFeePct: sheet.mgmtFeePct,
         contingencyPct: sheet.contingencyPct,
         discountPct: sheet.discountPct,
-        ceTotal: toNum(sheet.ceTotal),
+        ceTotal: canViewCost ? toNum(sheet.ceTotal) : 0,
         templateId: sheet.templateId,
         approvedByName: sheet.approvedBy?.fullName ?? null,
         approvedAt: sheet.approvedAt ? formatDateTime(sheet.approvedAt, locale) : null,
@@ -125,6 +136,7 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
           departmentCode: s.departmentCode ?? "",
           proxyFeeType: s.proxyFeeType,
           proxyFeeVal: s.proxyFeeVal,
+          clientFeePct: s.clientFeePct,
           lines: s.lines.map((l) => ({
             stableKey: l.stableKey ?? "",
             itemName: l.itemName,
@@ -145,6 +157,13 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
             stockRefUnitPrice: l.stockRefUnitPrice == null ? null : Number(l.stockRefUnitPrice),
             legCode: l.legCode ?? "",
             note: l.note ?? "",
+            // Giá CE là số bị gate: KHÔNG select vào payload khi thiếu quyền (ceGroupKey/ceName
+            // giữ lại vì chỉ là nhãn gộp, cần để lưu lại không làm mất nhóm).
+            ceQuantity: canViewCost ? l.ceQuantity : null,
+            ceUnitPrice: canViewCost && l.ceUnitPrice != null ? toNum(l.ceUnitPrice) : null,
+            ceGroupKey: l.ceGroupKey,
+            ceName: l.ceName ?? "",
+            vatPct: l.vatPct,
           })),
         })),
       }
@@ -192,16 +211,18 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
         </div>
       ) : (
         <>
-          {/* Sheet summary (bản sống realtime) */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SummaryCard label={t("coTotal")} value={formatNumber(sheet.coTotal, locale)} />
-            <SummaryCard label={t("ceTotal")} value={formatNumber(sheet.ceTotal, locale)} />
-            <SummaryCard label={t("chiHo")} value={formatNumber(sheet.chiHo, locale)} />
-            <SummaryCard
-              label={t("margin")}
-              value={`${formatPercent(computeMarginPct(Number(sheet.ceTotal), Number(sheet.coTotal)), locale)}%`}
-            />
-          </div>
+          {/* Sheet summary (bản sống realtime) — cả 4 ô đều là số bị gate bởi view_cost */}
+          {canViewCost && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <SummaryCard label={t("coTotal")} value={formatNumber(sheet.coTotal, locale)} />
+              <SummaryCard label={t("ceTotal")} value={formatNumber(sheet.ceTotal, locale)} />
+              <SummaryCard label={t("chiHo")} value={formatNumber(sheet.chiHo, locale)} />
+              <SummaryCard
+                label={t("margin")}
+                value={`${formatPercent(computeMarginPct(Number(sheet.ceTotal), Number(sheet.coTotal)), locale)}%`}
+              />
+            </div>
+          )}
 
           {/* CO/CE builder — edit trực tiếp tại đây (dùng chung action với Bidding, cùng 1 CostSheet) */}
           <section className="rounded-xl border border-border bg-surface p-5">
@@ -222,6 +243,9 @@ export default async function ProjectCoCePage({ params }: { params: Promise<{ id
                 allTemplates={allTemplates}
                 vendors={vendors.map((v) => ({ id: v.id, label: v.name }))}
                 stockReservations={stockReservations}
+                canViewCost={canViewCost}
+                canViewPaycap={canViewPaycap}
+                canEdit={canEditSheet}
               />
             )}
           </section>

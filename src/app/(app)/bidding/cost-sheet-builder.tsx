@@ -1,25 +1,49 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
-import { Plus, Trash2, Wand2, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
+// Builder CO/CE MỘT MÀN HÌNH (CE-2, 05/08/2026) — giao diện theo ĐÚNG mockup v4 đã chốt với chủ
+// dự án (scratchpad/coce-v2-mockup.html): CE trái / CO phải trên cùng một lưới, thuế theo dòng,
+// Total CO + Trần chi NCC theo quyền, phí quản lý theo mục L1, header tổng realtime.
+//
+// GIỮ NGUYÊN contract với server: state PHẲNG sections[]+lines[], payload sectionsJson + các input
+// scalar, đường lưu saveCostSheet. Chỉ phần TRÌNH BÀY viết lại.
+//
+// HAI CHẾ ĐỘ trên cùng một component:
+// - Chế độ CŨ (ceTotal nhập tổng): lưới chỉ có khối CO; panel ceTotal/margin/make-up như trước.
+//   Banner "Chuyển sang CE theo dòng" đổ CE từng dòng bằng đúng phép phân bổ BM02.
+// - Chế độ MỚI (CE theo dòng): cột CE sửa từng dòng, ceTotal server TỰ suy — ô nhập tay biến mất.
+// Nhận diện = sheetHasLineCe (dữ liệu, không cột cờ); bảng mới trống bật tay bằng nút.
+
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Trash2, Wand2, CheckCircle2, ChevronDown, ChevronRight, Link2, Unlink, Settings2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn, formatNumber, formatPercent } from "@/lib/utils";
 import { NumberField } from "@/components/ui/number-field";
 import {
   computeMarginPct,
   computeMakeupCe,
-  clientBillableTotal,
   computeCostSheetTotals,
+  computeLineAmount,
+  computeLineNetAmount,
+  computeCeAggregates,
+  ceRowsOf,
+  ceGroupHeirIndex,
+  sheetHasLineCe,
+  sectionNumber,
+  payCapFor,
+  taxDisplayAmount,
+  clientBillableTotal,
   flattenSectionTree,
-  taxGrossUp,
+  VAT_PCT_OPTIONS,
   LINE_TYPES,
   TAX_TYPES,
   REVISION_KINDS,
   MAX_SECTION_DEPTH,
+  type CeLineCalcInput,
+  type CeSectionInput,
   type LineType,
   type TaxType,
 } from "@/lib/bidding";
-import { SECTION_COLOR_TONE } from "@/lib/bidding-ui";
+import { quotationChain } from "@/lib/costsheet-quotation";
 import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { Locale } from "@/i18n/locales";
@@ -59,6 +83,14 @@ export type LineData = {
   /** LOF-V1 — nhãn CHẶNG (tỉnh/điểm/đợt) để gom khi xuất bản nghiệm thu. Thuần nhãn, không tính tiền. */
   legCode: string;
   note: string;
+  // ── CO/CE v3 (CE-1/CE-2) — CE theo dòng ──
+  ceQuantity: number | null;
+  ceUnitPrice: number | null;
+  /** Khoá GỘP N dòng CO → 1 dòng CE khách nhìn; chỉ dòng ĐẠI DIỆN (đầu nhóm) mang ceName/ceQ/ceP. */
+  ceGroupKey: string | null;
+  ceName: string;
+  /** % VAT theo dòng (8|10) — CHỈ dòng VAT; null = chưa chọn (trần chi giữ = net, Q4). */
+  vatPct: number | null;
 };
 
 export type SectionData = {
@@ -74,6 +106,8 @@ export type SectionData = {
   departmentCode: string;
   proxyFeeType: string | null;
   proxyFeeVal: number | null;
+  /** CO/CE v3 — phí quản lý BÁO KHÁCH của mục L1 (10/5/nhập tay); null = chưa áp ("thiếu mục"). */
+  clientFeePct: number | null;
   lines: LineData[];
 };
 
@@ -149,6 +183,11 @@ function blankLine(sectionKey: string): Line {
     stockRefUnitPrice: null,
     legCode: "",
     note: "",
+    ceQuantity: null,
+    ceUnitPrice: null,
+    ceGroupKey: null,
+    ceName: "",
+    vatPct: null,
   };
 }
 
@@ -196,6 +235,7 @@ function blankSection(isProxy = false, parentKey: string | null = null, nameVi =
     departmentCode: "",
     proxyFeeType: isProxy ? "PCT" : null,
     proxyFeeVal: isProxy ? 0 : null,
+    clientFeePct: null,
   };
 }
 
@@ -233,7 +273,7 @@ function descendantKeys(key: string, sections: Section[]): Set<string> {
   return out;
 }
 
-/** Section tự đánh dấu Chi hộ HOẶC nằm dưới 1 tổ tiên Chi hộ (kế thừa) — dùng loại khỏi make-up. */
+/** Section tự đánh dấu Chi hộ HOẶC nằm dưới 1 tổ tiên Chi hộ (kế thừa) — dùng loại khỏi make-up/CE. */
 function effectiveProxyKeys(sections: Section[]): Set<string> {
   const byKey = new Map(sections.map((s) => [s.key, s]));
   const out = new Set<string>();
@@ -252,6 +292,28 @@ function effectiveProxyKeys(sections: Section[]): Set<string> {
   return out;
 }
 
+/** Input tính CE cho một dòng builder — dùng chung mọi chỗ gọi engine ở file này. */
+function ceInput(l: Line): CeLineCalcInput {
+  return {
+    lineType: l.lineType,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    fixedAmount: l.fixedAmount,
+    percentVal: l.percentVal,
+    taxType: l.taxType,
+    customTaxAmount: l.customTaxAmount,
+    ceQuantity: l.ceQuantity,
+    ceUnitPrice: l.ceUnitPrice,
+    ceGroupKey: l.ceGroupKey,
+    ceName: l.ceName,
+    vatPct: l.vatPct,
+    isSponsored: l.isSponsored,
+    itemName: l.itemName,
+    stockRefUnitPrice: l.stockRefUnitPrice,
+    stockResvLineId: l.stockResvLineId,
+  };
+}
+
 export function CostSheetBuilder({
   projectId,
   minMarginPct,
@@ -261,6 +323,9 @@ export function CostSheetBuilder({
   vendors,
   departments,
   stockReservations = [],
+  canViewCost = true,
+  canViewPaycap = true,
+  canEdit = true,
 }: {
   projectId: string;
   minMarginPct: number;
@@ -272,6 +337,10 @@ export function CostSheetBuilder({
   departments: { code: string; name: string; costPrefix: string }[];
   /** K3 — các mục GIỮ CHỖ KHO đã duyệt của dự án này, chèn được vào bảng dưới dạng cặp dòng. */
   stockReservations?: StockReservationOption[];
+  /** Gate cột theo quyền — trang server TÍNH và TƯỚC dữ liệu trước khi truyền (số bị gate không vào HTML). */
+  canViewCost?: boolean;
+  canViewPaycap?: boolean;
+  canEdit?: boolean;
 }) {
   const t = useTranslations("bidding.costsheet");
   const tCommon = useTranslations("common");
@@ -293,9 +362,31 @@ export function CostSheetBuilder({
   const [sections, setSections] = useState<Section[]>(initial.sections);
   const [lines, setLines] = useState<Line[]>(initial.lines);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [view, setView] = useState<"both" | "ce" | "co">("both");
+  const [showUtil, setShowUtil] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [makeupFactor, setMakeupFactor] = useState(() => Math.round((1 / (1 - minMarginPct / 100)) * 100) / 100);
+  // Chế độ CE theo dòng: khởi tạo từ dữ liệu; bảng cũ bật lên bằng nút convert / bảng trống bật tay.
+  const proxyKeys = useMemo(() => effectiveProxyKeys(sections), [sections]);
+  const [ceMode, setCeMode] = useState(() => {
+    const svc = initial.lines.filter((l) => {
+      const s = initial.sections.find((x) => x.key === l.sectionKey);
+      return s && !effectiveProxyKeys(initial.sections).has(s.key);
+    });
+    return svc.length > 0 && sheetHasLineCe(svc.map(ceInput));
+  });
+  // Mức phí "Khác" — dựng từ các % đã lưu ngoài {10, 5}; mặc định một bucket 8%.
+  const [customRates, setCustomRates] = useState<number[]>(() => {
+    const seen = new Set<number>();
+    for (const s of initial.sections) {
+      if (!s.isProxy && !s.parentKey && s.clientFeePct != null && s.clientFeePct !== 10 && s.clientFeePct !== 5) seen.add(s.clientFeePct);
+    }
+    return seen.size > 0 ? [...seen] : [8];
+  });
 
   const templates = showAllTemplates ? allTemplates : matchingTemplates;
 
+  // ── Tổng CO (giữ nguyên đường cũ — percentBase cho dòng %) ──
   const totals = useMemo(
     () =>
       computeCostSheetTotals(
@@ -316,9 +407,30 @@ export function CostSheetBuilder({
       ),
     [sections, lines, mgmtFeePct, contingencyPct],
   );
-  const marginPct = computeMarginPct(ceTotal, totals.coTotal);
-  const marginOk = marginPct >= minMarginPct;
+  const percentBase = totals.directCo;
 
+  // ── Bộ tổng CE chế độ mới — client mirror của computeCeAggregates (server tính lại khi lưu) ──
+  const ceAgg = useMemo(() => {
+    const ceSections: CeSectionInput[] = sections.map((s) => ({
+      key: s.key,
+      parentKey: s.parentKey,
+      isProxy: proxyKeys.has(s.key),
+      clientFeePct: s.clientFeePct,
+      lines: lines.filter((l) => l.sectionKey === s.key).map(ceInput),
+    }));
+    return computeCeAggregates(ceSections, vatPct, totals.coTotal);
+  }, [sections, lines, proxyKeys, vatPct, totals.coTotal]);
+
+  const payTotal = useMemo(
+    () => lines.filter((l) => !proxyKeys.has(l.sectionKey)).reduce((sum, l) => sum + payCapFor(ceInput(l), percentBase), 0),
+    [lines, proxyKeys, percentBase],
+  );
+
+  const marginPct = ceMode ? ceAgg.marginPctNew : computeMarginPct(ceTotal, totals.coTotal);
+  const marginOk = marginPct >= minMarginPct;
+  const effectiveCeTotal = ceMode ? ceAgg.ceTotalDerived : ceTotal;
+
+  // ── Mutators ──
   function updateSection(key: string, patch: Partial<Section>) {
     setSections((ss) => ss.map((s) => (s.key === key ? { ...s, ...patch } : s)));
   }
@@ -340,8 +452,24 @@ export function CostSheetBuilder({
     const line = blankLine(sectionKey);
     setLines((ls) => [...ls, line]);
   }
+  /** Xoá dòng — nếu là ĐẠI DIỆN của nhóm CE gộp thì bầu dòng kế tiếp làm đại diện, CHUYỂN ceName/ceQ/ceP
+   *  sang nó (quyết định vòng 5: không để nhóm mồ côi mất CE). */
   function removeLine(key: string) {
-    setLines((ls) => ls.filter((l) => l.key !== key));
+    setLines((ls) => {
+      const idx = ls.findIndex((l) => l.key === key);
+      if (idx < 0) return ls;
+      const dead = ls[idx];
+      const heir = ceGroupHeirIndex(ls, idx);
+      const heirKey = heir == null ? null : ls[heir].key;
+      return ls
+        .filter((l) => l.key !== key)
+        .map((l) => (l.key === heirKey ? { ...l, ceName: dead.ceName || dead.itemName, ceQuantity: dead.ceQuantity, ceUnitPrice: dead.ceUnitPrice } : l));
+    });
+    setSelected((s) => {
+      const next = new Set(s);
+      next.delete(key);
+      return next;
+    });
   }
   /** Chèn CẶP dòng cho một mục giữ chỗ kho đã duyệt (K3) — dựng ngoài updater, cùng lý do addLine. */
   function insertStockPair(sectionKey: string, resv: StockReservationOption) {
@@ -355,10 +483,105 @@ export function CostSheetBuilder({
     setSections(h.sections);
     setLines(h.lines);
   }
+
+  // ── Gộp / tách nhóm CE ──
+  const selectedLines = lines.filter((l) => selected.has(l.key));
+  const mergeSameSection = selectedLines.length >= 2 && selectedLines.every((l) => l.sectionKey === selectedLines[0].sectionKey);
+  function mergeSelected() {
+    if (!mergeSameSection) return;
+    const groupKey = newStableKey();
+    const keys = new Set(selectedLines.map((l) => l.key));
+    let first = true;
+    setLines((ls) =>
+      ls.map((l) => {
+        if (!keys.has(l.key)) return l;
+        if (first) {
+          first = false;
+          return { ...l, ceGroupKey: groupKey, ceName: l.ceName || l.itemName, ceQuantity: l.ceQuantity ?? 1, ceUnitPrice: l.ceUnitPrice };
+        }
+        return { ...l, ceGroupKey: groupKey, ceQuantity: null, ceUnitPrice: null, ceName: "" };
+      }),
+    );
+    setSelected(new Set());
+  }
+  function ungroup(groupKey: string) {
+    setLines((ls) =>
+      ls.map((l) => (l.ceGroupKey === groupKey ? { ...l, ceGroupKey: null, ceQuantity: l.ceQuantity ?? (l.lineType === "QTY_PRICE" ? l.quantity : 1), ceUnitPrice: l.ceUnitPrice ?? null } : l)),
+    );
+  }
+
+  // ── Make-up chế độ mới: đổ CE = Total CO nhóm × hệ số (toàn bảng hoặc các dòng đã chọn) ──
+  function fillCeByFactor(onlySelected: boolean) {
+    const targetKeys = onlySelected ? new Set(selectedLines.map((l) => l.key)) : null;
+    setLines((ls) => {
+      const bySection = new Map<string, Line[]>();
+      for (const l of ls) {
+        if (proxyKeys.has(l.sectionKey)) continue;
+        (bySection.get(l.sectionKey) ?? bySection.set(l.sectionKey, []).get(l.sectionKey)!).push(l);
+      }
+      const patch = new Map<string, Partial<Line>>();
+      for (const [, sectionLines] of bySection) {
+        for (const row of ceRowsOf(sectionLines.map((l) => ({ ...ceInput(l), key: l.key })), percentBase)) {
+          const leader = sectionLines.find((l) => l.key === (row.leader as { key: string }).key)!;
+          if (targetKeys && !row.coLines.some((c) => targetKeys.has((c as { key: string }).key))) continue;
+          const q = leader.ceQuantity ?? (leader.lineType === "QTY_PRICE" && leader.quantity > 0 ? leader.quantity : 1);
+          patch.set(leader.key, { ceQuantity: q, ceUnitPrice: Math.round((row.coSum * makeupFactor) / q) });
+        }
+      }
+      return ls.map((l) => (patch.has(l.key) ? { ...l, ...patch.get(l.key) } : l));
+    });
+    setCeMode(true);
+  }
+
+  // ── Convert bảng cũ → CE theo dòng: đúng phép phân bổ BM02 (factor + residual dồn dòng lớn nhất) ──
+  function convertToLineCe() {
+    const chain = quotationChain(ceTotal, vatPct, agencyFeePct);
+    const svc = lines.filter((l) => !proxyKeys.has(l.sectionKey));
+    // Trọng số = CO gross-up + giá trị tham chiếu kho (K3) — y hệt lineWeight của buildQuotationModel.
+    const weight = (l: Line) => computeLineAmount(ceInput(l), percentBase) + (l.stockRefUnitPrice ? Math.round(l.quantity * l.stockRefUnitPrice) : 0);
+    // Phân bổ theo HÀNG CE (nhóm kho tự gộp), bỏ dòng tài trợ khỏi phần chia tiền khách.
+    const rows = ceRowsOf(svc.map((l) => ({ ...ceInput(l), key: l.key })), percentBase).map((r) => ({
+      leaderKey: (r.leader as { key: string }).key,
+      sponsored: !!r.leader.isSponsored,
+      w: r.coLines.reduce((sum, c) => sum + weight(svc.find((l) => l.key === (c as { key: string }).key)!), 0),
+    }));
+    const chargeable = rows.filter((r) => !r.sponsored && r.w > 0);
+    const totalW = chargeable.reduce((s, r) => s + r.w, 0);
+    const factor = totalW > 0 ? chain.serviceSubtotal / totalW : 0;
+    const alloc = new Map<string, number>();
+    let given = 0;
+    for (const r of chargeable) {
+      const a = Math.round(r.w * factor);
+      alloc.set(r.leaderKey, a);
+      given += a;
+    }
+    // Residual dồn vào hàng lớn nhất — Σ phân bổ = serviceSubtotal TUYỆT ĐỐI.
+    const largest = chargeable.reduce<(typeof chargeable)[number] | null>((m, r) => (m == null || r.w > m.w ? r : m), null);
+    if (largest) alloc.set(largest.leaderKey, (alloc.get(largest.leaderKey) ?? 0) + (chain.serviceSubtotal - given));
+    setLines((ls) =>
+      ls.map((l) => {
+        if (!alloc.has(l.key) && !rows.some((r) => r.leaderKey === l.key)) return l;
+        const a = alloc.get(l.key);
+        const q = l.lineType === "QTY_PRICE" && l.quantity > 0 ? l.quantity : 1;
+        if (a == null) {
+          // hàng tài trợ: hiện đơn giá would-be, engine tự tính tiền = 0
+          const w = weight(l);
+          return { ...l, ceQuantity: q, ceUnitPrice: Math.round((w * factor) / q) };
+        }
+        // Giữ Σ CE = serviceSubtotal tuyệt đối: nếu chia không tròn theo SL thì hàng đó chuyển SL=1.
+        const p = Math.round(a / q);
+        return p * q === a ? { ...l, ceQuantity: q, ceUnitPrice: p } : { ...l, ceQuantity: 1, ceUnitPrice: a };
+      }),
+    );
+    // Phí theo mục kế thừa % phí agency của bảng cũ — chỉnh lại từng mục sau nếu muốn.
+    setSections((ss) => ss.map((s) => (!s.isProxy && !s.parentKey && s.clientFeePct == null ? { ...s, clientFeePct: agencyFeePct } : s)));
+    if (agencyFeePct !== 10 && agencyFeePct !== 5 && !customRates.includes(agencyFeePct)) setCustomRates((r) => [...r, agencyFeePct]);
+    setCeMode(true);
+  }
+
   function runMakeup() {
     // Markup-eligible: QTY_PRICE/FIXED, không thuộc hạng mục Chi hộ (kể cả nằm dưới 1 tổ tiên Chi hộ).
     // FIXED coi qty=1×fixedAmount.
-    const proxyKeys = effectiveProxyKeys(sections);
     const eligible = sections
       .filter((s) => !proxyKeys.has(s.key))
       .flatMap((s) => lines.filter((l) => l.sectionKey === s.key))
@@ -378,7 +601,85 @@ export function CostSheetBuilder({
     setCeTotal(Math.round(totals.coTotal * (1 + vatPct / 100) * (1 - discountPct / 100)));
   }
 
+  // ── Cột hiển thị (gate theo quyền + seg CE/CO) ──
+  const showCE = ceMode && canViewCost && view !== "co";
+  const showCO = view !== "ce" || !canViewCost;
+  const showTot = canViewCost && view !== "ce";
+  const showPay = canViewPaycap && view !== "ce";
+  const showMg = canViewCost && ceMode && view !== "ce";
+  // Đơn vị nằm trong khối CE khi khối đó hiện, ngược lại chuyển sang khối CO — luôn có đúng một cột.
+  const unitInCo = !showCE;
+  const colCount =
+    2 + (showCE ? 4 : 0) + (showCO ? 4 + (unitInCo ? 1 : 0) : 0) + (showTot ? 1 : 0) + (showPay ? 1 : 0) + (showMg ? 1 : 0) + (showUtil ? 6 : 0) + (canEdit ? 1 : 0);
+
+  // ── Danh sách mục theo cây (thứ tự render + indexPath cho STT) ──
+  const serviceRoots = sections.filter((s) => !s.isProxy && !s.parentKey);
+  const proxyRoots = sections.filter((s) => s.isProxy);
+  const childrenOf = (key: string) => sections.filter((s) => s.parentKey === key);
+
+  /** Tổng cả nhánh của một mục — CE gộp theo hàng, CO/thuế/trần theo dòng. */
+  function branchStats(key: string): { ce: number; pre: number; tax: number; tot: number; pay: number } {
+    const own = lines.filter((l) => l.sectionKey === key);
+    const stats = {
+      ce: ceRowsOf(own.map(ceInput), percentBase).reduce((s, r) => s + r.ceAmount, 0),
+      pre: own.reduce((s, l) => s + computeLineNetAmount(ceInput(l), percentBase), 0),
+      tax: own.reduce((s, l) => s + taxDisplayAmount(ceInput(l), percentBase), 0),
+      tot: own.reduce((s, l) => s + computeLineAmount(ceInput(l), percentBase), 0),
+      pay: own.reduce((s, l) => s + payCapFor(ceInput(l), percentBase), 0),
+    };
+    for (const c of childrenOf(key)) {
+      const cs = branchStats(c.key);
+      stats.ce += cs.ce;
+      stats.pre += cs.pre;
+      stats.tax += cs.tax;
+      stats.tot += cs.tot;
+      stats.pay += cs.pay;
+    }
+    return stats;
+  }
+
+  function setCollapseLevel(maxDepth: number) {
+    const next: Record<string, boolean> = {};
+    const walk = (list: Section[], depth: number) => {
+      for (const s of list) {
+        if (depth >= maxDepth) next[s.key] = true;
+        walk(childrenOf(s.key), depth + 1);
+      }
+    };
+    walk(serviceRoots, 1);
+    walk(proxyRoots, 1);
+    setCollapsed(next);
+  }
+
+  // ── Thanh cuộn ngang NỔI đáy khung, đồng bộ 2 chiều với lưới ──
+  const gridRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [scrollW, setScrollW] = useState(0);
+  const syncing = useRef(false);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const table = el.querySelector("table");
+    if (!table) return;
+    const ro = new ResizeObserver(() => setScrollW(table.scrollWidth));
+    ro.observe(table);
+    setScrollW(table.scrollWidth);
+    return () => ro.disconnect();
+  }, [sections.length, lines.length, colCount]);
+  function syncScroll(from: "grid" | "bar") {
+    if (syncing.current) return;
+    syncing.current = true;
+    const g = gridRef.current, b = barRef.current;
+    if (g && b) {
+      if (from === "grid") b.scrollLeft = g.scrollLeft;
+      else g.scrollLeft = b.scrollLeft;
+    }
+    syncing.current = false;
+  }
+
   const payload = { sections, lines };
+  const l1Names = new Map(serviceRoots.map((s, i) => [s.key, `${sectionNumber([i])} — ${s.nameVi || t("untitledSection")}`]));
+  const feeBuckets: { rate: number; fixed: boolean }[] = [{ rate: 10, fixed: true }, { rate: 5, fixed: true }, ...customRates.map((r) => ({ rate: r, fixed: false }))];
 
   return (
     <form action={formAction} className="space-y-4">
@@ -393,73 +694,234 @@ export function CostSheetBuilder({
       <input type="hidden" name="mgmtFeePct" value={mgmtFeePct} />
       <input type="hidden" name="contingencyPct" value={contingencyPct} />
       <input type="hidden" name="discountPct" value={discountPct} />
+      {/* Chế độ mới: ceTotal chỉ để server đối chiếu — server TỰ suy lại từ dòng (bỏ qua input này). */}
+      {ceMode && <input type="hidden" name="ceTotal" value={effectiveCeTotal} />}
+
+      {!canEdit && (
+        <p className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("readOnlyNote")}</p>
+      )}
 
       {/* Scenario + template */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-foreground">{t("scenario")}</label>
-          <div className="flex flex-wrap gap-2">
-            {(["COST_UP", "BUDGET_DOWN"] as const).map((s) => (
-              <label key={s} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border-strong px-2.5 py-1.5 text-xs has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50">
-                <input type="radio" name="scenario" value={s} checked={scenario === s} onChange={() => setScenario(s)} />
-                {t(s === "COST_UP" ? "scenarioCostUp" : "scenarioBudgetDown")}
-              </label>
-            ))}
-          </div>
-        </div>
-        {sections.length === 0 && templates.length > 0 && (
-          <div className="flex items-end gap-2">
-            <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} className="h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-xs">
-              <option value="">{t("selectTemplate")}</option>
-              {templates.map((tp) => (
-                <option key={tp.id} value={tp.id}>{tp.name}</option>
+      {canEdit && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground">{t("scenario")}</label>
+            <div className="flex flex-wrap gap-2">
+              {(["COST_UP", "BUDGET_DOWN"] as const).map((s) => (
+                <label key={s} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border-strong px-2.5 py-1.5 text-xs has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50">
+                  <input type="radio" name="scenario" value={s} checked={scenario === s} onChange={() => setScenario(s)} />
+                  {t(s === "COST_UP" ? "scenarioCostUp" : "scenarioBudgetDown")}
+                </label>
               ))}
-            </select>
-            <button type="button" onClick={loadTemplate} className="h-9 rounded-lg border border-border-strong px-3 text-xs font-medium hover:bg-surface-2">
-              {t("fromTemplate")}
-            </button>
+            </div>
           </div>
-        )}
-      </div>
-      {sections.length === 0 && !showAllTemplates && allTemplates.length > matchingTemplates.length && (
+          {sections.length === 0 && templates.length > 0 && (
+            <div className="flex items-end gap-2">
+              <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} className="h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-xs">
+                <option value="">{t("selectTemplate")}</option>
+                {templates.map((tp) => (
+                  <option key={tp.id} value={tp.id}>{tp.name}</option>
+                ))}
+              </select>
+              <button type="button" onClick={loadTemplate} className="h-9 rounded-lg border border-border-strong px-3 text-xs font-medium hover:bg-surface-2">
+                {t("fromTemplate")}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {canEdit && sections.length === 0 && !showAllTemplates && allTemplates.length > matchingTemplates.length && (
         <button type="button" onClick={() => setShowAllTemplates(true)} className="text-xs font-medium text-brand-600 hover:underline">
           {t("showAllTemplates")}
         </button>
       )}
 
-      {/* Sections — cây N-cấp (Mục→Nhóm→Sub-nhóm→...), tối đa {MAX_SECTION_DEPTH} cấp */}
-      <div className="space-y-3">
-        {sections
-          .filter((s) => !s.isProxy && !s.parentKey)
-          .map((s) => (
-            <SectionCard departments={departments}
-              key={s.key}
-              section={s}
-              depth={1}
-              allSections={sections}
-              allLines={lines}
-              vendors={vendors}
-              locale={locale}
-              t={t}
-              percentBase={totals.directCo}
-              collapsedState={collapsed}
-              setCollapsedState={setCollapsed}
-              updateSection={updateSection}
-              removeSection={removeSection}
-              addSection={addSection}
-              updateLine={updateLine}
-              addLine={addLine}
-              removeLine={removeLine}
-            />
-          ))}
+      {/* Banner convert bảng cũ → CE theo dòng (tự nguyện — Q2) */}
+      {canEdit && !ceMode && lines.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-brand-700">{t("convertTitle")}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{t("convertBody")}</p>
+          </div>
+          <button type="button" onClick={convertToLineCe} disabled={ceTotal <= 0} className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50" title={ceTotal <= 0 ? t("convertNeedsCe") : undefined}>
+            {t("convertBtn")}
+          </button>
+        </div>
+      )}
+      {canEdit && !ceMode && lines.length === 0 && (
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-brand-600">
+          <input type="checkbox" checked={ceMode} onChange={(e) => setCeMode(e.target.checked)} />
+          {t("enableCeMode")}
+        </label>
+      )}
+
+      {/* KPI header realtime (chế độ mới) — sticky, cùng nguồn recalc với lưới */}
+      {ceMode && canViewCost && (
+        <div className="sticky top-0 z-30 grid grid-cols-2 gap-2 rounded-xl border border-border bg-surface/95 p-2 backdrop-blur-sm sm:grid-cols-4 lg:grid-cols-7">
+          <Kpi hero label={t("kpiSub")} value={formatNumber(ceAgg.ceService, locale)} />
+          <Kpi label={t("kpiFee")} value={`+${formatNumber(ceAgg.feeTotal, locale)}`} />
+          <Kpi label={t("kpiPreVat")} value={formatNumber(ceAgg.cePreVat, locale)} />
+          <Kpi label={t("kpiCo")} value={formatNumber(totals.coTotal, locale)} accent="indigo" />
+          {canViewPaycap && <Kpi label={t("kpiPay")} value={formatNumber(payTotal, locale)} accent="green" />}
+          <div className="rounded-lg bg-surface-2 px-2.5 py-1.5">
+            <p className="text-[10px] text-muted-foreground">{t("kpiMargin", { pct: formatNumber(minMarginPct, locale) })}</p>
+            <p className={cn("text-sm font-bold tabular-nums", marginOk ? "text-success" : "text-danger")}>{formatPercent(marginPct, locale)}%</p>
+          </div>
+          <Kpi label={t("kpiProxy")} value={formatNumber(totals.chiHo, locale)} />
+        </div>
+      )}
+
+      {/* Thanh chế độ xem + thu gọn cấp + cột phụ + gộp CE */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {canViewCost && ceMode && (
+          <Seg
+            options={[{ v: "both", label: t("viewBoth") }, { v: "ce", label: t("viewCe") }, { v: "co", label: t("viewCo") }]}
+            value={view}
+            onChange={(v) => setView(v as typeof view)}
+            label={t("viewLabel")}
+          />
+        )}
+        <Seg
+          options={[{ v: "1", label: t("level1") }, { v: "2", label: t("level12") }, { v: "3", label: t("level123") }, { v: "all", label: t("levelAll") }]}
+          value=""
+          onChange={(v) => (v === "all" ? setCollapsed({}) : setCollapseLevel(Number(v)))}
+          label={t("levelLabel")}
+        />
+        <button type="button" onClick={() => setShowUtil((x) => !x)} className={cn("inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-medium", showUtil ? "border-brand-400 bg-brand-50 text-brand-700" : "border-border-strong text-muted-foreground hover:bg-surface-2")}>
+          <Settings2 className="h-3.5 w-3.5" /> {t("utilToggle")}
+        </button>
+        {canEdit && ceMode && selected.size >= 2 && (
+          <button type="button" onClick={mergeSelected} disabled={!mergeSameSection} title={mergeSameSection ? undefined : t("mergeHintSameSection")} className="inline-flex items-center gap-1 rounded-lg border border-brand-300 bg-brand-50 px-2 py-1 font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-50">
+            <Link2 className="h-3.5 w-3.5" /> {t("mergeBtn", { n: selected.size })}
+          </button>
+        )}
+        {canEdit && ceMode && (
+          <span className="ml-auto inline-flex items-center gap-1.5">
+            <label className="text-muted-foreground">{t("makeupFactor")}</label>
+            <NumberField decimals={2} value={makeupFactor} onChange={setMakeupFactor} className="h-7 w-16 rounded border border-border-strong bg-surface px-1.5 text-right text-xs" />
+            <button type="button" onClick={() => fillCeByFactor(false)} className="rounded-lg border border-border-strong px-2 py-1 font-medium hover:bg-surface-2">
+              {t("makeupFillAll")}
+            </button>
+            {selected.size > 0 && (
+              <button type="button" onClick={() => fillCeByFactor(true)} className="rounded-lg border border-border-strong px-2 py-1 font-medium hover:bg-surface-2">
+                {t("makeupFillSelected", { n: selected.size })}
+              </button>
+            )}
+          </span>
+        )}
       </div>
-      <button type="button" onClick={() => addSection(false, null)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
-        <Plus className="h-3.5 w-3.5" />
-        {t("addSection")}
-      </button>
+
+      {/* ── LƯỚI CHÍNH ── */}
+      <div>
+        <div ref={gridRef} onScroll={() => syncScroll("grid")} className="overflow-x-auto overflow-y-scroll max-h-[72vh] rounded-xl border border-border">
+          <table className="w-full min-w-[900px] border-separate border-spacing-0 text-xs">
+            <thead className="sticky top-0 z-20">
+              <tr className="bg-surface-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <th className="sticky left-0 z-10 w-12 border-b border-border bg-surface-2 px-2 py-1.5" />
+                <th className="sticky left-12 z-10 min-w-[240px] border-b border-border bg-surface-2 px-2 py-1.5" />
+                {showCE && <th colSpan={4} className="border-b border-l-2 border-border border-l-success/40 px-2 py-1.5 text-center font-semibold text-success">{t("gridCeHeader")}</th>}
+                {showCO && <th colSpan={4 + (unitInCo ? 1 : 0)} className="border-b border-l-2 border-border border-l-brand-400/40 px-2 py-1.5 text-center font-semibold text-brand-600">{t("gridCoHeader")}</th>}
+                {showTot && <th className="border-b border-l-2 border-border border-l-border-strong px-2 py-1.5 text-center font-semibold text-brand-700">{t("colTotalCo")}</th>}
+                {showPay && <th className="border-b border-border px-2 py-1.5 text-center font-semibold text-success" title={t("colPayCapHint")}>{t("colPayCap")}</th>}
+                {showMg && <th className="border-b border-border px-2 py-1.5 text-center">{t("colMargin")}</th>}
+                {showUtil && <th colSpan={6} className="border-b border-l-2 border-border border-l-border-strong px-2 py-1.5 text-center">{t("utilToggle")}</th>}
+                {canEdit && <th className="border-b border-border px-1 py-1.5" />}
+              </tr>
+              <tr className="bg-surface-2 text-left text-muted-foreground">
+                <th className="sticky left-0 z-10 border-b border-border bg-surface-2 px-2 py-1.5">{t("colStt")}</th>
+                <th className="sticky left-12 z-10 border-b border-border bg-surface-2 px-2 py-1.5">{t("colDesc")}</th>
+                {showCE && (
+                  <>
+                    <th className="border-b border-l-2 border-border border-l-success/40 px-2 py-1.5 text-right">{t("colQty")}</th>
+                    <th className="border-b border-border px-2 py-1.5">{t("colUnit")}</th>
+                    <th className="border-b border-border px-2 py-1.5 text-right">{t("colUnitPrice")}</th>
+                    <th className="border-b border-border px-2 py-1.5 text-right">{t("colCeAmount")}</th>
+                  </>
+                )}
+                {showCO && (
+                  <>
+                    <th className="border-b border-l-2 border-border border-l-brand-400/40 px-2 py-1.5 text-right">{t("colQty")}</th>
+                    {unitInCo && <th className="border-b border-border px-2 py-1.5">{t("colUnit")}</th>}
+                    <th className="border-b border-border px-2 py-1.5 text-right">{t("colUnitPrice")}</th>
+                    <th className="border-b border-border px-2 py-1.5 text-right">{t("colCoPre")}</th>
+                    <th className="border-b border-border px-2 py-1.5 text-right">{t("colCoTax")}</th>
+                  </>
+                )}
+                {showTot && <th className="border-b border-l-2 border-border border-l-border-strong px-2 py-1.5 text-right font-semibold text-brand-700" title={t("colTotalCoHint")}>{t("colTotalCo")}</th>}
+                {showPay && <th className="border-b border-border px-2 py-1.5 text-right font-semibold text-success">{t("colPayCap")}</th>}
+                {showMg && <th className="border-b border-border px-2 py-1.5 text-right">{t("colMargin")}</th>}
+                {showUtil && (
+                  <>
+                    <th className="border-b border-l-2 border-border border-l-border-strong px-2 py-1.5">{t("colType")}</th>
+                    <th className="border-b border-border px-2 py-1.5">{t("colVendor")}</th>
+                    <th className="border-b border-border px-2 py-1.5 text-center">{t("colLock")}</th>
+                    <th className="border-b border-border px-2 py-1.5">{t("colMaxMarkup")}</th>
+                    <th className="border-b border-border px-2 py-1.5 text-center" title={t("colSponsoredHint")}>{t("colSponsored")}</th>
+                    <th className="border-b border-border px-2 py-1.5" title={t("colLegHint")}>{t("colLeg")}</th>
+                  </>
+                )}
+                {canEdit && <th className="border-b border-border px-1 py-1.5" />}
+              </tr>
+            </thead>
+            <tbody>
+              {serviceRoots.map((s, i) => (
+                <SectionRows key={s.key} section={s} depth={1} indexPath={[i]} ctx={rowCtx()} />
+              ))}
+              {proxyRoots.map((s) => (
+                <SectionRows key={s.key} section={s} depth={1} indexPath={[]} ctx={rowCtx()} proxyRoot />
+              ))}
+              {lines.length === 0 && (
+                <tr>
+                  <td colSpan={colCount} className="px-2 py-6 text-center text-muted-foreground">{t("none")}</td>
+                </tr>
+              )}
+              {/* Dòng phí QL + tổng cuối bảng — đúng vị trí quen trong file Excel (chế độ mới) */}
+              {ceMode && canViewCost && (
+                <>
+                  {feeBuckets.map((b) => {
+                    const members = serviceRoots.filter((s) => s.clientFeePct === b.rate);
+                    if (members.length === 0 && !b.fixed) return null;
+                    const amt = members.reduce((sum, s) => sum + (ceAgg.feeBySection.get(s.key) ?? 0), 0);
+                    const roms = members.map((s) => sectionNumber([serviceRoots.indexOf(s)])).join(", ");
+                    return (
+                      <SummaryTableRow
+                        key={`fee-${b.rate}`}
+                        colCount={colCount}
+                        showCE={showCE}
+                        label={members.length > 0 ? t("feeRowLabel", { rate: formatNumber(b.rate, locale), sections: roms }) : t("feeRowLabelEmpty", { rate: formatNumber(b.rate, locale) })}
+                        value={members.length > 0 ? formatNumber(amt, locale) : "—"}
+                      />
+                    );
+                  })}
+                  <SummaryTableRow label={t("grandRowLabel")} value={formatNumber(ceAgg.cePreVat, locale)} colCount={colCount} showCE={showCE} strong />
+                  <SummaryTableRow label={t("vatRowLabel", { pct: formatNumber(vatPct, locale) })} value={formatNumber(ceAgg.ceTotalDerived - ceAgg.cePreVat, locale)} colCount={colCount} showCE={showCE} />
+                  <SummaryTableRow label={t("totalRowLabel")} value={formatNumber(ceAgg.ceTotalDerived, locale)} colCount={colCount} showCE={showCE} strong />
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Bar cuộn ngang NỔI — sticky đáy viewport, đồng bộ 2 chiều với lưới */}
+        <div ref={barRef} onScroll={() => syncScroll("bar")} className="sticky bottom-0 z-30 mt-0.5 h-3.5 overflow-x-auto overflow-y-hidden rounded bg-surface-2">
+          <div style={{ width: scrollW, height: 1 }} />
+        </div>
+      </div>
+
+      {canEdit && (
+        <button type="button" onClick={() => addSection(false, null)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
+          <Plus className="h-3.5 w-3.5" />
+          {t("addSection")}
+        </button>
+      )}
+      {canEdit && proxyRoots.length === 0 && (
+        <button type="button" onClick={() => addSection(true)} className="ml-4 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
+          <Plus className="h-3.5 w-3.5" />
+          {t("proxySectionTitle")}
+        </button>
+      )}
 
       {/* K3 — Kho đã duyệt: chèn CẶP dòng (hàng lấy từ kho giá 0 + hàng mua bù) vào một hạng mục. */}
-      {stockReservations.length > 0 && (
+      {canEdit && stockReservations.length > 0 && (
         <section className="space-y-2 rounded-xl border border-border bg-surface p-3">
           <div>
             <h3 className="text-sm font-semibold text-foreground">{t("stockPanelTitle")}</h3>
@@ -507,75 +969,157 @@ export function CostSheetBuilder({
         </section>
       )}
 
-      {/* Proxy section (Chi hộ) — tách riêng cuối bảng */}
-      <div className="space-y-2 rounded-lg border border-dashed border-border-strong p-3">
-        {sections
-          .filter((s) => s.isProxy)
-          .map((s) => (
-            <ProxySectionCard
-              key={s.key}
-              section={s}
-              lines={lines.filter((l) => l.sectionKey === s.key)}
-              vendors={vendors}
-              locale={locale}
-              t={t}
-              updateSection={updateSection}
-              removeSection={removeSection}
-              updateLine={updateLine}
-              addLine={addLine}
-              removeLine={removeLine}
-            />
-          ))}
-        {sections.filter((s) => s.isProxy).length === 0 && (
-          <button type="button" onClick={() => addSection(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
-            <Plus className="h-3.5 w-3.5" />
-            {t("proxySectionTitle")}
-          </button>
-        )}
-      </div>
+      {/* Phí DỊCH VỤ của khối Chi hộ — RIÊNG, nằm ngoài margin và ngoài phí quản lý báo khách
+          (bất biến #2). Mỗi mục Chi hộ gốc một dòng cấu hình. */}
+      {canViewCost &&
+        proxyRoots.map((s) => {
+          const sub = lines.filter((l) => l.sectionKey === s.key).reduce((sum, l) => sum + computeLineAmount(ceInput(l), percentBase), 0);
+          const feeAmt = s.proxyFeeType === "FIXED" ? (s.proxyFeeVal ?? 0) : Math.round((sub * (s.proxyFeeVal ?? 0)) / 100);
+          return (
+            <div key={s.key} className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border-strong px-3 py-2 text-xs">
+              <span className="font-medium text-foreground">{t("proxySectionTitle")}</span>
+              <span className="text-muted-foreground">{t("proxySubtotal")}: {formatNumber(sub, locale)}</span>
+              <label className="flex items-center gap-1.5">
+                {t("proxyFeeType")}:
+                <select value={s.proxyFeeType ?? "PCT"} disabled={!canEdit} onChange={(e) => updateSection(s.key, { proxyFeeType: e.target.value })} className="h-7 rounded border border-border-strong bg-surface px-1.5">
+                  <option value="PCT">{t("proxyFeePct")}</option>
+                  <option value="FIXED">{t("proxyFeeFixed")}</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5">
+                {t("proxyFeeVal")}:
+                <NumberField decimals={2} value={s.proxyFeeVal ?? 0} disabled={!canEdit} onChange={(v) => updateSection(s.key, { proxyFeeVal: v })} className="h-7 w-24 rounded border border-border-strong bg-surface px-1.5" />
+              </label>
+              <span className="font-medium text-foreground">= {formatNumber(feeAmt, locale)}</span>
+            </div>
+          );
+        })}
+
+      {/* Panel PHÍ QUẢN LÝ theo mục L1 (chế độ mới) — cùng nguồn recalc với dòng phí trong lưới */}
+      {ceMode && canViewCost && (
+        <section className="space-y-2 rounded-xl border border-border bg-surface p-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">{t("feeCardTitle")}</h3>
+            <p className="text-[11px] text-muted-foreground">{t("feeCardHint")}</p>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-3">
+            {feeBuckets.map((b, bi) => {
+              const members = serviceRoots.filter((s) => s.clientFeePct === b.rate);
+              const amt = members.reduce((sum, s) => sum + (ceAgg.feeBySection.get(s.key) ?? 0), 0);
+              return (
+                <div key={`${b.rate}-${bi}`} className="rounded-lg border border-border bg-surface-2 p-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    {b.fixed ? (
+                      <span className="font-bold text-foreground">{formatNumber(b.rate, locale)}%</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-bold text-foreground">
+                        {t("feeBucketOther")}
+                        <NumberField
+                          decimals={2}
+                          value={b.rate}
+                          onChange={(v) => {
+                            const nv = Math.max(0, Math.min(100, v));
+                            setSections((ss) => ss.map((s) => (!s.isProxy && !s.parentKey && s.clientFeePct === b.rate ? { ...s, clientFeePct: nv } : s)));
+                            setCustomRates((rs) => rs.map((r) => (r === b.rate ? nv : r)));
+                          }}
+                          disabled={!canEdit}
+                          className="h-6 w-14 rounded border border-border-strong bg-surface px-1 text-right text-xs"
+                        />
+                        %
+                      </span>
+                    )}
+                    {canEdit && (
+                      <span className="ml-auto flex gap-1 text-[10px]">
+                        <button type="button" className="text-brand-600 hover:underline" onClick={() => setSections((ss) => ss.map((s) => (!s.isProxy && !s.parentKey && s.clientFeePct == null ? { ...s, clientFeePct: b.rate } : s)))}>
+                          {t("feeSelectAll")}
+                        </button>
+                        <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSections((ss) => ss.map((s) => (!s.isProxy && !s.parentKey && s.clientFeePct === b.rate ? { ...s, clientFeePct: null } : s)))}>
+                          {t("feeClearAll")}
+                        </button>
+                      </span>
+                    )}
+                    {amt > 0 && <span className="text-[11px] font-semibold tabular-nums text-success">+{formatNumber(amt, locale)}</span>}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {serviceRoots.map((s, i) => {
+                      const mine = s.clientFeePct === b.rate;
+                      const other = s.clientFeePct != null && !mine;
+                      return (
+                        <label key={s.key} title={other ? t("feeTakenHint") : s.nameVi} className={cn("cursor-pointer rounded border px-1.5 py-0.5 text-[11px]", mine ? "border-brand-400 bg-brand-50 font-semibold text-brand-700" : other ? "cursor-not-allowed border-border text-muted-foreground opacity-50" : "border-border-strong text-foreground hover:bg-surface")}>
+                          <input type="checkbox" className="sr-only" disabled={!canEdit || other} checked={mine} onChange={(e) => updateSection(s.key, { clientFeePct: e.target.checked ? b.rate : null })} />
+                          {sectionNumber([i])}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {ceAgg.missingFeeSectionKeys.length > 0 ? (
+            <p className="rounded-lg border border-warning/40 bg-warning-bg px-2.5 py-1.5 text-[11px] font-medium text-warning">
+              {t("feeMissing", { names: ceAgg.missingFeeSectionKeys.map((k) => l1Names.get(k) ?? "?").join(" · ") })}
+            </p>
+          ) : (
+            <p className="text-[11px] font-medium text-success">{t("feeOk")}</p>
+          )}
+        </section>
+      )}
 
       {/* Header settings: mgmt fee / contingency / discount / VAT / phí agency (báo giá) */}
-      <div className="grid grid-cols-1 gap-3 rounded-lg border border-border p-4 sm:grid-cols-5">
-        <PctField label={t("mgmtFeePct")} hint={t("mgmtFeePctHint")} value={mgmtFeePct} onChange={setMgmtFeePct} />
-        <PctField label={t("contingencyPct")} hint={t("contingencyPctHint")} value={contingencyPct} onChange={setContingencyPct} />
-        <PctField label={t("discountPct")} hint={t("discountPctHint")} value={discountPct} onChange={setDiscountPct} />
-        <div>
-          <label className="mb-1 block text-xs font-medium text-foreground">VAT (%)</label>
-          <NumberField decimals={2} value={vatPct} onChange={setVatPct} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
+      {canViewCost && (
+        <div className="grid grid-cols-1 gap-3 rounded-lg border border-border p-4 sm:grid-cols-5">
+          <PctField label={t("mgmtFeePct")} hint={t("mgmtFeePctHint")} value={mgmtFeePct} onChange={setMgmtFeePct} disabled={!canEdit} />
+          <PctField label={t("contingencyPct")} hint={t("contingencyPctHint")} value={contingencyPct} onChange={setContingencyPct} disabled={!canEdit} />
+          <PctField label={t("discountPct")} hint={t("discountPctHint")} value={discountPct} onChange={setDiscountPct} disabled={!canEdit} />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground">VAT (%)</label>
+            <NumberField decimals={2} value={vatPct} onChange={setVatPct} disabled={!canEdit} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
+          </div>
+          <PctField label={t("agencyFeePct")} hint={t("agencyFeePctHint")} value={agencyFeePct} onChange={setAgencyFeePct} disabled={!canEdit} />
         </div>
-        <PctField label={t("agencyFeePct")} hint={t("agencyFeePctHint")} value={agencyFeePct} onChange={setAgencyFeePct} />
-      </div>
+      )}
 
-      {/* Totals + margin */}
-      <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-surface-2 p-4 sm:grid-cols-4">
-        <Stat label={t("coTotal")} value={formatNumber(totals.coTotal, locale)} />
-        <div>
-          <label className="mb-1 block text-xs font-medium text-foreground">{t("ceTotal")}</label>
-          <NumberField name="ceTotal" value={ceTotal} onChange={setCeTotal} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
-        </div>
-        <Stat label={t("chiHo")} value={formatNumber(totals.chiHo, locale)} />
-        <div>
-          <span className="mb-1 block text-xs font-medium text-foreground">{t("margin")}</span>
-          <div className={cn("flex h-9 items-center rounded-lg px-2.5 text-sm font-semibold", marginOk ? "bg-success-bg text-success" : "bg-danger-bg text-danger")}>
-            {formatPercent(marginPct, locale)}% · {marginOk ? t("marginOk") : t("marginLow", { pct: formatNumber(minMarginPct, locale) })}
+      {/* Totals + margin — chế độ CŨ nhập ceTotal tay; chế độ MỚI hiện số suy ra (khoá) */}
+      {canViewCost && (
+        <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-surface-2 p-4 sm:grid-cols-4">
+          <Stat label={t("coTotal")} value={formatNumber(totals.coTotal, locale)} />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground">{t("ceTotal")}</label>
+            {ceMode ? (
+              <div className="flex h-9 items-center rounded-lg bg-surface px-2.5 text-sm font-semibold tabular-nums text-foreground" title={t("ceTotalDerivedHint")}>
+                {formatNumber(effectiveCeTotal, locale)}
+              </div>
+            ) : (
+              <NumberField name="ceTotal" value={ceTotal} onChange={setCeTotal} disabled={!canEdit} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
+            )}
+          </div>
+          <Stat label={t("chiHo")} value={formatNumber(totals.chiHo, locale)} />
+          <div>
+            <span className="mb-1 block text-xs font-medium text-foreground">{t("margin")}</span>
+            <div className={cn("flex h-9 items-center rounded-lg px-2.5 text-sm font-semibold", marginOk ? "bg-success-bg text-success" : "bg-danger-bg text-danger")}>
+              {formatPercent(marginPct, locale)}% · {marginOk ? t("marginOk") : t("marginLow", { pct: formatNumber(minMarginPct, locale) })}
+            </div>
           </div>
         </div>
-      </div>
-      <Stat label={t("grandTotalForClient")} value={formatNumber(clientBillableTotal(ceTotal, totals.chiHo), locale)} />
+      )}
+      {canViewCost && <Stat label={t("grandTotalForClient")} value={formatNumber(clientBillableTotal(effectiveCeTotal, totals.chiHo), locale)} />}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={runMakeup} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700 hover:bg-brand-100">
-          <Wand2 className="h-3.5 w-3.5" />
-          {t("makeup")}
-        </button>
-        <button type="button" onClick={suggestCe} className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-2 text-xs font-medium hover:bg-surface-2">
-          {t("suggestCe")}
-        </button>
-        <span className="text-xs text-muted-foreground">{t("makeupHint")}</span>
-      </div>
+      {canEdit && !ceMode && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={runMakeup} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700 hover:bg-brand-100">
+            <Wand2 className="h-3.5 w-3.5" />
+            {t("makeup")}
+          </button>
+          <button type="button" onClick={suggestCe} className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-2 text-xs font-medium hover:bg-surface-2">
+            {t("suggestCe")}
+          </button>
+          <span className="text-xs text-muted-foreground">{t("makeupHint")}</span>
+        </div>
+      )}
 
       {/* Override khi margin thấp */}
-      {!marginOk && (
+      {canEdit && !marginOk && (
         <div>
           <label className="mb-1 block text-xs font-medium text-danger">{t("overrideNote")}</label>
           <input name="overrideNote" value={overrideNote} onChange={(e) => setOverrideNote(e.target.value)} className={cn("h-10 w-full rounded-lg border bg-surface px-3 text-sm", state.fieldErrors?.overrideNote ? "border-danger" : "border-border-strong")} />
@@ -583,433 +1127,522 @@ export function CostSheetBuilder({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
-        <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
-          {pending ? tCommon("saving") : t("submitApprove")}
-        </button>
-        {/* Đánh dấu VAI TRÒ của bản lưu này. Không chọn = bản làm việc nội bộ (đa số) — cố ý để
-            trống mặc định, ép chọn sẽ khiến người dùng gắn bừa và bản xuất nghiệm thu lấy nhầm bản.
-            KHÔNG dùng state: người dùng chọn xong bấm Lưu ngay, và React 19 tự reset ô sau mỗi lần
-            chạy action — reset về "bản nội bộ" ở đây là hành vi ĐÚNG cho lần lưu kế tiếp. */}
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          {t("revisionKindLabel")}
-          <select name="revisionKind" defaultValue="" className="h-9 rounded-lg border border-border-strong bg-surface px-2 text-xs">
-            <option value="">{t("revisionKindNone")}</option>
-            {REVISION_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {t(`revisionKind${k}` as "revisionKindQUOTE")}
-              </option>
-            ))}
-          </select>
-        </label>
-        {data?.approvedByName && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-            <CheckCircle2 className="h-4 w-4" />
-            {t("approved")} — {t("approvedBy", { name: data.approvedByName, date: data.approvedAt ?? "" })}
-          </span>
-        )}
-      </div>
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+          <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+            {pending ? tCommon("saving") : t("submitApprove")}
+          </button>
+          {/* Đánh dấu VAI TRÒ của bản lưu này. Không chọn = bản làm việc nội bộ (đa số) — cố ý để
+              trống mặc định, ép chọn sẽ khiến người dùng gắn bừa và bản xuất nghiệm thu lấy nhầm bản.
+              KHÔNG dùng state: người dùng chọn xong bấm Lưu ngay, và React 19 tự reset ô sau mỗi lần
+              chạy action — reset về "bản nội bộ" ở đây là hành vi ĐÚNG cho lần lưu kế tiếp. */}
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {t("revisionKindLabel")}
+            <select name="revisionKind" defaultValue="" className="h-9 rounded-lg border border-border-strong bg-surface px-2 text-xs">
+              <option value="">{t("revisionKindNone")}</option>
+              {REVISION_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {t(`revisionKind${k}` as "revisionKindQUOTE")}
+                </option>
+              ))}
+            </select>
+          </label>
+          {data?.approvedByName && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+              <CheckCircle2 className="h-4 w-4" />
+              {t("approved")} — {t("approvedBy", { name: data.approvedByName, date: data.approvedAt ?? "" })}
+            </span>
+          )}
+        </div>
+      )}
     </form>
   );
+
+  // Bọc context cho các hàm render hàng — tránh truyền ~20 props qua từng cấp đệ quy.
+  function rowCtx(): RowCtx {
+    return {
+      t, locale, lines, sections, vendors, departments, percentBase, collapsed, setCollapsed,
+      view, showCE, showCO, showTot, showPay, showMg, showUtil, unitInCo, colCount, canEdit,
+      ceMode, selected, setSelected, updateSection, removeSection, addSection, updateLine, addLine,
+      removeLine, ungroup, branchStats, childrenOf, serviceRoots, minMarginPct,
+    };
+  }
 }
 
-type SectionCardProps = {
-  section: Section;
-  depth: number;
-  allSections: Section[];
-  allLines: Line[];
+type RowCtx = {
+  t: (key: string, values?: Record<string, string | number>) => string;
+  locale: Locale;
+  lines: Line[];
+  sections: Section[];
   vendors: { id: string; label: string }[];
   departments: { code: string; name: string; costPrefix: string }[];
-  locale: Locale;
-  t: (key: string, values?: Record<string, string | number>) => string;
   percentBase: number;
+  collapsed: Record<string, boolean>;
+  setCollapsed: (fn: (s: Record<string, boolean>) => Record<string, boolean>) => void;
+  view: "both" | "ce" | "co";
+  showCE: boolean;
+  showCO: boolean;
+  showTot: boolean;
+  showPay: boolean;
+  showMg: boolean;
+  showUtil: boolean;
+  unitInCo: boolean;
+  colCount: number;
+  canEdit: boolean;
+  ceMode: boolean;
+  selected: Set<string>;
+  setSelected: (fn: (s: Set<string>) => Set<string>) => void;
   updateSection: (key: string, patch: Partial<Section>) => void;
   removeSection: (key: string) => void;
   addSection: (isProxy?: boolean, parentKey?: string | null) => void;
   updateLine: (key: string, patch: Partial<Line>) => void;
   addLine: (sectionKey: string) => void;
   removeLine: (key: string) => void;
+  ungroup: (groupKey: string) => void;
+  branchStats: (key: string) => { ce: number; pre: number; tax: number; tot: number; pay: number };
+  childrenOf: (key: string) => Section[];
+  serviceRoots: Section[];
+  minMarginPct: number;
 };
 
-/** Tổng tiền cả nhánh (dòng trực tiếp của section + đệ quy toàn bộ section con/cháu). */
-function subtreeAmount(sectionKey: string, allSections: Section[], allLines: Line[], percentBase: number): number {
-  const own = allLines.filter((l) => l.sectionKey === sectionKey).reduce((sum, l) => sum + lineAmount(l, percentBase), 0);
-  const childrenTotal = allSections
-    .filter((s) => s.parentKey === sectionKey)
-    .reduce((sum, c) => sum + subtreeAmount(c.key, allSections, allLines, percentBase), 0);
-  return own + childrenTotal;
+/** Màu nền theo tầng — L1 đậm nhất, từ L4 trắng (mockup). KHÔNG đặt transition-colors cạnh các nền
+ *  này (bug kẹt màu theme đã ghi ở HANDOVER 10.24). */
+const LAYER_BG = ["bg-brand-100", "bg-brand-50", "bg-surface-2", "bg-surface"];
+function layerBg(depth: number, proxy: boolean): string {
+  if (proxy) return "bg-warning-bg";
+  return LAYER_BG[Math.min(depth, 4) - 1];
 }
 
-function SectionCard({
-  section,
-  depth,
-  allSections,
-  allLines,
-  vendors,
-  departments,
-  locale,
-  t,
-  percentBase,
-  collapsedState,
-  setCollapsedState,
-  updateSection,
-  removeSection,
-  addSection,
-  updateLine,
-  addLine,
-  removeLine,
-}: SectionCardProps & { collapsedState: Record<string, boolean>; setCollapsedState: (fn: (s: Record<string, boolean>) => Record<string, boolean>) => void }) {
-  const isCollapsed = !!collapsedState[section.key];
-  const ownLines = allLines.filter((l) => l.sectionKey === section.key);
-  const children = allSections.filter((s) => s.parentKey === section.key);
-  // Badge = tổng cả nhánh (dòng trực tiếp + mọi mục con/cháu) — đầu mục thấy ngay tổng toàn nhóm.
-  const subtotal = subtreeAmount(section.key, allSections, allLines, percentBase);
+function SectionRows({ section: s, depth, indexPath, ctx, proxyRoot = false, proxyBranch = false }: { section: Section; depth: number; indexPath: number[]; ctx: RowCtx; proxyRoot?: boolean; proxyBranch?: boolean }) {
+  const { t, locale, lines, collapsed, setCollapsed, colCount, canEdit, showCE, showCO, showTot, showPay, showMg, showUtil, unitInCo } = ctx;
+  const isCollapsed = !!collapsed[s.key];
+  const stats = ctx.branchStats(s.key);
+  // Chỉ MỤC GỐC Chi hộ mang nhãn "CH"; mục con bên dưới vẫn đánh số bình thường (nhưng kế thừa
+  // tính chất Chi hộ: không CE, không margin) — đánh "CH" cho cả nhánh thì không phân biệt được mục nào.
+  const proxy = proxyRoot || proxyBranch;
+  const stt = proxyRoot ? t("sttProxy") : sectionNumber(indexPath);
+  const bg = layerBg(depth, proxy);
+  const mg = !proxy && stats.ce > 0 ? ((stats.ce - stats.tot) / stats.ce) * 100 : null;
+  const ownLines = lines.filter((l) => l.sectionKey === s.key);
+  const children = ctx.childrenOf(s.key);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border" style={{ marginLeft: depth > 1 ? 16 : 0 }}>
-      <div className="flex items-center gap-2 bg-surface-2 px-3 py-2">
-        <button type="button" onClick={() => setCollapsedState((s) => ({ ...s, [section.key]: !s[section.key] }))} className="text-muted-foreground">
-          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-        <input value={section.icon} onChange={(e) => updateSection(section.key, { icon: e.target.value })} className="h-8 w-10 rounded border border-transparent bg-transparent text-center text-sm hover:border-border-strong" />
-        <input
-          value={locale === "vi" ? section.nameVi : section.nameEn || section.nameVi}
-          onChange={(e) => updateSection(section.key, locale === "vi" ? { nameVi: e.target.value } : { nameEn: e.target.value })}
-          placeholder={t("sectionNameVi")}
-          className="h-8 flex-1 rounded border border-transparent bg-transparent px-1 text-sm font-medium hover:border-border-strong"
-        />
-        {/* Phòng ban phụ trách — quyết định prefix mã của MỌI dòng trong hạng mục (ACC-001…).
-            Mã do server đánh lúc lưu; đây chỉ chọn phòng. */}
-        <select
-          value={section.departmentCode}
-          onChange={(e) => updateSection(section.key, { departmentCode: e.target.value })}
-          title={t("sectionDepartmentHint")}
-          aria-label={t("sectionDepartment")}
-          className="h-8 rounded border border-transparent bg-transparent px-1 text-xs text-muted-foreground hover:border-border-strong"
-        >
-          <option value="">{t("sectionDepartmentNone")}</option>
-          {departments.map((d) => (
-            <option key={d.code} value={d.code}>
-              {d.costPrefix} — {d.name}
-            </option>
-          ))}
-        </select>
-        <Badge tone={SECTION_COLOR_TONE[section.colorSlot] ?? "neutral"}>{formatNumber(subtotal, locale)}</Badge>
-        <button type="button" onClick={() => removeSection(section.key)} className="text-danger hover:text-danger/80">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      {!isCollapsed && (
-        <>
-          <LinesTable lines={ownLines} vendors={vendors} locale={locale} t={t} percentBase={percentBase} updateLine={updateLine} removeLine={removeLine} />
-          <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-border px-3 py-2">
-            <button type="button" onClick={() => addLine(section.key)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
-              <Plus className="h-3.5 w-3.5" />
-              {t("addLine")}
-            </button>
-            {depth < MAX_SECTION_DEPTH && (
-              <button type="button" onClick={() => addSection(false, section.key)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
-                <Plus className="h-3.5 w-3.5" />
-                {t("addSubsection")}
-              </button>
-            )}
-          </div>
-          {children.length > 0 && (
-            <div className="space-y-2 border-t border-dashed border-border bg-surface/60 p-2">
-              {children.map((c) => (
-                <SectionCard departments={departments}
-                  key={c.key}
-                  section={c}
-                  depth={depth + 1}
-                  allSections={allSections}
-                  allLines={allLines}
-                  vendors={vendors}
-                  locale={locale}
-                  t={t}
-                  percentBase={percentBase}
-                  collapsedState={collapsedState}
-                  setCollapsedState={setCollapsedState}
-                  updateSection={updateSection}
-                  removeSection={removeSection}
-                  addSection={addSection}
-                  updateLine={updateLine}
-                  addLine={addLine}
-                  removeLine={removeLine}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function ProxySectionCard({
-  section,
-  lines,
-  vendors,
-  locale,
-  t,
-  updateSection,
-  removeSection,
-  updateLine,
-  addLine,
-  removeLine,
-}: {
-  section: Section;
-  lines: Line[];
-  vendors: { id: string; label: string }[];
-  locale: Locale;
-  t: (key: string, values?: Record<string, string | number>) => string;
-  updateSection: (key: string, patch: Partial<Section>) => void;
-  removeSection: (key: string) => void;
-  updateLine: (key: string, patch: Partial<Line>) => void;
-  addLine: (sectionKey: string) => void;
-  removeLine: (key: string) => void;
-}) {
-  const subtotal = lines.reduce((sum, l) => sum + lineAmount(l, 0), 0);
-  const feeAmt = section.proxyFeeType === "FIXED" ? (section.proxyFeeVal ?? 0) : Math.round((subtotal * (section.proxyFeeVal ?? 0)) / 100);
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-border-strong">
-      <div className="flex flex-wrap items-center gap-2 bg-surface-2 px-3 py-2">
-        <span className="text-sm">{section.icon}</span>
-        <span className="text-sm font-medium text-foreground">{t("proxySectionTitle")}</span>
-        <button type="button" onClick={() => removeSection(section.key)} className="ml-auto text-danger hover:text-danger/80">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <LinesTable lines={lines} vendors={vendors} locale={locale} t={t} percentBase={0} updateLine={updateLine} removeLine={removeLine} hidePercent />
-      <button type="button" onClick={() => addLine(section.key)} className="flex w-full items-center gap-1.5 border-t border-dashed border-border px-3 py-2 text-xs font-medium text-brand-600 hover:bg-surface-2">
-        <Plus className="h-3.5 w-3.5" />
-        {t("addLine")}
-      </button>
-      <div className="flex flex-wrap items-center gap-3 border-t border-border px-3 py-2 text-xs">
-        <span className="text-muted-foreground">{t("proxySubtotal")}: {formatNumber(subtotal, locale)}</span>
-        <label className="flex items-center gap-1.5">
-          {t("proxyFeeType")}:
-          <select value={section.proxyFeeType ?? "PCT"} onChange={(e) => updateSection(section.key, { proxyFeeType: e.target.value })} className="h-7 rounded border border-border-strong bg-surface px-1.5">
-            <option value="PCT">{t("proxyFeePct")}</option>
-            <option value="FIXED">{t("proxyFeeFixed")}</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
-          {t("proxyFeeVal")}:
-          <NumberField
-            decimals={2}
-            value={section.proxyFeeVal ?? 0}
-            onChange={(v) => updateSection(section.key, { proxyFeeVal: v })}
-            className="h-7 w-24 rounded border border-border-strong bg-surface px-1.5"
-          />
-        </label>
-        <span className="font-medium text-foreground">= {formatNumber(feeAmt, locale)}</span>
-      </div>
-    </div>
-  );
-}
-
-function LinesTable({
-  lines,
-  vendors,
-  locale,
-  t,
-  percentBase,
-  updateLine,
-  removeLine,
-  hidePercent,
-}: {
-  lines: Line[];
-  vendors: { id: string; label: string }[];
-  locale: Locale;
-  t: (key: string, values?: Record<string, string | number>) => string;
-  percentBase: number;
-  updateLine: (key: string, patch: Partial<Line>) => void;
-  removeLine: (key: string) => void;
-  hidePercent?: boolean;
-}) {
-  return (
-    <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
-      <table className="w-full min-w-[820px] text-xs">
-        <thead className="sticky top-0 z-10 bg-surface text-left text-muted-foreground">
-          <tr>
-            <th className="px-2 py-2">{t("colType")}</th>
-            <th className="px-2 py-2">{t("colItem")}</th>
-            <th className="px-2 py-2" title={t("colLegHint")}>{t("colLeg")}</th>
-            <th className="px-2 py-2">{t("colQty")}</th>
-            <th className="px-2 py-2">{t("colUnit")}</th>
-            <th className="px-2 py-2 text-right">{t("colUnitPrice")}</th>
-            <th className="px-2 py-2">{t("colTax")}</th>
-            <th className="px-2 py-2 text-right">{t("colAmount")}</th>
-            <th className="px-2 py-2">{t("colVendor")}</th>
-            <th className="px-2 py-2 text-center">{t("colLock")}</th>
-            <th className="px-2 py-2">{t("colMaxMarkup")}</th>
-            <th className="px-2 py-2 text-center" title={t("colSponsoredHint")}>{t("colSponsored")}</th>
-            <th className="px-2 py-2" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {lines.map((l) => {
-            return (
-              <LineRow key={l.key} line={l} vendors={vendors} locale={locale} t={t} percentBase={percentBase} updateLine={updateLine} removeLine={removeLine} hidePercent={hidePercent} />
-            );
-          })}
-          {lines.length === 0 && (
-            <tr>
-              <td colSpan={13} className="px-2 py-4 text-center text-muted-foreground">{t("none")}</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function LineRow({
-  line: l,
-  vendors,
-  locale,
-  t,
-  percentBase,
-  updateLine,
-  removeLine,
-  hidePercent,
-}: {
-  line: Line;
-  vendors: { id: string; label: string }[];
-  locale: Locale;
-  t: (key: string, values?: Record<string, string | number>) => string;
-  percentBase: number;
-  updateLine: (key: string, patch: Partial<Line>) => void;
-  removeLine: (key: string) => void;
-  hidePercent?: boolean;
-}) {
-  const amount = lineAmount(l, percentBase);
-  const availableTypes = hidePercent ? LINE_TYPES.filter((lt) => lt !== "PERCENT_OF_TOTAL") : LINE_TYPES;
-  // K3 — dòng LẤY TỪ KHO: số lượng khoá theo mức đã duyệt, ô đơn giá nhập GIÁ THAM CHIẾU (giá thật
-  // luôn = 0 nên Thành tiền hiện 0). Loại dòng/thuế/khoá/markup/tài trợ đều không áp dụng.
-  const isStock = l.stockRefUnitPrice != null;
-
-  return (
-    <tr>
-      <td className="px-1 py-1">
-        <select value={l.lineType} onChange={(e) => updateLine(l.key, { lineType: e.target.value })} disabled={isStock} className={cn(cellInput, "min-w-[110px]")}>
-          {availableTypes.map((lt) => (
-            <option key={lt} value={lt}>
-              {t(lineTypeLabelKey(lt as LineType))}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td className="px-1 py-1">
-        <input value={l.itemName} onChange={(e) => updateLine(l.key, { itemName: e.target.value })} className={cn(cellInput, "min-w-[130px]")} />
-        {isStock && <Badge tone="brand">{t("stockLineBadge")}</Badge>}
-      </td>
-      {/* Nhãn CHẶNG (tỉnh/điểm/đợt) — thuần nhãn, không vào một công thức tiền nào. Gõ tay: danh
-          sách tỉnh của mỗi chiến dịch khác nhau, đẻ bảng danh mục cho nó là thêm màn quản trị mà
-          không ai được lợi. Bản xuất nghiệm thu gom theo đúng chuỗi này. */}
-      <td className="px-1 py-1">
-        <input
-          value={l.legCode}
-          onChange={(e) => updateLine(l.key, { legCode: e.target.value })}
-          placeholder={t("colLegPlaceholder")}
-          maxLength={40}
-          className={cn(cellInput, "w-24")}
-        />
-      </td>
-      {l.lineType === "QTY_PRICE" ? (
-        <>
-          <td className="px-1 py-1">
-            <NumberField decimals={2} value={l.quantity} onChange={(v) => updateLine(l.key, { quantity: v })} disabled={isStock} title={isStock ? t("stockQtyLocked") : undefined} className={cn(cellInput, "w-16")} />
-          </td>
-          <td className="px-1 py-1">
-            <input value={l.unit} onChange={(e) => updateLine(l.key, { unit: e.target.value })} className={cn(cellInput, "w-16")} />
-          </td>
-          <td className="px-1 py-1">
-            {isStock ? (
-              <NumberField
-                value={l.stockRefUnitPrice ?? 0}
-                onChange={(v) => updateLine(l.key, { stockRefUnitPrice: v })}
-                title={t("stockRefPriceHint")}
-                className={cn(cellInput, "w-28 text-right italic")}
+    <>
+      <tr className={cn(bg, "font-medium")}>
+        <td className={cn("sticky left-0 z-10 px-2 py-1.5 text-[11px] font-bold", bg)}>
+          <button type="button" onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !c[s.key] }))} className="inline-flex items-center gap-0.5 text-foreground">
+            {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {stt}
+          </button>
+        </td>
+        <td className={cn("sticky left-12 z-10 px-2 py-1", bg)} style={{ paddingLeft: 8 + (depth - 1) * 14 }}>
+          <span className="flex items-center gap-1.5">
+            {canEdit && !proxyRoot ? (
+              <input
+                value={locale === "vi" ? s.nameVi : s.nameEn || s.nameVi}
+                onChange={(e) => ctx.updateSection(s.key, locale === "vi" ? { nameVi: e.target.value } : { nameEn: e.target.value })}
+                placeholder={t("sectionNameVi")}
+                className="h-7 w-full min-w-[140px] rounded border border-transparent bg-transparent px-1 text-xs font-semibold hover:border-border-strong focus:border-brand-400 focus:outline-none"
               />
             ) : (
-              <NumberField value={l.unitPrice} onChange={(v) => updateLine(l.key, { unitPrice: v })} className={cn(cellInput, "w-28 text-right")} />
+              <span className="text-xs font-semibold">{proxyRoot ? t("proxySectionTitle") : (locale === "vi" ? s.nameVi : s.nameEn || s.nameVi) || t("untitledSection")}</span>
             )}
+            {proxyRoot && <span className="whitespace-nowrap rounded bg-warning/15 px-1 py-0.5 text-[9px] font-bold text-warning">{t("proxyTag")}</span>}
+            {canEdit && !proxyRoot && (
+              <select
+                value={s.departmentCode}
+                onChange={(e) => ctx.updateSection(s.key, { departmentCode: e.target.value })}
+                title={t("sectionDepartmentHint")}
+                aria-label={t("sectionDepartment")}
+                className="h-6 rounded border border-transparent bg-transparent px-0.5 text-[10px] text-muted-foreground hover:border-border-strong"
+              >
+                <option value="">{t("sectionDepartmentNone")}</option>
+                {ctx.departments.map((d) => (
+                  <option key={d.code} value={d.code}>{d.costPrefix}</option>
+                ))}
+              </select>
+            )}
+          </span>
+        </td>
+        {showCE && (
+          <>
+            <td colSpan={3} />
+            <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{proxy ? "—" : formatNumber(stats.ce, locale)}</td>
+          </>
+        )}
+        {showCO && (
+          <>
+            <td colSpan={1 + (unitInCo ? 1 : 0)} />
+            <td />
+            <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{formatNumber(stats.pre, locale)}</td>
+            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{formatNumber(stats.tax, locale)}</td>
+          </>
+        )}
+        {showTot && <td className="px-2 py-1.5 text-right font-bold tabular-nums text-brand-700">{formatNumber(stats.tot, locale)}</td>}
+        {showPay && <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-success">{formatNumber(stats.pay, locale)}</td>}
+        {showMg && (
+          <td className="px-2 py-1.5 text-right tabular-nums">
+            {mg == null ? <span className="text-muted-foreground">—</span> : <span className={cn("font-semibold", mg >= ctx.minMarginPct ? "text-success" : "text-danger")}>{formatPercent(mg, locale)}%</span>}
           </td>
-        </>
-      ) : l.lineType === "FIXED" ? (
-        <>
-          <td className="px-1 py-1 text-center text-muted-foreground" colSpan={2}>—</td>
-          <td className="px-1 py-1">
-            <NumberField value={l.fixedAmount ?? 0} onChange={(v) => updateLine(l.key, { fixedAmount: v })} className={cn(cellInput, "w-28 text-right")} />
+        )}
+        {showUtil && <td colSpan={6} />}
+        {canEdit && (
+          <td className="whitespace-nowrap px-1 py-1.5 text-right">
+            <button type="button" title={t("addLine")} onClick={() => ctx.addLine(s.key)} className="mr-1 text-brand-600 hover:text-brand-700"><Plus className="h-3.5 w-3.5" /></button>
+            {!proxyRoot && depth < MAX_SECTION_DEPTH && (
+              <button type="button" title={t("addSubsection")} onClick={() => ctx.addSection(false, s.key)} className="mr-1 text-muted-foreground hover:text-foreground"><Plus className="h-3 w-3" /></button>
+            )}
+            <button type="button" title={tRemoveTitle(t, proxyRoot)} onClick={() => ctx.removeSection(s.key)} className="text-danger hover:text-danger/80"><Trash2 className="h-3.5 w-3.5" /></button>
           </td>
-        </>
-      ) : (
+        )}
+      </tr>
+      {!isCollapsed && <SectionLineRows section={s} depth={depth} proxy={proxy} ctx={ctx} lines={ownLines} />}
+      {!isCollapsed &&
+        children.map((c, i) => (
+          <SectionRows key={c.key} section={c} depth={depth + 1} indexPath={[...indexPath, i]} ctx={ctx} proxyBranch={proxy} />
+        ))}
+    </>
+  );
+}
+
+function tRemoveTitle(t: RowCtx["t"], proxy: boolean): string {
+  return proxy ? t("proxySectionTitle") : t("addSection");
+}
+
+/** Các hàng DÒNG của một mục — gộp theo hàng CE: nhóm N dòng in 1 hàng CE + các dòng CO con thụt vào. */
+function SectionLineRows({ section: s, depth, proxy, ctx, lines: ownLines }: { section: Section; depth: number; proxy: boolean; ctx: RowCtx; lines: Line[] }) {
+  const { percentBase } = ctx;
+  const rows = ceRowsOf(ownLines.map((l) => ({ ...ceInput(l), key: l.key })), percentBase);
+  const byKey = new Map(ownLines.map((l) => [l.key, l]));
+  return (
+    <>
+      {rows.map((r, i) => {
+        const leader = byKey.get((r.leader as { key: string }).key)!;
+        if (r.coLines.length === 1) {
+          return <LineRow key={leader.key} line={leader} stt={i + 1} depth={depth} proxy={proxy} ctx={ctx} ceRole="single" />;
+        }
+        const isStockGroup = !leader.ceGroupKey && !!leader.stockResvLineId;
+        return (
+          <GroupRows
+            key={leader.key}
+            leader={leader}
+            members={r.coLines.map((c) => byKey.get((c as { key: string }).key)!)}
+            stt={i + 1}
+            depth={depth}
+            proxy={proxy}
+            ctx={ctx}
+            coSum={r.coSum}
+            ceAmount={r.ceAmount}
+            isStockGroup={isStockGroup}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+/** Hàng CE GỘP: 1 hàng CE khách nhìn (đại diện) + các dòng CO chi tiết thụt dưới. */
+function GroupRows({ leader, members, stt, depth, proxy, ctx, coSum, ceAmount, isStockGroup }: {
+  leader: Line; members: Line[]; stt: number; depth: number; proxy: boolean; ctx: RowCtx; coSum: number; ceAmount: number; isStockGroup: boolean;
+}) {
+  const { t, locale, showCE, showCO, showTot, showPay, showMg, showUtil, unitInCo, canEdit, percentBase } = ctx;
+  const pre = members.reduce((s, l) => s + computeLineNetAmount(ceInput(l), percentBase), 0);
+  const tax = members.reduce((s, l) => s + taxDisplayAmount(ceInput(l), percentBase), 0);
+  const pay = members.reduce((s, l) => s + payCapFor(ceInput(l), percentBase), 0);
+  const mg = !proxy && ceAmount > 0 ? ((ceAmount - coSum) / ceAmount) * 100 : null;
+  const bg = "bg-surface";
+  return (
+    <>
+      <tr className={cn(bg, "border-t border-border")}>
+        <td className={cn("sticky left-0 z-10 px-2 py-1 text-right tabular-nums text-muted-foreground", bg)}>{stt}</td>
+        <td className={cn("sticky left-12 z-10 px-2 py-1", bg)} style={{ paddingLeft: 8 + depth * 14 }}>
+          <span className="flex items-center gap-1.5">
+            {canEdit && showCE ? (
+              <input value={leader.ceName || leader.itemName} onChange={(e) => ctx.updateLine(leader.key, { ceName: e.target.value })} placeholder={t("ceNamePlaceholder")} className={cellInput} />
+            ) : (
+              <span className="text-xs font-medium">{leader.ceName || leader.itemName}</span>
+            )}
+            <Badge tone={isStockGroup ? "brand" : "neutral"}>{isStockGroup ? t("stockGroupBadge") : t("groupBadge", { n: members.length })}</Badge>
+            {canEdit && !isStockGroup && leader.ceGroupKey && (
+              <button type="button" title={t("ungroup")} onClick={() => ctx.ungroup(leader.ceGroupKey!)} className="text-muted-foreground hover:text-danger"><Unlink className="h-3 w-3" /></button>
+            )}
+          </span>
+        </td>
+        {showCE && (
+          <>
+            <td className="px-1 py-1 text-right">
+              <NumberField decimals={2} value={leader.ceQuantity ?? 0} onChange={(v) => ctx.updateLine(leader.key, { ceQuantity: v })} disabled={!canEdit} className={cn(cellInput, "w-14 text-right")} />
+            </td>
+            <td className="px-1 py-1">
+              <input value={leader.unit} onChange={(e) => ctx.updateLine(leader.key, { unit: e.target.value })} disabled={!canEdit} className={cn(cellInput, "w-14")} />
+            </td>
+            <td className="px-1 py-1 text-right">
+              <NumberField value={leader.ceUnitPrice ?? 0} onChange={(v) => ctx.updateLine(leader.key, { ceUnitPrice: v })} disabled={!canEdit} className={cn(cellInput, "w-24 text-right")} />
+            </td>
+            <td className="px-2 py-1 text-right font-semibold tabular-nums">{leader.isSponsored ? <span className="text-[10px] text-muted-foreground">{t("colSponsored")}</span> : formatNumber(ceAmount, locale)}</td>
+          </>
+        )}
+        {showCO && (
+          <>
+            <td colSpan={1 + (unitInCo ? 1 : 0)} />
+            <td />
+            <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{formatNumber(pre, locale)}</td>
+            <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{formatNumber(tax, locale)}</td>
+          </>
+        )}
+        {showTot && <td className="px-2 py-1 text-right font-semibold tabular-nums text-brand-700">{formatNumber(coSum, locale)}</td>}
+        {showPay && <td className="px-2 py-1 text-right tabular-nums text-success">{formatNumber(pay, locale)}</td>}
+        {showMg && (
+          <td className="px-2 py-1 text-right tabular-nums">
+            {mg == null ? "" : <span className={cn("font-semibold", mg >= ctx.minMarginPct ? "text-success" : "text-danger")}>{formatPercent(mg, locale)}%</span>}
+          </td>
+        )}
+        {showUtil && <td colSpan={6} />}
+        {canEdit && <td />}
+      </tr>
+      {members.map((m) => (
+        <LineRow key={m.key} line={m} stt={null} depth={depth + 1} proxy={proxy} ctx={ctx} ceRole="member" />
+      ))}
+    </>
+  );
+}
+
+function LineRow({ line: l, stt, depth, proxy, ctx, ceRole }: { line: Line; stt: number | null; depth: number; proxy: boolean; ctx: RowCtx; ceRole: "single" | "member" }) {
+  const { t, locale, showCE, showCO, showTot, showPay, showMg, showUtil, unitInCo, canEdit, ceMode, percentBase } = ctx;
+  const input = ceInput(l);
+  const amount = computeLineAmount(input, percentBase);
+  const net = computeLineNetAmount(input, percentBase);
+  const tax = taxDisplayAmount(input, percentBase);
+  const pay = payCapFor(input, percentBase);
+  const ceA = l.isSponsored ? 0 : Math.round((l.ceQuantity ?? 0) * (l.ceUnitPrice ?? 0));
+  const mg = ceRole === "single" && !proxy && ceA > 0 ? ((ceA - amount) / ceA) * 100 : null;
+  // K3 — dòng LẤY TỪ KHO: số lượng khoá theo mức đã duyệt, ô đơn giá nhập GIÁ THAM CHIẾU (giá thật
+  // luôn = 0 nên Trước thuế hiện 0). Loại dòng/thuế/khoá/markup/tài trợ đều không áp dụng.
+  const isStock = l.stockRefUnitPrice != null;
+  const availableTypes = proxy ? LINE_TYPES.filter((lt) => lt !== "PERCENT_OF_TOTAL") : LINE_TYPES;
+  const selectable = canEdit && ceMode && ceRole === "single" && !proxy && !l.stockResvLineId;
+  const bg = "bg-surface";
+
+  return (
+    <tr className={cn(bg, "border-t border-border/60")}>
+      <td className={cn("sticky left-0 z-10 px-2 py-1 text-right tabular-nums text-muted-foreground", bg)}>
+        {selectable ? (
+          <label className="inline-flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={ctx.selected.has(l.key)}
+              onChange={(e) =>
+                ctx.setSelected((s) => {
+                  const next = new Set(s);
+                  if (e.target.checked) next.add(l.key);
+                  else next.delete(l.key);
+                  return next;
+                })
+              }
+            />
+            <span>{stt}</span>
+          </label>
+        ) : (
+          <span>{stt ?? "·"}</span>
+        )}
+      </td>
+      <td className={cn("sticky left-12 z-10 px-2 py-1", bg)} style={{ paddingLeft: 8 + depth * 14 }}>
+        <input value={l.itemName} onChange={(e) => ctx.updateLine(l.key, { itemName: e.target.value })} disabled={!canEdit} placeholder={t("colItem")} className={cn(cellInput, "min-w-[150px] font-medium")} />
+        <input value={l.specs} onChange={(e) => ctx.updateLine(l.key, { specs: e.target.value })} disabled={!canEdit} placeholder={t("specsPlaceholder")} className={cn(cellInput, "mt-0.5 min-w-[150px] text-[10px] text-muted-foreground")} />
+        {isStock && <Badge tone="brand">{t("stockLineBadge")}</Badge>}
+      </td>
+      {showCE && (
+        ceRole === "member" ? (
+          <td colSpan={4} className="px-2 py-1 text-center text-[10px] text-muted-foreground">↳</td>
+        ) : (
+          <>
+            <td className="px-1 py-1 text-right">
+              <NumberField decimals={2} value={l.ceQuantity ?? 0} onChange={(v) => ctx.updateLine(l.key, { ceQuantity: v })} disabled={!canEdit} className={cn(cellInput, "w-14 text-right")} />
+            </td>
+            <td className="px-1 py-1">
+              <input value={l.unit} onChange={(e) => ctx.updateLine(l.key, { unit: e.target.value })} disabled={!canEdit} className={cn(cellInput, "w-14")} />
+            </td>
+            <td className="px-1 py-1 text-right">
+              <NumberField value={l.ceUnitPrice ?? 0} onChange={(v) => ctx.updateLine(l.key, { ceUnitPrice: v })} disabled={!canEdit} className={cn(cellInput, "w-24 text-right")} />
+            </td>
+            <td className="px-2 py-1 text-right tabular-nums">{l.isSponsored ? <span className="text-[10px] text-muted-foreground">{t("colSponsored")}</span> : formatNumber(ceA, locale)}</td>
+          </>
+        )
+      )}
+      {showCO && (
         <>
-          <td className="px-1 py-1 text-center text-muted-foreground" colSpan={2}>—</td>
-          <td className="px-1 py-1">
-            <NumberField decimals={2} value={l.percentVal ?? 0} onChange={(v) => updateLine(l.key, { percentVal: v })} className={cn(cellInput, "w-20 text-right")} />
+          {l.lineType === "QTY_PRICE" ? (
+            <>
+              <td className="px-1 py-1 text-right">
+                <NumberField decimals={2} value={l.quantity} onChange={(v) => ctx.updateLine(l.key, { quantity: v })} disabled={!canEdit || isStock} title={isStock ? t("stockQtyLocked") : undefined} className={cn(cellInput, "w-14 text-right")} />
+              </td>
+              {unitInCo && (
+                <td className="px-1 py-1">
+                  <input value={l.unit} onChange={(e) => ctx.updateLine(l.key, { unit: e.target.value })} disabled={!canEdit} className={cn(cellInput, "w-14")} />
+                </td>
+              )}
+              <td className="px-1 py-1 text-right">
+                {isStock ? (
+                  <NumberField value={l.stockRefUnitPrice ?? 0} onChange={(v) => ctx.updateLine(l.key, { stockRefUnitPrice: v })} disabled={!canEdit} title={t("stockRefPriceHint")} className={cn(cellInput, "w-24 text-right italic")} />
+                ) : (
+                  <NumberField value={l.unitPrice} onChange={(v) => ctx.updateLine(l.key, { unitPrice: v })} disabled={!canEdit} className={cn(cellInput, "w-24 text-right")} />
+                )}
+              </td>
+            </>
+          ) : l.lineType === "FIXED" ? (
+            <>
+              <td colSpan={1 + (unitInCo ? 1 : 0)} className="px-1 py-1 text-center text-muted-foreground">—</td>
+              <td className="px-1 py-1 text-right">
+                <NumberField value={l.fixedAmount ?? 0} onChange={(v) => ctx.updateLine(l.key, { fixedAmount: v })} disabled={!canEdit} className={cn(cellInput, "w-24 text-right")} />
+              </td>
+            </>
+          ) : (
+            <>
+              <td colSpan={1 + (unitInCo ? 1 : 0)} className="px-1 py-1 text-center text-muted-foreground">—</td>
+              <td className="px-1 py-1 text-right">
+                <NumberField decimals={2} value={l.percentVal ?? 0} onChange={(v) => ctx.updateLine(l.key, { percentVal: v })} disabled={!canEdit} className={cn(cellInput, "w-16 text-right")} />
+              </td>
+            </>
+          )}
+          <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{formatNumber(net, locale)}</td>
+          <td className="px-1 py-1 text-right">
+            {l.lineType === "PERCENT_OF_TOTAL" ? (
+              <span className="text-muted-foreground">—</span>
+            ) : (
+              <span className="flex items-center justify-end gap-1">
+                <span className="tabular-nums text-muted-foreground">{formatNumber(tax, locale)}</span>
+                {/* Loại thuế đổi được từng dòng bất kỳ lúc nào — rời VAT thì xoá %; rời OTHER xoá tiền nhập tay. */}
+                <select
+                  value={l.taxType}
+                  disabled={!canEdit || isStock}
+                  onChange={(e) => {
+                    const tx = e.target.value;
+                    ctx.updateLine(l.key, { taxType: tx, ...(tx !== "VAT" ? { vatPct: null } : {}), ...(tx !== "OTHER" ? { customTaxAmount: null } : {}) });
+                  }}
+                  className={cn(cellInput, "w-[64px]")}
+                >
+                  {availableTypes.map((tx) => (
+                    <option key={tx} value={tx}>{t(taxTypeLabelKey(tx as TaxType))}</option>
+                  ))}
+                </select>
+                {l.taxType === "VAT" && (
+                  <select
+                    value={l.vatPct == null ? "" : String(l.vatPct)}
+                    disabled={!canEdit || isStock}
+                    onChange={(e) => ctx.updateLine(l.key, { vatPct: e.target.value === "" ? null : Number(e.target.value) })}
+                    title={t("vatPctHint")}
+                    className={cn(cellInput, "w-[52px]")}
+                  >
+                    <option value="">{t("vatPctNone")}</option>
+                    {VAT_PCT_OPTIONS.map((p) => (
+                      <option key={p} value={p}>{p}%</option>
+                    ))}
+                  </select>
+                )}
+                {l.taxType === "OTHER" && (
+                  <NumberField placeholder={t("customTaxAmountPlaceholder")} value={l.customTaxAmount ?? 0} onChange={(v) => ctx.updateLine(l.key, { customTaxAmount: v })} disabled={!canEdit} className={cn(cellInput, "w-20 text-right")} />
+                )}
+              </span>
+            )}
           </td>
         </>
       )}
-      <td className="px-1 py-1">
-        {l.lineType === "PERCENT_OF_TOTAL" ? (
-          <span className="text-muted-foreground">—</span>
-        ) : (
-          <div className="flex flex-col gap-1">
-            <select value={l.taxType} onChange={(e) => updateLine(l.key, { taxType: e.target.value })} className={cn(cellInput, "min-w-[92px]")}>
-              {TAX_TYPES.map((tx) => (
-                <option key={tx} value={tx}>
-                  {t(taxTypeLabelKey(tx))}
-                </option>
+      {showTot && <td className="px-2 py-1 text-right font-semibold tabular-nums text-brand-700">{formatNumber(amount, locale)}</td>}
+      {showPay && <td className="px-2 py-1 text-right tabular-nums text-success">{formatNumber(pay, locale)}</td>}
+      {showMg && (
+        <td className="px-2 py-1 text-right tabular-nums">
+          {mg == null ? "" : <span className={cn("font-semibold", mg >= ctx.minMarginPct ? "text-success" : "text-danger")}>{formatPercent(mg, locale)}%</span>}
+        </td>
+      )}
+      {showUtil && (
+        <>
+          <td className="px-1 py-1">
+            <select value={l.lineType} onChange={(e) => ctx.updateLine(l.key, { lineType: e.target.value })} disabled={!canEdit || isStock} className={cn(cellInput, "min-w-[96px]")}>
+              {availableTypes.map((lt) => (
+                <option key={lt} value={lt}>{t(lineTypeLabelKey(lt as LineType))}</option>
               ))}
             </select>
-            {l.taxType === "OTHER" && (
-              <NumberField
-                placeholder={t("customTaxAmountPlaceholder")}
-                value={l.customTaxAmount ?? 0}
-                onChange={(v) => updateLine(l.key, { customTaxAmount: v })}
-                className={cn(cellInput, "min-w-[92px] text-right")}
-              />
-            )}
-          </div>
-        )}
-      </td>
-      <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{formatNumber(amount, locale)}</td>
-      <td className="px-1 py-1">
-        <SearchableSelect
-          value={l.vendorId}
-          onChange={(v) => updateLine(l.key, { vendorId: v })}
-          options={vendors.map((v) => ({ value: v.id, label: v.label }))}
-          className="min-w-[110px]"
-        />
-      </td>
-      <td className="px-1 py-1 text-center">
-        <input type="checkbox" checked={l.isLocked} onChange={(e) => updateLine(l.key, { isLocked: e.target.checked })} />
-      </td>
-      <td className="px-1 py-1">
-        <input type="number" step="any" placeholder="∞" value={l.maxMarkupPct} onChange={(e) => updateLine(l.key, { maxMarkupPct: e.target.value })} className={cn(cellInput, "w-14")} disabled={l.isLocked} />
-      </td>
-      {/* "TCM hỗ trợ": báo giá hiện đơn giá nhưng KHÔNG tính tiền dòng này (CE dòng = 0). Chỉ đổi
-          cách trình bày bản xuất — CO của dòng vẫn vào giá vốn bình thường. */}
-      <td className="px-1 py-1 text-center">
-        <input type="checkbox" checked={l.isSponsored} onChange={(e) => updateLine(l.key, { isSponsored: e.target.checked })} />
-      </td>
-      <td className="px-1 py-1 text-center">
-        <button type="button" onClick={() => removeLine(l.key)} className="text-danger hover:text-danger/80">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </td>
+          </td>
+          <td className="px-1 py-1">
+            <SearchableSelect value={l.vendorId} onChange={(v) => ctx.updateLine(l.key, { vendorId: v })} options={ctx.vendors.map((v) => ({ value: v.id, label: v.label }))} className="min-w-[110px]" />
+          </td>
+          <td className="px-1 py-1 text-center">
+            <input type="checkbox" checked={l.isLocked} disabled={!canEdit} onChange={(e) => ctx.updateLine(l.key, { isLocked: e.target.checked })} />
+          </td>
+          <td className="px-1 py-1">
+            <input type="number" step="any" placeholder="∞" value={l.maxMarkupPct} disabled={!canEdit || l.isLocked} onChange={(e) => ctx.updateLine(l.key, { maxMarkupPct: e.target.value })} className={cn(cellInput, "w-14")} />
+          </td>
+          {/* "TCM hỗ trợ": báo giá hiện đơn giá nhưng KHÔNG tính tiền dòng này (CE dòng = 0). Chỉ đổi
+              cách trình bày bản xuất — CO của dòng vẫn vào giá vốn bình thường. */}
+          <td className="px-1 py-1 text-center">
+            <input type="checkbox" checked={l.isSponsored} disabled={!canEdit} onChange={(e) => ctx.updateLine(l.key, { isSponsored: e.target.checked })} />
+          </td>
+          {/* Nhãn CHẶNG (tỉnh/điểm/đợt) — thuần nhãn, không vào một công thức tiền nào. Gõ tay: danh
+              sách tỉnh của mỗi chiến dịch khác nhau, đẻ bảng danh mục cho nó là thêm màn quản trị mà
+              không ai được lợi. Bản xuất nghiệm thu gom theo đúng chuỗi này. */}
+          <td className="px-1 py-1">
+            <input value={l.legCode} onChange={(e) => ctx.updateLine(l.key, { legCode: e.target.value })} disabled={!canEdit} placeholder={t("colLegPlaceholder")} maxLength={40} className={cn(cellInput, "w-20")} />
+          </td>
+        </>
+      )}
+      {canEdit && (
+        <td className="px-1 py-1 text-center">
+          <button type="button" onClick={() => ctx.removeLine(l.key)} className="text-danger hover:text-danger/80">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </td>
+      )}
     </tr>
   );
 }
 
-function PctField({ label, hint, value, onChange }: { label: string; hint: string; value: number; onChange: (v: number) => void }) {
+/**
+ * Hàng TỔNG HỢP cuối bảng (dòng phí QL, tổng trước VAT, VAT, số tiền thanh toán).
+ * Số luôn nằm ở cột "Thành tiền CE" khi khối CE hiện; khối CE ẩn thì số về ngay sau cột diễn giải —
+ * hai nhánh cùng đếm đủ `colCount` ô để bảng không bị lệch cột.
+ */
+function SummaryTableRow({ label, value, colCount, showCE, strong = false }: { label: string; value: string; colCount: number; showCE: boolean; strong?: boolean }) {
+  const rest = colCount - (showCE ? 6 : 3);
+  return (
+    <tr className={cn("bg-surface-2", strong && "font-bold")}>
+      <td className="sticky left-0 z-10 bg-surface-2 px-2 py-1.5" />
+      <td className={cn("sticky left-12 z-10 bg-surface-2 px-2 py-1.5 text-[11px]", strong ? "font-bold text-foreground" : "font-medium text-muted-foreground")}>{label}</td>
+      {showCE && <td colSpan={3} />}
+      <td className="px-2 py-1.5 text-right tabular-nums">{value}</td>
+      {rest > 0 && <td colSpan={rest} />}
+    </tr>
+  );
+}
+
+function Kpi({ label, value, hero = false, accent }: { label: string; value: string; hero?: boolean; accent?: "indigo" | "green" }) {
+  return (
+    <div className={cn("rounded-lg px-2.5 py-1.5", hero ? "bg-brand-50 ring-1 ring-brand-300" : "bg-surface-2")}>
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className={cn("tabular-nums", hero ? "text-base font-extrabold text-foreground" : "text-sm font-bold", !hero && accent === "indigo" && "text-brand-700", !hero && accent === "green" && "text-success", !hero && !accent && "text-foreground")}>{value}</p>
+    </div>
+  );
+}
+
+function Seg({ options, value, onChange, label }: { options: { v: string; label: string }[]; value: string; onChange: (v: string) => void; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="inline-flex overflow-hidden rounded-lg border border-border-strong">
+        {options.map((o) => (
+          <button key={o.v} type="button" onClick={() => onChange(o.v)} className={cn("px-2 py-1 font-medium", value === o.v ? "bg-brand-500 text-white" : "bg-surface text-muted-foreground hover:bg-surface-2")}>
+            {o.label}
+          </button>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function PctField({ label, hint, value, onChange, disabled = false }: { label: string; hint: string; value: number; onChange: (v: number) => void; disabled?: boolean }) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-foreground">{label}</label>
-      <NumberField decimals={2} value={value} onChange={onChange} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
+      <NumberField decimals={2} value={value} onChange={onChange} disabled={disabled} className="h-9 w-full rounded-lg border border-border-strong bg-surface px-2.5 text-sm" />
       <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
     </div>
   );
@@ -1022,18 +1655,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="flex h-9 items-center rounded-lg bg-surface px-2.5 text-sm font-semibold tabular-nums text-foreground">{value}</div>
     </div>
   );
-}
-
-function lineAmount(l: LineData, percentBase: number): number {
-  // Gross-up thuế theo taxType (khớp computeLineAmount ở server). PERCENT_OF_TOTAL không gross-up.
-  // OTHER: cộng thẳng customTaxAmount (nhập tay), không nhân hệ số gross-up %.
-  if (l.lineType === "FIXED") {
-    const base = l.fixedAmount ?? 0;
-    return l.taxType === "OTHER" ? Math.round(base + (l.customTaxAmount ?? 0)) : Math.round(base * taxGrossUp(l.taxType));
-  }
-  if (l.lineType === "PERCENT_OF_TOTAL") return Math.round(((l.percentVal ?? 0) / 100) * percentBase);
-  const base = l.quantity * l.unitPrice;
-  return l.taxType === "OTHER" ? Math.round(base + (l.customTaxAmount ?? 0)) : Math.round(base * taxGrossUp(l.taxType));
 }
 
 function lineTypeLabelKey(lt: LineType): string {
@@ -1049,4 +1670,4 @@ function taxTypeLabelKey(tx: TaxType): string {
   return "taxVat";
 }
 
-const cellInput = "h-8 w-full rounded border border-border-strong bg-surface px-1.5 text-xs outline-none focus:border-brand-400";
+const cellInput = "h-7 w-full rounded border border-transparent bg-transparent px-1 text-xs outline-none hover:border-border-strong focus:border-brand-400 disabled:opacity-70";

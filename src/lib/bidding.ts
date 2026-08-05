@@ -327,6 +327,7 @@ export type CeLineCalcInput = CostLineCalcInput & {
   isSponsored?: boolean;
   itemName?: string;
   stockRefUnitPrice?: number | null;
+  stockResvLineId?: string | null;
 };
 
 /**
@@ -368,12 +369,16 @@ export type CeRow<L extends CeLineCalcInput> = {
 /**
  * GỘP dòng CO thành các hàng CE khách nhìn, theo `ceGroupKey` (mirror nếp cặp kho K3 in gộp).
  * Dòng không có khoá → hàng 1-1. Thứ tự hàng theo lần xuất hiện đầu tiên của nhóm.
+ *
+ * CẶP KHO K3 TỰ GỘP theo `stockResvLineId` mà KHÔNG cần ceGroupKey: validator CẤM đặt ceGroupKey
+ * lên dòng kho (cặp là nhóm CÓ SẴN, không cho trộn thêm dòng khác), nhưng bất biến K3 "khách chỉ
+ * nhìn thấy MỘT dòng" vẫn phải giữ ở chế độ CE theo dòng — nên khoá nhóm hiệu lực suy từ chính cặp.
  */
 export function ceRowsOf<L extends CeLineCalcInput>(lines: L[], percentBase: number): CeRow<L>[] {
   const rows: CeRow<L>[] = [];
   const byGroup = new Map<string, CeRow<L>>();
   for (const l of lines) {
-    const key = l.ceGroupKey ?? null;
+    const key = l.ceGroupKey ?? (l.stockResvLineId ? `stock:${l.stockResvLineId}` : null);
     if (key && byGroup.has(key)) {
       const row = byGroup.get(key)!;
       row.coLines.push(l);
@@ -404,6 +409,22 @@ export function ceRowsOf<L extends CeLineCalcInput>(lines: L[], percentBase: num
 export function sheetHasLineCe(serviceLines: CeLineCalcInput[]): boolean {
   if (serviceLines.length === 0) return false;
   return ceRowsOf(serviceLines, 0).every((r) => r.ceUnitPrice != null);
+}
+
+/**
+ * Xoá dòng ĐẠI DIỆN của một nhóm CE gộp → trả về VỊ TRÍ dòng kế thừa (dòng cùng nhóm đứng ngay sau),
+ * để nơi gọi chuyển ceName/ceQuantity/ceUnitPrice sang nó. Trả null khi dòng bị xoá không phải đại
+ * diện, hoặc nhóm chỉ còn một dòng.
+ *
+ * Không có bước này thì nhóm còn lại MẤT TRẮNG giá CE (các dòng thành viên đều để trống ceUnitPrice)
+ * — bảng rơi khỏi chế độ CE theo dòng trong im lặng và tổng báo khách tụt đúng phần của nhóm đó.
+ */
+export function ceGroupHeirIndex(lines: { ceGroupKey?: string | null }[], removedIndex: number): number | null {
+  const dead = lines[removedIndex];
+  if (!dead?.ceGroupKey) return null;
+  const members = lines.map((l, i) => ({ l, i })).filter((x) => x.l.ceGroupKey === dead.ceGroupKey);
+  if (members.length < 2 || members[0].i !== removedIndex) return null; // chỉ đại diện mới cần bầu lại
+  return members[1].i;
 }
 
 export type CeSectionInput = {

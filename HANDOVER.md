@@ -1231,8 +1231,9 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       server (vẫn dùng trang in + Ctrl-P).
 
 29. **CO/CE v3 — CE-4 XONG 05/08/2026: đọc file khách trả về + đối chiếu từng dòng.**
-    **CO/CE v3 HOÀN TẤT — không còn đợt nào.** (KHÔNG migration — `origin`/`importFileKey` đã có từ
-    CE-1; KHÔNG mã quyền mới — dùng `bidding.costsheet.edit`.)
+    (KHÔNG migration — `origin`/`importFileKey` đã có từ CE-1; KHÔNG mã quyền mới — dùng
+    `bidding.costsheet.edit`.) *(CE-4 khép lại kế hoạch v3 ban đầu; **CE-5 làm thêm sau đó** theo
+    yêu cầu vòng đời version của chủ dự án — xem mục 10.30.)*
     - ⚠ **IMPORT KHÔNG BAO GIỜ GHI VÀO BẢNG CO/CE.** Action chỉ kiểm đọc được, lưu file GỐC vào
       storage rồi trả khoá; trang dùng khoá đó đọc lại và ĐỐI CHIẾU. Muốn thành số thật thì Account
       sửa trên builder rồi bấm Lưu như mọi lần — đi qua đủ margin gate, validator, revision. Tự ghi
@@ -1263,14 +1264,94 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       chiếu — an toàn hơn, và chỉ có vài dòng mỗi vòng) · đọc file .xls cũ hoặc CSV · gắn
       `origin="IMPORT"` tự động khi lưu (hàm `tagRevisionAsImport` đã có, chưa nối nút).
 
+30. **CO/CE — CE-5 XONG 06/08/2026: VÒNG ĐỜI VERSION** (migration VIẾT TAY
+    `20260810000000_coce_v3_ce5` — bẫy RedefineTables lần 5; KHÔNG mã quyền mới, dùng
+    `bidding.costsheet.edit`). Nghiệp vụ thật: thương lượng thầu 5–7 vòng, ký xong còn 2–3 vòng nữa,
+    mỗi vòng phải xem được "đổi gì so với bản trước", chốt 1 bản cho HỢP ĐỒNG và 1 bản cho NGHIỆM
+    THU, rồi so hai bản đó để làm phụ lục/thanh lý. Bốn phần:
+    - **(a) Diff nay THẤY CE.** Trước CE-5 `costsheet-diff.ts` chỉ so `amount` (CO) nên bảng ở chế độ
+      CE theo dòng đổi giá bán bao nhiêu cũng báo **0 dòng thay đổi**. Tái hiện bằng số trước khi
+      sửa: một vòng khách cắt −2.112.279 hiện ra "0 changed". Nay `SnapshotLine` mang thêm
+      `ceQuantity/ceUnitPrice/ceGroupKey/ceName/vatPct/taxType/customTaxAmount/ceDropped`,
+      `lineEqual` so cả 8 trường, `LineDiff` có `ceDelta` + `direction`.
+      ⚠ **`direction` lấy `ceDelta` LÀM CHUẨN, chỉ rơi về `amountDelta` khi CE không đổi** — dòng
+      khách ép giảm giá bán mà CO giữ nguyên phải hiện màu "giảm", không phải "không đổi".
+    - **(b) Import sinh thẳng version mới.** Account bấm import → **xem bảng đối chiếu TRƯỚC** → bấm
+      "Áp vào version mới" thì mới ghi (quyết định chủ dự án — không tự động, để còn nhìn trước khi
+      chốt). `applyImportToNewVersion` dựng payload từ DB rồi gọi **chính `saveCostSheet`**, KHÔNG
+      viết đường ghi thứ hai: giữ nguyên margin gate, validator, revision, `stableKey`. Revision sinh
+      ra gắn `origin="IMPORT"` + ghi chú `Phản hồi khách cho v{N}`.
+      ⚠ Chặn `LEGACY_MODE` (bảng chưa ở chế độ CE theo dòng) và `NO_CHANGE` (file không khác gì) —
+      không có hai cửa đó thì mỗi lần bấm nhầm đẻ một version rỗng.
+      **Margin dưới sàn 31% VẪN sinh version, chờ duyệt** (quyết định chủ dự án): vòng thương lượng
+      chính là lúc margin tụt, chặn ở đây là chặn đúng việc Account đang làm.
+    - **(c) Dòng khách yêu cầu BỎ — cột mới `CostLine.ceDropped`.** Khách xoá dòng thì **không xoá
+      dữ liệu**: dòng gạch ngang, CE = 0, **CO vẫn tính** (chi phí nội bộ vẫn có thật), có nút
+      "Khôi phục" để Account thương lượng lại. Dòng khách THÊM vào thì nhập với CO = 0 và tô **xanh
+      dương** (khác hẳn xanh lá của dòng tăng tiền) kèm cảnh báo *"có dòng có giá trị ở CE nhưng = 0
+      ở CO"* — Account phải bổ sung CO hoặc xác nhận cố ý.
+      ⚠ **BUG ĐÃ VÁ, ĐỌC TRƯỚC KHI SỬA BUILDER**: `ceInput()` quên truyền `ceDropped` xuống hàm tính
+      nên **màn hình cộng cả dòng đã bỏ** trong khi server thì không — lệch đúng một dòng
+      (326.816.369 trên màn hình vs **323.441.451** ở server, chênh 3.374.918). Loại lỗi này im lặng
+      tuyệt đối: cả hai số đều "hợp lý", chỉ lộ khi đối chiếu DB sau khi lưu. **Mọi trường mới của
+      dòng phải được truyền vào CẢ hàm tính của builder LẪN payload lưu.**
+    - **(d) Chốt bản + so bản.** Mỗi dòng version có nút **"so với bản trước"** (trừ v1) nhảy thẳng
+      xuống khối so sánh. `tagRevisionKind` nay ép **MỘT bản mỗi loại** trong transaction (gắn
+      CONTRACT cho bản mới thì tự gỡ nhãn khỏi bản cũ) — hai bản cùng nhãn thì câu hỏi "hợp đồng
+      chốt số nào" không có đáp án. ⚠ **Gắn nhãn KHÔNG khoá bản** (quyết định chủ dự án): sau khi ký
+      vẫn còn 2–3 vòng sửa. `sendCostSheetToLiquidation` nay tìm bản **`kind="ACCEPTANCE"`** thay vì
+      bản mới nhất, và **không làm gì nếu chưa ai gắn nhãn** — lấy bản mới nhất là gửi nghiệm thu một
+      bản nháp mà không ai biết.
+    - **Verify bằng số trên T006 thật:** import phản hồi khách → v3 tự sinh, `origin=IMPORT`, ghi chú
+      "Phản hồi khách cho v2" · **coTotal 246.310.558 KHÔNG đổi qua cả v1/v2/v3** · ceTotal
+      365.762.301 → 355.785.597, chênh **−9.976.704** = −7.694.813 (khách cắt) + 2.000.000 (khách
+      thêm) − 3.374.918 (khách bỏ) − 906.973 (phí quản lý giảm theo) · khối so sánh hiện Δ CO 0 ·
+      Δ CE −9.976.704 · 4 dòng đổi có CE trước/sau · dòng bị bỏ gạch ngang mà vẫn giữ 3.374.918 để
+      khôi phục · bấm "Khôi phục" tổng về 326.816.369. 8/8 test diff, tsc/eslint/build/i18n sạch.
+    - **CHƯA LÀM (cố ý):** khoá cứng bản đã gắn nhãn · lịch sử ai gắn/gỡ nhãn (chỉ có AuditLog chung)
+      · so BA bản trở lên cùng lúc · xuất bảng so sánh ra Excel (hiện chỉ xem trên màn hình).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `6eff5b3`** (05/08/2026 18:41) — CE-4 đọc file khách trả về; **CO/CE v3
-HOÀN TẤT cả 4 đợt**, xem mục 10.26 → 10.29. Chạy `bash scripts/deploy.sh` **đường LAN
-192.168.1.111:22**, fingerprint khớp. **Không migration mới, không mã quyền mới.** Backup TRƯỚC
-deploy: `~/backup/*-20260805-184114*` trên server + `D:/TCM/backup-prod-20260805-184114/` máy dev.
+**Production đang chạy `28b16dc`** (06/08/2026 10:20) — **CE-5 vòng đời version** (mục 10.30). Chạy
+`bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **1 migration mới** áp
+sạch (`coce_v3_ce5` — thêm cột `cost_line.ceDropped`), **không mã quyền mới**. Backup TRƯỚC deploy ở
+hai nơi: `~/backup/*-20260806-101954*` trên server + `D:/TCM/backup-prod-20260806-101954/` máy dev.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — **khớp từng số, không đổi một dòng nào**:
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| coTotal + ceTotal 5 bảng CO/CE | (10 số) | **không đổi MỘT ĐỒNG** |
+| dòng grant quyền / dòng CO/CE | 1296 / 483 | **1296 / 483** |
+| cột mới `ceDropped` | — | **0 true / 483 false** (đúng: mặc định trên toàn bộ dòng cũ) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Health check: `/login` 200 · `/bidding` và `/projects/groups` 307 về login · `[jobs] scheduler bật`.
+
+⚠ **Vẫn giữ nguyên ghi chú của ba lần deploy trước: production chưa có bảng nào ở chế độ CE theo
+dòng** (`ceUnitPrice` 0 dòng · `clientFeePct` 0 mục · `quoteTemplateCode` 0 khách · revision
+`origin="IMPORT"` 0). Chuyển đổi là TỰ NGUYỆN — Account bấm nút trên từng bảng khi muốn. **Toàn bộ
+CE-5 (diff thấy CE, import sinh version, dòng khách bỏ, chốt 2 mốc) chỉ chạy trên bảng đã chuyển
+chế độ**, nên tới khi Account chuyển bảng đầu tiên thì production nhìn y hệt hôm qua.
+
+⚠ **Bản vá nginx vẫn CHƯA chạy** (xem ghi chú deploy 05/08 lúc 11:19): lần chạy hôm 05/08 hỏng vì
+bản script cũ đọc `$HOME` dưới `sudo` thành `/root`. Bản đã sửa nằm sẵn ở `~/nginx-fix/` trên
+server, chạy bằng
+`ssh -i ~/.ssh/tcm_deploy tcm@192.168.1.111 -t 'sudo bash ~/nginx-fix/apply.sh'`. Chưa chạy thì
+thi thoảng vẫn tái diễn 429/timeout.
+
+---
+
+### Deploy trước đó — 05/08/2026 lúc 18:41
+
+**Production khi đó chạy `6eff5b3`** — CE-4 đọc file khách trả về; kế hoạch CO/CE v3 ban đầu hoàn
+tất cả 4 đợt, xem mục 10.26 → 10.29. Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**,
+fingerprint khớp. **Không migration mới, không mã quyền mới.** Backup TRƯỚC deploy:
+`~/backup/*-20260805-184114*` trên server + `D:/TCM/backup-prod-20260805-184114/` máy dev.
 
 Đối chiếu production sau deploy — **không đổi một dòng dữ liệu nào**:
 
@@ -1283,10 +1364,6 @@ deploy: `~/backup/*-20260805-184114*` trên server + `D:/TCM/backup-prod-2026080
 | `integrity_check` / `foreign_key_check` | **ok** / 0 dòng |
 
 Health check: `/login` 200 · `/projects/*/co-ce` 307 về login · `[jobs] scheduler bật`.
-
-⚠ Vẫn giữ nguyên ghi chú của lần deploy trước: **production chưa có bảng nào ở chế độ CE theo
-dòng** (`ceUnitPrice` 0 dòng · `clientFeePct` 0 mục · `quoteTemplateCode` 0 khách). Chuyển đổi là
-TỰ NGUYỆN — Account bấm nút trên từng bảng khi muốn.
 
 ---
 

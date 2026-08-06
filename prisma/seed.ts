@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { TCM_FAMILY_GROUP_NAME } from "../src/lib/chat";
 import { PERMISSION_CODES } from "../src/lib/permission-catalog";
 import { currentPeriodCode } from "../src/lib/creative-cost";
+import { DEFAULT_RECRUIT_CRITERIA } from "../src/lib/recruit";
 
 const prisma = new PrismaClient();
 
@@ -1676,6 +1677,13 @@ async function main() {
     { code: "RECRUIT", labelVi: "Tuyển dụng", labelEn: "Recruitment" },
     { code: "OTHER", labelVi: "Khác", labelEn: "Other" },
   ]);
+  // Tiêu chí chấm điểm phỏng vấn (TD-1) — danh mục MỀM: BGĐ thêm/bớt ở /settings/options/
+  // recruit_criteria mà không cần sửa code. Bộ mặc định dưới đây do trợ lý đề xuất và chủ dự án
+  // duyệt 06/08/2026; mục "chịu áp lực / làm hiện trường" là đặc thù nghề event của TCM.
+  // ⚠ Phiếu đã chấm lưu criterionCode dạng CHUỖI nên tắt một tiêu chí về sau KHÔNG làm hỏng dữ
+  // liệu cũ — cùng nguyên tắc với câu hỏi kiểm tra ở KB-H3 (tắt, không xoá).
+  await seedOptionSet("recruit_criteria", "Tiêu chí đánh giá phỏng vấn", [...DEFAULT_RECRUIT_CRITERIA]);
+
   const kbCategories = await seedOptionSet("kb_category", "Danh mục cơ sở tri thức", [
     { code: "GENERAL", labelVi: "Chung", labelEn: "General" },
     { code: "CREDENTIALS", labelVi: "Năng lực (Credentials)", labelEn: "Credentials" },
@@ -2081,8 +2089,41 @@ async function main() {
     "settings.communication.manage": ["BOARD_OF_MANAGEMENT"],
   };
 
+  /**
+   * TUYỂN DỤNG (TD-1, 06/08/2026) — MỘT NGUỒN SỰ THẬT cho cả ba đường, đúng khuôn MONEY_POLICY:
+   * `isRestricted` (chặn rơi vào grant rộng) · `recruitCodesFor` (DB dựng-từ-đầu) · backfill
+   * `20260806_recruit_*` (DB đang chạy). Sửa bảng này là cả ba đổi theo — ĐỪNG cấp mấy mã này ở
+   * chỗ khác, chính việc có hai đường cấp mâu thuẫn là nguồn của 5 lỗ hổng ở HANDOVER 10.15.
+   *
+   * ⚠ CẢ 7 MÃ đều khai ở đây, kể cả `recruit.view`. Khác `iso.view` / `mkt.view` (cố ý để ở base
+   * cho cả công ty xem), hồ sơ ứng viên là DỮ LIỆU CÁ NHÂN CỦA NGƯỜI NGOÀI công ty — CV có họ tên,
+   * ngày sinh, điện thoại, email, nơi từng làm việc. Mã nào quên khai ở đây sẽ rơi vào
+   * `baseGrantCodes` và 20 vai đọc được toàn bộ kho CV.
+   *
+   * ⚠ Người phỏng vấn KHÔNG cần `recruit.view`: họ mở được hồ sơ của đúng lượt phỏng vấn gắn tên
+   * mình bằng phép kiểm THEO BẢN GHI (lib/recruit.ts → canOpenCandidate). Trưởng bộ phận và người
+   * quản lý trực tiếp của vị trí cũng vậy. Đừng cấp `recruit.view` cho cả loạt role quản lý chỉ để
+   * giải bài toán đó — nó mở luôn kho CV của MỌI vị trí.
+   *
+   * ⚠ Đi theo MÃ ROLE, KHÔNG theo nhóm `HR`: nhóm đó còn chứa `ADMIN_STAFF` (hành chính), cấp theo
+   * nhóm là lặp lại đúng bẫy SECURITY_GUARD-trong-nhóm-WAREHOUSE đã phải vá (mục 10.15).
+   */
+  const RECRUIT_POLICY: Record<string, string[]> = {
+    "recruit.view": ["HR_MANAGER", "HR_STAFF", "BOARD_OF_MANAGEMENT"],
+    "recruit.manage": ["HR_MANAGER", "HR_STAFF"],
+    // JD gắn với cơ cấu tổ chức → sửa ở Settings, giữ ở cấp trưởng phòng.
+    "recruit.jd.manage": ["HR_MANAGER", "BOARD_OF_MANAGEMENT"],
+    // AI đọc CV tốn tiền theo LƯỢT — cùng lý do tách mã với clients.kb.generate / mkt.generate.
+    "recruit.ai_parse": ["HR_MANAGER", "HR_STAFF"],
+    "recruit.salary.view": ["HR_MANAGER", "HR_STAFF", "BOARD_OF_MANAGEMENT"],
+    "recruit.interview.manage": ["HR_MANAGER", "HR_STAFF"],
+    // Chốt nhận/loại là quyết định nhân sự — giữ ở trưởng phòng NS + BGĐ.
+    "recruit.decide": ["HR_MANAGER", "BOARD_OF_MANAGEMENT"],
+  };
+
   const isRestricted = (code: string) =>
     code in MONEY_POLICY || // chính sách quyền chạm tiền — xem MONEY_POLICY ngay trên
+    code in RECRUIT_POLICY || // hồ sơ ứng viên = dữ liệu cá nhân người ngoài — xem RECRUIT_POLICY
     code.startsWith("kpi.") || // (1)
     code.startsWith("settings.") || // (1)
     code.startsWith("payroll.") || // module chưa làm — chưa ai có
@@ -2271,6 +2312,12 @@ async function main() {
       .filter(([, allowed]) => allowed.includes(roleCode))
       .map(([code]) => code);
 
+  /** Mã tuyển dụng mà role này được giữ theo RECRUIT_POLICY (xem hằng ở trên). */
+  const recruitCodesFor = (roleCode: string) =>
+    Object.entries(RECRUIT_POLICY)
+      .filter(([, allowed]) => allowed.includes(roleCode))
+      .map(([code]) => code);
+
   const grantCodesFor = (r: (typeof roleSeeds)[number]) =>
     EXPLICIT_GRANTS[r.code]
       ? new Set(EXPLICIT_GRANTS[r.code])
@@ -2280,6 +2327,7 @@ async function main() {
           ...(extraByRole[r.code] ?? []),
           ...moneyCodesFor(r.code),
           ...adminCodesFor(r.code),
+          ...recruitCodesFor(r.code),
         ]);
 
   for (const r of roleSeeds) {
@@ -2524,6 +2572,27 @@ async function main() {
       key: "20260729_kho_k4_transfer_approve",
       codes: ["inventory.transfer.approve"],
       roleFilter: (r) => r.code === "OPERATIONS_MANAGER" || r.groupCode === "BOD",
+    },
+
+    // 06/08/2026 TUYỂN DỤNG (TD-1) — 7 mã mới. Nguồn sự thật là RECRUIT_POLICY ở trên; mấy dòng
+    // dưới CHỈ dịch bảng đó sang đường backfill cho DB ĐANG CHẠY (Vòng 4 bỏ qua role đã có grant).
+    //
+    // ⚠ Lọc theo MÃ ROLE, không theo nhóm `HR` — nhóm đó còn có `ADMIN_STAFF` (hành chính), người
+    // không tham gia tuyển dụng. Sửa RECRUIT_POLICY thì phải sửa cả mấy dòng này cho khớp.
+    {
+      key: "20260806_recruit_view",
+      codes: ["recruit.view", "recruit.salary.view"],
+      roleFilter: (r) => r.code === "HR_MANAGER" || r.code === "HR_STAFF" || r.groupCode === "BOD",
+    },
+    {
+      key: "20260806_recruit_manage",
+      codes: ["recruit.manage", "recruit.ai_parse", "recruit.interview.manage"],
+      roleFilter: (r) => r.code === "HR_MANAGER" || r.code === "HR_STAFF",
+    },
+    {
+      key: "20260806_recruit_decide",
+      codes: ["recruit.jd.manage", "recruit.decide"],
+      roleFilter: (r) => r.code === "HR_MANAGER" || r.groupCode === "BOD",
     },
   ];
   for (const bf of backfills) {

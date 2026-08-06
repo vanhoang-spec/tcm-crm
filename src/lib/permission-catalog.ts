@@ -175,6 +175,21 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "staff.timesheet.edit", module: "staff", labelVi: "Chấm công, đặt nghỉ phép", labelEn: "Edit timesheet & leave" },
   { code: "staff.week.confirm", module: "staff", labelVi: "Chốt tuần chấm công", labelEn: "Confirm timesheet week", sensitive: true },
 
+  // ── ⑤b Tuyển dụng (sub-module của Nhân sự) ──
+  // ⚠ `recruit.salary.view` KHÔNG phải cửa duy nhất mở ô lương mong muốn: trưởng bộ phận và người
+  // quản lý trực tiếp của CHÍNH vị trí đang tuyển cũng thấy, bằng phép kiểm theo BẢN GHI trong
+  // `canSeeExpectedSalary` (lib/recruit.ts). Ma trận quyền là phẳng toàn cục nên không diễn đạt
+  // được "trưởng phòng của phòng đang tuyển" — đừng đi tìm mã quyền cho hai vai đó.
+  // ⚠ `recruit.ai_parse` tách riêng vì AI tính tiền theo LƯỢT — cùng lý do với `clients.kb.generate`
+  // và `mkt.generate`. Nó là ĐẶC QUYỀN THÊM chồng lên `recruit.manage`, không thay thế.
+  { code: "recruit.view", module: "recruit", labelVi: "Xem vị trí tuyển dụng & hồ sơ ứng viên", labelEn: "View job positions & candidates" },
+  { code: "recruit.manage", module: "recruit", labelVi: "Nhận CV, sửa hồ sơ ứng viên", labelEn: "Upload CV, edit candidates" },
+  { code: "recruit.jd.manage", module: "recruit", labelVi: "Sửa vị trí tuyển dụng, JD & mẫu JD", labelEn: "Manage positions, JD & JD templates" },
+  { code: "recruit.ai_parse", module: "recruit", labelVi: "Dùng AI đọc CV (tốn phí theo lượt)", labelEn: "Use AI to read CVs (billed per call)" },
+  { code: "recruit.salary.view", module: "recruit", labelVi: "Xem lương mong muốn của ứng viên", labelEn: "View candidate expected salary", sensitive: true },
+  { code: "recruit.interview.manage", module: "recruit", labelVi: "Đặt lịch phỏng vấn, phân công người phỏng vấn", labelEn: "Schedule interviews & assign interviewers" },
+  { code: "recruit.decide", module: "recruit", labelVi: "Chốt kết quả tuyển: Thành công / Từ chối", labelEn: "Decide outcome: hire / reject", sensitive: true },
+
   // ── ⑥ KPI ──
   { code: "kpi.view", module: "kpi", labelVi: "Xem KPI & quỹ performance", labelEn: "View KPI & performance pool", sensitive: true },
   { code: "kpi.score", module: "kpi", labelVi: "Chấm điểm KPI", labelEn: "Enter KPI scores", sensitive: true },

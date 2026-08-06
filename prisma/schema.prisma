@@ -38,6 +38,7 @@ model Team {
   ownedProjects   Project[]             @relation("ProjectOwnerTeam")
   loansAsBorrower PlanningLoanRequest[] @relation("LoanFromTeam")
   loansAsLender   PlanningLoanRequest[] @relation("LoanToTeam")
+  jobPositions    JobPosition[]
 
   @@map("team")
 }
@@ -55,6 +56,7 @@ model Department {
   lead          Staff?         @relation("DepartmentLead", fields: [leadStaffId], references: [id])
   staff         Staff[]
   scheduleWeeks ScheduleWeek[]
+  jobPositions  JobPosition[]
 
   @@map("department")
 }
@@ -248,6 +250,12 @@ model Staff {
   mktPostVariantsPosted       MktPostVariant[]          @relation("MktPostVariantPostedBy")
   mktInsightReportsCreated    MktInsightReport[]        @relation("MktInsightReportCreatedBy")
   mktInsightFilesUploaded     MktInsightFile[]          @relation("MktInsightFileUploadedBy")
+  jobPositionsManaged         JobPosition[]             @relation("JobPositionHiringManager")
+  jobPositionsJdUpdated       JobPosition[]             @relation("JobPositionJdUpdatedBy")
+  candidatesCreated           Candidate[]               @relation("CandidateCreatedBy")
+  candidatesDecided           Candidate[]               @relation("CandidateDecidedBy")
+  interviewsAsInterviewer     Interview[]               @relation("InterviewInterviewer")
+  interviewsCreated           Interview[]               @relation("InterviewCreatedBy")
 
   @@map("staff")
 }
@@ -374,7 +382,7 @@ model AuditLog {
 model Notification {
   id               String   @id @default(cuid())
   recipientStaffId String
-  type             String // TEAM_ASSIGNMENT_NEEDED | COSTSHEET_REJECTED | BRAINSTORM_MEETING_INVITE | DEPARTMENT_ORDER_RECEIVED | ORDER_RESULT_RECEIVED | ORDER_DEADLINE_REMINDER | EXTERNAL_TIMELINE_UPDATED | TIMELINE_DEADLINE_REMINDER | CREATIVE_TASK_ASSIGNED | CREATIVE_TASK_NEEDS_APPROVAL | CREATIVE_TASK_DELIVERED | CREATIVE_TASK_REVISION | CREATIVE_TASK_DEADLINE_REMINDER | ACCEPTANCE_SIGN_REMINDER | ADVANCE_REQUESTED | ADVANCE_DISBURSED | ADVANCE_SETTLED | AR_OVERDUE_REMINDER | CHAT_MESSAGE | CHAT_MENTION | REMINDER_DUE | POLL_CREATED | CTV_CONTRACTS_GENERATED | INVENTORY_TRANSFER_INCOMING | INVENTORY_RETURN_OVERDUE | SCHEDULE_CONFIRMED | SCHEDULE_UPDATED | PLANNING_STAGE_ASSIGNED | PLANNING_RESULT_SUBMITTED | PLANNING_REVISION_REQUESTED | PLANNING_FINAL_CONFIRMED | DEPT_TASK_ASSIGNED | DEPT_TASK_NEEDS_APPROVAL | DEPT_TASK_DELIVERED | DEPT_TASK_REVISION | DEPT_TASK_DEADLINE_REMINDER
+  type             String // TEAM_ASSIGNMENT_NEEDED | COSTSHEET_REJECTED | BRAINSTORM_MEETING_INVITE | DEPARTMENT_ORDER_RECEIVED | ORDER_RESULT_RECEIVED | ORDER_DEADLINE_REMINDER | EXTERNAL_TIMELINE_UPDATED | TIMELINE_DEADLINE_REMINDER | CREATIVE_TASK_ASSIGNED | CREATIVE_TASK_NEEDS_APPROVAL | CREATIVE_TASK_DELIVERED | CREATIVE_TASK_REVISION | CREATIVE_TASK_DEADLINE_REMINDER | ACCEPTANCE_SIGN_REMINDER | ADVANCE_REQUESTED | ADVANCE_DISBURSED | ADVANCE_SETTLED | AR_OVERDUE_REMINDER | CHAT_MESSAGE | CHAT_MENTION | REMINDER_DUE | POLL_CREATED | CTV_CONTRACTS_GENERATED | INVENTORY_TRANSFER_INCOMING | INVENTORY_RETURN_OVERDUE | SCHEDULE_CONFIRMED | SCHEDULE_UPDATED | PLANNING_STAGE_ASSIGNED | PLANNING_RESULT_SUBMITTED | PLANNING_REVISION_REQUESTED | PLANNING_FINAL_CONFIRMED | DEPT_TASK_ASSIGNED | DEPT_TASK_NEEDS_APPROVAL | DEPT_TASK_DELIVERED | DEPT_TASK_REVISION | DEPT_TASK_DEADLINE_REMINDER | INTERVIEW_REQUESTED | INTERVIEW_CONFIRMED | INTERVIEW_DECLINED
   title            String
   body             String?
   projectId        String?
@@ -3055,4 +3063,175 @@ model MktInsightFile {
 
   @@index([reportId])
   @@map("mkt_insight_file")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TUYỂN DỤNG (sub-module của Nhân sự) — TD-1
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Vị trí đang tuyển + JD của vị trí đó. Quản trị ở /settings/recruit.
+///
+/// ⚠ CỐ Ý KHÔNG đụng tới `Staff.title` (chuỗi tự do) và KHÔNG dựng danh mục chức danh dùng chung.
+/// HANDOVER 10.5 có ghi nợ "nên chuyển title thành option_set + Staff.titleId" — đó là việc đụng
+/// vào lương theo vị trí, KPI và Creative cost, không thuộc phạm vi tuyển dụng. Bảng này là danh
+/// mục RIÊNG của tuyển dụng, chỉ neo vào org chart qua phòng ban / team / người quản lý.
+///
+/// JD để thẳng 4 ô văn bản dài chứ không phải JSON block như bài học KB: JD không có cấu trúc
+/// lồng nhau, và repo cố ý không có bộ render markdown. Hiển thị bằng `whitespace-pre-wrap`,
+/// React tự escape text node.
+model JobPosition {
+  id     String @id @default(cuid())
+  title  String
+  /// OPEN = đang tuyển · PAUSED = tạm dừng · CLOSED = đã tuyển xong/huỷ.
+  /// Không có đường XOÁ: xoá vị trí đang có ứng viên là mất dấu vết cả kho hồ sơ (mirror ClientGroup).
+  status String @default("OPEN")
+
+  departmentId String?
+  teamId       String?
+  /// Người quản lý trực tiếp của vị trí này. Cùng với trưởng phòng, đây là người NGOÀI HR được
+  /// nhìn thấy lương mong muốn của ứng viên (xem lib/recruit.ts → canSeeExpectedSalary).
+  hiringManagerStaffId String?
+
+  jdSummary          String?
+  jdResponsibilities String?
+  jdRequirements     String?
+  jdBenefits         String?
+  jdUpdatedAt        DateTime?
+  jdUpdatedById      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  department    Department? @relation(fields: [departmentId], references: [id])
+  team          Team?       @relation(fields: [teamId], references: [id])
+  hiringManager Staff?      @relation("JobPositionHiringManager", fields: [hiringManagerStaffId], references: [id])
+  jdUpdatedBy   Staff?      @relation("JobPositionJdUpdatedBy", fields: [jdUpdatedById], references: [id])
+  candidates    Candidate[]
+
+  @@index([status])
+  @@index([departmentId])
+  @@map("job_position")
+}
+
+/// Mẫu JD dùng lại — HR chọn mẫu để điền sẵn 4 ô JD của một vị trí mới, sau đó sửa tự do.
+/// Điền xong là DỮ LIỆU RỜI: sửa mẫu về sau KHÔNG đổi JD của vị trí đã tạo (cố ý — JD đã đăng
+/// tuyển không được đổi sau lưng người đang ứng tuyển).
+model JdTemplate {
+  id                 String   @id @default(cuid())
+  name               String
+  jdSummary          String?
+  jdResponsibilities String?
+  jdRequirements     String?
+  jdBenefits         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("jd_template")
+}
+
+/// Hồ sơ ứng viên. Bị từ chối thì KHÔNG xoá — chuyển `status = "REJECTED"` và vẫn giữ nguyên
+/// `positionId`, nhờ vậy kho hồ sơ (/staff/recruit/archive) tìm lại được theo phòng ban / vị trí.
+model Candidate {
+  id         String @id @default(cuid())
+  positionId String
+
+  fullName String
+  dob      DateTime? // quy ước UTC-midnight của app (HANDOVER 4.3)
+  phone    String?
+  email    String?
+
+  /// Ba ô tóm tắt do AI đọc CV điền sẵn, HR sửa lại được. Văn bản thuần, KHÔNG markdown.
+  summaryWork   String?
+  summarySkills String?
+  summaryOther  String?
+
+  /// Lương mong muốn (VND). Tiền = BigInt trong DB theo luật chung (HANDOVER 4.1).
+  /// ⚠ Ô này bị GATE Ở TẦNG TRUY VẤN — xem lib/recruit.ts. Không select là không vào HTML.
+  expectedSalary BigInt?
+
+  cvFileKey  String
+  cvFileName String
+  cvFileMime String
+  cvFileSize Int
+  /// Mốc lần AI đọc CV gần nhất. Null = chưa đọc lần nào (HR nhập tay hoàn toàn).
+  aiParsedAt DateTime?
+
+  /// NEW = mới nhận · INTERVIEWING = đã có lịch phỏng vấn · HIRED · REJECTED.
+  status       String    @default("NEW")
+  decidedAt    DateTime?
+  decidedById  String?
+  decisionNote String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  position   JobPosition @relation(fields: [positionId], references: [id])
+  decidedBy  Staff?      @relation("CandidateDecidedBy", fields: [decidedById], references: [id])
+  createdBy  Staff?      @relation("CandidateCreatedBy", fields: [createdById], references: [id])
+  interviews Interview[]
+
+  @@index([positionId, status])
+  @@index([status])
+  @@map("candidate")
+}
+
+/// Một lượt phỏng vấn = một vòng × một người phỏng vấn.
+///
+/// ⚠ Vòng đời: PENDING (đã gửi yêu cầu, chờ người phỏng vấn xác nhận lịch) → CONFIRMED → DONE
+/// (đã chấm điểm). DECLINED = người phỏng vấn báo bận, HR đặt lại lịch khác. Người phỏng vấn CHỈ
+/// nhìn được hồ sơ ứng viên của lượt phỏng vấn GẮN TÊN MÌNH — phép kiểm theo bản ghi, không phải
+/// theo mã quyền (mirror cách duyệt đề xuất kho theo PIC dự án, HANDOVER 10.11).
+model Interview {
+  id                 String   @id @default(cuid())
+  candidateId        String
+  round              Int // 1 | 2 | 3
+  interviewerStaffId String
+  scheduledAt        DateTime
+  durationMin        Int      @default(60)
+  /// Phòng họp, địa chỉ, hoặc link họp online. Đi thẳng vào file lịch .ics.
+  location           String?
+
+  status        String    @default("PENDING")
+  respondedAt   DateTime?
+  declineReason String?
+
+  /// Kết quả — PASS | CONSIDER | FAIL. Đây là đề xuất của NGƯỜI PHỎNG VẤN, khác với quyết định
+  /// cuối cùng nằm ở Candidate.status (do người có quyền hr.recruit.decide bấm).
+  recommendation String?
+  strengths      String?
+  concerns       String?
+  note           String?
+  scoredAt       DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  interviewer Staff            @relation("InterviewInterviewer", fields: [interviewerStaffId], references: [id])
+  createdBy   Staff?           @relation("InterviewCreatedBy", fields: [createdById], references: [id])
+  scores      InterviewScore[]
+
+  @@unique([candidateId, round, interviewerStaffId])
+  @@index([interviewerStaffId, status])
+  @@map("interview")
+}
+
+/// Điểm từng tiêu chí của một lượt phỏng vấn.
+///
+/// ⚠ `criterionCode` là CHUỖI, cố ý KHÔNG phải khoá ngoại sang OptionItem: tiêu chí là danh mục
+/// mềm (OptionSet `recruit_criteria`), BGĐ tắt bớt tiêu chí về sau thì phiếu đã chấm vẫn phải đọc
+/// được nguyên vẹn. Cùng lý do với việc câu hỏi kiểm tra ở KB-H3 chỉ TẮT chứ không xoá.
+model InterviewScore {
+  id            String  @id @default(cuid())
+  interviewId   String
+  criterionCode String
+  score         Int // 1..5
+  note          String?
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@unique([interviewId, criterionCode])
+  @@map("interview_score")
 }

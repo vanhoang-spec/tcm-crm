@@ -28,6 +28,8 @@ import {
   Coins,
   Warehouse,
   Boxes,
+  Briefcase,
+  ListChecks,
   Clock,
   CalendarDays,
   Plane,
@@ -81,6 +83,8 @@ export default async function SettingsPage() {
     { href: "/settings/shifts", icon: Clock, title: t("shiftsTitle"), desc: t("shiftsDesc") },
     { href: "/settings/timekeeping", icon: CalendarDays, title: t("timekeepingTitle"), desc: t("timekeepingDesc") },
     { href: "/settings/options/leave_type", icon: Plane, title: t("leaveTypeTitle"), desc: t("leaveTypeDesc") },
+    { href: "/settings/recruit", icon: Briefcase, title: t("recruitTitle"), desc: t("recruitDesc") },
+    { href: "/settings/options/recruit_criteria", icon: ListChecks, title: t("recruitCriteriaTitle"), desc: t("recruitCriteriaDesc") },
     { href: "/settings/security", icon: KeyRound, title: t("securityTitle"), desc: t("securityDesc") },
   ];
 

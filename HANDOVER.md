@@ -111,7 +111,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ② | Bidding & Hợp đồng | `/bidding` | Xong (CO/CE builder, make-up, margin gate, duyệt) |
 | ③ | Quản lý dự án | `/projects/[id]` | Xong — 9 tab: Tổng quan, Timeline, ORDER, CO/CE, Planning, Vận hành, Sản xuất, Thu mua, Nghiệm thu |
 | ④ | Chi phí & Công nợ | `/finance` | Xong (tạm ứng, thanh toán NCC, công nợ, cashflow) |
-| ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) |
+| ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) + **Tuyển dụng** (`/staff/recruit` — vị trí & JD gắn org chart, nhận CV, AI đọc CV điền hồ sơ, lịch phỏng vấn 3 vòng có xác nhận + file lịch .ics, phiếu chấm điểm, kho hồ sơ; xem mục 10.31) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
 | ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 |
@@ -125,7 +125,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 106 model Prisma · 64 migration · 83 file `src/lib` · 3394 key i18n × 2 ngôn ngữ · 131 mã quyền.
+**Quy mô:** 111 model Prisma · 66 migration · 76 file `src/lib` · 3692 key i18n × 2 ngôn ngữ · 138 mã quyền.
 
 ---
 
@@ -1310,6 +1310,89 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       khôi phục · bấm "Khôi phục" tổng về 326.816.369. 8/8 test diff, tsc/eslint/build/i18n sạch.
     - **CHƯA LÀM (cố ý):** khoá cứng bản đã gắn nhãn · lịch sử ai gắn/gỡ nhãn (chỉ có AuditLog chung)
       · so BA bản trở lên cùng lúc · xuất bảng so sánh ra Excel (hiện chỉ xem trên màn hình).
+
+31. **TUYỂN DỤNG — TD-1 XONG 06/08/2026** (migration `20260811000000_recruit_td1`, 5 bảng MỚI
+    `job_position` / `jd_template` / `candidate` / `interview` / `interview_score`). Sub-module của
+    Nhân sự, thêm tab ngang thứ tư ở `/staff`.
+    - **Vòng đời:** HR mở vị trí + JD ở `/settings/recruit` → nhận CV gắn vào vị trí → bấm **AI đọc
+      CV** điền sẵn hồ sơ → HR kiểm rồi Lưu → hẹn phỏng vấn 3 vòng, mỗi vòng gửi YÊU CẦU cho người
+      phỏng vấn tự xác nhận → chấm điểm theo tiêu chí → chốt **Thành công / Từ chối** → hồ sơ bị từ
+      chối vào **Kho hồ sơ**, tìm lại theo phòng ban / vị trí.
+    - ⚠ **KHÔNG nối API Google Calendar** (quyết định chủ dự án 06/08/2026). Thay bằng nút tải file
+      lịch `.ics` (`lib/ics.ts` thuần + route `/api/interview-ics/[id]`) — mở ra là Google Calendar
+      / Outlook / lịch điện thoại tự hỏi "thêm vào lịch?". Nối API đòi tài khoản Google Cloud, duyệt
+      ứng dụng và mỗi nhân sự cấp quyền một lần; token hết hạn là lịch hỏng âm thầm.
+      ⚠ **Đường GỬI THƯ MỜI HỌP chưa làm được vì máy chủ mail công ty CHƯA khai báo** — toàn bộ
+      `SMTP_*` trên production đang trống (đó cũng là lý do "Quên mật khẩu" chưa gửi được thư). Khai
+      báo xong thì chỉ cần đính chuỗi `buildIcs()` vào email, KHÔNG phải viết lại gì.
+    - ⚠ **JD dùng danh mục RIÊNG (`JobPosition`), CỐ Ý không đụng `Staff.title`.** Nợ "chuyển title
+      thành option_set" ở mục 10.5 đụng lương theo vị trí / KPI / Creative cost — ngoài phạm vi
+      tuyển dụng. Vị trí neo vào org chart qua phòng ban + team + người quản lý trực tiếp.
+      Vị trí chỉ **đóng/tạm dừng**, KHÔNG có đường xoá (mirror ClientGroup, mục 10.12): xoá vị trí
+      đang có ứng viên là mất dấu cả kho hồ sơ. Mẫu JD điền xong là **dữ liệu rời** — sửa mẫu về sau
+      không đổi JD của vị trí đã tạo (JD đã đăng tuyển không được đổi sau lưng người đang ứng tuyển).
+    - ⚠ **LƯƠNG MONG MUỐN có HAI TẦNG quyền, gate ở TẦNG TRUY VẤN.** Mã `recruit.salary.view` (HR +
+      BGĐ) **hoặc** là **trưởng bộ phận / người quản lý trực tiếp của CHÍNH vị trí đó** — hai vai sau
+      kiểm THEO BẢN GHI (`canSeeExpectedSalary`), vì ma trận quyền phẳng toàn cục không diễn đạt
+      được "trưởng phòng của phòng đang tuyển". Trang **không select cột `expectedSalary`** khi
+      không đủ điều kiện; `saveCandidate` cũng **bỏ qua trường này** nếu người lưu không được xem —
+      thiếu phép kiểm đó thì người không thấy ô lương vẫn ghi đè nó thành rỗng chỉ bằng cách bấm Lưu.
+      Đã verify: đóng vai Field Supervisor → HTML thô **không có ô lương và không có con số nào**.
+    - ⚠ **Người phỏng vấn KHÔNG cần mã quyền nào.** Họ mở được hồ sơ + CV của đúng lượt gắn tên mình
+      bằng phép kiểm theo bản ghi (`gateCandidate`). Vì vậy `/api/recruit-cv/[id]` **kiểm belongs-to
+      ngay từ đầu** (mirror `/api/project-file/[id]`, KHÔNG mirror `/api/client-kb/[id]` — mục 10.13).
+      Trang `/staff/recruit/interviews` cố ý mở cho mọi người đã đăng nhập, phạm vi do CÂU TRUY VẤN
+      quyết định chứ không phải mã quyền. Đã verify: người không liên quan → CV **403**, hồ sơ →
+      `/no-access`, `/staff/recruit` → đá sang "Lịch phỏng vấn của tôi" (KHÔNG phải `/no-access` —
+      tránh đúng vòng lặp 307 ở mục 10.1).
+    - **Tiêu chí chấm điểm là danh mục MỀM** — OptionSet `recruit_criteria`, 6 mục mặc định do trợ
+      lý đề xuất và chủ dự án duyệt (chuyên môn · xử lý tình huống · giao tiếp · thái độ & gắn bó ·
+      **chịu áp lực/hiện trường** (đặc thù nghề event) · văn hoá & đội nhóm), chấm 1–5 + ghi chú
+      từng mục, cuối phiếu có đề xuất Đạt / Cân nhắc / Không đạt + điểm mạnh + điểm cần lưu ý.
+      ⚠ `InterviewScore.criterionCode` lưu **CHUỖI**, không phải khoá ngoại: tắt tiêu chí về sau thì
+      phiếu cũ vẫn đọc được (cùng nguyên tắc "tắt, không xoá" của câu hỏi KB-H3).
+    - **Quyền: 7 mã mới (131 → 138)**, nguồn sự thật là `RECRUIT_POLICY` trong seed, nuôi cả ba
+      đường `isRestricted` + `recruitCodesFor` + 3 backfill `20260806_recruit_*` (khuôn `MONEY_POLICY`,
+      mục 10.16). ⚠ **CẢ 7 mã đều `isRestricted`**, khác `iso.view`/`mkt.view` cố ý để ở base — hồ sơ
+      ứng viên là dữ liệu cá nhân của người NGOÀI công ty. ⚠ Lọc theo **MÃ ROLE**, không theo nhóm
+      `HR` (nhóm đó còn có `ADMIN_STAFF` hành chính — đúng bẫy SECURITY_GUARD ở mục 10.15).
+      Đo được **GIỐNG HỆT NHAU** trên DB dựng-từ-đầu và dev.db: view 3 · manage 2 · jd.manage 2 ·
+      ai_parse 2 · salary.view 3 · interview.manage 2 · decide 2 = **+16 dòng**. `db:seed` lần hai
+      no-op (1312 → 1312).
+    - ⚠ **`recruit.ai_parse` tách riêng vì AI tính tiền theo LƯỢT** — kiểm bằng `hasPermission` BÊN
+      TRONG action đã có `requirePermission("recruit.manage")` ở đầu (mirror `mkt.generate`).
+    - ⚠ **AI CHỈ TRẢ VỀ CHO FORM, KHÔNG ghi thẳng vào hồ sơ** (đúng yêu cầu "fill vào thông tin căn
+      bản → cho lưu"): HR nhìn rồi mới Lưu, và bấm lại nút không đè mất phần HR đã sửa tay. Chỉ
+      `aiParsedAt` được ghi. Mọi output AI qua **Zod** (`aiChatJson` chỉ ép kiểu — mục 10.14): ngày
+      sinh sai khuôn → null thay vì đoán, lương ngoài dải [1tr, 1 tỷ] → bỏ.
+    - ⚠ **`DateField` giữ giá trị trong state NỘI BỘ, không nhận giá trị qua prop** — muốn AI điền
+      được ngày sinh phải ép dựng lại bằng `key` (đúng mẫu đã vá ở trình soạn bài KB-H3, mục 10.14a).
+      Chỉ bump key khi AI đọc ĐƯỢC ngày sinh; AI trả null thì giữ nguyên thứ HR đã gõ.
+    - ⚠ **BUG ĐÃ VÁ:** bản đầu điều hướng sau khi tải CV bằng `router.push()` **trong lúc render** →
+      React báo "Cannot update a component while rendering a different component". Nay `uploadCandidate`
+      gọi `redirect()` ở SERVER. Điều hướng không bao giờ được làm trong thân render.
+    - ⚠ **Giờ phỏng vấn nhận NGÀY và GIỜ TÁCH RIÊNG**, cố ý không dùng ô `datetime-local`: ô native
+      hiển thị theo locale hệ điều hành và Chromium bỏ qua `lang` → máy tiếng Anh-Mỹ hiện mm/dd/yyyy
+      (đúng lỗi đã vá ở `operations-grid.tsx`, mục 10.19). Mốc hẹn là THỜI ĐIỂM THẬT nên dựng bằng
+      giờ ĐỊA PHƯƠNG, KHÔNG theo quy ước UTC-midnight — server bắt buộc `TZ=Asia/Ho_Chi_Minh`.
+      Verify: hẹn 09:00 ngày 12/08 → DB `2026-08-12T02:00:00Z`, file .ics `DTSTART:20260812T020000Z`.
+    - **Verify end-to-end trên browser bằng CV thật** (act-as 3 vai khác nhau): AI đọc CV **5/5
+      trường khớp** (họ tên · ngày sinh 1997-03-14 · điện thoại · email · lương "18.000.000
+      VND/tháng" → 18000000) · ngày sinh lưu đúng UTC-midnight, lương lưu BigInt · thông báo gửi
+      người phỏng vấn **không rò điện thoại/email/lương** · chấm 6 tiêu chí 24/30 → trung bình hiện
+      **4,0** khớp `averageScore` · file .ics tải được, `Content-Type: text/calendar`, địa điểm thoát
+      dấu phẩy đúng chuẩn · từ chối thiếu lý do bị **server** chặn (đã gỡ `required` phía trình duyệt
+      để thử thẳng server) · hồ sơ bị từ chối rời danh sách đang chạy, vào Kho hồ sơ, lọc theo phòng
+      ban khác thì không hiện · **bẫy React 19 đã né**: action trả lỗi mà ô điện thoại, ô tóm tắt và
+      ngày sinh đều còn nguyên. 28/28 test thuần (ics + phép tính) pass.
+    - ⚠ **Dữ liệu gửi ra DeepSeek:** nội dung CV đi NGUYÊN VĂN (≤24.000 ký tự) — đây là dữ liệu cá
+      nhân của người NGOÀI công ty. Hộp xác nhận trước nút AI nói rõ điều đó, cùng chuẩn đã áp cho
+      kho kiến thức khách hàng.
+    - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** gửi thư mời họp qua email (chờ khai báo
+      SMTP) · nối Google Calendar API · cổng ứng tuyển cho ứng viên tự nộp · gửi thư báo kết quả cho
+      ứng viên · nhập tay tiêu chí khác nhau theo từng VÒNG (hiện dùng chung một bộ) · tìm kiếm
+      toàn văn trong kho hồ sơ (mới lọc theo phòng ban/vị trí/trạng thái) · đọc CV là ảnh scan (OCR)
+      · gắn ứng viên đã nhận sang hồ sơ nhân sự · nhắc lịch phỏng vấn qua notification trước giờ hẹn.
 
 ---
 

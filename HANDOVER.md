@@ -1398,7 +1398,44 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `28b16dc`** (06/08/2026 10:20) — **CE-5 vòng đời version** (mục 10.30). Chạy
+**Production đang chạy `35314b1`** (06/08/2026 14:27) — **TD-1 Tuyển dụng** (mục 10.31). Chạy
+`bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **1 migration mới** áp
+sạch (`recruit_td1` — 5 bảng MỚI, không đụng cột nào của bảng cũ), **7 mã quyền mới**. Backup TRƯỚC
+deploy ở hai nơi: `~/backup/*-20260806-142708*` trên server + `D:/TCM/backup-prod-20260806-142708/`
+máy dev.
+
+Đối chiếu production SAU deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| coTotal + ceTotal 5 bảng CO/CE | (10 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO/CE | 483 | **483** |
+| dòng grant quyền | 1296 | **1312** (+16 = đúng 7 mã tuyển dụng) |
+| 5 bảng tuyển dụng mới | — | **0 / 0 / 0 / 0 / 0** (chưa ai nhập, đúng như mong đợi) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+7 mã quyền đo trên production **giống hệt** bản dựng-từ-đầu và dev.db: view 3 · manage 2 ·
+jd.manage 2 · ai_parse 2 · salary.view 3 · interview.manage 2 · decide 2. Đủ 3 marker
+`20260806_recruit_*`, OptionSet `recruit_criteria` 6 mục.
+
+Health check: `/login` 200 · `/staff/recruit`, `/staff/recruit/interviews`, `/staff/recruit/archive`,
+`/settings/recruit` đều 307 về login · hai route API (`/api/recruit-cv/x`, `/api/interview-ics/x`)
+trả **401** khi chưa đăng nhập · `[jobs] scheduler bật`.
+
+⚠ **Việc cần làm trước khi HR dùng thật:** mở `/settings/recruit` tạo vị trí đang tuyển đầu tiên
+(gắn phòng ban + người quản lý trực tiếp — chính người đó và trưởng bộ phận sẽ thấy lương mong
+muốn của ứng viên). Chưa có vị trí nào thì ô "Nhận CV mới" báo rõ và không cho tải CV lên.
+
+⚠ **Đường gửi thư mời họp vẫn CHƯA có** vì `SMTP_*` trên production đang trống — người phỏng vấn
+nhận thông báo TRONG APP và tự bấm "Thêm vào lịch" để tải file .ics. Khai báo máy chủ mail xong
+thì nâng lên gửi thư mời rất nhẹ (xem mục 10.31).
+
+---
+
+### Deploy trước đó — 06/08/2026 lúc 10:20
+
+**Production khi đó chạy `28b16dc`** — **CE-5 vòng đời version** (mục 10.30). Chạy
 `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **1 migration mới** áp
 sạch (`coce_v3_ce5` — thêm cột `cost_line.ceDropped`), **không mã quyền mới**. Backup TRƯỚC deploy ở
 hai nơi: `~/backup/*-20260806-101954*` trên server + `D:/TCM/backup-prod-20260806-101954/` máy dev.

@@ -1338,11 +1338,29 @@ dòng** (`ceUnitPrice` 0 dòng · `clientFeePct` 0 mục · `quoteTemplateCode` 
 CE-5 (diff thấy CE, import sinh version, dòng khách bỏ, chốt 2 mốc) chỉ chạy trên bảng đã chuyển
 chế độ**, nên tới khi Account chuyển bảng đầu tiên thì production nhìn y hệt hôm qua.
 
-⚠ **Bản vá nginx vẫn CHƯA chạy** (xem ghi chú deploy 05/08 lúc 11:19): lần chạy hôm 05/08 hỏng vì
-bản script cũ đọc `$HOME` dưới `sudo` thành `/root`. Bản đã sửa nằm sẵn ở `~/nginx-fix/` trên
-server, chạy bằng
-`ssh -i ~/.ssh/tcm_deploy tcm@192.168.1.111 -t 'sudo bash ~/nginx-fix/apply.sh'`. Chưa chạy thì
-thi thoảng vẫn tái diễn 429/timeout.
+**BẢN VÁ NGINX ĐÃ CHẠY XONG 06/08/2026 lúc 11:58** (`~/nginx-fix/apply.sh`, chủ dự án chạy bằng
+sudo) — kết thúc sự cố 429/502 mở từ 05/08. Hai thay đổi: khối chuyển hướng IP → tên miền (thay
+`tcm-crm-test-ip` cũ trỏ cổng 3100 đã chết), và map miễn giới hạn tốc độ cho **GET có `_rsc`**
+(Next.js tự tải trước link "Quên mật khẩu?" khi mở trang login, ngưỡng cũ 5r/m làm app tự chặn
+chính mình).
+
+Đo sau khi vá: IP nội bộ **và** IP public đều **301** về `app.tcmbtl.com` · tải trước 60/60 login +
+40/40 forgot-password **không lần nào bị chặn** · **POST kèm `?_rsc=` VẪN bị chặn** (35/60 ở login,
+23/40 ở forgot-password) — tức mẹo thêm `_rsc` không né được giới hạn, đúng như thiết kế.
+
+⚠ **BẪY NGINX ĐÃ CẮN MỘT LẦN — ĐỌC TRƯỚC KHI SỬA `limit_req` LẦN SAU.** nginx **không cho đổi KHOÁ
+TÍNH của một vùng `limit_req_zone` đã tồn tại bằng lệnh nạp lại nóng**: nó ghi `[emerg] limit_req
+"tcm_login" uses the "$tcm_rl_key" key while previously it used the "$binary_remote_addr" key` rồi
+**giữ nguyên cấu hình cũ**. Nguy ở chỗ mọi tín hiệu bên ngoài đều báo THÀNH CÔNG — `nginx -t` ok
+(kiểm FILE, không kiểm vùng nhớ tiến trình đang chạy) và systemd ghi "Reloaded" (lệnh gửi tín hiệu
+thoát 0). Lần chạy 09:51 vì vậy **im lặng không có tác dụng gì suốt hơn 2 tiếng**, chỉ lộ ra khi thử
+bằng request thật. Khởi động lại HẲN thì vùng nhớ dựng mới nên hết xung đột. `apply.sh` nay tự phát
+hiện và chuyển sang restart, rồi **tự gõ một request thật để chứng minh cấu hình mới đã sống** thay
+vì tin systemctl. **Đừng bao giờ kết luận "nginx đã nạp cấu hình mới" từ `nginx -t` + `systemctl`.**
+(Các lần nạp lại nóng SAU này không còn vướng, vì cấu hình đang chạy đã dùng khoá mới.)
+
+Ghi chú: `ps` trên server còn một tiến trình `nginx` khác — đó là nginx **bên trong container Docker
+`mikopbx`** (tổng đài), không gian mạng riêng, không liên quan web server. Đừng "dọn".
 
 ---
 

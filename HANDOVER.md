@@ -116,7 +116,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
 | ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
-| ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1: Creative/Graphic 2D/Multimedia, hạn bắt buộc, tab "Việc của tôi", `/settings/creative-squads` — xem mục 10.32) |
+| ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
 | — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) |
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
@@ -125,7 +125,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 113 model Prisma · 68 migration · 76 file `src/lib` · 3737 key i18n × 2 ngôn ngữ · 138 mã quyền.
+**Quy mô:** 112 model Prisma · 67 migration · 76 file `src/lib` · 3731 key i18n × 2 ngôn ngữ · 138 mã quyền.
 
 ---
 
@@ -1424,16 +1424,15 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       (trước đây server nhận MỌI staffId); (b) trưởng team chỉ giao được người **trong team mình**
       cho task **của team mình**; (c) form bỏ trống deadline thì **GIỮ hạn cũ**, trước đây ghi đè
       thành null — tức thao tác giao việc tự xoá mất hạn vừa điều phối.
-    - **A7 — DUYỆT NHIỀU BÊN** (`CreativeTaskApprover`): Master KV cần **3 chữ ký** (Creative đúng
-      idea · Art đẹp · Account hợp ý khách), adapt cần 2 (Design lead + Account).
-      ⚠ **Task KHÔNG có dòng approver nào ⇒ đi ĐƯỜNG CŨ** (một người có `creative.task.approve`) —
-      dữ liệu cũ không đổi hành vi một chút nào. Có danh sách thì: chỉ người TRONG danh sách ký được
-      (**dù có mã quyền duyệt cũng không ký thay được**); đủ mọi chữ ký mới DELIVERED; **bất kỳ ai
-      trả lại là XOÁ SẠCH chữ ký** — vòng nộp mới duyệt lại từ đầu, vì chữ ký cũ ký cho bản cũ.
-      ⚠ **App KHÔNG đoán "Art Manager"/"Design lead" là ai** — người giao CHỌN đích danh, app chỉ
-      tick sẵn gợi ý: KV_2D ở giai đoạn THỰC THI → lead CREATIVE + lead GRAPHIC_2D + Account đặt
-      việc; loại khác → lead team của task + Account. Giai đoạn thầu KHÔNG gợi ý ai (duyệt nhiều bên
-      là chuyện của thực thi).
+    - ⚠ **A7 — DUYỆT NHIỀU BÊN: ĐÃ GỠ ở CR-1b (07/08/2026), ĐỪNG BUILD LẠI.** CR-1 từng có bảng
+      `CreativeTaskApprover` cho Master KV 3 chữ ký (Creative + Art + Account). Chủ dự án chỉnh
+      lại flow (xem "Flow v2" ngay dưới): job TCM thiên về THỰC THI, vai CD giảm, và làm việc với
+      khách là phần của Account — kéo thêm chữ ký trong nội bộ Creative là sai vai. Nay **MỘT người
+      có `creative.task.approve` duyệt là xong**, rồi trả thẳng cho Account đặt việc.
+      Gỡ sạch: model + migration `20260812010000_creative_task_approvers` (xoá HẲN — chưa từng lên
+      production, production khi đó ở `35314b1`) + code trong `creative/actions.ts` + giao diện
+      trong `task-board.tsx` + 6 key i18n. ⚠ **Bản `creative-mini` VẪN GIỮ duyệt nhiều bên** —
+      sản phẩm riêng, quyết định riêng; đừng "đồng bộ" hai bên.
     - ⚠ **Bộ nhắc quá hạn PHẢI có trưởng team trong danh sách nhận** (`reminders.ts`): task đã điều
       phối + có hạn nhưng CHƯA giao người thì `assigneeId`/`assignedById` đều null → bản cũ **không
       gửi cho ai VÀ không set cờ**, nên vòng quét 5 phút lôi lại task đó vĩnh viễn. Đã tái hiện đúng
@@ -1463,6 +1462,25 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       danh sách bấm ký bị chặn dù có mã quyền, trả lại → REVISION + xoá sạch 3 chữ ký · nhắc quá hạn
       gửi đúng trưởng team, đặt cờ, chạy lần 2 no-op · brainstorm tick đúng 3/36 người · thống kê
       6 đã có kết quả / 6 thắng / 0 thua khớp đếm tay trong DB. tsc/eslint/i18n 0-0/build sạch.
+    - **FLOW v2 — chốt với chủ dự án 07/08/2026 (đã vẽ lại sơ đồ và duyệt).** Job của TCM thuần
+      activation/event, THỰC THI nhiều hơn sáng tạo, nên vai Creative Director giảm so với mô tả
+      hồi CR-1. Tám điểm, phần lớn là QUY TRÌNH ngoài app — ghi ở đây để người sau không build
+      nhầm tính năng:
+      · **Account cầm trịch mọi khâu đối ngoại.** Account present cho khách; CD chỉ tham dự khi
+        được yêu cầu hỗ trợ trình bày. Chốt idea/concept/proposal/báo giá trước khi gửi khách là
+        việc của Account — KHÔNG kéo CD vào khâu này.
+      · **Account là người raise buổi brainstorm** khi có brief. Nhân sự planning nay nằm TRONG
+        từng team Account (xem mục 10.18), không còn là phòng riêng.
+      · **Creative vẫn là bộ phận ĐỘC LẬP, nhận Order từ Account** — đầu flow nhận việc từ Account,
+        cuối flow trả thành phẩm về Account, nhiều vòng lặp theo ý khách. App đã đúng như vậy.
+      · **Thực thi:** thiết kế KV → adapt KV đã duyệt xuống toàn bộ hạng mục → **xuất file sản
+        xuất cho nhà cung cấp**, phối hợp với OPE và PRO. Phần xuất file/phối hợp làm NGOÀI app.
+      · ⚠ **Team nhỏ thứ ba giữ tên "3D"**, chuyển dần sang "Multimedia" (3D/Animation/AI) sau khi
+        mọi người quen. CỐ Ý không sửa code/seed: mã trong code vẫn là `MULTIMEDIA` (bản đồ nhãn
+        `SQUAD_CODE_BY_ORDER_LABEL` khoá theo mã), chủ dự án tự đổi TÊN HIỂN THỊ ở
+        `/settings/creative-squads`. Đổi tên hiển thị không đụng một dòng code nào.
+      · **Brainstorm vẫn tick sẵn lead 3 team nhỏ** (B1) — đúng ý "Account raise cho các team liên
+        quan"; chỉ là gợi ý, Account bỏ tick được.
     - ⚠ **HẠN CHẾ PHẢI NÓI RÕ: `creative.task.assign` vẫn đang cấp RỘNG** (nằm trong grant mặc định,
       ~20 vai có). Đường "trưởng team" của CR-1 là **MỞ THÊM một lối**, chưa phải siết lại — hôm nay
       gần như ai cũng giao việc Creative được. Muốn đúng tinh thần "CD điều phối, trưởng team giao

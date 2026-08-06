@@ -4,9 +4,24 @@
     {
       "name": "tcm-crm-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "creative-mini-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../TCM_CRM_creative",
+        "run",
+        "dev"
+      ],
+      "port": 3100,
+      "autoPort": false
     }
   ]
 }

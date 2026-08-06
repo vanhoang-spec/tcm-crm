@@ -125,31 +125,18 @@ export async function assignCreativeTask(taskId: string, formData: FormData) {
   const newDeadline = dateOrNull(formData.get("deadline"));
   const deadlineChanged = newDeadline != null && newDeadline.getTime() !== task.deadline?.getTime();
 
-  // A7: danh sách người duyệt đích danh (mảng id, có thể rỗng = đường duyệt cũ).
-  const approverIds = [...new Set(formData.getAll("approverIds").map((v) => str(v)).filter(Boolean))];
-  const approvers = approverIds.length
-    ? await prisma.staff.findMany({ where: { id: { in: approverIds }, isActive: true }, select: { id: true } })
-    : [];
-
-  await prisma.$transaction(async (tx) => {
-    await tx.creativeTask.update({
-      where: { id: taskId },
-      data: {
-        assigneeId,
-        taskTypeId: nullable(formData.get("taskTypeId")) ?? task.taskTypeId,
-        cdApprovalNotRequired: formData.get("cdApprovalNotRequired") === "on",
-        ...(newDeadline ? { deadline: newDeadline } : {}),
-        ...(deadlineChanged ? { deadlineReminderSentAt: null } : {}),
-        assignedById: staffId,
-        assignedAt: new Date(),
-        status: "ASSIGNED",
-      },
-    });
-    // Giao lại thì danh sách duyệt dựng lại từ đầu — danh sách cũ thuộc lần giao cũ.
-    await tx.creativeTaskApprover.deleteMany({ where: { taskId } });
-    if (approvers.length) {
-      await tx.creativeTaskApprover.createMany({ data: approvers.map((a) => ({ taskId, staffId: a.id })) });
-    }
+  await prisma.creativeTask.update({
+    where: { id: taskId },
+    data: {
+      assigneeId,
+      taskTypeId: nullable(formData.get("taskTypeId")) ?? task.taskTypeId,
+      cdApprovalNotRequired: formData.get("cdApprovalNotRequired") === "on",
+      ...(newDeadline ? { deadline: newDeadline } : {}),
+      ...(deadlineChanged ? { deadlineReminderSentAt: null } : {}),
+      assignedById: staffId,
+      assignedAt: new Date(),
+      status: "ASSIGNED",
+    },
   });
 
   await notify(assigneeId, "CREATIVE_TASK_ASSIGNED", `Bạn được giao task Creative — dự án ${task.project.code}`, task.title, task.projectId);
@@ -182,87 +169,46 @@ export async function submitCreativeTask(taskId: string, formData: FormData) {
   if (deliverStraight) {
     await markOrderItemDone(task.orderItemId); // trả thẳng → đóng dòng timeline gốc
     if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, link, task.projectId);
-  } else {
-    // A7: task có danh sách duyệt đích danh → báo TẤT CẢ người chưa ký; không có → báo người giao (đường cũ).
-    const pending = await prisma.creativeTaskApprover.findMany({
-      where: { taskId, approvedAt: null },
-      select: { staffId: true },
-    });
-    const recipients = pending.length ? pending.map((p) => p.staffId) : task.assignedById ? [task.assignedById] : [];
-    for (const rid of recipients) {
-      await notify(rid, "CREATIVE_TASK_NEEDS_APPROVAL", `Task Creative chờ bạn duyệt — dự án ${task.project.code}`, task.title, task.projectId);
-    }
+  } else if (task.assignedById) {
+    await notify(task.assignedById, "CREATIVE_TASK_NEEDS_APPROVAL", `Task Creative chờ duyệt — dự án ${task.project.code}`, task.title, task.projectId);
   }
   done(task.projectId);
 }
 
 /**
- * Duyệt task SUBMITTED.
+ * Duyệt task SUBMITTED → trả thành phẩm cho người ORDER (Account đặt việc).
  *
- * Hai đường (A7):
- *  - Task CÓ danh sách duyệt đích danh: chỉ người TRONG danh sách ký được (kiểm bản ghi — Account
- *    hay trưởng team không cần mã quyền). Đủ MỌI chữ ký → DELIVERED; còn thiếu → vẫn SUBMITTED.
- *  - Task KHÔNG có danh sách: đường cũ — một người có `creative.task.approve` bấm là xong.
+ * ⚠ MỘT người duyệt là xong — CR-1b (flow v2, 07/08/2026) đã GỠ cơ chế duyệt nhiều bên: job của
+ * TCM thiên về thực thi, vai CD giảm, và khâu làm việc với khách thuộc về Account chứ không phải
+ * kéo thêm chữ ký trong nội bộ Creative. (Bản `creative-mini` VẪN giữ duyệt nhiều bên — sản phẩm
+ * riêng, quyết định riêng; đừng đồng bộ hai bên.)
  */
 export async function approveCreativeTask(taskId: string) {
+  await requirePermission("creative.task.approve");
   const staffId = await getCurrentStaffId();
-  if (!staffId) return;
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "SUBMITTED") return;
-
-  const approvers = await prisma.creativeTaskApprover.findMany({ where: { taskId } });
-
-  if (approvers.length > 0) {
-    const mine = approvers.find((a) => a.staffId === staffId);
-    if (!mine) return; // không có tên trong danh sách → không ký được, dù có mã quyền
-    if (!mine.approvedAt) {
-      await prisma.creativeTaskApprover.update({ where: { id: mine.id }, data: { approvedAt: new Date() } });
-    }
-    const remaining = approvers.filter((a) => a.id !== mine.id && !a.approvedAt).length;
-    if (remaining > 0) {
-      done(task.projectId);
-      return; // còn thiếu chữ ký — task đứng nguyên SUBMITTED
-    }
-  } else {
-    if (!(await hasPermission("creative.task.approve"))) return;
-  }
 
   await prisma.creativeTask.update({
     where: { id: taskId },
     data: { status: "DELIVERED", reviewedById: staffId, reviewedAt: new Date(), deliveredAt: new Date() },
   });
-  await markOrderItemDone(task.orderItemId); // duyệt đủ → đóng dòng timeline gốc
+  await markOrderItemDone(task.orderItemId); // duyệt → đóng dòng timeline gốc
   if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, task.deliverableLinkUrl, task.projectId);
   done(task.projectId);
 }
 
-/**
- * Trả lại task để sửa → REVISION, tăng revisionCount, báo nhân sự.
- * A7: BẤT KỲ ai trong danh sách duyệt từ chối là cả vòng dừng, và XOÁ SẠCH chữ ký đã có —
- * vòng nộp mới phải duyệt lại từ đầu (chữ ký cũ ký cho bản cũ).
- */
+/** Trả lại task để sửa → REVISION, tăng revisionCount, báo nhân sự. */
 export async function rejectCreativeTask(taskId: string, formData: FormData) {
+  await requirePermission("creative.task.approve");
   const staffId = await getCurrentStaffId();
-  if (!staffId) return;
   const task = await loadUnlocked(taskId);
   if (!task || task.status !== "SUBMITTED") return;
 
-  const approvers = await prisma.creativeTaskApprover.findMany({ where: { taskId } });
-  if (approvers.length > 0) {
-    if (!approvers.some((a) => a.staffId === staffId)) return;
-  } else {
-    if (!(await hasPermission("creative.task.approve"))) return;
-  }
-
   const note = nullable(formData.get("rejectNote"));
-  await prisma.$transaction(async (tx) => {
-    await tx.creativeTask.update({
-      where: { id: taskId },
-      data: { status: "REVISION", revisionCount: { increment: 1 }, reviewedById: staffId, reviewedAt: new Date() },
-    });
-    if (approvers.length > 0) {
-      await tx.creativeTaskApprover.updateMany({ where: { taskId }, data: { approvedAt: null } });
-    }
+  await prisma.creativeTask.update({
+    where: { id: taskId },
+    data: { status: "REVISION", revisionCount: { increment: 1 }, reviewedById: staffId, reviewedAt: new Date() },
   });
   if (task.assigneeId) await notify(task.assigneeId, "CREATIVE_TASK_REVISION", `Task Creative cần sửa lại — dự án ${task.project.code}`, note ?? task.title, task.projectId);
   done(task.projectId);

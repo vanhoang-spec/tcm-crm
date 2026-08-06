@@ -2450,13 +2450,7 @@
       "reroute": "Route to another squad",
       "routeSquad": "Route to squad",
       "directAssign": "Assign directly (skip routing)",
-      "overdueDays": "{days} days overdue",
-      "approversTitle": "Deliverable approvers",
-      "approversHint": "Tick nobody to use the normal flow (a single approver signs off).",
-      "approversLabel": "Approvers",
-      "approveSign": "Sign off my part",
-      "leadOf": "{squad} lead",
-      "ordererRole": "requesting Account"
+      "overdueDays": "{days} days overdue"
     },
     "my": {
       "title": "My tasks",

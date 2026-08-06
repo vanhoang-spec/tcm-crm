@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { NumberField } from "@/components/ui/number-field";
-import { Lock, CheckCircle2, Check, Clock3 } from "lucide-react";
+import { Lock, CheckCircle2, Clock3 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/ui/date-field";
@@ -19,8 +19,6 @@ import {
   createCreativeTask,
   deleteCreativeTask,
 } from "./actions";
-
-export type ApproverChip = { staffId: string; name: string; approved: boolean };
 
 export type TaskData = {
   id: string;
@@ -49,13 +47,11 @@ export type TaskData = {
   hoursSpent: number | null;
   revisionCount: number;
   deliveredAt: Date | null;
-  approvers: ApproverChip[];
   locked: boolean;
   graceDaysLeft: number | null;
 };
 type Opt = { id: string; label: string };
 export type StaffOpt = { id: string; label: string; squadId: string | null };
-export type SquadLead = { squadId: string; code: string; name: string; leadStaffId: string | null; leadName: string | null };
 
 const STATUS_ORDER = ["UNASSIGNED", "ASSIGNED", "REVISION", "SUBMITTED", "DELIVERED", "CANCELED"] as const;
 const PHASE_TONE = { BIDDING: "brand", WORKING: "success" } as const;
@@ -86,7 +82,6 @@ export function TaskBoard({
   teams,
   orderers,
   squads,
-  squadLeads,
   hideCreate,
   hideFilters,
 }: {
@@ -97,7 +92,6 @@ export function TaskBoard({
   teams: Opt[];
   orderers: Opt[];
   squads: Opt[];
-  squadLeads: SquadLead[];
   /** Màn "Việc của tôi" ẩn form tạo task lẻ + dàn filter — 2 prop thay vì tách component. */
   hideCreate?: boolean;
   hideFilters?: boolean;
@@ -195,7 +189,7 @@ export function TaskBoard({
                   </h3>
                   <div className="space-y-2">
                     {unrouted.map((task) => (
-                      <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} squadLeads={squadLeads} t={t} />
+                      <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} t={t} />
                     ))}
                   </div>
                 </div>
@@ -207,7 +201,7 @@ export function TaskBoard({
                   </h3>
                   <div className="space-y-2">
                     {routed.map((task) => (
-                      <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} squadLeads={squadLeads} t={t} />
+                      <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} t={t} />
                     ))}
                   </div>
                 </div>
@@ -223,7 +217,7 @@ export function TaskBoard({
             </h3>
             <div className="space-y-2">
               {group.map((task) => (
-                <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} squadLeads={squadLeads} t={t} />
+                <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} t={t} />
               ))}
             </div>
           </div>
@@ -258,47 +252,6 @@ export function TaskBoard({
       )}
     </div>
   );
-}
-
-/**
- * Danh sách NGƯỜI DUYỆT gợi ý cho form giao việc (A7). App KHÔNG đoán "Art/Design lead" là ai —
- * chỉ điền sẵn theo quy tắc đã chốt, người giao sửa tự do:
- *  - Master KV (loại KV_2D) ở giai đoạn thực thi → lead CREATIVE + lead GRAPHIC_2D + Account đặt hàng.
- *  - Loại khác ở giai đoạn thực thi → lead team của task + Account đặt hàng.
- *  - Giai đoạn bidding → không gợi ý (đường duyệt CD như cũ; proposal do Account review ngoài app).
- * THUẦN — StrictMode gọi 2 lần vẫn cùng kết quả.
- */
-function suggestedApproverIds(task: TaskData, squadLeads: SquadLead[]): Set<string> {
-  const ids = new Set<string>();
-  if (task.phase !== "WORKING") return ids;
-  const leadOf = (code: string) => squadLeads.find((s) => s.code === code)?.leadStaffId;
-  if (task.taskTypeCode === "KV_2D") {
-    const a = leadOf("CREATIVE");
-    const b = leadOf("GRAPHIC_2D");
-    if (a) ids.add(a);
-    if (b) ids.add(b);
-  } else if (task.squadId) {
-    const lead = squadLeads.find((s) => s.squadId === task.squadId)?.leadStaffId;
-    if (lead) ids.add(lead);
-  }
-  if (task.ordererId) ids.add(task.ordererId);
-  return ids;
-}
-
-/** Ứng viên hiện trong ô chọn người duyệt: 3 lead team + Account đặt hàng (khử trùng). THUẦN. */
-function approverCandidates(task: TaskData, squadLeads: SquadLead[], t: ReturnType<typeof useTranslations>): Opt[] {
-  const out: Opt[] = [];
-  const seen = new Set<string>();
-  for (const s of squadLeads) {
-    if (s.leadStaffId && s.leadName && !seen.has(s.leadStaffId)) {
-      seen.add(s.leadStaffId);
-      out.push({ id: s.leadStaffId, label: `${s.leadName} — ${t("task.leadOf", { squad: s.name })}` });
-    }
-  }
-  if (task.ordererId && task.ordererName && !seen.has(task.ordererId)) {
-    out.push({ id: task.ordererId, label: `${task.ordererName} — ${t("task.ordererRole")}` });
-  }
-  return out;
 }
 
 function RouteForm({
@@ -345,20 +298,16 @@ function AssignForm({
   task,
   creativeStaff,
   taskTypes,
-  squadLeads,
   t,
 }: {
   task: TaskData;
   creativeStaff: StaffOpt[];
   taskTypes: Opt[];
-  squadLeads: SquadLead[];
   t: ReturnType<typeof useTranslations>;
 }) {
   // Task đã về team → ô chọn người lọc còn NGƯỜI TRONG TEAM (server cũng chặn với trưởng team;
   // CD muốn vượt thì điều phối lại trước — giữ UI một đường).
   const staffOptions = task.squadId ? creativeStaff.filter((s) => s.squadId === task.squadId) : creativeStaff;
-  const suggested = suggestedApproverIds(task, squadLeads);
-  const candidates = approverCandidates(task, squadLeads, t);
 
   return (
     <div className="space-y-2">
@@ -384,27 +333,6 @@ function AssignForm({
           <input type="checkbox" name="cdApprovalNotRequired" className="h-4 w-4 rounded border-border-strong" />
           {t("task.cdNoApproval")}
         </label>
-        {/* A7 — danh sách người duyệt đích danh. Không tick ai = đường duyệt CD như cũ. */}
-        {candidates.length > 0 && (
-          <details open={suggested.size > 0} className="rounded-lg border border-dashed border-border px-2.5 py-1.5">
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("task.approversTitle")}</summary>
-            <p className="mt-1 text-[11px] text-muted-foreground">{t("task.approversHint")}</p>
-            <div className="mt-1.5 space-y-1">
-              {candidates.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-xs text-foreground">
-                  <input
-                    type="checkbox"
-                    name="approverIds"
-                    value={c.id}
-                    defaultChecked={suggested.has(c.id)}
-                    className="h-3.5 w-3.5 rounded border-border-strong"
-                  />
-                  {c.label}
-                </label>
-              ))}
-            </div>
-          </details>
-        )}
       </form>
       <div className="flex items-center gap-2">
         <button type="submit" form={`assign-${task.id}`} className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
@@ -421,14 +349,12 @@ function TaskCard({
   creativeStaff,
   taskTypes,
   squads,
-  squadLeads,
   t,
 }: {
   task: TaskData;
   creativeStaff: StaffOpt[];
   taskTypes: Opt[];
   squads: Opt[];
-  squadLeads: SquadLead[];
   t: ReturnType<typeof useTranslations>;
 }) {
   const locale = useLocale() as Locale;
@@ -480,13 +406,13 @@ function TaskCard({
                   <details className="rounded-lg border border-dashed border-border px-2.5 py-1.5">
                     <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("task.directAssign")}</summary>
                     <div className="mt-2">
-                      <AssignForm task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squadLeads={squadLeads} t={t} />
+                      <AssignForm task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} t={t} />
                     </div>
                   </details>
                 </>
               ) : (
                 <>
-                  <AssignForm task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squadLeads={squadLeads} t={t} />
+                  <AssignForm task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} t={t} />
                   <details className="rounded-lg border border-dashed border-border px-2.5 py-1.5">
                     <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("task.reroute")}</summary>
                     <div className="mt-2">
@@ -522,26 +448,9 @@ function TaskCard({
                 </a>
               )}
               {task.hoursSpent != null && <p className="text-xs text-muted-foreground">{t("task.hoursSpent", { hours: task.hoursSpent })}</p>}
-              {task.approvers.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground">{t("task.approversLabel")}:</span>
-                  {task.approvers.map((a) => (
-                    <span
-                      key={a.staffId}
-                      className={
-                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] " +
-                        (a.approved ? "border-success/40 bg-success-bg text-success" : "border-border-strong text-muted-foreground")
-                      }
-                    >
-                      {a.approved && <Check className="h-3 w-3" />}
-                      {a.name}
-                    </span>
-                  ))}
-                </div>
-              )}
               <FormButton
                 action={approveCreativeTask.bind(null, task.id)}
-                label={task.approvers.length > 0 ? t("task.approveSign") : t("task.approve")}
+                label={t("task.approve")}
                 success
               />
               <form action={rejectCreativeTask.bind(null, task.id)} className="space-y-1.5">

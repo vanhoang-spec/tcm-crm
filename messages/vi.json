@@ -2450,13 +2450,7 @@
       "reroute": "Điều phối lại team khác",
       "routeSquad": "Giao về team",
       "directAssign": "Giao thẳng cho người (bỏ qua điều phối)",
-      "overdueDays": "Trễ {days} ngày",
-      "approversTitle": "Người duyệt sản phẩm",
-      "approversHint": "Không tick ai thì đi đường duyệt thường (một người duyệt là xong).",
-      "approversLabel": "Người duyệt",
-      "approveSign": "Ký duyệt phần của tôi",
-      "leadOf": "trưởng {squad}",
-      "ordererRole": "Account đặt việc"
+      "overdueDays": "Trễ {days} ngày"
     },
     "my": {
       "title": "Việc của tôi",

@@ -42,12 +42,11 @@ export default async function MyCreativeTasksPage() {
         assignee: true,
         orderedBy: true,
         squad: true,
-        approvers: { include: { staff: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
       },
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
-    prisma.creativeSquad.findMany({ where: { isActive: true }, orderBy: { sort: "asc" }, include: { lead: { select: { fullName: true } } } }),
+    prisma.creativeSquad.findMany({ where: { isActive: true }, orderBy: { sort: "asc" }, }),
     prisma.optionSet.findUnique({
       where: { code: "creative_task_type" },
       include: { items: { where: { isActive: true }, orderBy: { sort: "asc" } } },
@@ -83,20 +82,12 @@ export default async function MyCreativeTasksPage() {
       hoursSpent: task.hoursSpent,
       revisionCount: task.revisionCount,
       deliveredAt: task.deliveredAt,
-      approvers: task.approvers.map((a) => ({ staffId: a.staffId, name: a.staff.fullName, approved: a.approvedAt != null })),
       locked,
       graceDaysLeft: locked ? null : finishedGraceDaysLeft(statusCode, task.project.finishedAt),
     };
   });
 
   const overdueCount = taskData.filter((x) => x.overdueDays != null).length;
-  const squadLeads = squads.map((s) => ({
-    squadId: s.id,
-    code: s.code,
-    name: s.name,
-    leadStaffId: s.leadStaffId,
-    leadName: s.lead?.fullName ?? null,
-  }));
 
   return (
     <div className="space-y-4">
@@ -125,7 +116,6 @@ export default async function MyCreativeTasksPage() {
             teams={[]}
             orderers={[]}
             squads={squads.map((s) => ({ id: s.id, label: s.name }))}
-            squadLeads={squadLeads}
             hideCreate
             hideFilters
           />

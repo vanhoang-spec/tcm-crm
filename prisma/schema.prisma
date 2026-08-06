@@ -256,7 +256,6 @@ model Staff {
   mktInsightReportsCreated    MktInsightReport[]        @relation("MktInsightReportCreatedBy")
   mktInsightFilesUploaded     MktInsightFile[]          @relation("MktInsightFileUploadedBy")
   creativeSquadsLed           CreativeSquad[]           @relation("CreativeSquadLead")
-  creativeTaskApprovals       CreativeTaskApprover[]    @relation("CreativeTaskApproverStaff")
   jobPositionsManaged         JobPosition[]             @relation("JobPositionHiringManager")
   jobPositionsJdUpdated       JobPosition[]             @relation("JobPositionJdUpdatedBy")
   candidatesCreated           Candidate[]               @relation("CandidateCreatedBy")
@@ -1490,30 +1489,6 @@ model CreativeSquad {
   @@map("creative_squad")
 }
 
-/// Người duyệt của MỘT task — CR-1 mở rộng khâu duyệt từ "một người có quyền" thành DANH SÁCH
-/// đích danh (luồng thực thi chủ dự án mô tả 06/08/2026: Master KV cần Creative + Art + Account
-/// CÙNG duyệt; adapt cần Design lead + Account).
-///
-/// ⚠ App KHÔNG đoán "Art Manager"/"Design lead" là ai — người giao việc CHỌN đích danh, form chỉ
-/// gợi ý sẵn theo loại việc (lead squad + Account đặt hàng). Task KHÔNG có dòng nào ở đây thì đi
-/// đường duyệt CŨ (một người có `creative.task.approve` bấm) — dữ liệu cũ không đổi hành vi.
-/// Đủ MỌI dòng có `approvedAt` → task DELIVERED; BẤT KỲ ai trả lại → REVISION và xoá sạch chữ ký
-/// (vòng mới phải duyệt lại từ đầu — chữ ký cũ ký cho bản cũ).
-model CreativeTaskApprover {
-  id         String    @id @default(cuid())
-  taskId     String
-  staffId    String
-  approvedAt DateTime?
-  note       String?
-  createdAt  DateTime  @default(now())
-
-  task  CreativeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  staff Staff        @relation("CreativeTaskApproverStaff", fields: [staffId], references: [id], onDelete: Cascade)
-
-  @@unique([taskId, staffId])
-  @@map("creative_task_approver")
-}
-
 /// 1 tác vụ cụ thể team Creative phải làm. Tự sinh từ checklist Order Creative (sourceItemLabel dedupe)
 /// hoặc CD tạo lẻ. Phase BIDDING/WORKING tính realtime từ project.status.code (không lưu).
 /// Vòng đời: UNASSIGNED → ASSIGNED → SUBMITTED → (REVISION ↺) → DELIVERED · CANCELED = bị khóa theo project.
@@ -1552,7 +1527,6 @@ model CreativeTask {
   order      ProjectOrder?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
   orderItem  ProjectOrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
   taskType   OptionItem?            @relation("CreativeTaskType", fields: [taskTypeId], references: [id])
-  approvers  CreativeTaskApprover[]
   assignee   Staff?            @relation("CreativeTaskAssignee", fields: [assigneeId], references: [id])
   assignedBy Staff?            @relation("CreativeTaskAssignedBy", fields: [assignedById], references: [id])
   reviewedBy Staff?            @relation("CreativeTaskReviewedBy", fields: [reviewedById], references: [id])

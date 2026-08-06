@@ -21,7 +21,6 @@ export default async function CreativePage() {
         assignee: true,
         orderedBy: true,
         squad: true,
-        approvers: { include: { staff: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -39,7 +38,6 @@ export default async function CreativePage() {
     prisma.creativeSquad.findMany({
       where: { isActive: true },
       orderBy: { sort: "asc" },
-      include: { lead: { select: { fullName: true } } },
     }),
   ]);
 
@@ -73,7 +71,6 @@ export default async function CreativePage() {
       hoursSpent: task.hoursSpent,
       revisionCount: task.revisionCount,
       deliveredAt: task.deliveredAt,
-      approvers: task.approvers.map((a) => ({ staffId: a.staffId, name: a.staff.fullName, approved: a.approvedAt != null })),
       locked,
       graceDaysLeft,
     };
@@ -81,13 +78,6 @@ export default async function CreativePage() {
 
   const staffOptions = creativeStaff.map((s) => ({ id: s.id, label: s.fullName, squadId: s.creativeSquadId }));
   const squadOptions = squads.map((s) => ({ id: s.id, label: s.name }));
-  const squadLeads = squads.map((s) => ({
-    squadId: s.id,
-    code: s.code,
-    name: s.name,
-    leadStaffId: s.leadStaffId,
-    leadName: s.lead?.fullName ?? null,
-  }));
   const taskTypeOptions = (taskTypeSet?.items ?? []).map((it) => ({ id: it.id, label: pickLabel(it, locale) }));
   // Chỉ cho tạo task lẻ ở dự án CHƯA khóa (loại FAILED/CANCELED ở DB + FINISHED-hết-grace ở JS vì lock là phép tính thời gian).
   const projectOptions = projects
@@ -196,7 +186,6 @@ export default async function CreativePage() {
             teams={teamOptions}
             orderers={ordererOptions}
             squads={squadOptions}
-            squadLeads={squadLeads}
           />
         </div>
       </section>

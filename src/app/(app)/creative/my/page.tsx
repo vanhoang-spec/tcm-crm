@@ -37,7 +37,7 @@ export default async function MyCreativeTasksPage() {
         status: { in: [...ACTIVE_TASK_STATUSES, "DELIVERED"] },
       },
       include: {
-        project: { include: { status: true, ownerTeam: true } },
+        project: { include: { status: true } },
         taskType: true,
         assignee: true,
         orderedBy: true,
@@ -64,8 +64,7 @@ export default async function MyCreativeTasksPage() {
       status: task.status as CreativeTaskStatus,
       projectId: task.projectId,
       projectCode: task.project.code,
-      projectName: task.project.name,
-      teamCode: task.project.ownerTeam?.code ?? null,
+      projectName: task.project.name,
       phase: taskPhase(statusCode),
       taskTypeId: task.taskTypeId,
       taskTypeCode: task.taskType?.code ?? null,
@@ -121,8 +120,7 @@ export default async function MyCreativeTasksPage() {
             tasks={taskData}
             creativeStaff={[]}
             taskTypes={(taskTypeSet?.items ?? []).map((it) => ({ id: it.id, label: pickLabel(it, locale) }))}
-            projects={[]}
-            teams={[]}
+            projects={[]}
             orderers={[]}
             squads={squads.map((s) => ({ id: s.id, label: s.name }))}
             squadLeads={squadLeads}

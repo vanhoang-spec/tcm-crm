@@ -10,11 +10,9 @@ const inputClass =
 
 export function StaffCreateForm({
   departments,
-  teams,
   roles,
 }: {
   departments: { id: string; name: string }[];
-  teams: { id: string; name: string }[];
   roles: { id: string; name: string }[];
 }) {
   const [state, formAction, pending] = useActionState<StaffFormState, FormData>(createStaff, {});
@@ -56,12 +54,6 @@ export function StaffCreateForm({
           <option value="">{t("noDepartment")}</option>
           {departments.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-        <select name="teamId" defaultValue="" className={inputClass}>
-          <option value="">{t("noTeam")}</option>
-          {teams.map((tm) => (
-            <option key={tm.id} value={tm.id}>{tm.name}</option>
           ))}
         </select>
         <select name="roleId" defaultValue="" className={inputClass}>

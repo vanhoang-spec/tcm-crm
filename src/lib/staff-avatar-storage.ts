@@ -1,7 +1,10 @@
 import { writeFile, mkdir, readFile, unlink } from "fs/promises";
 import path from "path";
 import { randomBytes } from "crypto";
-import { extForMime } from "./chat-storage";
+/** Đuôi file theo MIME — bản TCM mượn của chat-storage, bản mini tự khai vì đã cắt module chat. */
+function extForMime(mime: string): string {
+  return { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }[mime] ?? "bin";
+}
 
 /**
  * Lưu ảnh đại diện nhân sự trên LOCAL DISK, NGOÀI `public/` — mirror chat-storage.ts (storage

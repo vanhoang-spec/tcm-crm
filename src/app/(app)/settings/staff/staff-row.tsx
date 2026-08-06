@@ -12,8 +12,6 @@ export type StaffRowData = {
   title: string | null;
   departmentId: string | null;
   departmentName: string | null;
-  teamId: string | null;
-  teamName: string | null;
   gender: string | null;
   workLocation: string | null;
   managerId: string | null;
@@ -33,12 +31,10 @@ export type StaffRowData = {
 export function StaffRow({
   staff,
   departments,
-  teams,
   managers,
 }: {
   staff: StaffRowData;
   departments: { id: string; name: string }[];
-  teams: { id: string; name: string }[];
   /** Mọi nhân sự đang hoạt động TRỪ chính người này — ứng viên làm quản lý trực tiếp. */
   managers: { id: string; fullName: string }[];
 }) {
@@ -94,69 +90,6 @@ export function StaffRow({
               spellCheck={false}
               className="h-8 w-48 rounded-md border border-border-strong bg-surface px-2 text-xs"
             />
-            <label className="flex items-center gap-1.5 text-[11px]">
-              <input type="checkbox" name="payrollExempt" defaultChecked={staff.payrollExempt} className="h-3.5 w-3.5 rounded border-border-strong" />
-              {t("payrollExemptLabel")}
-            </label>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="submit"
-                disabled={loginPending}
-                className="h-7 rounded-md bg-brand-600 px-2 text-[11px] font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-              >
-                {loginPending ? "..." : t("save")}
-              </button>
-              <button type="button" onClick={() => setEditingLogin(false)} className="text-[11px] text-muted-foreground hover:underline">
-                {t("cancelEdit")}
-              </button>
-            </div>
-            {loginState.error && <span className="text-[11px] text-danger">{loginState.error}</span>}
-          </form>
-        )}
-      </td>
-      <td className="px-3 py-2 text-muted-foreground">{staff.title ?? "—"}</td>
-      <td className="px-3 py-2 text-muted-foreground">
-        {!editingOrg ? (
-          <div className="flex flex-col items-start gap-0.5">
-            <span>{staff.departmentName ?? "—"}</span>
-            {staff.teamName && <span className="text-[11px] text-muted-foreground">{staff.teamName}</span>}
-            {staff.isPlanningStaff && (
-              <span className="rounded bg-surface-2 px-1.5 text-[10px] text-muted-foreground">{t("planningStaffShort")}</span>
-            )}
-            <button type="button" onClick={() => setEditingOrg(true)} className="text-[11px] text-brand-600 hover:underline">
-              {t("editOrg")}
-            </button>
-            {orgState.success === "SAVED" && <span className="text-[11px] text-success">{t("saved")}</span>}
-          </div>
-        ) : (
-          <form action={orgFormAction} className="flex min-w-[180px] flex-col gap-1">
-            <select name="departmentId" defaultValue={staff.departmentId ?? ""} className="h-8 rounded-md border border-border-strong bg-surface px-2 text-xs">
-              <option value="">{t("noDepartment")}</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-            <select name="teamId" defaultValue={staff.teamId ?? ""} className="h-8 rounded-md border border-border-strong bg-surface px-2 text-xs">
-              <option value="">{t("noTeam")}</option>
-              {teams.map((tm) => (
-                <option key={tm.id} value={tm.id}>{tm.name}</option>
-              ))}
-            </select>
-            <select name="managerId" defaultValue={staff.managerId ?? ""} className="h-8 rounded-md border border-border-strong bg-surface px-2 text-xs">
-              <option value="">{t("noManager")}</option>
-              {managers.map((m) => (
-                <option key={m.id} value={m.id}>{m.fullName}</option>
-              ))}
-            </select>
-            <label className="flex items-center gap-1.5 text-[11px]" title={t("planningStaffHint")}>
-              <input
-                type="checkbox"
-                name="isPlanningStaff"
-                defaultChecked={staff.isPlanningStaff}
-                className="h-3.5 w-3.5 rounded border-border-strong"
-              />
-              {t("planningStaffLabel")}
-            </label>
             <div className="flex items-center gap-1.5">
               <button
                 type="submit"

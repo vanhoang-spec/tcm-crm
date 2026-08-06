@@ -55,95 +55,13 @@ export const SQUAD_CODE_BY_ORDER_LABEL: Record<string, string> = {
   VIDEO: "MULTIMEDIA",
 };
 
-/**
- * Tự sinh CreativeTask từ 1 Order Creative. Idempotent theo (orderId, sourceItemLabel).
- * Đọc từ 2 nguồn hội tụ vào cùng ProjectOrder:
- *  - `creativeItems` (ProjectOrderCreativeItem): checklist Creative tick tay ở Bidding — sourceItemLabel = it.label.
- *  - `items` (ProjectOrderItem): dòng tự gom từ Master Timeline — sourceItemLabel = "TL:{sourceTimelineItemId|id}".
- * Gọi từ order-actions.createDepartmentOrder & project-orders.dispatchOrder khi department = CREATIVE.
- */
-export async function spawnTasksForCreativeOrder(orderId: string): Promise<void> {
-  const order = await prisma.projectOrder.findUnique({
-    where: { id: orderId },
-    include: { creativeItems: true, items: true, project: true },
-  });
-  if (!order || order.department !== "CREATIVE") return;
-
-  const existing = await prisma.creativeTask.findMany({
-    where: { orderId },
-    select: { sourceItemLabel: true },
-  });
-  const already = new Set(existing.map((t) => t.sourceItemLabel));
-  const orderedById = order.sentById ?? order.project.ownerId ?? null;
-
-  // CR-1: gợi ý team nhỏ theo nhãn checklist. Squad tắt/chưa seed ⇒ null, KHÔNG chặn spawn.
-  const squads = await prisma.creativeSquad.findMany({ where: { isActive: true }, select: { id: true, code: true } });
-  const squadIdByCode = new Map(squads.map((s) => [s.code, s.id]));
-
-  const fromChecklist = order.creativeItems.map((it) => ({
-    sourceItemLabel: it.label,
-    orderItemId: null as string | null,
-    title: it.detail?.trim() ? it.detail.trim() : `Creative: ${it.label}`,
-    detail: it.detail ?? null,
-    squadId: squadIdByCode.get(SQUAD_CODE_BY_ORDER_LABEL[it.label] ?? "") ?? null,
-  }));
-  const fromTimeline = order.items.map((it) => ({
-    sourceItemLabel: `TL:${it.sourceTimelineItemId ?? it.id}`,
-    orderItemId: it.id, // giữ FK để đẩy ProjectOrderItem.status → DONE khi task DELIVERED (tín hiệu về Timeline)
-    title: it.label,
-    detail: it.detail ?? null,
-    squadId: null as string | null, // dòng Timeline không đoán được loại việc — CD điều phối tay
-  }));
-
-  const toCreate = [...fromChecklist, ...fromTimeline]
-    .filter((row) => !already.has(row.sourceItemLabel))
-    .map((row) => ({
-      projectId: order.projectId,
-      orderId: order.id,
-      orderItemId: row.orderItemId,
-      orderedById,
-      sourceItemLabel: row.sourceItemLabel,
-      title: row.title,
-      detail: row.detail,
-      status: "UNASSIGNED",
-      // CR-1 fix gốc "0 task có deadline": hạn task mặc định = hạn mong muốn trên Order. Trước đây
-      // cột này bị bỏ trống lúc spawn nên bộ nhắc quá hạn không bao giờ chạy (đo được 0/5 task).
-      deadline: order.desiredTimeline,
-      squadId: row.squadId,
-    }));
-
-  if (toCreate.length > 0) {
-    try {
-      await prisma.creativeTask.createMany({ data: toCreate });
-    } catch (e) {
-      // P2002 = dispatch song song, bên kia đã tạo trước — backstop @@unique([orderId, sourceItemLabel]) hoạt động đúng, bỏ qua.
-      if (!(e instanceof Error && "code" in e && (e as { code?: string }).code === "P2002")) throw e;
-    }
-
-    // Báo trưởng team nhỏ có việc mới về team — SAU khi ghi task (SQLite single-writer, không gói
-    // transaction). Gom MỘT tin mỗi team mỗi order. Task chưa có team (OTHER/TL) thì CD tự thấy
-    // trên board ở nhóm "chờ điều phối".
-    const bySquad = new Map<string, number>();
-    for (const row of toCreate) if (row.squadId) bySquad.set(row.squadId, (bySquad.get(row.squadId) ?? 0) + 1);
-    if (bySquad.size > 0) {
-      const leads = await prisma.creativeSquad.findMany({
-        where: { id: { in: [...bySquad.keys()] }, leadStaffId: { not: null } },
-        select: { id: true, name: true, leadStaffId: true },
-      });
-      if (leads.length > 0) {
-        await prisma.notification.createMany({
-          data: leads.map((s) => ({
-            recipientStaffId: s.leadStaffId!,
-            type: "CREATIVE_TASK_ROUTED",
-            title: `${bySquad.get(s.id)} task Creative mới về team ${s.name}`,
-            body: `Dự án ${order.project.code} — vào Creative để giao người trong team.`,
-            projectId: order.projectId,
-          })),
-        });
-      }
-    }
-  }
-}
+// ⚠ Bản mini KHÔNG có `spawnTasksForCreativeOrder`.
+//
+// Ở bản TCM, task Creative sinh TỰ ĐỘNG từ Order mà Account gửi sang (kèm checklist và hạn).
+// Bản mini đã cắt module Bidding nên KHÔNG còn nguồn sinh task đó — hiện task phải tạo tay trên
+// bảng. Đường NHẬN VIỆC riêng của bản mini (ai đó gửi yêu cầu + hạn → sinh task) là việc của đợt
+// kế tiếp; khi làm, nhớ chép hạn xuống task, nếu bỏ trống thì bộ nhắc quá hạn lại thành code chết
+// đúng như lỗi đã phải vá ở bản TCM.
 
 /** Khóa mọi task chưa trả (≠ DELIVERED/CANCELED) của 1 dự án → CANCELED. Gọi khi dự án THUA/HỦY. */
 export async function lockCreativeTasksForProject(projectId: string): Promise<void> {

@@ -1,15 +1,5 @@
 import { prisma } from "./prisma";
-import {
-  checkOrderDeadlineReminders,
-  checkAcceptanceSignReminders,
-  checkCreativeTaskDeadlineReminders,
-  checkDepartmentTaskDeadlineReminders,
-  checkInventoryReturnReminders,
-  checkArOverdueReminders,
-  checkExpiryWarnings,
-} from "./reminders";
-import { checkSpecialOccasions } from "./occasions";
-import { checkChatReminders } from "./chat-reminders";
+import { checkCreativeTaskDeadlineReminders } from "./reminders";
 
 // ─────────────────────────────────────────────────────────
 // Chạy các job kiểm-và-nhắc theo lịch.
@@ -50,15 +40,9 @@ async function claimRun(now: Date): Promise<boolean> {
 }
 
 const JOBS: [string, () => Promise<unknown>][] = [
-  ["order-deadline", checkOrderDeadlineReminders],
-  ["acceptance-sign", checkAcceptanceSignReminders],
+  // Bản mini chỉ còn MỘT job. Bản TCM đầy đủ có 9 (hạn order, ký nghiệm thu, task bộ phận,
+  // trả đồ kho, công nợ quá hạn, hạn dùng vật tư, sinh nhật, nhắc chat) — cắt cùng module.
   ["creative-task-deadline", checkCreativeTaskDeadlineReminders],
-  ["dept-task-deadline", checkDepartmentTaskDeadlineReminders],
-  ["inventory-return", checkInventoryReturnReminders],
-  ["ar-overdue", checkArOverdueReminders],
-  ["inventory-expiry", checkExpiryWarnings],
-  ["special-occasions", checkSpecialOccasions],
-  ["chat-reminders", checkChatReminders],
 ];
 
 /**

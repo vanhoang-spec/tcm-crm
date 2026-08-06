@@ -68,14 +68,8 @@ export async function staffHasPermission(staffId: string, code: string): Promise
  */
 const SAFE_LANDING: [permission: string, href: string][] = [
   ["dashboard.view", "/"],
-  ["inventory.view", "/inventory"],
-  ["projects.view", "/projects"],
-  ["clients.view", "/clients"],
-  ["finance.view", "/finance"],
   ["creative.view", "/creative"],
-  ["staff.view", "/staff"],
-  ["chat.use", "/chat"],
-  ["kb.view", "/kb"],
+  ["creative.task.submit", "/creative/my"],
   ["settings.view", "/settings"],
 ];
 
@@ -86,77 +80,6 @@ export async function requirePermission(code: string): Promise<void> {
   redirect(SAFE_LANDING.find(([p]) => perms.has(p))?.[1] ?? "/no-access");
 }
 
-// ─────────────────────────────────────────────────────────
-// Phạm vi hiển thị Dashboard — QUYỀN lấy từ ma trận, còn phòng ban/team vẫn lấy từ hồ sơ nhân sự
-// (đó là "dữ liệu của ai", không phải "được phép hay không").
-// ─────────────────────────────────────────────────────────
 
-export type DashboardScope = {
-  canSeeAllTeams: boolean;
-  canSeeCashflow: boolean;
-  /** Team Account của nhân sự hiện tại (A1/A2/A3) — null nếu không thuộc Account hoặc xem được mọi team. */
-  ownTeamCode: string | null;
-  /** Danh sách team hiển thị ở khối kinh doanh: ["A1","A2","A3","ALL"] khi xem được tất cả, [team] cho Account, ["ALL"] cho phòng khác. */
-  visibleTeamCodes: string[];
-  /** Mã phòng ban của nhân sự hiện tại — dùng để tô đậm card bộ phận mình ở khối tiến độ. */
-  highlightDept: string | null;
-};
-
-export async function getDashboardScope(): Promise<DashboardScope> {
-  const staffId = await getCurrentStaffId();
-  const [staff, perms] = await Promise.all([
-    staffId
-      ? prisma.staff.findUnique({
-          where: { id: staffId },
-          select: { department: { select: { code: true } }, team: { select: { code: true } } },
-        })
-      : Promise.resolve(null),
-    getMyPermissions(),
-  ]);
-
-  const isExec = perms.has("dashboard.all_teams");
-  const deptCode = staff?.department?.code ?? null;
-  const ownTeamCode = !isExec && deptCode === "ACCOUNT" ? (staff?.team?.code ?? null) : null;
-
-  const allTeams = await prisma.team.findMany({ where: { isActive: true }, select: { code: true }, orderBy: { code: "asc" } });
-  const visibleTeamCodes = isExec ? [...allTeams.map((t) => t.code), "ALL"] : ownTeamCode ? [ownTeamCode] : ["ALL"];
-
-  return {
-    canSeeAllTeams: isExec,
-    canSeeCashflow: perms.has("dashboard.cashflow"),
-    ownTeamCode,
-    visibleTeamCodes,
-    highlightDept: !isExec && deptCode !== "ACCOUNT" ? deptCode : null,
-  };
-}
-
-// ─────────────────────────────────────────────────────────
-// Phạm vi hiển thị trợ lý AI.
-//
-// Trước đây gate bằng DANH SÁCH EMAIL cứng trong file này (3 người BGĐ + Hồ Sĩ Bảo) cộng với
-// phòng ban. Nay đi qua ma trận: seed đã dựng lại đúng phân bổ cũ theo nhóm role, admin chỉnh
-// tiếp trong /settings/roles. Giữ nguyên hình dạng trả về để 8 chỗ gọi không phải sửa.
-//
-// ⚠ Đây chỉ là lớp HIỂN THỊ — mỗi action AI vẫn tự requirePermission("ai.*") trước khi gọi model.
-// ─────────────────────────────────────────────────────────
-
-export type AiVisibility = {
-  canBrainstorm: boolean;
-  canContent: boolean;
-  canCanva: boolean;
-  canCostSheet: boolean;
-  canBoardReport: boolean;
-  canTrend: boolean;
-};
-
-export async function getAiVisibility(): Promise<AiVisibility> {
-  const p = await getMyPermissions();
-  return {
-    canBrainstorm: p.has("ai.brainstorm"),
-    canContent: p.has("ai.content"),
-    canCanva: p.has("ai.canva"),
-    canCostSheet: p.has("ai.costsheet"),
-    canBoardReport: p.has("ai.board_report"),
-    canTrend: p.has("ai.trend"),
-  };
-}
+// Bản mini KHÔNG có `getDashboardScope` / `getAiVisibility` như bản TCM: hai hàm đó phục vụ
+// Dashboard đa team + trợ lý AI, đều đã cắt. Trang chủ bản mini chỉ đưa thẳng vào bảng task.

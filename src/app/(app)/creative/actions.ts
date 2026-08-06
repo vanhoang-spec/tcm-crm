@@ -41,11 +41,10 @@ function done(projectId?: string) {
   if (projectId) revalidatePath(`/projects/${projectId}/orders`);
 }
 
-/** Đẩy ProjectOrderItem gốc (nếu task sinh từ Master Timeline) sang DONE — tín hiệu Creative→Timeline đã xong. */
-async function markOrderItemDone(orderItemId: string | null) {
-  if (!orderItemId) return;
-  await prisma.projectOrderItem.update({ where: { id: orderItemId }, data: { status: "DONE" } });
-}
+// Bản mini KHÔNG đẩy tín hiệu ngược về Master Timeline: bản TCM có `markOrderItemDone` để đóng
+// dòng timeline gốc khi task được trả, nhưng cả Order lẫn Timeline đều đã cắt khỏi bản mini.
+// Task Creative ở đây đứng độc lập; đường nhận việc riêng (đợt sau) sẽ tự quyết có cần tín hiệu
+// ngược hay không.
 
 /**
  * Người đang thao tác có phải TRƯỞNG TEAM NHỎ của task này không — phép kiểm THEO BẢN GHI
@@ -180,7 +179,6 @@ export async function submitCreativeTask(taskId: string, formData: FormData) {
   });
 
   if (deliverStraight) {
-    await markOrderItemDone(task.orderItemId); // trả thẳng → đóng dòng timeline gốc
     if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, link, task.projectId);
   } else {
     // A7: task có danh sách duyệt đích danh → báo TẤT CẢ người chưa ký; không có → báo người giao (đường cũ).
@@ -231,7 +229,6 @@ export async function approveCreativeTask(taskId: string) {
     where: { id: taskId },
     data: { status: "DELIVERED", reviewedById: staffId, reviewedAt: new Date(), deliveredAt: new Date() },
   });
-  await markOrderItemDone(task.orderItemId); // duyệt đủ → đóng dòng timeline gốc
   if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, task.deliverableLinkUrl, task.projectId);
   done(task.projectId);
 }

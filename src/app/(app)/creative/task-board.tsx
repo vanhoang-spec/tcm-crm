@@ -29,8 +29,7 @@ export type TaskData = {
   status: CreativeTaskStatus;
   projectId: string;
   projectCode: string;
-  projectName: string;
-  teamCode: string | null;
+  projectName: string;
   phase: "BIDDING" | "WORKING";
   taskTypeId: string | null;
   taskTypeCode: string | null;
@@ -82,8 +81,7 @@ export function TaskBoard({
   tasks,
   creativeStaff,
   taskTypes,
-  projects,
-  teams,
+  projects,
   orderers,
   squads,
   squadLeads,
@@ -93,8 +91,7 @@ export function TaskBoard({
   tasks: TaskData[];
   creativeStaff: StaffOpt[];
   taskTypes: Opt[];
-  projects: Opt[];
-  teams: Opt[];
+  projects: Opt[];
   orderers: Opt[];
   squads: Opt[];
   squadLeads: SquadLead[];
@@ -105,8 +102,7 @@ export function TaskBoard({
   const t = useTranslations("creative");
   const [fProject, setFProject] = useState("");
   const [fAssignee, setFAssignee] = useState("");
-  const [fPhase, setFPhase] = useState("");
-  const [fTeam, setFTeam] = useState("");
+  const [fPhase, setFPhase] = useState("");
   const [fSquad, setFSquad] = useState("");
   const [fOrderer, setFOrderer] = useState("");
 
@@ -116,12 +112,11 @@ export function TaskBoard({
         (task) =>
           (!fProject || task.projectId === fProject) &&
           (!fAssignee || task.assigneeId === fAssignee) &&
-          (!fPhase || task.phase === fPhase) &&
-          (!fTeam || task.teamCode === fTeam) &&
+          (!fPhase || task.phase === fPhase) &&
           (!fSquad || task.squadId === fSquad) &&
           (!fOrderer || task.ordererId === fOrderer),
       ),
-    [tasks, fProject, fAssignee, fPhase, fTeam, fSquad, fOrderer],
+    [tasks, fProject, fAssignee, fPhase, fSquad, fOrderer],
   );
 
   return (
@@ -159,12 +154,6 @@ export function TaskBoard({
             <option value="">{t("board.allPhases")}</option>
             <option value="BIDDING">{t("phaseBIDDING")}</option>
             <option value="WORKING">{t("phaseWORKING")}</option>
-          </select>
-          <select aria-label={t("board.filterTeam")} value={fTeam} onChange={(e) => setFTeam(e.target.value)} className={input}>
-            <option value="">{t("board.allTeams")}</option>
-            {teams.map((tm) => (
-              <option key={tm.id} value={tm.id}>{tm.label}</option>
-            ))}
           </select>
           <SearchableSelect
             value={fOrderer}

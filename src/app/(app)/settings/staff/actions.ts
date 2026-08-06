@@ -57,7 +57,6 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
   const email = normalizeLoginId(String(formData.get("email") ?? ""));
   const title = String(formData.get("title") ?? "").trim();
   const departmentId = String(formData.get("departmentId") ?? "").trim();
-  const teamId = String(formData.get("teamId") ?? "").trim();
   const roleId = String(formData.get("roleId") ?? "").trim();
   const payrollExempt = formData.get("payrollExempt") === "on";
   const dobRaw = String(formData.get("dateOfBirth") ?? "").trim();
@@ -88,8 +87,7 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
       fullName,
       email,
       title: title || null,
-      departmentId: departmentId || null,
-      teamId: teamId || null,
+      departmentId: departmentId || null,
       // Không gán nhóm quyền = tập quyền RỖNG, người đó đăng nhập vào không mở được trang nào.
       roleId: roleId || null,
       payrollExempt,
@@ -174,12 +172,11 @@ export async function updateStaffOrg(staffId: string, _prev: StaffFormState, for
 
   const target = await prisma.staff.findUnique({
     where: { id: staffId },
-    select: { departmentId: true, teamId: true, managerId: true, isPlanningStaff: true },
+    select: { departmentId: true, managerId: true, isPlanningStaff: true },
   });
   if (!target) return { error: t("errorRequired") };
 
   if (departmentId && !(await prisma.department.count({ where: { id: departmentId } }))) return { error: t("errorRequired") };
-  if (teamId && !(await prisma.team.count({ where: { id: teamId } }))) return { error: t("errorRequired") };
 
   if (managerId) {
     if (managerId === staffId) return { error: t("errorManagerSelf") };
@@ -199,12 +196,12 @@ export async function updateStaffOrg(staffId: string, _prev: StaffFormState, for
     }
   }
 
-  await prisma.staff.update({ where: { id: staffId }, data: { departmentId, teamId, managerId, isPlanningStaff } });
+  await prisma.staff.update({ where: { id: staffId }, data: { departmentId, managerId, isPlanningStaff } });
   await prisma.auditLog.create({
     data: {
       entityType: "staff",
       entityId: staffId,
-      field: "departmentId,teamId,managerId,isPlanningStaff",
+      field: "departmentId,managerId,isPlanningStaff",
       oldValue: JSON.stringify(target),
       newValue: JSON.stringify({ departmentId, teamId, managerId, isPlanningStaff }),
       action: "UPDATE",
@@ -327,12 +324,7 @@ export async function deleteStaff(staffId: string, _prev: StaffFormState, formDa
   if (await isLastActiveAdmin(staffId)) return { error: t("errorLastAdmin") };
 
   await prisma.$transaction([
-    prisma.notification.deleteMany({ where: { recipientStaffId: staffId } }),
-    prisma.clientTransfer.deleteMany({ where: { transferredById: staffId } }),
-    prisma.projectOrderAttendee.deleteMany({ where: { staffId } }),
-    prisma.projectMember.deleteMany({ where: { staffId } }),
-    prisma.conversationMember.deleteMany({ where: { staffId } }),
-    prisma.shiftAssignment.deleteMany({ where: { staffId } }),
+    prisma.notification.deleteMany({ where: { recipientStaffId: staffId } }),
     prisma.staff.delete({ where: { id: staffId } }),
   ]);
   await audit(staffId, "DELETE");

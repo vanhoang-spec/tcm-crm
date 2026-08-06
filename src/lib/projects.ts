@@ -55,59 +55,6 @@ export function finishedGraceDaysLeft(projectStatusCode: string, finishedAt: Dat
   return left > 0 ? left : null;
 }
 
-/** Đẩy ProjectOrderItem gốc (nếu task sinh từ Master Timeline) sang DONE — tín hiệu bộ phận→Timeline đã xong. */
-export async function markOrderItemDone(orderItemId: string | null): Promise<void> {
-  if (!orderItemId) return;
-  await prisma.projectOrderItem.update({ where: { id: orderItemId }, data: { status: "DONE" } });
-}
-
-/**
- * Dọn task đã sinh từ các dòng order (ProjectOrderItem) sắp bị gỡ — PHẢI gọi TRƯỚC khi xóa dòng,
- * vì FK task→dòng là SetNull: xóa dòng trước sẽ mất liên kết và để lại task "zombie" vẫn active.
- * - Task chưa ai nhận (UNASSIGNED) → xóa hẳn.
- * - Task đang làm → CANCELED + giải phóng khóa dedupe (sourceKey/sourceItemLabel) để nếu dòng
- *   được đưa lại order sau này (cùng timeline item) thì spawn vẫn tạo được task mới.
- * - Task DELIVERED giữ nguyên (kết quả đã trả).
- */
-export async function cancelTasksForOrderItems(orderItemIds: string[]): Promise<void> {
-  if (orderItemIds.length === 0) return;
-  await prisma.$transaction([
-    prisma.creativeTask.deleteMany({ where: { orderItemId: { in: orderItemIds }, status: "UNASSIGNED" } }),
-    prisma.creativeTask.updateMany({
-      where: { orderItemId: { in: orderItemIds }, status: { notIn: ["DELIVERED", "CANCELED"] } },
-      data: { status: "CANCELED", sourceItemLabel: null },
-    }),
-    prisma.departmentTask.deleteMany({ where: { orderItemId: { in: orderItemIds }, status: "UNASSIGNED" } }),
-    prisma.departmentTask.updateMany({
-      where: { orderItemId: { in: orderItemIds }, status: { notIn: ["DELIVERED", "CANCELED"] } },
-      data: { status: "CANCELED", sourceKey: null },
-    }),
-  ]);
-}
-
-/**
- * Đồng bộ nội dung dòng order → task đã sinh (khi Leader sửa dòng SAU khi order đã gửi).
- * Chỉ cập nhật task chưa kết thúc; deadline chỉ đồng bộ khi task còn UNASSIGNED
- * (lead đã giao thì deadline là của lead đặt — không ghi đè).
- */
-export async function syncTasksWithOrderItem(item: {
-  id: string;
-  label: string;
-  detail: string | null;
-  desiredReceiptAt: Date | null;
-}): Promise<void> {
-  await prisma.$transaction([
-    prisma.creativeTask.updateMany({
-      where: { orderItemId: item.id, status: { notIn: ["DELIVERED", "CANCELED"] } },
-      data: { title: item.label, detail: item.detail },
-    }),
-    prisma.departmentTask.updateMany({
-      where: { orderItemId: item.id, status: { notIn: ["DELIVERED", "CANCELED"] } },
-      data: { title: item.label, detail: item.detail },
-    }),
-    prisma.departmentTask.updateMany({
-      where: { orderItemId: item.id, status: "UNASSIGNED" },
-      data: { deadline: item.desiredReceiptAt, deadlineReminderSentAt: null },
-    }),
-  ]);
-}
+// Bản mini KHÔNG có markOrderItemDone / cancelTasksForOrderItems / syncTasksWithOrderItem:
+// ba hàm đó nối Creative với Master Timeline và task bộ phận — cả hai module đã cắt.
+// Đường nhận việc riêng của bản mini sẽ thay thế chúng (đợt sau).

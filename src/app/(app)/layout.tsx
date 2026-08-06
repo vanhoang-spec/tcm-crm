@@ -1,15 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
-import { FloatingDock } from "@/components/layout/floating-dock";
 import { Header } from "@/components/layout/header";
 import { prisma } from "@/lib/prisma";
-import {
-  getBiddingReminders,
-  getCareOverdueClients,
-  getPendingCostSheetApprovals,
-  getStockRequestReminders,
-  getTimelineOverdueItems,
-} from "@/lib/reminders";
-import { getArOverdueItems } from "@/lib/finance";
 import { redirect } from "next/navigation";
 import { getCurrentStaffId, getSessionContext } from "@/lib/current-staff";
 import { getMyPermissions } from "@/lib/permissions";
@@ -37,36 +28,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const navPermissions = [...(await getMyPermissions())];
   // Chuông đếm ĐÚNG những khối người này xem được ở /reminders — nếu không, tài khoản hẹp quyền
   // (thủ kho, bảo vệ) thấy con số của việc họ không mở ra được, bấm vào thì trang trống.
-  const [careItems, biddingItems, pendingApprovals, timelineItems, stockRequestItems, arItems, unreadNotifications, staffRows] =
-    await Promise.all([
-      navPermissions.includes("clients.view") ? getCareOverdueClients() : Promise.resolve([]),
-      navPermissions.includes("bidding.view") ? getBiddingReminders() : Promise.resolve([]),
-      navPermissions.includes("bidding.view") ? getPendingCostSheetApprovals() : Promise.resolve([]),
-      navPermissions.includes("projects.view") ? getTimelineOverdueItems() : Promise.resolve([]),
-      navPermissions.includes("inventory.view") ? getStockRequestReminders() : Promise.resolve([]),
-      navPermissions.includes("finance.view") ? getArOverdueItems() : Promise.resolve([]),
-      // CHAT_MESSAGE có badge chưa đọc riêng trong module Chat — không cộng vào chuông nhắc việc.
-      prisma.notification.count({
-        where: { isRead: false, recipientStaffId: currentStaffId ?? "", type: { not: "CHAT_MESSAGE" } },
-      }),
-      prisma.staff.findMany({
-        where: { isActive: true },
-        select: { id: true, fullName: true, title: true, avatarKey: true, updatedAt: true, department: { select: { name: true } } },
-        orderBy: { fullName: "asc" },
-      }),
-    ]);
-  // Mỗi nguồn đếm ĐÚNG 1 lần trên chuông: acceptance/creative-task/inventory-return đã có Notification
-  // bền vững từ các hàm check* (nằm trong unreadNotifications) nên KHÔNG cộng danh sách computed nữa —
-  // tránh đếm kép. Các nguồn thuần computed (care/bidding/approvals/timeline/AR) vẫn cộng trực tiếp.
-  // Trang /reminders vẫn tự query đầy đủ các danh sách để hiển thị.
-  const reminderCount =
-    careItems.length +
-    biddingItems.length +
-    pendingApprovals.length +
-    timelineItems.length +
-    stockRequestItems.length +
-    arItems.length +
-    unreadNotifications;
+  const [unreadNotifications, staffRows] = await Promise.all([
+    prisma.notification.count({
+      where: { isRead: false, recipientStaffId: currentStaffId ?? "" },
+    }),
+    prisma.staff.findMany({
+      where: { isActive: true },
+      select: { id: true, fullName: true, title: true, avatarKey: true, updatedAt: true, department: { select: { name: true } } },
+      orderBy: { fullName: "asc" },
+    }),
+  ]);
+  // Bản mini: chuông chỉ đếm Notification bền vững (task Creative quá hạn, giao việc, duyệt).
+  // Bản TCM còn cộng 5 nguồn thuần-tính-toán (chăm sóc khách, hạn thầu, duyệt CO/CE, timeline,
+  // công nợ) — đã cắt cùng module tương ứng.
+  const reminderCount = unreadNotifications;
   const actAsStaff = staffRows.map((s) => ({
     id: s.id,
     fullName: s.fullName,
@@ -94,10 +69,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Hộp chat / AI nổi — ĐẶT Ở ĐÂY, ngoài <header> (header có backdrop-blur → containing block,
           sẽ nhốt mọi position:fixed bên trong; xem HANDOVER mục 4.4). State của dock sống trong
           layout nên giữ nguyên khi điều hướng client giữa các module — chính là mục đích tính năng. */}
-      <FloatingDock
-        canChat={navPermissions.includes("chat.use")}
-        canAi={navPermissions.some((p) => p.startsWith("ai."))}
-      />
     </div>
   );
 }

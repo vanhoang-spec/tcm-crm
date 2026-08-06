@@ -10,17 +10,15 @@ import { requirePermission } from "@/lib/permissions";
 export default async function SettingsStaffPage() {
   await requirePermission("settings.staff.manage");
   const tAuth = await getTranslations("auth.admin");
-  const [staff, departments, teams, roles, activeStaff, t] = await Promise.all([
+  const [staff, departments, roles, activeStaff, t] = await Promise.all([
     prisma.staff.findMany({
       orderBy: { fullName: "asc" },
       include: {
         department: { select: { name: true } },
-        team: { select: { name: true } },
         manager: { select: { fullName: true } },
       },
     }),
     prisma.department.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
-    prisma.team.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     // Gán nhóm quyền NGAY LÚC TẠO: bỏ trống thì người đó đăng nhập vào không mở được trang nào.
     prisma.role.findMany({ orderBy: [{ sort: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     // Ứng viên quản lý trực tiếp cho ô "Sửa phòng ban/team" ở từng hàng.
@@ -39,7 +37,7 @@ export default async function SettingsStaffPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t("desc")}</p>
       </div>
 
-      <StaffCreateForm departments={departments} teams={teams} roles={roles} />
+      <StaffCreateForm departments={departments} roles={roles} />
 
       <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-xl border border-border">
         <table className="w-full text-sm">
@@ -65,7 +63,6 @@ export default async function SettingsStaffPage() {
               <StaffRow
                 key={s.id}
                 departments={departments}
-                teams={teams}
                 managers={activeStaff.filter((m) => m.id !== s.id)}
                 staff={{
                   id: s.id,
@@ -74,8 +71,6 @@ export default async function SettingsStaffPage() {
                   title: s.title,
                   departmentId: s.departmentId,
                   departmentName: s.department?.name ?? null,
-                  teamId: s.teamId,
-                  teamName: s.team?.name ?? null,
                   gender: s.gender,
                   workLocation: s.workLocation,
                   managerId: s.managerId,

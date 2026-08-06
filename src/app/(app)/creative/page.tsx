@@ -10,13 +10,13 @@ import { requirePermission } from "@/lib/permissions";
 
 export default async function CreativePage() {
   await requirePermission("creative.view");
-  const [t, locale, stats, tasks, creativeStaff, taskTypeSet, projects, teams, squads] = await Promise.all([
+  const [t, locale, stats, tasks, creativeStaff, taskTypeSet, projects, squads] = await Promise.all([
     getTranslations("creative"),
     getLocale() as Promise<Locale>,
     getCreativeDashboardStats(),
     prisma.creativeTask.findMany({
       include: {
-        project: { include: { status: true, ownerTeam: true } },
+        project: { include: { status: true } },
         taskType: true,
         assignee: true,
         orderedBy: true,
@@ -34,8 +34,7 @@ export default async function CreativePage() {
       where: { status: { code: { notIn: ["FAILED", "CANCELED"] } } },
       include: { status: true },
       orderBy: { updatedAt: "desc" },
-    }),
-    prisma.team.findMany({ orderBy: { code: "asc" } }),
+    }),
     prisma.creativeSquad.findMany({
       where: { isActive: true },
       orderBy: { sort: "asc" },
@@ -54,8 +53,7 @@ export default async function CreativePage() {
       status: task.status as CreativeTaskStatus, // cột DB là String; danh sách trạng thái chuẩn ở CREATIVE_TASK_STATUSES
       projectId: task.projectId,
       projectCode: task.project.code,
-      projectName: task.project.name,
-      teamCode: task.project.ownerTeam?.code ?? null,
+      projectName: task.project.name,
       phase: taskPhase(statusCode),
       taskTypeId: task.taskTypeId,
       taskTypeCode: task.taskType?.code ?? null,
@@ -93,7 +91,6 @@ export default async function CreativePage() {
   const projectOptions = projects
     .filter((p) => !isTaskLocked(p.status.code, p.finishedAt))
     .map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` }));
-  const teamOptions = teams.map((tm) => ({ id: tm.code, label: tm.code }));
   const ordererOptions = Array.from(
     new Map(tasks.filter((t) => t.orderedBy).map((t) => [t.orderedBy!.id, t.orderedBy!.fullName])).entries(),
   )
@@ -192,8 +189,7 @@ export default async function CreativePage() {
             tasks={taskData}
             creativeStaff={staffOptions}
             taskTypes={taskTypeOptions}
-            projects={projectOptions}
-            teams={teamOptions}
+            projects={projectOptions}
             orderers={ordererOptions}
             squads={squadOptions}
             squadLeads={squadLeads}

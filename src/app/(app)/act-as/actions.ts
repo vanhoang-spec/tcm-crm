@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ACT_AS_COOKIE, ACT_AS_COOKIE_OPTS, isAdminStaff, signActAs } from "@/lib/current-staff";
 import { getAuthenticatedStaffId } from "@/lib/auth-session";
-import { ensureTcmFamilyMembership } from "@/lib/chat";
 import { staffHasPermission } from "@/lib/permissions";
 
 /**
@@ -31,7 +30,5 @@ export async function setActAsStaff(staffId: string) {
   const staff = await prisma.staff.findFirst({ where: { id: staffId, isActive: true }, select: { id: true } });
   if (!staff) return;
   store.set(ACT_AS_COOKIE, signActAs(staff.id), ACT_AS_COOKIE_OPTS);
-  // Idempotent: auto-join "GIA ĐÌNH TCM" cho nhân sự @tcmbtl.com chưa có trong nhóm.
-  await ensureTcmFamilyMembership(staff.id).catch(() => {});
   revalidatePath("/", "layout");
 }

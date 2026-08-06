@@ -33,9 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# sqlite dev database — dữ liệu cục bộ, khôi phục bằng `npx prisma migrate dev` + `npm run db:seed`
-/prisma/dev.db
-/prisma/dev.db-journal
+# sqlite dev database — dữ liệu cục bộ, khôi phục bằng `npx prisma migrate deploy` + `npm run db:seed`
+# ⚠ Dùng mẫu *.db chứ không liệt kê từng tên: bản mini chạy trên `creative.db` và suýt bị commit
+# vì dòng cũ chỉ loại đúng `dev.db`. Đặt tên CSDL mới sau này cũng tự được loại.
+/prisma/*.db
+/prisma/*.db-journal
 
 # chat attachment binaries (local disk, ngoài public/ — xem src/lib/chat-storage.ts)
 /storage

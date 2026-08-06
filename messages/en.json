@@ -575,7 +575,9 @@
       "recruitTitle": "Job positions & JD",
       "recruitDesc": "Open positions anchored to the org chart, job descriptions and JD templates.",
       "recruitCriteriaTitle": "Interview criteria",
-      "recruitCriteriaDesc": "Criteria used to score candidates on the interview form."
+      "recruitCriteriaDesc": "Criteria used to score candidates on the interview form.",
+      "creativeSquadsTitle": "Creative squads",
+      "creativeSquadsDesc": "The three squads inside Creative, their leads and membership."
     },
     "bidding": {
       "backToSettings": "Back to Settings",
@@ -1161,6 +1163,24 @@
       "errNoTitle": "Enter the position title.",
       "errNotFound": "Position not found.",
       "errGeneric": "Could not complete, please try again."
+    },
+    "creativeSquads": {
+      "backToSettings": "Back to settings",
+      "title": "Creative squads",
+      "desc": "Three squads inside the Creative department: Creative (ideas), Graphic 2D (key visuals), Multimedia (3D/animation/AI).",
+      "squadsTitle": "The three squads",
+      "lead": "Squad lead",
+      "leadNone": "— Not set —",
+      "leadHint": "The lead is notified when work arrives and assigns it to people in the squad.",
+      "active": "Active",
+      "membersTitle": "Squad membership",
+      "membersHint": "Each person belongs to exactly one squad.",
+      "unassignedCount": "{n} people still have no squad.",
+      "noSquad": "— No squad —",
+      "noSquadYet": "no squad",
+      "assign": "Assign",
+      "saved": "Saved",
+      "errGeneric": "Could not save, please try again."
     }
   },
   "bidding": {
@@ -1180,7 +1200,14 @@
       "allStatuses": "All statuses",
       "allTeams": "All",
       "teamUnassigned": "Awaiting team",
-      "unassignedCount": "{count} projects awaiting team"
+      "unassignedCount": "{count} projects awaiting team",
+      "funnelTitle": "Pitching statistics",
+      "funnelHint": "Based on decided projects of the team in view (unaffected by the status/search filters).",
+      "funnelDecided": "Decided",
+      "funnelWon": "Won",
+      "funnelFailed": "Lost",
+      "funnelFailRate": "Loss rate",
+      "funnelNoReason": "{count} lost projects have no recorded reason (legacy data)."
     },
     "complexity": {
       "simple": "Simple",
@@ -1507,7 +1534,7 @@
       "failReason": "Loss reason",
       "selectFailReason": "— Select reason —",
       "failNote": "Additional note",
-      "failNoteRequiredHint": "Required when selecting \"Other\"",
+      "failNoteRequiredHint": "Required — explain specifically why the bid was lost",
       "moveToProcessing": "→ Move to In progress",
       "moveToLiquidation": "→ Move to Acceptance",
       "markFinished": "→ Mark Paid - Complete",
@@ -2311,7 +2338,8 @@
     "phaseWORKING": "WORKING",
     "nav": {
       "board": "Task board",
-      "cost": "Cost-per-task"
+      "cost": "Cost-per-task",
+      "my": "My tasks"
     },
     "cost": {
       "title": "Creative cost-per-task",
@@ -2383,7 +2411,11 @@
       "groupSUBMITTED": "Awaiting CD review",
       "groupREVISION": "Needs revision",
       "groupDELIVERED": "Delivered",
-      "groupCANCELED": "Locked"
+      "groupCANCELED": "Locked",
+      "filterSquad": "Filter by squad",
+      "allSquads": "All squads",
+      "groupUnrouted": "Awaiting routing to a squad",
+      "groupRouted": "Routed — awaiting assignment"
     },
     "task": {
       "project": "Project",
@@ -2413,7 +2445,24 @@
       "revisions": "Revisions: {count}",
       "hoursSpent": "{hours}h",
       "lockedCancel": "Locked (project cancelled/failed) — read-only.",
-      "finishedGraceOpen": "Project finished — remember to archive deliverables to the local server ({days} days left)."
+      "finishedGraceOpen": "Project finished — remember to archive deliverables to the local server ({days} days left).",
+      "route": "Route",
+      "reroute": "Route to another squad",
+      "routeSquad": "Route to squad",
+      "directAssign": "Assign directly (skip routing)",
+      "overdueDays": "{days} days overdue",
+      "approversTitle": "Deliverable approvers",
+      "approversHint": "Tick nobody to use the normal flow (a single approver signs off).",
+      "approversLabel": "Approvers",
+      "approveSign": "Sign off my part",
+      "leadOf": "{squad} lead",
+      "ordererRole": "requesting Account"
+    },
+    "my": {
+      "title": "My tasks",
+      "subtitle": "Creative tasks assigned to you — overdue ones come first.",
+      "empty": "No Creative task is assigned to you.",
+      "overdueBanner": "You have {count} overdue tasks."
     }
   },
   "finance": {

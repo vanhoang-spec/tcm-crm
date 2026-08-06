@@ -908,8 +908,10 @@ export async function markFailed(
   const failReasonNote = String(formData.get("failReasonNote") ?? "").trim();
   if (!failReasonId) return { fieldErrors: { failReasonId: t("failReasonRequired") } };
 
-  const failReason = await prisma.optionItem.findUnique({ where: { id: failReasonId } });
-  if (failReason?.code === "OTHER" && !failReasonNote) {
+  // CR-1/B2 (quyết định chủ dự án 06/08/2026): GIẢI TRÌNH BẮT BUỘC với MỌI lý do, không chỉ "Khác".
+  // Thống kê tỷ lệ fail chỉ dùng được khi biết lý do THỰC — chọn một mục trong danh sách rồi bỏ
+  // trống phần giải trình thì một năm sau mở lại không ai nhớ vì sao thua.
+  if (!failReasonNote) {
     return { fieldErrors: { failReasonNote: t("failReasonNoteRequired") } };
   }
 

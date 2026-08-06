@@ -130,6 +130,10 @@ model Staff {
   /// cứng theo team là team còn lại không giao được việc cho ai. Nhãn ô chọn có ghi tên team để người
   /// giao tự biết mình đang mượn người của team khác.
   isPlanningStaff Boolean   @default(false)
+  /// CR-1 (06/08/2026): team NHỎ trong phòng Creative mà người này thuộc về — đúng MỘT team
+  /// (quyết định chủ dự án). ⚠ ĐỪNG NHẦM với `teamId` = team ACCOUNT (A1/A2/A3). Gán ở
+  /// /settings/creative-squads; null = chưa phân team, CD vẫn giao thẳng việc được.
+  creativeSquadId String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -145,9 +149,10 @@ model Staff {
   workLocation String? // "TPHCM" | "HÀ NỘI" — text thuần, chỉ hiển thị
   managerId    String? // NGƯỜI quản lý trực tiếp thật (khác Role.parentRoleId — đó là phân cấp role chung, không phải người cụ thể) — dùng dựng org chart
 
-  department Department? @relation(fields: [departmentId], references: [id])
-  team       Team?       @relation(fields: [teamId], references: [id])
-  role       Role?       @relation(fields: [roleId], references: [id])
+  department    Department?    @relation(fields: [departmentId], references: [id])
+  team          Team?          @relation(fields: [teamId], references: [id])
+  creativeSquad CreativeSquad? @relation("StaffCreativeSquad", fields: [creativeSquadId], references: [id])
+  role          Role?          @relation(fields: [roleId], references: [id])
   manager    Staff?      @relation("StaffManager", fields: [managerId], references: [id], onDelete: SetNull)
   reports    Staff[]     @relation("StaffManager")
 
@@ -250,6 +255,8 @@ model Staff {
   mktPostVariantsPosted       MktPostVariant[]          @relation("MktPostVariantPostedBy")
   mktInsightReportsCreated    MktInsightReport[]        @relation("MktInsightReportCreatedBy")
   mktInsightFilesUploaded     MktInsightFile[]          @relation("MktInsightFileUploadedBy")
+  creativeSquadsLed           CreativeSquad[]           @relation("CreativeSquadLead")
+  creativeTaskApprovals       CreativeTaskApprover[]    @relation("CreativeTaskApproverStaff")
   jobPositionsManaged         JobPosition[]             @relation("JobPositionHiringManager")
   jobPositionsJdUpdated       JobPosition[]             @relation("JobPositionJdUpdatedBy")
   candidatesCreated           Candidate[]               @relation("CandidateCreatedBy")
@@ -382,7 +389,7 @@ model AuditLog {
 model Notification {
   id               String   @id @default(cuid())
   recipientStaffId String
-  type             String // TEAM_ASSIGNMENT_NEEDED | COSTSHEET_REJECTED | BRAINSTORM_MEETING_INVITE | DEPARTMENT_ORDER_RECEIVED | ORDER_RESULT_RECEIVED | ORDER_DEADLINE_REMINDER | EXTERNAL_TIMELINE_UPDATED | TIMELINE_DEADLINE_REMINDER | CREATIVE_TASK_ASSIGNED | CREATIVE_TASK_NEEDS_APPROVAL | CREATIVE_TASK_DELIVERED | CREATIVE_TASK_REVISION | CREATIVE_TASK_DEADLINE_REMINDER | ACCEPTANCE_SIGN_REMINDER | ADVANCE_REQUESTED | ADVANCE_DISBURSED | ADVANCE_SETTLED | AR_OVERDUE_REMINDER | CHAT_MESSAGE | CHAT_MENTION | REMINDER_DUE | POLL_CREATED | CTV_CONTRACTS_GENERATED | INVENTORY_TRANSFER_INCOMING | INVENTORY_RETURN_OVERDUE | SCHEDULE_CONFIRMED | SCHEDULE_UPDATED | PLANNING_STAGE_ASSIGNED | PLANNING_RESULT_SUBMITTED | PLANNING_REVISION_REQUESTED | PLANNING_FINAL_CONFIRMED | DEPT_TASK_ASSIGNED | DEPT_TASK_NEEDS_APPROVAL | DEPT_TASK_DELIVERED | DEPT_TASK_REVISION | DEPT_TASK_DEADLINE_REMINDER | INTERVIEW_REQUESTED | INTERVIEW_CONFIRMED | INTERVIEW_DECLINED
+  type             String // TEAM_ASSIGNMENT_NEEDED | COSTSHEET_REJECTED | BRAINSTORM_MEETING_INVITE | DEPARTMENT_ORDER_RECEIVED | ORDER_RESULT_RECEIVED | ORDER_DEADLINE_REMINDER | EXTERNAL_TIMELINE_UPDATED | TIMELINE_DEADLINE_REMINDER | CREATIVE_TASK_ASSIGNED | CREATIVE_TASK_NEEDS_APPROVAL | CREATIVE_TASK_DELIVERED | CREATIVE_TASK_REVISION | CREATIVE_TASK_DEADLINE_REMINDER | CREATIVE_TASK_ROUTED | ACCEPTANCE_SIGN_REMINDER | ADVANCE_REQUESTED | ADVANCE_DISBURSED | ADVANCE_SETTLED | AR_OVERDUE_REMINDER | CHAT_MESSAGE | CHAT_MENTION | REMINDER_DUE | POLL_CREATED | CTV_CONTRACTS_GENERATED | INVENTORY_TRANSFER_INCOMING | INVENTORY_RETURN_OVERDUE | SCHEDULE_CONFIRMED | SCHEDULE_UPDATED | PLANNING_STAGE_ASSIGNED | PLANNING_RESULT_SUBMITTED | PLANNING_REVISION_REQUESTED | PLANNING_FINAL_CONFIRMED | DEPT_TASK_ASSIGNED | DEPT_TASK_NEEDS_APPROVAL | DEPT_TASK_DELIVERED | DEPT_TASK_REVISION | DEPT_TASK_DEADLINE_REMINDER | INTERVIEW_REQUESTED | INTERVIEW_CONFIRMED | INTERVIEW_DECLINED
   title            String
   body             String?
   projectId        String?
@@ -1456,9 +1463,62 @@ model ProjectStaffing {
 // MODULE CREATIVE — Task giao cho team Creative (cost-per-task/lương ở đợt sau)
 // ─────────────────────────────────────────────────────────
 
+/// Team NHỎ bên trong phòng Creative (CR-1, quyết định chủ dự án 06/08/2026):
+/// CREATIVE (idea, chiến lược) · GRAPHIC_2D (Key Visual, master KV) · MULTIMEDIA (3D/Animation/AI).
+///
+/// ⚠ CỐ Ý là bảng RIÊNG, KHÔNG nhét vào `Team` — bảng đó LÀ team Account (A1/A2/A3) và lan ra
+/// ~15 picker, mã dự án (lib/bidding.ts), quỹ KPI, org chart. Cũng không phải Department con:
+/// CREATIVE vẫn là MỘT phòng, squad chỉ là tầng điều phối việc bên trong.
+///
+/// `leadStaffId` = trưởng team nhỏ — người GIAO người trong team sau khi CD điều phối task về team.
+/// Quyền của trưởng team kiểm THEO BẢN GHI trong action (mẫu Team.leadStaffId của Planning),
+/// KHÔNG có mã quyền riêng. 3 squad do seed dựng (marker một lần), chỉ bật/tắt — không có đường xoá.
+model CreativeSquad {
+  id          String   @id @default(cuid())
+  code        String   @unique // CREATIVE | GRAPHIC_2D | MULTIMEDIA
+  name        String
+  leadStaffId String?
+  isActive    Boolean  @default(true)
+  sort        Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead    Staff?         @relation("CreativeSquadLead", fields: [leadStaffId], references: [id])
+  members Staff[]        @relation("StaffCreativeSquad")
+  tasks   CreativeTask[]
+
+  @@map("creative_squad")
+}
+
+/// Người duyệt của MỘT task — CR-1 mở rộng khâu duyệt từ "một người có quyền" thành DANH SÁCH
+/// đích danh (luồng thực thi chủ dự án mô tả 06/08/2026: Master KV cần Creative + Art + Account
+/// CÙNG duyệt; adapt cần Design lead + Account).
+///
+/// ⚠ App KHÔNG đoán "Art Manager"/"Design lead" là ai — người giao việc CHỌN đích danh, form chỉ
+/// gợi ý sẵn theo loại việc (lead squad + Account đặt hàng). Task KHÔNG có dòng nào ở đây thì đi
+/// đường duyệt CŨ (một người có `creative.task.approve` bấm) — dữ liệu cũ không đổi hành vi.
+/// Đủ MỌI dòng có `approvedAt` → task DELIVERED; BẤT KỲ ai trả lại → REVISION và xoá sạch chữ ký
+/// (vòng mới phải duyệt lại từ đầu — chữ ký cũ ký cho bản cũ).
+model CreativeTaskApprover {
+  id         String    @id @default(cuid())
+  taskId     String
+  staffId    String
+  approvedAt DateTime?
+  note       String?
+  createdAt  DateTime  @default(now())
+
+  task  CreativeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  staff Staff        @relation("CreativeTaskApproverStaff", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, staffId])
+  @@map("creative_task_approver")
+}
+
 /// 1 tác vụ cụ thể team Creative phải làm. Tự sinh từ checklist Order Creative (sourceItemLabel dedupe)
 /// hoặc CD tạo lẻ. Phase BIDDING/WORKING tính realtime từ project.status.code (không lưu).
 /// Vòng đời: UNASSIGNED → ASSIGNED → SUBMITTED → (REVISION ↺) → DELIVERED · CANCELED = bị khóa theo project.
+/// CR-1: `squadId` = task đã ĐIỀU PHỐI về team nhỏ nào ("đã về team" là THUỘC TÍNH, không phải
+/// status mới — CD re-route được bất kỳ lúc nào và vẫn giao thẳng người được như cũ).
 model CreativeTask {
   id                     String    @id @default(cuid())
   projectId              String
@@ -1466,6 +1526,7 @@ model CreativeTask {
   orderItemId            String? // ProjectOrderItem gốc (chỉ task sinh từ Master Timeline) — để đẩy status→DONE khi DELIVERED
   orderedById            String? // snapshot người ORDER (order.sentById ?? project.ownerId) — nơi trả thành phẩm
   sourceItemLabel        String? // nhãn ProjectOrderCreativeItem gốc (dedupe khi tự sinh)
+  squadId                String? // CR-1: team nhỏ được điều phối — spawn gợi ý theo nhãn, CD sửa được
   taskTypeId             String? // option_set "creative_task_type" — CD chọn lúc giao
   title                  String
   detail                 String?
@@ -1486,10 +1547,12 @@ model CreativeTask {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  order      ProjectOrder?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  orderItem  ProjectOrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
-  taskType   OptionItem?       @relation("CreativeTaskType", fields: [taskTypeId], references: [id])
+  project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  squad      CreativeSquad?         @relation(fields: [squadId], references: [id], onDelete: SetNull)
+  order      ProjectOrder?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderItem  ProjectOrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  taskType   OptionItem?            @relation("CreativeTaskType", fields: [taskTypeId], references: [id])
+  approvers  CreativeTaskApprover[]
   assignee   Staff?            @relation("CreativeTaskAssignee", fields: [assigneeId], references: [id])
   assignedBy Staff?            @relation("CreativeTaskAssignedBy", fields: [assignedById], references: [id])
   reviewedBy Staff?            @relation("CreativeTaskReviewedBy", fields: [reviewedById], references: [id])

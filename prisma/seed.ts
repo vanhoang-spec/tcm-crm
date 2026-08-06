@@ -1684,6 +1684,30 @@ async function main() {
   // liệu cũ — cùng nguyên tắc với câu hỏi kiểm tra ở KB-H3 (tắt, không xoá).
   await seedOptionSet("recruit_criteria", "Tiêu chí đánh giá phỏng vấn", [...DEFAULT_RECRUIT_CRITERIA]);
 
+  // ── 3 team nhỏ Creative (CR-1, 06/08/2026) — one-shot marker ──
+  // Marker để re-seed KHÔNG dựng lại squad admin đã sửa tay (đổi tên, tắt, gán lead).
+  // ⚠ CỐ Ý không gán người vào squad và không gán lead: chủ dự án gán ở /settings/creative-squads.
+  // Hệ quả khi 0 người có squad: luồng "điều phối về team → trưởng team giao người" chưa chạy,
+  // nhưng CD vẫn giao thẳng việc như trước — KHÔNG phải hỏng.
+  const SQUADS_KEY = "20260806_creative_squads";
+  const squadsMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: SQUADS_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!squadsMarker) {
+    const squadRows = [
+      { code: "CREATIVE", name: "Creative — idea & chiến lược", sort: 1 },
+      { code: "GRAPHIC_2D", name: "Graphic 2D — Key Visual", sort: 2 },
+      { code: "MULTIMEDIA", name: "Multimedia — 3D/Animation/AI", sort: 3 },
+    ];
+    for (const s of squadRows) {
+      await prisma.creativeSquad.upsert({ where: { code: s.code }, update: {}, create: s });
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: SQUADS_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ created: squadRows.length }) },
+    });
+    console.log(`[seed] 3 team nhỏ Creative đã dựng (marker ${SQUADS_KEY})`);
+  }
+
   const kbCategories = await seedOptionSet("kb_category", "Danh mục cơ sở tri thức", [
     { code: "GENERAL", labelVi: "Chung", labelEn: "General" },
     { code: "CREDENTIALS", labelVi: "Năng lực (Credentials)", labelEn: "Credentials" },

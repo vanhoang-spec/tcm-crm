@@ -4,13 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber, formatDecimal, formatPercent, pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { getCreativeDashboardStats, isTaskLocked, taskPhase, finishedGraceDaysLeft, type CreativeTaskStatus } from "@/lib/creative";
+import { getCreativeDashboardStats, isTaskLocked, taskPhase, finishedGraceDaysLeft, taskOverdueDays, type CreativeTaskStatus } from "@/lib/creative";
 import { TaskBoard, type TaskData } from "./task-board";
 import { requirePermission } from "@/lib/permissions";
 
 export default async function CreativePage() {
   await requirePermission("creative.view");
-  const [t, locale, stats, tasks, creativeStaff, taskTypeSet, projects, teams] = await Promise.all([
+  const [t, locale, stats, tasks, creativeStaff, taskTypeSet, projects, teams, squads] = await Promise.all([
     getTranslations("creative"),
     getLocale() as Promise<Locale>,
     getCreativeDashboardStats(),
@@ -20,6 +20,8 @@ export default async function CreativePage() {
         taskType: true,
         assignee: true,
         orderedBy: true,
+        squad: true,
+        approvers: { include: { staff: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -34,6 +36,11 @@ export default async function CreativePage() {
       orderBy: { updatedAt: "desc" },
     }),
     prisma.team.findMany({ orderBy: { code: "asc" } }),
+    prisma.creativeSquad.findMany({
+      where: { isActive: true },
+      orderBy: { sort: "asc" },
+      include: { lead: { select: { fullName: true } } },
+    }),
   ]);
 
   const taskData: TaskData[] = tasks.map((task) => {
@@ -51,23 +58,36 @@ export default async function CreativePage() {
       teamCode: task.project.ownerTeam?.code ?? null,
       phase: taskPhase(statusCode),
       taskTypeId: task.taskTypeId,
+      taskTypeCode: task.taskType?.code ?? null,
       taskTypeLabel: task.taskType ? pickLabel(task.taskType, locale) : null,
+      squadId: task.squadId,
+      squadName: task.squad?.name ?? null,
       assigneeId: task.assigneeId,
       assigneeName: task.assignee?.fullName ?? null,
       ordererId: task.orderedById,
       ordererName: task.orderedBy?.fullName ?? null,
       cdApprovalNotRequired: task.cdApprovalNotRequired,
       deadline: task.deadline,
+      overdueDays: taskOverdueDays(task.status, task.deadline, locked),
       deliverableLinkUrl: task.deliverableLinkUrl,
       hoursSpent: task.hoursSpent,
       revisionCount: task.revisionCount,
       deliveredAt: task.deliveredAt,
+      approvers: task.approvers.map((a) => ({ staffId: a.staffId, name: a.staff.fullName, approved: a.approvedAt != null })),
       locked,
       graceDaysLeft,
     };
   });
 
-  const staffOptions = creativeStaff.map((s) => ({ id: s.id, label: s.fullName }));
+  const staffOptions = creativeStaff.map((s) => ({ id: s.id, label: s.fullName, squadId: s.creativeSquadId }));
+  const squadOptions = squads.map((s) => ({ id: s.id, label: s.name }));
+  const squadLeads = squads.map((s) => ({
+    squadId: s.id,
+    code: s.code,
+    name: s.name,
+    leadStaffId: s.leadStaffId,
+    leadName: s.lead?.fullName ?? null,
+  }));
   const taskTypeOptions = (taskTypeSet?.items ?? []).map((it) => ({ id: it.id, label: pickLabel(it, locale) }));
   // Chỉ cho tạo task lẻ ở dự án CHƯA khóa (loại FAILED/CANCELED ở DB + FINISHED-hết-grace ở JS vì lock là phép tính thời gian).
   const projectOptions = projects
@@ -175,6 +195,8 @@ export default async function CreativePage() {
             projects={projectOptions}
             teams={teamOptions}
             orderers={ordererOptions}
+            squads={squadOptions}
+            squadLeads={squadLeads}
           />
         </div>
       </section>

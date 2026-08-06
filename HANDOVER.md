@@ -116,7 +116,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
 | ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
-| ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) |
+| ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1: Creative/Graphic 2D/Multimedia, hạn bắt buộc, tab "Việc của tôi", `/settings/creative-squads` — xem mục 10.32) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
 | — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) |
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
@@ -125,7 +125,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 111 model Prisma · 66 migration · 76 file `src/lib` · 3692 key i18n × 2 ngôn ngữ · 138 mã quyền.
+**Quy mô:** 113 model Prisma · 68 migration · 76 file `src/lib` · 3737 key i18n × 2 ngôn ngữ · 138 mã quyền.
 
 ---
 
@@ -1393,6 +1393,88 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       ứng viên · nhập tay tiêu chí khác nhau theo từng VÒNG (hiện dùng chung một bộ) · tìm kiếm
       toàn văn trong kho hồ sơ (mới lọc theo phòng ban/vị trí/trạng thái) · đọc CV là ảnh scan (OCR)
       · gắn ứng viên đã nhận sang hồ sơ nhân sự · nhắc lịch phỏng vấn qua notification trước giờ hẹn.
+
+32. **CREATIVE — CR-1 XONG 06/08/2026: 3 team nhỏ + điều phối việc + duyệt nhiều bên**
+    (2 migration VIẾT TAY `20260812000000_creative_squads` + `20260812010000_creative_task_approvers`;
+    **KHÔNG mã quyền mới**). **CHƯA DEPLOY** tại thời điểm ghi mục này — production vẫn chạy `35314b1`.
+
+    Cơ cấu chốt với chủ dự án: phòng Creative chia **3 team nhỏ** — `CREATIVE` (idea & chiến lược) ·
+    `GRAPHIC_2D` (Key Visual, master KV) · `MULTIMEDIA` (3D/Animation/AI, kiêm nhiệm).
+
+    - ⚠ **BỐN CHỖ HỤT ĐÃ ĐO ĐƯỢC TRƯỚC KHI SỬA** (đo trên dev.db): **0/5 task có deadline** · không có
+      khái niệm team nhỏ · không có màn "việc của tôi" · 42 dòng lương theo vị trí đều là số mẫu
+      20.000.000. CR-1 xử lý ba cái đầu; phần chi phí CỐ Ý để nguyên (xem "chưa làm" cuối mục).
+    - ⚠ **GỐC RỄ của "0 task có deadline": `spawnTasksForCreativeOrder` KHÔNG chép
+      `order.desiredTimeline` xuống task.** Cột hạn bỏ trống ⇒ bộ nhắc quá hạn ở `reminders.ts` (đã
+      viết xong từ lâu, bắn theo `deadline`) **không bao giờ chạy** — code chết. Nay spawn chép hạn
+      từ Order. Verify: gửi Order hạn 20/08 → cả 3 task sinh ra đều có hạn 20/08.
+    - **Bước ĐIỀU PHỐI mới, đứng TRƯỚC "giao người"**: CD chọn team nhỏ + **deadline BẮT BUỘC** →
+      trưởng team nhận thông báo → trưởng team giao người trong team. ⚠ **KHÔNG thêm status mới**:
+      "đã về team" là THUỘC TÍNH (`CreativeTask.squadId`), không phải giai đoạn — thêm `ROUTED` phải
+      sửa ≥6 chỗ và vỡ ngay khi CD giao thẳng nhảy cóc. Board tách nhóm UNASSIGNED thành 2 nhóm con
+      bằng dữ liệu (`squadId` null hay không).
+    - **Nhãn checklist Order → team**, hằng `SQUAD_CODE_BY_ORDER_LABEL` ở `lib/creative.ts`:
+      KEY_VISUAL/DESIGN_2D → GRAPHIC_2D · DESIGN_3D/SET_DESIGN/VIDEO → MULTIMEDIA · **OTHER và dòng
+      từ Master Timeline KHÔNG map** (CD tự quyết). Đây chỉ là GỢI Ý — CD điều phối lại được.
+      ⚠ Danh sách nhãn còn sống ở `bidding/order-panel.tsx` + `order-actions.ts`; CR-1 KHÔNG đụng 2
+      file đó, thêm nhãn mới ở đó mà quên map ở đây thì task chỉ không được gợi ý team (vô hại).
+    - ⚠ **Trưởng team giao việc bằng phép kiểm THEO BẢN GHI, KHÔNG có mã quyền riêng**
+      (`squad.leadStaffId === meId`) — đừng đi tìm `requirePermission` tương ứng. Vá luôn **3 lỗ cũ**
+      của `assignCreativeTask`: (a) assignee phải là Staff **đang hoạt động thuộc phòng CREATIVE**
+      (trước đây server nhận MỌI staffId); (b) trưởng team chỉ giao được người **trong team mình**
+      cho task **của team mình**; (c) form bỏ trống deadline thì **GIỮ hạn cũ**, trước đây ghi đè
+      thành null — tức thao tác giao việc tự xoá mất hạn vừa điều phối.
+    - **A7 — DUYỆT NHIỀU BÊN** (`CreativeTaskApprover`): Master KV cần **3 chữ ký** (Creative đúng
+      idea · Art đẹp · Account hợp ý khách), adapt cần 2 (Design lead + Account).
+      ⚠ **Task KHÔNG có dòng approver nào ⇒ đi ĐƯỜNG CŨ** (một người có `creative.task.approve`) —
+      dữ liệu cũ không đổi hành vi một chút nào. Có danh sách thì: chỉ người TRONG danh sách ký được
+      (**dù có mã quyền duyệt cũng không ký thay được**); đủ mọi chữ ký mới DELIVERED; **bất kỳ ai
+      trả lại là XOÁ SẠCH chữ ký** — vòng nộp mới duyệt lại từ đầu, vì chữ ký cũ ký cho bản cũ.
+      ⚠ **App KHÔNG đoán "Art Manager"/"Design lead" là ai** — người giao CHỌN đích danh, app chỉ
+      tick sẵn gợi ý: KV_2D ở giai đoạn THỰC THI → lead CREATIVE + lead GRAPHIC_2D + Account đặt
+      việc; loại khác → lead team của task + Account. Giai đoạn thầu KHÔNG gợi ý ai (duyệt nhiều bên
+      là chuyện của thực thi).
+    - ⚠ **Bộ nhắc quá hạn PHẢI có trưởng team trong danh sách nhận** (`reminders.ts`): task đã điều
+      phối + có hạn nhưng CHƯA giao người thì `assigneeId`/`assignedById` đều null → bản cũ **không
+      gửi cho ai VÀ không set cờ**, nên vòng quét 5 phút lôi lại task đó vĩnh viễn. Đã tái hiện đúng
+      ca này rồi vá.
+    - **`/creative/my` — "Việc của tôi"** (tab thứ hai): gác `creative.task.submit`; phạm vi do CÂU
+      TRUY VẤN quyết định (`assigneeId = me`), không phải mã quyền. Dùng lại `TaskBoard` với 2 prop
+      `hideCreate`/`hideFilters`. Task trễ hạn nổi lên đầu (`sortByUrgency`, hàm thuần).
+    - **`/settings/creative-squads`**: sửa tên team, trưởng team, bật/tắt + bảng phân người. Gác
+      `settings.creative.manage`. **KHÔNG có đường tạo/xoá team** — 3 team seed sẵn, `isActive` là đủ
+      (xoá team đang có người/task trỏ vào là mất dấu điều phối, mirror ClientGroup mục 10.12).
+    - **Phần B — khớp luồng pitching:**
+      · **B1** Brainstorm **tick sẵn lead 3 team nhỏ** trong ô mời (gợi ý, Account bỏ tick được).
+      · ⚠ **B2 Giải trình khi THUA THẦU nay BẮT BUỘC với MỌI lý do**, không chỉ "Khác"
+        (`markFailed`, bỏ điều kiện `code === "OTHER"`). Thống kê tỷ lệ fail chỉ dùng được khi biết
+        lý do THỰC — chọn một mục rồi bỏ trống giải trình thì một năm sau không ai nhớ vì sao thua.
+      · **B3** Khối **"Thống kê pitching"** trên `/bidding`: đã có kết quả / thắng / thua / tỷ lệ
+        thua + phân bố lý do. Hàm thuần `computeBiddingFunnel` ở `lib/bidding.ts`.
+        ⚠ Đọc dữ liệu RIÊNG, **chỉ lọc theo TEAM đang xem** — cố ý không dùng lại mảng `projects` của
+        trang vì mảng đó còn bị lọc theo trạng thái + ô tìm kiếm, tỷ lệ sẽ nhảy khi người dùng gõ tìm
+        kiếm. ⚠ `CANCELED` (khách huỷ) **KHÔNG tính là thua thầu** — gộp vào là thổi tỷ lệ thua lên.
+    - **Verify (26/26 test thuần + browser thật, act-as 4 vai):** Order hạn 20/08 → 3 task đều có
+      hạn, KV→Graphic 2D, 3D→Multimedia, OTHER không team, đúng 2 trưởng team nhận thông báo ·
+      điều phối **thiếu hạn bị server chặn** (đã gỡ `required` phía trình duyệt để thử thẳng server),
+      có hạn thì qua · **tạm gỡ `creative.task.assign` khỏi CREATIVE_STAFF** rồi đóng vai trưởng
+      Graphic 2D: **giao được** task team mình, bị chặn khi giao task của Multimedia và khi nhét tay
+      id người ngoài phòng Creative · duyệt 3 bên: ký 1 người task VẪN đứng SUBMITTED, người ngoài
+      danh sách bấm ký bị chặn dù có mã quyền, trả lại → REVISION + xoá sạch 3 chữ ký · nhắc quá hạn
+      gửi đúng trưởng team, đặt cờ, chạy lần 2 no-op · brainstorm tick đúng 3/36 người · thống kê
+      6 đã có kết quả / 6 thắng / 0 thua khớp đếm tay trong DB. tsc/eslint/i18n 0-0/build sạch.
+    - ⚠ **HẠN CHẾ PHẢI NÓI RÕ: `creative.task.assign` vẫn đang cấp RỘNG** (nằm trong grant mặc định,
+      ~20 vai có). Đường "trưởng team" của CR-1 là **MỞ THÊM một lối**, chưa phải siết lại — hôm nay
+      gần như ai cũng giao việc Creative được. Muốn đúng tinh thần "CD điều phối, trưởng team giao
+      người" thì phải gỡ mã đó khỏi các vai không liên quan; đó là quyết định chính sách của BGĐ,
+      cố ý không tự làm trong đợt này.
+    - ⚠ **3 team nhỏ seed ra RỖNG — không tự gán ai.** Chưa gán trưởng team thì luồng điều-phối-rồi-
+      giao chưa chạy, nhưng CD vẫn giao thẳng như cũ nên không có gì hỏng. Gán ở
+      `/settings/creative-squads`.
+    - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** lịch sử phiên bản sản phẩm (mỗi lần nộp một
+      dòng thay vì ghi đè `deliverableLinkUrl`) · báo cáo tải theo tuần & thời gian chờ từng khâu ·
+      ước lượng khối lượng + độ ưu tiên · sửa phần chi phí (vẫn chạy trên lương mẫu 20tr — **đừng
+      đọc bảng đó để ra quyết định**) · siết grant `creative.task.*` · nối task theo thứ tự trước-sau.
 
 ---
 

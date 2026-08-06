@@ -20,7 +20,6 @@ export function ResultActions({
   const [failState, failAction, failPending] = useActionState<ProjectFormState, FormData>(failBound, {});
   const cancelAction = markClientCancel.bind(null, projectId);
   const [failReasonId, setFailReasonId] = useState("");
-  const isOtherReason = failReasons.find((r) => r.id === failReasonId)?.code === "OTHER";
 
   return (
     <div className="space-y-4">
@@ -54,10 +53,11 @@ export function ResultActions({
         {failState.fieldErrors?.failReasonId && <p className="text-xs text-danger">{failState.fieldErrors.failReasonId}</p>}
         <input
           name="failReasonNote"
+          required
           placeholder={t("failNote")}
           className={cn("h-9 w-full rounded-lg border bg-surface px-2.5 text-sm", failState.fieldErrors?.failReasonNote ? "border-danger" : "border-border-strong")}
         />
-        {isOtherReason && !failState.fieldErrors?.failReasonNote && (
+        {!failState.fieldErrors?.failReasonNote && (
           <p className="text-xs text-muted-foreground">{t("failNoteRequiredHint")}</p>
         )}
         {failState.fieldErrors?.failReasonNote && <p className="text-xs text-danger">{failState.fieldErrors.failReasonNote}</p>}

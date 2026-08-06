@@ -4,8 +4,9 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
-import { pickLabel, cn } from "@/lib/utils";
+import { pickLabel, cn, formatPercent } from "@/lib/utils";
 import { COMPLEXITY_TONE, STATUS_TONE, TEAM_TONE } from "@/lib/bidding-ui";
+import { computeBiddingFunnel } from "@/lib/bidding";
 import type { Locale } from "@/i18n/locales";
 import { requirePermission } from "@/lib/permissions";
 
@@ -36,6 +37,20 @@ export default async function BiddingListPage({
     prisma.project.count({ where: { ownerTeamId: null } }),
   ]);
 
+  // CR-1/B3 — thống kê pitching đọc RIÊNG, chỉ lọc theo TEAM đang xem. CỐ Ý không dùng lại mảng
+  // `projects` ở trên: mảng đó còn bị lọc theo trạng thái và ô tìm kiếm, nên tỷ lệ thua sẽ nhảy
+  // theo bộ lọc — một con số tỷ lệ đổi khi người dùng gõ tìm kiếm là con số vô nghĩa.
+  const outcomeRows = await prisma.project.findMany({
+    where: { ownerTeamId: teamRecord?.id },
+    select: { status: { select: { code: true } }, failReason: { select: { labelVi: true, labelEn: true } } },
+  });
+  const funnel = computeBiddingFunnel(
+    outcomeRows.map((r) => ({
+      statusCode: r.status.code,
+      failReasonLabel: r.failReason ? pickLabel(r.failReason, locale) : null,
+    })),
+  );
+
   const teamTabs = [{ code: undefined as string | undefined, label: t("allTeams") }, ...teams.map((tm) => ({ code: tm.code, label: tm.code }))];
 
   function withParams(next: Record<string, string | undefined>) {
@@ -59,6 +74,48 @@ export default async function BiddingListPage({
         </LinkButton>
       </div>
 
+      {funnel.decided > 0 && (
+        <section className="rounded-xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-semibold text-foreground">{t("funnelTitle")}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("funnelHint")}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <div>
+              <p className="text-2xl font-bold text-foreground">{funnel.decided}</p>
+              <p className="text-xs text-muted-foreground">{t("funnelDecided")}</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-success">{funnel.won}</p>
+              <p className="text-xs text-muted-foreground">{t("funnelWon")}</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-danger">{funnel.failed}</p>
+              <p className="text-xs text-muted-foreground">{t("funnelFailed")}</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-danger">{funnel.failRate != null ? formatPercent(funnel.failRate, locale) : "—"}%</p>
+              <p className="text-xs text-muted-foreground">{t("funnelFailRate")}</p>
+            </div>
+          </div>
+          {funnel.reasons.length > 0 && (
+            <div className="mt-4 space-y-1.5">
+              {funnel.reasons.map((r) => (
+                <div key={r.label} className="flex items-center gap-2">
+                  <span className="w-48 shrink-0 truncate text-xs text-foreground">{r.label}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+                    <div className="h-full rounded-full bg-danger" style={{ width: `${r.pct}%` }} />
+                  </div>
+                  <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+                    {r.count} · {formatPercent(r.pct, locale)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {funnel.failedWithoutReason > 0 && (
+            <p className="mt-3 text-xs text-warning">{t("funnelNoReason", { count: funnel.failedWithoutReason })}</p>
+          )}
+        </section>
+      )}
       {unassignedCount > 0 && (
         <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
           {t("unassignedCount", { count: unassignedCount })}

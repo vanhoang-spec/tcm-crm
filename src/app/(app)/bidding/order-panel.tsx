@@ -44,6 +44,7 @@ export function OrderPanel({
   briefLinkUrl,
   orders,
   staff,
+  preselectedAttendeeIds,
   accountName,
   suggestedTimeline,
 }: {
@@ -51,6 +52,8 @@ export function OrderPanel({
   briefLinkUrl: string;
   orders: OrderData[];
   staff: { id: string; label: string }[];
+  /** CR-1/B1: lead 3 team nhỏ Creative — tick SẴN trong danh sách mời (gợi ý, Account bỏ tick được). */
+  preselectedAttendeeIds?: string[];
   accountName: string;
   suggestedTimeline: string; // yyyy-mm-dd
 }) {
@@ -80,7 +83,7 @@ export function OrderPanel({
           {ordersByDept.BRAINSTORM ? (
             <BrainstormCard order={ordersByDept.BRAINSTORM} locale={locale} t={t} />
           ) : (
-            ticked.BRAINSTORM && <BrainstormForm projectId={projectId} staff={staff} t={t} />
+            ticked.BRAINSTORM && <BrainstormForm projectId={projectId} staff={staff} preselected={preselectedAttendeeIds} t={t} />
           )}
         </div>
 
@@ -120,13 +123,16 @@ export function OrderPanel({
 function BrainstormForm({
   projectId,
   staff,
+  preselected,
   t,
 }: {
   projectId: string;
   staff: { id: string; label: string }[];
+  preselected?: string[];
   t: (key: string) => string;
 }) {
   const bound = createBrainstormOrder.bind(null, projectId);
+  const pre = new Set(preselected ?? []);
   return (
     <form action={bound} className="mt-3 space-y-2">
       <Field label={t("meetingAt")}>
@@ -145,7 +151,7 @@ function BrainstormForm({
         <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border-strong p-2">
           {staff.map((s) => (
             <label key={s.id} className="flex items-center gap-2 text-xs text-foreground">
-              <input type="checkbox" name="attendeeIds" value={s.id} className="h-3.5 w-3.5 rounded border-border-strong" />
+              <input type="checkbox" name="attendeeIds" value={s.id} defaultChecked={pre.has(s.id)} className="h-3.5 w-3.5 rounded border-border-strong" />
               {s.label}
             </label>
           ))}

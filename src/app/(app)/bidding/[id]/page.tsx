@@ -88,7 +88,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     getNumberSetting("bidding", "order_response_days", 4),
   ]);
 
-  const [matchingTemplatesRaw, allTemplatesRaw, teams, activeStaff, costDepartments, vendors, failReasonSet, auditEntries, stockReservations] = await Promise.all([
+  const [matchingTemplatesRaw, allTemplatesRaw, teams, activeStaff, costDepartments, vendors, failReasonSet, auditEntries, stockReservations, creativeSquads] = await Promise.all([
     project.projectTypeId
       ? prisma.costsheetTemplate.findMany({
           where: { isActive: true, projectTypeId: project.projectTypeId },
@@ -106,7 +106,11 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     prisma.optionSet.findUnique({ where: { code: "fail_reason" }, include: { items: { where: { isActive: true }, orderBy: { sort: "asc" } } } }),
     prisma.auditLog.findMany({ where: { entityType: "project", entityId: project.id }, orderBy: { changedAt: "desc" }, take: 8 }),
     getApprovedReservations(project.id),
+    // CR-1/B1: lead 3 team nhỏ Creative — tick sẵn khi Account mở buổi brainstorm de-brief.
+    prisma.creativeSquad.findMany({ where: { isActive: true, leadStaffId: { not: null } }, select: { leadStaffId: true } }),
   ]);
+
+  const squadLeadIds = creativeSquads.map((s) => s.leadStaffId).filter((x): x is string => !!x);
 
   function toTemplateOption(tp: (typeof allTemplatesRaw)[number]): TemplateOption {
     return {
@@ -324,6 +328,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
         briefLinkUrl={project.briefLinkUrl ?? ""}
         orders={orderData}
         staff={activeStaff.map((s) => ({ id: s.id, label: s.fullName }))}
+        preselectedAttendeeIds={squadLeadIds}
         accountName={accountName}
         suggestedTimeline={suggestedTimeline}
       />

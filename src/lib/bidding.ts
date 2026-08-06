@@ -566,3 +566,63 @@ export async function generateProjectCode(
   const seq = String(count + 1).padStart(3, "0");
   return `T${seq}${clientCode}${yy}${teamCode}`;
 }
+
+// ─────────────────────────────────────────────────────────
+// CR-1/B3 — Thống kê pitching: tỷ lệ thua thầu và lý do THỰC
+// ─────────────────────────────────────────────────────────
+
+export type PitchOutcomeInput = {
+  statusCode: string;
+  /** Nhãn lý do thua (đã pickLabel theo ngôn ngữ) — null khi chưa chọn hoặc dự án không thua. */
+  failReasonLabel: string | null;
+};
+
+export type BiddingFunnel = {
+  /** Số dự án ĐÃ có kết quả = thắng + thua. Mẫu số của tỷ lệ. */
+  decided: number;
+  won: number;
+  failed: number;
+  /** % thua trên số đã có kết quả; null khi chưa dự án nào có kết quả (đừng hiện 0% cho "chưa có gì"). */
+  failRate: number | null;
+  /** Lý do thua, nhiều nhất trước. `pct` tính trên tổng số dự án THUA. */
+  reasons: { label: string; count: number; pct: number }[];
+  /** Dự án thua nhưng chưa chọn lý do — dữ liệu cũ trước khi bắt buộc giải trình. */
+  failedWithoutReason: number;
+};
+
+/**
+ * Gom tỷ lệ thắng/thua và phân bố lý do thua. Hàm THUẦN — nhận mảng đã lọc theo năm ở call site.
+ *
+ * "Thắng" = mọi trạng thái đã đi qua cửa thắng thầu (PROCESSING/LIQUIDATION/HANDOVER/FINISHED)
+ * cộng WON nếu có; KHÔNG tính BIDDING/PENDING (chưa có kết quả) và CANCELED (khách huỷ, không
+ * phải thua thầu — gộp vào là tỷ lệ thua bị thổi lên).
+ */
+export function computeBiddingFunnel(rows: PitchOutcomeInput[]): BiddingFunnel {
+  const WON_CODES = new Set(["WON", "PROCESSING", "LIQUIDATION", "HANDOVER", "FINISHED"]);
+  let won = 0;
+  let failed = 0;
+  let failedWithoutReason = 0;
+  const byReason = new Map<string, number>();
+
+  for (const r of rows) {
+    if (WON_CODES.has(r.statusCode)) {
+      won++;
+    } else if (r.statusCode === "FAILED") {
+      failed++;
+      if (r.failReasonLabel) byReason.set(r.failReasonLabel, (byReason.get(r.failReasonLabel) ?? 0) + 1);
+      else failedWithoutReason++;
+    }
+  }
+
+  const decided = won + failed;
+  return {
+    decided,
+    won,
+    failed,
+    failRate: decided > 0 ? (failed / decided) * 100 : null,
+    reasons: [...byReason.entries()]
+      .map(([label, count]) => ({ label, count, pct: failed > 0 ? (count / failed) * 100 : 0 }))
+      .sort((a, b) => b.count - a.count),
+    failedWithoutReason,
+  };
+}

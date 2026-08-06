@@ -575,7 +575,9 @@
       "recruitTitle": "Vị trí tuyển dụng & JD",
       "recruitDesc": "Vị trí đang tuyển gắn với cơ cấu tổ chức, mô tả công việc và mẫu JD.",
       "recruitCriteriaTitle": "Tiêu chí đánh giá phỏng vấn",
-      "recruitCriteriaDesc": "Các tiêu chí chấm điểm ứng viên trong phiếu phỏng vấn."
+      "recruitCriteriaDesc": "Các tiêu chí chấm điểm ứng viên trong phiếu phỏng vấn.",
+      "creativeSquadsTitle": "Team nhỏ Creative",
+      "creativeSquadsDesc": "Ba team nhỏ trong phòng Creative, trưởng team và phân người."
     },
     "bidding": {
       "backToSettings": "Quay lại Thiết lập",
@@ -1161,6 +1163,24 @@
       "errNoTitle": "Nhập tên vị trí.",
       "errNotFound": "Không tìm thấy vị trí.",
       "errGeneric": "Không thực hiện được, thử lại."
+    },
+    "creativeSquads": {
+      "backToSettings": "Về Cài đặt",
+      "title": "Team nhỏ Creative",
+      "desc": "Ba team nhỏ trong phòng Creative: Creative (idea), Graphic 2D (Key Visual), Multimedia (3D/Animation/AI).",
+      "squadsTitle": "Ba team nhỏ",
+      "lead": "Trưởng team",
+      "leadNone": "— Chưa gán —",
+      "leadHint": "Trưởng team nhận thông báo khi có việc về team và là người giao người trong team.",
+      "active": "Đang hoạt động",
+      "membersTitle": "Phân người vào team",
+      "membersHint": "Mỗi người thuộc đúng một team nhỏ.",
+      "unassignedCount": "Còn {n} người chưa có team.",
+      "noSquad": "— Chưa có team —",
+      "noSquadYet": "chưa có team",
+      "assign": "Gán",
+      "saved": "Đã lưu",
+      "errGeneric": "Không lưu được, thử lại."
     }
   },
   "bidding": {
@@ -1180,7 +1200,14 @@
       "allStatuses": "Tất cả trạng thái",
       "allTeams": "Tất cả",
       "teamUnassigned": "Chờ giao team",
-      "unassignedCount": "{count} dự án chờ giao team"
+      "unassignedCount": "{count} dự án chờ giao team",
+      "funnelTitle": "Thống kê pitching",
+      "funnelHint": "Tính trên các dự án đã có kết quả của team đang xem (không đổi theo bộ lọc trạng thái/tìm kiếm).",
+      "funnelDecided": "Đã có kết quả",
+      "funnelWon": "Thắng",
+      "funnelFailed": "Thua",
+      "funnelFailRate": "Tỷ lệ thua",
+      "funnelNoReason": "{count} dự án thua chưa ghi lý do (dữ liệu cũ)."
     },
     "complexity": {
       "simple": "Đơn giản",
@@ -1507,7 +1534,7 @@
       "failReason": "Lý do thua",
       "selectFailReason": "— Chọn lý do —",
       "failNote": "Ghi chú thêm",
-      "failNoteRequiredHint": "Bắt buộc nhập cụ thể khi chọn \"Khác\"",
+      "failNoteRequiredHint": "Bắt buộc — giải trình cụ thể vì sao thua thầu",
       "moveToProcessing": "→ Chuyển Đang triển khai",
       "moveToLiquidation": "→ Chuyển Đang nghiệm thu",
       "markFinished": "→ Đánh dấu Thanh toán xong - Hoàn tất",
@@ -2311,7 +2338,8 @@
     "phaseWORKING": "WORKING",
     "nav": {
       "board": "Bảng task",
-      "cost": "Cost-per-task"
+      "cost": "Cost-per-task",
+      "my": "Việc của tôi"
     },
     "cost": {
       "title": "Cost-per-task Creative",
@@ -2383,7 +2411,11 @@
       "groupSUBMITTED": "Chờ CD duyệt",
       "groupREVISION": "Cần sửa lại",
       "groupDELIVERED": "Đã trả thành phẩm",
-      "groupCANCELED": "Đã khóa"
+      "groupCANCELED": "Đã khóa",
+      "filterSquad": "Lọc theo team nhỏ",
+      "allSquads": "Tất cả team nhỏ",
+      "groupUnrouted": "Chờ điều phối về team",
+      "groupRouted": "Đã về team — chờ giao người"
     },
     "task": {
       "project": "Dự án",
@@ -2413,7 +2445,24 @@
       "revisions": "Số lần sửa: {count}",
       "hoursSpent": "{hours}h",
       "lockedCancel": "Đã khóa (dự án hủy/thua thầu) — không sửa được.",
-      "finishedGraceOpen": "Dự án hoàn tất — nhớ lưu thành phẩm về local server (còn {days} ngày)."
+      "finishedGraceOpen": "Dự án hoàn tất — nhớ lưu thành phẩm về local server (còn {days} ngày).",
+      "route": "Điều phối",
+      "reroute": "Điều phối lại team khác",
+      "routeSquad": "Giao về team",
+      "directAssign": "Giao thẳng cho người (bỏ qua điều phối)",
+      "overdueDays": "Trễ {days} ngày",
+      "approversTitle": "Người duyệt sản phẩm",
+      "approversHint": "Không tick ai thì đi đường duyệt thường (một người duyệt là xong).",
+      "approversLabel": "Người duyệt",
+      "approveSign": "Ký duyệt phần của tôi",
+      "leadOf": "trưởng {squad}",
+      "ordererRole": "Account đặt việc"
+    },
+    "my": {
+      "title": "Việc của tôi",
+      "subtitle": "Task Creative đang gắn tên bạn — việc trễ hạn xếp lên đầu.",
+      "empty": "Bạn chưa được giao task Creative nào.",
+      "overdueBanner": "Bạn đang có {count} việc trễ hạn."
     }
   },
   "finance": {

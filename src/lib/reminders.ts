@@ -303,7 +303,7 @@ export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
       status: { in: [...ACTIVE_TASK_STATUSES] },
       deadlineReminderSentAt: null,
     },
-    include: { project: { include: { status: true } } },
+    include: { project: { include: { status: true } }, squad: { select: { leadStaffId: true } } },
   });
   const actionable = overdue.filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt));
   if (actionable.length === 0) return;
@@ -312,6 +312,10 @@ export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
     const recipientIds = new Set<string>();
     if (task.assigneeId) recipientIds.add(task.assigneeId);
     if (task.assignedById) recipientIds.add(task.assignedById);
+    // CR-1: thêm trưởng team nhỏ — BẮT BUỘC chứ không chỉ tiện: task đã điều phối về team + có hạn
+    // nhưng CHƯA giao người thì assignee/assignedBy đều null → trước đây không gửi ai VÀ không set
+    // cờ, vòng 5 phút query lại task đó mãi mãi. Trưởng team cũng đúng là người phải xử lý.
+    if (task.squad?.leadStaffId) recipientIds.add(task.squad.leadStaffId);
 
     if (recipientIds.size > 0) {
       await prisma.notification.createMany({

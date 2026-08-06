@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { NumberField } from "@/components/ui/number-field";
-import { Lock, CheckCircle2 } from "lucide-react";
+import { Lock, CheckCircle2, Check, Clock3 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/ui/date-field";
@@ -11,6 +11,7 @@ import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import type { CreativeTaskStatus } from "@/lib/creative";
 import {
+  routeCreativeTask,
   assignCreativeTask,
   submitCreativeTask,
   approveCreativeTask,
@@ -18,6 +19,8 @@ import {
   createCreativeTask,
   deleteCreativeTask,
 } from "./actions";
+
+export type ApproverChip = { staffId: string; name: string; approved: boolean };
 
 export type TaskData = {
   id: string;
@@ -30,21 +33,29 @@ export type TaskData = {
   teamCode: string | null;
   phase: "BIDDING" | "WORKING";
   taskTypeId: string | null;
+  taskTypeCode: string | null;
   taskTypeLabel: string | null;
+  squadId: string | null;
+  squadName: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
   ordererId: string | null;
   ordererName: string | null;
   cdApprovalNotRequired: boolean;
   deadline: Date | null;
+  /** Số ngày ĐÃ trễ (tính ở server lúc render — client giữ thuần cho StrictMode). Null = chưa trễ. */
+  overdueDays: number | null;
   deliverableLinkUrl: string | null;
   hoursSpent: number | null;
   revisionCount: number;
   deliveredAt: Date | null;
+  approvers: ApproverChip[];
   locked: boolean;
   graceDaysLeft: number | null;
 };
 type Opt = { id: string; label: string };
+export type StaffOpt = { id: string; label: string; squadId: string | null };
+export type SquadLead = { squadId: string; code: string; name: string; leadStaffId: string | null; leadName: string | null };
 
 const STATUS_ORDER = ["UNASSIGNED", "ASSIGNED", "REVISION", "SUBMITTED", "DELIVERED", "CANCELED"] as const;
 const PHASE_TONE = { BIDDING: "brand", WORKING: "success" } as const;
@@ -55,6 +66,18 @@ function toDateInput(d: Date | null): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
 }
 
+/** Trễ hạn nổi lên đầu (trễ nhiều nhất trước), còn lại theo hạn gần nhất; không hạn xếp cuối. THUẦN. */
+function sortByUrgency(tasks: TaskData[]): TaskData[] {
+  return [...tasks].sort((a, b) => {
+    const ao = a.overdueDays ?? -1;
+    const bo = b.overdueDays ?? -1;
+    if (ao !== bo) return bo - ao;
+    const ad = a.deadline ? new Date(a.deadline).getTime() : Infinity;
+    const bd = b.deadline ? new Date(b.deadline).getTime() : Infinity;
+    return ad - bd;
+  });
+}
+
 export function TaskBoard({
   tasks,
   creativeStaff,
@@ -62,19 +85,29 @@ export function TaskBoard({
   projects,
   teams,
   orderers,
+  squads,
+  squadLeads,
+  hideCreate,
+  hideFilters,
 }: {
   tasks: TaskData[];
-  creativeStaff: Opt[];
+  creativeStaff: StaffOpt[];
   taskTypes: Opt[];
   projects: Opt[];
   teams: Opt[];
   orderers: Opt[];
+  squads: Opt[];
+  squadLeads: SquadLead[];
+  /** Màn "Việc của tôi" ẩn form tạo task lẻ + dàn filter — 2 prop thay vì tách component. */
+  hideCreate?: boolean;
+  hideFilters?: boolean;
 }) {
   const t = useTranslations("creative");
   const [fProject, setFProject] = useState("");
   const [fAssignee, setFAssignee] = useState("");
   const [fPhase, setFPhase] = useState("");
   const [fTeam, setFTeam] = useState("");
+  const [fSquad, setFSquad] = useState("");
   const [fOrderer, setFOrderer] = useState("");
 
   const filtered = useMemo(
@@ -85,9 +118,10 @@ export function TaskBoard({
           (!fAssignee || task.assigneeId === fAssignee) &&
           (!fPhase || task.phase === fPhase) &&
           (!fTeam || task.teamCode === fTeam) &&
+          (!fSquad || task.squadId === fSquad) &&
           (!fOrderer || task.ordererId === fOrderer),
       ),
-    [tasks, fProject, fAssignee, fPhase, fTeam, fOrderer],
+    [tasks, fProject, fAssignee, fPhase, fTeam, fSquad, fOrderer],
   );
 
   return (
@@ -97,47 +131,91 @@ export function TaskBoard({
       </p>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchableSelect
-          value={fProject}
-          onChange={setFProject}
-          placeholder={t("board.allProjects")}
-          allowClear
-          className="w-44"
-          options={projects.map((p) => ({ value: p.id, label: p.label }))}
-        />
-        <SearchableSelect
-          value={fAssignee}
-          onChange={setFAssignee}
-          placeholder={t("board.allAssignees")}
-          allowClear
-          className="w-44"
-          options={creativeStaff.map((s) => ({ value: s.id, label: s.label }))}
-        />
-        <select aria-label={t("board.filterPhase")} value={fPhase} onChange={(e) => setFPhase(e.target.value)} className={input}>
-          <option value="">{t("board.allPhases")}</option>
-          <option value="BIDDING">{t("phaseBIDDING")}</option>
-          <option value="WORKING">{t("phaseWORKING")}</option>
-        </select>
-        <select aria-label={t("board.filterTeam")} value={fTeam} onChange={(e) => setFTeam(e.target.value)} className={input}>
-          <option value="">{t("board.allTeams")}</option>
-          {teams.map((tm) => (
-            <option key={tm.id} value={tm.id}>{tm.label}</option>
-          ))}
-        </select>
-        <SearchableSelect
-          value={fOrderer}
-          onChange={setFOrderer}
-          placeholder={t("board.allOrderers")}
-          allowClear
-          className="w-44"
-          options={orderers.map((o) => ({ value: o.id, label: o.label }))}
-        />
-      </div>
+      {!hideFilters && (
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchableSelect
+            value={fProject}
+            onChange={setFProject}
+            placeholder={t("board.allProjects")}
+            allowClear
+            className="w-44"
+            options={projects.map((p) => ({ value: p.id, label: p.label }))}
+          />
+          <SearchableSelect
+            value={fAssignee}
+            onChange={setFAssignee}
+            placeholder={t("board.allAssignees")}
+            allowClear
+            className="w-44"
+            options={creativeStaff.map((s) => ({ value: s.id, label: s.label }))}
+          />
+          <select aria-label={t("board.filterSquad")} value={fSquad} onChange={(e) => setFSquad(e.target.value)} className={input}>
+            <option value="">{t("board.allSquads")}</option>
+            {squads.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          <select aria-label={t("board.filterPhase")} value={fPhase} onChange={(e) => setFPhase(e.target.value)} className={input}>
+            <option value="">{t("board.allPhases")}</option>
+            <option value="BIDDING">{t("phaseBIDDING")}</option>
+            <option value="WORKING">{t("phaseWORKING")}</option>
+          </select>
+          <select aria-label={t("board.filterTeam")} value={fTeam} onChange={(e) => setFTeam(e.target.value)} className={input}>
+            <option value="">{t("board.allTeams")}</option>
+            {teams.map((tm) => (
+              <option key={tm.id} value={tm.id}>{tm.label}</option>
+            ))}
+          </select>
+          <SearchableSelect
+            value={fOrderer}
+            onChange={setFOrderer}
+            placeholder={t("board.allOrderers")}
+            allowClear
+            className="w-44"
+            options={orderers.map((o) => ({ value: o.id, label: o.label }))}
+          />
+        </div>
+      )}
 
       {STATUS_ORDER.map((status) => {
-        const group = filtered.filter((task) => task.status === status);
+        const group = sortByUrgency(filtered.filter((task) => task.status === status));
         if (group.length === 0) return null;
+
+        // CR-1: nhóm UNASSIGNED tách 2 nhóm con — "chờ CD điều phối" (chưa về team) và
+        // "đã về team, chờ giao người". Phân biệt bằng DỮ LIỆU (squadId), không phải status mới.
+        if (status === "UNASSIGNED") {
+          const unrouted = group.filter((task) => !task.squadId);
+          const routed = group.filter((task) => task.squadId);
+          return (
+            <div key={status} className="space-y-3">
+              {unrouted.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("board.groupUnrouted")} · {unrouted.length}
+                  </h3>
+                  <div className="space-y-2">
+                    {unrouted.map((task) => (
+                      <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} squadLeads={squadLeads} t={t} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {routed.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("board.groupRouted")} · {routed.length}
+                  </h3>
+                  <div className="space-y-2">
+                    {routed.map((task) => (
+                      <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} squadLeads={squadLeads} t={t} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        }
+
         return (
           <div key={status}>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -145,7 +223,7 @@ export function TaskBoard({
             </h3>
             <div className="space-y-2">
               {group.map((task) => (
-                <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} t={t} />
+                <TaskCard key={task.id} task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squads={squads} squadLeads={squadLeads} t={t} />
               ))}
             </div>
           </div>
@@ -154,28 +232,186 @@ export function TaskBoard({
       {filtered.length === 0 && <p className="text-sm text-muted-foreground">{t("board.empty")}</p>}
 
       {/* Create ad-hoc task */}
-      <details className="rounded-lg border border-dashed border-border-strong p-3">
-        <summary className="cursor-pointer text-xs font-medium text-brand-600">{t("task.createTitle")}</summary>
-        <form action={createCreativeTask} className="mt-2 flex flex-wrap items-end gap-2">
+      {!hideCreate && (
+        <details className="rounded-lg border border-dashed border-border-strong p-3">
+          <summary className="cursor-pointer text-xs font-medium text-brand-600">{t("task.createTitle")}</summary>
+          <form action={createCreativeTask} className="mt-2 flex flex-wrap items-end gap-2">
+            <SearchableSelect
+              name="projectId"
+              required
+              placeholder={t("task.selectProject")}
+              className="min-w-[160px]"
+              options={projects.map((p) => ({ value: p.id, label: p.label }))}
+            />
+            <select name="taskTypeId" className={input}>
+              <option value="">{t("task.selectTaskType")}</option>
+              {taskTypes.map((tt) => (
+                <option key={tt.id} value={tt.id}>{tt.label}</option>
+              ))}
+            </select>
+            <input name="title" placeholder={t("task.taskTitle")} className={input + " min-w-[160px] flex-1"} required />
+            <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
+              {t("task.createTask")}
+            </button>
+          </form>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Danh sách NGƯỜI DUYỆT gợi ý cho form giao việc (A7). App KHÔNG đoán "Art/Design lead" là ai —
+ * chỉ điền sẵn theo quy tắc đã chốt, người giao sửa tự do:
+ *  - Master KV (loại KV_2D) ở giai đoạn thực thi → lead CREATIVE + lead GRAPHIC_2D + Account đặt hàng.
+ *  - Loại khác ở giai đoạn thực thi → lead team của task + Account đặt hàng.
+ *  - Giai đoạn bidding → không gợi ý (đường duyệt CD như cũ; proposal do Account review ngoài app).
+ * THUẦN — StrictMode gọi 2 lần vẫn cùng kết quả.
+ */
+function suggestedApproverIds(task: TaskData, squadLeads: SquadLead[]): Set<string> {
+  const ids = new Set<string>();
+  if (task.phase !== "WORKING") return ids;
+  const leadOf = (code: string) => squadLeads.find((s) => s.code === code)?.leadStaffId;
+  if (task.taskTypeCode === "KV_2D") {
+    const a = leadOf("CREATIVE");
+    const b = leadOf("GRAPHIC_2D");
+    if (a) ids.add(a);
+    if (b) ids.add(b);
+  } else if (task.squadId) {
+    const lead = squadLeads.find((s) => s.squadId === task.squadId)?.leadStaffId;
+    if (lead) ids.add(lead);
+  }
+  if (task.ordererId) ids.add(task.ordererId);
+  return ids;
+}
+
+/** Ứng viên hiện trong ô chọn người duyệt: 3 lead team + Account đặt hàng (khử trùng). THUẦN. */
+function approverCandidates(task: TaskData, squadLeads: SquadLead[], t: ReturnType<typeof useTranslations>): Opt[] {
+  const out: Opt[] = [];
+  const seen = new Set<string>();
+  for (const s of squadLeads) {
+    if (s.leadStaffId && s.leadName && !seen.has(s.leadStaffId)) {
+      seen.add(s.leadStaffId);
+      out.push({ id: s.leadStaffId, label: `${s.leadName} — ${t("task.leadOf", { squad: s.name })}` });
+    }
+  }
+  if (task.ordererId && task.ordererName && !seen.has(task.ordererId)) {
+    out.push({ id: task.ordererId, label: `${task.ordererName} — ${t("task.ordererRole")}` });
+  }
+  return out;
+}
+
+function RouteForm({
+  task,
+  squads,
+  taskTypes,
+  t,
+}: {
+  task: TaskData;
+  squads: Opt[];
+  taskTypes: Opt[];
+  t: ReturnType<typeof useTranslations>;
+}) {
+  return (
+    <form action={routeCreativeTask.bind(null, task.id)} className="flex flex-wrap items-end gap-2">
+      <label className="text-xs text-muted-foreground">
+        {t("task.routeSquad")}
+        <select name="squadId" defaultValue={task.squadId ?? ""} className={input + " ml-1"} required>
+          <option value="">—</option>
+          {squads.map((s) => (
+            <option key={s.id} value={s.id}>{s.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs text-muted-foreground">
+        {t("task.deadline")}
+        {/* Deadline BẮT BUỘC ở bước điều phối — chặn tận gốc cảnh 0 task có hạn. */}
+        <DateField name="deadline" required className={input + " ml-1"} defaultValue={toDateInput(task.deadline)} />
+      </label>
+      <select name="taskTypeId" className={input} defaultValue={task.taskTypeId ?? ""}>
+        <option value="">{t("task.selectTaskType")}</option>
+        {taskTypes.map((tt) => (
+          <option key={tt.id} value={tt.id}>{tt.label}</option>
+        ))}
+      </select>
+      <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
+        {t("task.route")}
+      </button>
+    </form>
+  );
+}
+
+function AssignForm({
+  task,
+  creativeStaff,
+  taskTypes,
+  squadLeads,
+  t,
+}: {
+  task: TaskData;
+  creativeStaff: StaffOpt[];
+  taskTypes: Opt[];
+  squadLeads: SquadLead[];
+  t: ReturnType<typeof useTranslations>;
+}) {
+  // Task đã về team → ô chọn người lọc còn NGƯỜI TRONG TEAM (server cũng chặn với trưởng team;
+  // CD muốn vượt thì điều phối lại trước — giữ UI một đường).
+  const staffOptions = task.squadId ? creativeStaff.filter((s) => s.squadId === task.squadId) : creativeStaff;
+  const suggested = suggestedApproverIds(task, squadLeads);
+  const candidates = approverCandidates(task, squadLeads, t);
+
+  return (
+    <div className="space-y-2">
+      <form id={`assign-${task.id}`} action={assignCreativeTask.bind(null, task.id)} className="space-y-2">
+        <div className="flex flex-wrap items-end gap-2">
           <SearchableSelect
-            name="projectId"
+            name="assigneeId"
             required
-            placeholder={t("task.selectProject")}
-            className="min-w-[160px]"
-            options={projects.map((p) => ({ value: p.id, label: p.label }))}
+            defaultValue=""
+            placeholder={t("task.selectAssignee")}
+            className="min-w-[150px]"
+            options={staffOptions.map((s) => ({ value: s.id, label: s.label }))}
           />
-          <select name="taskTypeId" className={input}>
+          <select name="taskTypeId" className={input} defaultValue={task.taskTypeId ?? ""}>
             <option value="">{t("task.selectTaskType")}</option>
             {taskTypes.map((tt) => (
               <option key={tt.id} value={tt.id}>{tt.label}</option>
             ))}
           </select>
-          <input name="title" placeholder={t("task.taskTitle")} className={input + " min-w-[160px] flex-1"} required />
-          <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
-            {t("task.createTask")}
-          </button>
-        </form>
-      </details>
+          <DateField name="deadline" className={input} defaultValue={toDateInput(task.deadline)} />
+        </div>
+        <label className="flex items-center gap-2 text-xs text-foreground">
+          <input type="checkbox" name="cdApprovalNotRequired" className="h-4 w-4 rounded border-border-strong" />
+          {t("task.cdNoApproval")}
+        </label>
+        {/* A7 — danh sách người duyệt đích danh. Không tick ai = đường duyệt CD như cũ. */}
+        {candidates.length > 0 && (
+          <details open={suggested.size > 0} className="rounded-lg border border-dashed border-border px-2.5 py-1.5">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("task.approversTitle")}</summary>
+            <p className="mt-1 text-[11px] text-muted-foreground">{t("task.approversHint")}</p>
+            <div className="mt-1.5 space-y-1">
+              {candidates.map((c) => (
+                <label key={c.id} className="flex items-center gap-2 text-xs text-foreground">
+                  <input
+                    type="checkbox"
+                    name="approverIds"
+                    value={c.id}
+                    defaultChecked={suggested.has(c.id)}
+                    className="h-3.5 w-3.5 rounded border-border-strong"
+                  />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
+      </form>
+      <div className="flex items-center gap-2">
+        <button type="submit" form={`assign-${task.id}`} className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
+          {t("task.assign")}
+        </button>
+        {task.status === "UNASSIGNED" && <FormButton action={deleteCreativeTask.bind(null, task.id)} label={t("task.delete")} danger />}
+      </div>
     </div>
   );
 }
@@ -184,21 +420,33 @@ function TaskCard({
   task,
   creativeStaff,
   taskTypes,
+  squads,
+  squadLeads,
   t,
 }: {
   task: TaskData;
-  creativeStaff: Opt[];
+  creativeStaff: StaffOpt[];
   taskTypes: Opt[];
+  squads: Opt[];
+  squadLeads: SquadLead[];
   t: ReturnType<typeof useTranslations>;
 }) {
   const locale = useLocale() as Locale;
+  const overdue = task.overdueDays != null;
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-3">
+    <div className={"rounded-lg border bg-surface p-3 " + (overdue ? "border-danger/50" : "border-border")}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-foreground">{task.title}</span>
         <Badge tone={PHASE_TONE[task.phase]}>{t(`phase${task.phase}`)}</Badge>
+        {task.squadName && <Badge tone="brand">{task.squadName}</Badge>}
         {task.taskTypeLabel && <Badge tone="neutral">{task.taskTypeLabel}</Badge>}
+        {overdue && (
+          <Badge tone="danger">
+            <Clock3 className="mr-0.5 inline h-3 w-3" />
+            {t("task.overdueDays", { days: task.overdueDays ?? 0 })}
+          </Badge>
+        )}
         <span className="font-mono text-xs text-muted-foreground">{task.projectCode}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -222,39 +470,31 @@ function TaskCard({
             </p>
           )}
 
-          {/* UNASSIGNED → assign form */}
+          {/* UNASSIGNED: chưa về team → điều phối trước (giao thẳng nằm trong details);
+              đã về team → giao người (điều phối lại nằm trong details). */}
           {task.status === "UNASSIGNED" && (
             <div className="mt-2 space-y-2 border-t border-border pt-2">
-              {/* Nút Xóa là form riêng → tách khỏi form assign (không lồng form), nối lại bằng thuộc tính form=. */}
-              <form id={`assign-${task.id}`} action={assignCreativeTask.bind(null, task.id)} className="space-y-2">
-                <div className="flex flex-wrap items-end gap-2">
-                  <SearchableSelect
-                    name="assigneeId"
-                    required
-                    defaultValue=""
-                    placeholder={t("task.selectAssignee")}
-                    className="min-w-[150px]"
-                    options={creativeStaff.map((s) => ({ value: s.id, label: s.label }))}
-                  />
-                  <select name="taskTypeId" className={input} defaultValue={task.taskTypeId ?? ""}>
-                    <option value="">{t("task.selectTaskType")}</option>
-                    {taskTypes.map((tt) => (
-                      <option key={tt.id} value={tt.id}>{tt.label}</option>
-                    ))}
-                  </select>
-                  <DateField name="deadline" className={input} defaultValue={toDateInput(task.deadline)} />
-                </div>
-                <label className="flex items-center gap-2 text-xs text-foreground">
-                  <input type="checkbox" name="cdApprovalNotRequired" className="h-4 w-4 rounded border-border-strong" />
-                  {t("task.cdNoApproval")}
-                </label>
-              </form>
-              <div className="flex items-center gap-2">
-                <button type="submit" form={`assign-${task.id}`} className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
-                  {t("task.assign")}
-                </button>
-                <FormButton action={deleteCreativeTask.bind(null, task.id)} label={t("task.delete")} danger />
-              </div>
+              {!task.squadId ? (
+                <>
+                  <RouteForm task={task} squads={squads} taskTypes={taskTypes} t={t} />
+                  <details className="rounded-lg border border-dashed border-border px-2.5 py-1.5">
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("task.directAssign")}</summary>
+                    <div className="mt-2">
+                      <AssignForm task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squadLeads={squadLeads} t={t} />
+                    </div>
+                  </details>
+                </>
+              ) : (
+                <>
+                  <AssignForm task={task} creativeStaff={creativeStaff} taskTypes={taskTypes} squadLeads={squadLeads} t={t} />
+                  <details className="rounded-lg border border-dashed border-border px-2.5 py-1.5">
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("task.reroute")}</summary>
+                    <div className="mt-2">
+                      <RouteForm task={task} squads={squads} taskTypes={taskTypes} t={t} />
+                    </div>
+                  </details>
+                </>
+              )}
             </div>
           )}
 
@@ -273,7 +513,7 @@ function TaskCard({
             </form>
           )}
 
-          {/* SUBMITTED → CD approve/reject */}
+          {/* SUBMITTED → duyệt: có danh sách đích danh thì hiện chip từng người; không thì đường CD cũ */}
           {task.status === "SUBMITTED" && (
             <div className="mt-2 space-y-2 border-t border-border pt-2">
               {task.deliverableLinkUrl && (
@@ -282,7 +522,28 @@ function TaskCard({
                 </a>
               )}
               {task.hoursSpent != null && <p className="text-xs text-muted-foreground">{t("task.hoursSpent", { hours: task.hoursSpent })}</p>}
-              <FormButton action={approveCreativeTask.bind(null, task.id)} label={t("task.approve")} success />
+              {task.approvers.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">{t("task.approversLabel")}:</span>
+                  {task.approvers.map((a) => (
+                    <span
+                      key={a.staffId}
+                      className={
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] " +
+                        (a.approved ? "border-success/40 bg-success-bg text-success" : "border-border-strong text-muted-foreground")
+                      }
+                    >
+                      {a.approved && <Check className="h-3 w-3" />}
+                      {a.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <FormButton
+                action={approveCreativeTask.bind(null, task.id)}
+                label={task.approvers.length > 0 ? t("task.approveSign") : t("task.approve")}
+                success
+              />
               <form action={rejectCreativeTask.bind(null, task.id)} className="space-y-1.5">
                 <textarea
                   name="rejectNote"

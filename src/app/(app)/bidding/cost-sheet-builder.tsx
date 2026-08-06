@@ -314,6 +314,11 @@ function ceInput(l: Line): CeLineCalcInput {
     itemName: l.itemName,
     stockRefUnitPrice: l.stockRefUnitPrice,
     stockResvLineId: l.stockResvLineId,
+    // ⚠ THIẾU DÒNG NÀY LÀ MÀN HÌNH LỆCH VỚI SERVER: `ceRowsOf` cho CE = 0 ở dòng khách yêu cầu bỏ,
+    // nên không truyền cờ thì dải tổng của builder vẫn cộng dòng đó trong khi bảng đã lưu thì không.
+    // Đã đo: builder hiện 326.816.369 còn server lưu ra tổng ứng với 323.441.451 — lệch đúng phần
+    // của một dòng khách bỏ (3.374.918).
+    ceDropped: l.ceDropped,
   };
 }
 

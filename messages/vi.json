@@ -2339,7 +2339,8 @@
     "nav": {
       "board": "Bảng task",
       "cost": "Cost-per-task",
-      "my": "Việc của tôi"
+      "my": "Việc của tôi",
+      "requests": "Nhận việc"
     },
     "cost": {
       "title": "Cost-per-task Creative",
@@ -4015,5 +4016,43 @@
     "errNoRecommendation": "Chọn đề xuất kết quả.",
     "errCancelled": "Lượt hẹn đã bị huỷ.",
     "errNoDecisionReason": "Nhập lý do từ chối."
+  },
+  "creativeRequest": {
+    "title": "Nhận việc",
+    "subtitle": "Gửi yêu cầu cho team Creative — hệ thống tự sinh đầu việc và đưa về đúng team nhỏ.",
+    "formTitle": "Yêu cầu mới",
+    "formHint": "Tick những hạng mục cần làm. Mỗi hạng mục sẽ thành một đầu việc riêng trên bảng task.",
+    "project": "Công việc / chiến dịch",
+    "projectNew": "— Tạo công việc mới —",
+    "newProjectName": "Tên công việc mới",
+    "newProjectPlaceholder": "VD: Ra mắt sản phẩm mùa hè",
+    "client": "Khách hàng",
+    "clientNew": "— Thêm khách mới —",
+    "newClientName": "Tên khách hàng mới",
+    "briefLink": "Link brief",
+    "deadline": "Hạn chót",
+    "note": "Ghi chú thêm",
+    "items": "Hạng mục cần làm",
+    "itemDetailPlaceholder": "Mô tả cụ thể (dùng làm tên đầu việc)",
+    "itemKEY_VISUAL": "Key visual",
+    "itemDESIGN_2D": "Thiết kế 2D",
+    "itemDESIGN_3D": "Thiết kế 3D",
+    "itemSET_DESIGN": "Thiết kế bối cảnh",
+    "itemVIDEO": "Video / animation",
+    "itemOTHER": "Khác",
+    "submit": "Gửi yêu cầu",
+    "submitHint": "Trưởng team nhỏ sẽ nhận thông báo ngay sau khi gửi.",
+    "listTitle": "Yêu cầu đã gửi",
+    "listEmpty": "Chưa có yêu cầu nào.",
+    "deadlineIs": "hạn {date}",
+    "byWhom": "người gửi {name}",
+    "openBrief": "Mở brief",
+    "noTaskSpawned": "Chưa sinh đầu việc nào.",
+    "goToBoard": "Xem trên bảng task",
+    "errGeneric": "Không gửi được, thử lại.",
+    "errNoItem": "Tick ít nhất một hạng mục cần làm.",
+    "errNoDeadline": "Chọn hạn chót.",
+    "errNoProject": "Chọn công việc có sẵn hoặc nhập tên công việc mới.",
+    "errNoClient": "Chọn khách hàng hoặc nhập tên khách mới."
   }
 }

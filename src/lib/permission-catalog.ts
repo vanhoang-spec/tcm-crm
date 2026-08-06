@@ -9,7 +9,7 @@
  * Nhãn song ngữ đi qua `pickLabel()` như OptionItem — không đẻ thêm key i18n cho danh mục thuần
  * dữ liệu.
  *
- * ⚠ Bản này CHỈ có 16 mã. Bản TCM đầy đủ có 138 — phần chênh là các module đã cắt khỏi bản mini
+ * ⚠ Bản này CHỈ có 17 mã. Bản TCM đầy đủ có 138 — phần chênh là các module đã cắt khỏi bản mini
  * (thầu, CO/CE, tài chính, kho, chat, chấm công, KPI, tuyển dụng…). Thêm mã mới thì phải thêm cả
  * chỗ `requirePermission()` tương ứng VÀ đường cấp quyền trong `prisma/seed.ts`.
  *
@@ -46,6 +46,7 @@ export const PERMISSIONS: PermissionDef[] = [
   // ⚠ Trưởng team nhỏ giao việc bằng phép kiểm THEO BẢN GHI (squad.leadStaffId), KHÔNG có mã quyền
   // riêng — đừng đi tìm requirePermission tương ứng cho vai đó.
   { code: "creative.view", module: "creative", labelVi: "Xem bảng task Creative", labelEn: "View Creative board" },
+  { code: "creative.request.create", module: "creative", labelVi: "Gửi yêu cầu Creative", labelEn: "Submit Creative requests" },
   { code: "creative.task.manage", module: "creative", labelVi: "Tạo / xoá task", labelEn: "Create / delete tasks" },
   { code: "creative.task.assign", module: "creative", labelVi: "Điều phối về team & giao người", labelEn: "Route to squad & assign" },
   { code: "creative.task.submit", module: "creative", labelVi: "Nộp thành phẩm", labelEn: "Submit deliverables" },

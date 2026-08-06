@@ -29,6 +29,7 @@ const ROLE_GRANTS: Record<string, string[]> = {
   CREATIVE_DIRECTOR: [
     "dashboard.view",
     "creative.view",
+    "creative.request.create",
     "creative.task.manage",
     "creative.task.assign",
     "creative.task.submit",
@@ -44,7 +45,7 @@ const ROLE_GRANTS: Record<string, string[]> = {
   // phép kiểm THEO BẢN GHI (squad.leadStaffId), không cần mã quyền.
   CREATIVE_STAFF: ["dashboard.view", "creative.view", "creative.task.submit"],
   // Người đặt việc (Account/khách nội bộ): xem tiến độ, ký duyệt phần của mình khi được chỉ định.
-  REQUESTER: ["dashboard.view", "creative.view", "creative.task.manage"],
+  REQUESTER: ["dashboard.view", "creative.view", "creative.request.create"],
 };
 
 const ROLES: { code: string; name: string; groupCode: string; sort: number }[] = [
@@ -159,12 +160,12 @@ async function main() {
   // ── Nhân sự mẫu ──
   const hash = hashPassword(DEFAULT_PASSWORD);
   const STAFF = [
-    { code: "CRE-0001", fullName: "QUẢN TRỊ HỆ THỐNG", email: "admin@creative.local", title: "Administrator", dept: "CREATIVE", role: "ADMIN", squad: null },
-    { code: "CRE-0002", fullName: "NGUYỄN MINH KHANG", email: "cd@creative.local", title: "Creative Director", dept: "CREATIVE", role: "CREATIVE_DIRECTOR", squad: "CREATIVE" },
-    { code: "CRE-0003", fullName: "TRẦN THU HÀ", email: "art@creative.local", title: "Art Manager", dept: "CREATIVE", role: "CREATIVE_STAFF", squad: "GRAPHIC_2D" },
-    { code: "CRE-0004", fullName: "LÊ QUỐC BẢO", email: "3d@creative.local", title: "3D Designer", dept: "CREATIVE", role: "CREATIVE_STAFF", squad: "MULTIMEDIA" },
-    { code: "CRE-0005", fullName: "PHẠM NGỌC LAN", email: "2d@creative.local", title: "2D Designer", dept: "CREATIVE", role: "CREATIVE_STAFF", squad: "GRAPHIC_2D" },
-    { code: "CRE-0006", fullName: "VŨ ĐÌNH NAM", email: "account@creative.local", title: "Account Executive", dept: "REQUESTER", role: "REQUESTER", squad: null },
+    { code: "CRE-0001", fullName: "QUẢN TRỊ HỆ THỐNG", email: "admin@tcm.local", title: "Administrator", dept: "CREATIVE", role: "ADMIN", squad: null },
+    { code: "CRE-0002", fullName: "NGUYỄN MINH KHANG", email: "cd@tcm.local", title: "Creative Director", dept: "CREATIVE", role: "CREATIVE_DIRECTOR", squad: "CREATIVE" },
+    { code: "CRE-0003", fullName: "TRẦN THU HÀ", email: "art@tcm.local", title: "Art Manager", dept: "CREATIVE", role: "CREATIVE_STAFF", squad: "GRAPHIC_2D" },
+    { code: "CRE-0004", fullName: "LÊ QUỐC BẢO", email: "3d@tcm.local", title: "3D Designer", dept: "CREATIVE", role: "CREATIVE_STAFF", squad: "MULTIMEDIA" },
+    { code: "CRE-0005", fullName: "PHẠM NGỌC LAN", email: "2d@tcm.local", title: "2D Designer", dept: "CREATIVE", role: "CREATIVE_STAFF", squad: "GRAPHIC_2D" },
+    { code: "CRE-0006", fullName: "VŨ ĐÌNH NAM", email: "account@tcm.local", title: "Account Executive", dept: "REQUESTER", role: "REQUESTER", squad: null },
   ];
   const staffByCode: Record<string, string> = {};
   for (const s of STAFF) {

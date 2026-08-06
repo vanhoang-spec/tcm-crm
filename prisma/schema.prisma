@@ -129,6 +129,7 @@ model Staff {
   creativeTasksCd             CreativeTask[]            @relation("CreativeTaskAssignedBy")
   creativeTasksReviewed       CreativeTask[]            @relation("CreativeTaskReviewedBy")
   creativeTasksOrdered        CreativeTask[]            @relation("CreativeTaskOrderedBy")
+  creativeRequests            CreativeRequest[]         @relation("CreativeRequestBy")
   departmentsLed              Department[]              @relation("DepartmentLead")
   creativeSquadsLed           CreativeSquad[]           @relation("CreativeSquadLead")
   creativeTaskApprovals       CreativeTaskApprover[]    @relation("CreativeTaskApproverStaff")
@@ -305,6 +306,7 @@ model Project {
 
   notifications         Notification[]
   creativeTasks         CreativeTask[]
+  creativeRequests      CreativeRequest[]
   /// Kho v2 K4 — mốc mở KỲ CHIẾN DỊCH đang chạy (UTC-midnight). null = không có kỳ nào mở.
   /// CỜ TRẠNG THÁI, không phải lịch sử: lịch sử nằm ở sổ cái StockDocument (bất biến). Tự set khi
   /// thủ kho xác nhận xuất đồ tái sử dụng, tự xoá khi holding của dự án về 0.
@@ -367,6 +369,7 @@ model CreativeTask {
   projectId              String
   orderedById            String? // snapshot người ORDER (order.sentById ?? project.ownerId) — nơi trả thành phẩm
   sourceItemLabel        String? // nhãn ProjectOrderCreativeItem gốc (dedupe khi tự sinh)
+  requestId              String? // yêu cầu sinh ra task này (null = CD tạo tay trên bảng)
   squadId                String? // CR-1: team nhỏ được điều phối — spawn gợi ý theo nhãn, CD sửa được
   taskTypeId             String? // option_set "creative_task_type" — CD chọn lúc giao
   title                  String
@@ -390,6 +393,7 @@ model CreativeTask {
 
   project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
   squad      CreativeSquad?         @relation(fields: [squadId], references: [id], onDelete: SetNull)
+  request    CreativeRequest?       @relation(fields: [requestId], references: [id], onDelete: SetNull)
   taskType   OptionItem?            @relation("CreativeTaskType", fields: [taskTypeId], references: [id])
   approvers  CreativeTaskApprover[]
   assignee   Staff?            @relation("CreativeTaskAssignee", fields: [assigneeId], references: [id])
@@ -397,6 +401,9 @@ model CreativeTask {
   reviewedBy Staff?            @relation("CreativeTaskReviewedBy", fields: [reviewedById], references: [id])
   orderedBy  Staff?            @relation("CreativeTaskOrderedBy", fields: [orderedById], references: [id])
 
+  // Backstop DB cho spawn idempotent — hai lượt gửi song song không tạo task trùng.
+  // SQLite coi nhiều NULL là KHÁC nhau, nên task CD tạo tay (requestId null) không đụng ràng buộc này.
+  @@unique([requestId, sourceItemLabel])
   @@index([projectId, status])
   @@index([assigneeId, status])
   @@map("creative_task")
@@ -443,4 +450,29 @@ model PositionSalary {
 
   @@unique([positionTitle, departmentCode, periodCode])
   @@map("position_salary")
+}
+
+/// YÊU CẦU CREATIVE — đường NHẬN VIỆC của bản mini.
+///
+/// Ở bản TCM, task Creative sinh từ `ProjectOrder` mà Account gửi sang. Bản mini cắt Bidding nên
+/// dựng bảng riêng, gọn hơn nhiều nhưng giữ đúng hai thứ đã trả giá để học được:
+///  • `deadline` BẮT BUỘC và được CHÉP XUỐNG từng task lúc sinh — bản TCM từng bỏ trống cột hạn ở
+///    bước này, hệ quả là bộ nhắc quá hạn không bao giờ chạy (0/5 task có hạn).
+///  • Sinh task IDEMPOTENT theo `(requestId, sourceItemLabel)` — gửi lại/bấm hai lần không nhân đôi.
+model CreativeRequest {
+  id            String   @id @default(cuid())
+  projectId     String
+  requestedById String? // người đặt việc — nơi trả thành phẩm về
+  briefLinkUrl  String?
+  note          String?
+  /// Hạn mong muốn cho cả gói yêu cầu. Từng task nhận đúng hạn này lúc sinh; CD điều phối lại được.
+  deadline      DateTime
+  createdAt     DateTime @default(now())
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy Staff?         @relation("CreativeRequestBy", fields: [requestedById], references: [id])
+  tasks       CreativeTask[]
+
+  @@index([projectId])
+  @@map("creative_request")
 }

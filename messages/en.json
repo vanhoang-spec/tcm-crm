@@ -2339,7 +2339,8 @@
     "nav": {
       "board": "Task board",
       "cost": "Cost-per-task",
-      "my": "My tasks"
+      "my": "My tasks",
+      "requests": "Intake"
     },
     "cost": {
       "title": "Creative cost-per-task",
@@ -4015,5 +4016,43 @@
     "errNoRecommendation": "Pick a recommendation.",
     "errCancelled": "This slot has been cancelled.",
     "errNoDecisionReason": "Enter the reason for rejection."
+  },
+  "creativeRequest": {
+    "title": "Intake",
+    "subtitle": "Send a request to the Creative team — tasks are created and routed to the right squad automatically.",
+    "formTitle": "New request",
+    "formHint": "Tick the deliverables you need. Each one becomes its own task on the board.",
+    "project": "Job / campaign",
+    "projectNew": "— Create a new job —",
+    "newProjectName": "New job name",
+    "newProjectPlaceholder": "e.g. Summer product launch",
+    "client": "Client",
+    "clientNew": "— Add a new client —",
+    "newClientName": "New client name",
+    "briefLink": "Brief link",
+    "deadline": "Deadline",
+    "note": "Additional notes",
+    "items": "Deliverables needed",
+    "itemDetailPlaceholder": "Describe it (used as the task title)",
+    "itemKEY_VISUAL": "Key visual",
+    "itemDESIGN_2D": "2D design",
+    "itemDESIGN_3D": "3D design",
+    "itemSET_DESIGN": "Set design",
+    "itemVIDEO": "Video / animation",
+    "itemOTHER": "Other",
+    "submit": "Send request",
+    "submitHint": "Squad leads are notified as soon as you send it.",
+    "listTitle": "Requests sent",
+    "listEmpty": "No request yet.",
+    "deadlineIs": "due {date}",
+    "byWhom": "sent by {name}",
+    "openBrief": "Open brief",
+    "noTaskSpawned": "No task was created.",
+    "goToBoard": "See on the board",
+    "errGeneric": "Could not send, please try again.",
+    "errNoItem": "Tick at least one deliverable.",
+    "errNoDeadline": "Pick a deadline.",
+    "errNoProject": "Pick an existing job or enter a new job name.",
+    "errNoClient": "Pick a client or enter a new client name."
   }
 }

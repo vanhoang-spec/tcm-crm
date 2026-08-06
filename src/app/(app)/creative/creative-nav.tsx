@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type Labels = { board: string; my: string; cost: string };
+type Labels = { requests: string; board: string; my: string; cost: string };
 
 const TABS: { key: keyof Labels; seg: string }[] = [
+  { key: "requests", seg: "/requests" },
   { key: "board", seg: "" },
   { key: "my", seg: "/my" },
   { key: "cost", seg: "/cost" },

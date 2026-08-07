@@ -13,9 +13,12 @@ export type CreativeStaffOption = { id: string; label: string };
 export function SquadRow({
   squad,
   staffOptions,
+  staleLeadName,
 }: {
   squad: { id: string; code: string; name: string; isActive: boolean; leadStaffId: string | null };
   staffOptions: CreativeStaffOption[];
+  /** Tên trưởng team đã NGHỈ / chuyển phòng mà ô trưởng team vẫn đang trỏ vào. Null = bình thường. */
+  staleLeadName?: string | null;
 }) {
   const action = updateCreativeSquad.bind(null, squad.id);
   const [state, formAction, pending] = useActionState<SquadFormState, FormData>(action, {});
@@ -53,6 +56,13 @@ export function SquadRow({
           {t("active")}
         </label>
       </div>
+      {/* Cảnh báo con trỏ mồ côi: ô thả xuống hiện "Chưa gán" nhưng DB vẫn trỏ vào người đã nghỉ,
+          và mọi thông báo về team này đang KHÔNG tới ai. Bấm Lưu là gán lại / xoá con trỏ. */}
+      {staleLeadName && (
+        <p className="mt-2 rounded-lg border border-danger/40 bg-danger-bg px-2.5 py-1.5 text-[11px] leading-snug text-danger">
+          {t("staleLead", { name: staleLeadName })}
+        </p>
+      )}
       <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{t("leadHint")}</p>
 
       {state.error && <p className="mt-2 text-xs text-danger">{t("errGeneric")}</p>}

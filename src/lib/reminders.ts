@@ -303,7 +303,10 @@ export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
       status: { in: [...ACTIVE_TASK_STATUSES] },
       deadlineReminderSentAt: null,
     },
-    include: { project: { include: { status: true } }, squad: { select: { leadStaffId: true } } },
+    include: {
+      project: { include: { status: true } },
+      squad: { select: { leadStaffId: true, lead: { select: { isActive: true, department: { select: { code: true } } } } } },
+    },
   });
   const actionable = overdue.filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt));
   if (actionable.length === 0) return;
@@ -315,7 +318,15 @@ export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
     // CR-1: thêm trưởng team nhỏ — BẮT BUỘC chứ không chỉ tiện: task đã điều phối về team + có hạn
     // nhưng CHƯA giao người thì assignee/assignedBy đều null → trước đây không gửi ai VÀ không set
     // cờ, vòng 5 phút query lại task đó mãi mãi. Trưởng team cũng đúng là người phải xử lý.
-    if (task.squad?.leadStaffId) recipientIds.add(task.squad.leadStaffId);
+    // ⚠ Chỉ thêm khi trưởng team CÒN LÀM VIỆC ở phòng Creative (xem ACTIVE_SQUAD_LEAD ở
+    // lib/creative.ts): con trỏ leadStaffId không tự rỗng khi người đó nghỉ, gửi mù là nhắc rơi
+    // vào tài khoản đã nghỉ. Ca nguy hiểm: task chưa giao người + trưởng team đã nghỉ ⇒ không còn
+    // ai để gửi, khối `if` bên dưới không chạy nên KHÔNG set cờ — task quay lại hàng đợi mỗi 5
+    // phút. Chấp nhận: task đó cứ nằm chờ tới khi admin gán trưởng team mới, đúng hơn là đánh dấu
+    // "đã nhắc" trong khi thực tế chẳng ai nhận được gì.
+    if (task.squad?.leadStaffId && task.squad.lead?.isActive && task.squad.lead.department?.code === "CREATIVE") {
+      recipientIds.add(task.squad.leadStaffId);
+    }
 
     if (recipientIds.size > 0) {
       await prisma.notification.createMany({

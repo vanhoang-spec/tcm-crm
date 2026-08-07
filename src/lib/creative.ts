@@ -23,6 +23,21 @@ export type CreativeTaskStatus = (typeof CREATIVE_TASK_STATUSES)[number];
 export const ACTIVE_TASK_STATUSES: readonly CreativeTaskStatus[] = ["UNASSIGNED", "ASSIGNED", "SUBMITTED", "REVISION"];
 
 /**
+ * TRƯỞNG TEAM CÒN HIỆU LỰC — điều kiện lọc dùng CHUNG cho mọi chỗ gửi thông báo tới trưởng team
+ * nhỏ (sinh task từ Order · điều phối · nhắc quá hạn) và cho cảnh báo ở màn Settings.
+ *
+ * ⚠ Vì sao cần: `CreativeSquad.leadStaffId` là con trỏ, KHÔNG tự rỗng khi người đó nghỉ. Người
+ * nghỉ chỉ bị đánh dấu `isActive = false`, nên nếu chỉ kiểm `leadStaffId != null` thì thông báo
+ * vẫn bay về tài khoản đã nghỉ — im lặng, không ai biết. Cùng loại lỗi "con trỏ mồ côi" đã trả
+ * giá khi giải thể team A2 (HANDOVER 10.18).
+ *
+ * Điều kiện KHỚP ĐÚNG phép kiểm lúc GÁN trong `settings/creative-squads/actions.ts`: phải là nhân
+ * sự đang hoạt động VÀ thuộc phòng Creative — người chuyển sang phòng khác cũng không còn điều
+ * phối việc Creative nữa. Sửa ở đây thì nhớ sửa cả phép kiểm lúc gán, hai bên phải cùng luật.
+ */
+export const ACTIVE_SQUAD_LEAD = { isActive: true, department: { code: "CREATIVE" } } as const;
+
+/**
  * CR-1: số ngày ĐÃ TRỄ của một task — null nếu chưa trễ / không hạn / đã trả / đã khoá.
  * THUẦN, nhận `now` từ ngoài được để test; mặc định đồng hồ thật (chỉ gọi ở server lúc render).
  */
@@ -127,7 +142,11 @@ export async function spawnTasksForCreativeOrder(orderId: string): Promise<void>
     for (const row of toCreate) if (row.squadId) bySquad.set(row.squadId, (bySquad.get(row.squadId) ?? 0) + 1);
     if (bySquad.size > 0) {
       const leads = await prisma.creativeSquad.findMany({
-        where: { id: { in: [...bySquad.keys()] }, leadStaffId: { not: null } },
+        // ⚠ Lọc bằng ACTIVE_SQUAD_LEAD chứ KHÔNG phải `leadStaffId: { not: null }`: người nghỉ
+        // việc bị đánh dấu ngừng hoạt động nhưng ô trưởng team VẪN trỏ vào họ, nên thông báo sẽ
+        // bay về tài khoản đã nghỉ — im lặng, không ai biết cho tới lúc thắc mắc sao chẳng ai
+        // nhận việc. Xem chú thích của hằng ở đầu file.
+        where: { id: { in: [...bySquad.keys()] }, lead: ACTIVE_SQUAD_LEAD },
         select: { id: true, name: true, leadStaffId: true },
       });
       if (leads.length > 0) {

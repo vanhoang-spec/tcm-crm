@@ -1180,7 +1180,8 @@
       "noSquadYet": "no squad",
       "assign": "Assign",
       "saved": "Saved",
-      "errGeneric": "Could not save, please try again."
+      "errGeneric": "Could not save, please try again.",
+      "staleLead": "⚠ The squad lead is {name} — that person has left or moved to another department. New-work and overdue notifications for this squad are reaching NOBODY. Pick someone else and save."
     }
   },
   "bidding": {

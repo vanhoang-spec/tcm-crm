@@ -1180,7 +1180,8 @@
       "noSquadYet": "chưa có team",
       "assign": "Gán",
       "saved": "Đã lưu",
-      "errGeneric": "Không lưu được, thử lại."
+      "errGeneric": "Không lưu được, thử lại.",
+      "staleLead": "⚠ Trưởng team hiện là {name} — người này đã nghỉ hoặc chuyển phòng khác. Mọi thông báo việc mới và nhắc quá hạn của team này ĐANG KHÔNG tới ai. Chọn người khác rồi bấm Lưu."
     }
   },
   "bidding": {

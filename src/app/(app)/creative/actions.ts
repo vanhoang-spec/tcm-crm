@@ -69,7 +69,11 @@ export async function routeCreativeTask(taskId: string, formData: FormData) {
   const squadId = nullable(formData.get("squadId"));
   const deadline = dateOrNull(formData.get("deadline"));
   if (!squadId || !deadline) return;
-  const squad = await prisma.creativeSquad.findFirst({ where: { id: squadId, isActive: true } });
+  const squad = await prisma.creativeSquad.findFirst({
+    where: { id: squadId, isActive: true },
+    // Nạp kèm trạng thái của trưởng team để biết có gửi thông báo được không — xem ACTIVE_SQUAD_LEAD.
+    include: { lead: { select: { isActive: true, department: { select: { code: true } } } } },
+  });
   if (!squad) return;
 
   await prisma.creativeTask.update({
@@ -81,7 +85,10 @@ export async function routeCreativeTask(taskId: string, formData: FormData) {
       deadlineReminderSentAt: null, // hạn mới → được nhắc lại nếu quá hạn mới
     },
   });
-  if (squad.leadStaffId) {
+  // ⚠ Trưởng team đã NGHỈ (hoặc chuyển phòng khác) thì KHÔNG gửi — con trỏ leadStaffId không tự
+  // rỗng khi người đó nghỉ, gửi mù là thông báo rơi vào tài khoản không ai đọc. Màn Settings hiện
+  // cảnh báo đỏ để admin gán lại người khác.
+  if (squad.leadStaffId && squad.lead?.isActive && squad.lead.department?.code === "CREATIVE") {
     await notify(
       squad.leadStaffId,
       "CREATIVE_TASK_ROUTED",

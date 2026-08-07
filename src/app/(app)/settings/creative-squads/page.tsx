@@ -15,7 +15,11 @@ export default async function CreativeSquadsSettingsPage() {
   await requirePermission("settings.creative.manage");
   const [t, squads, creativeStaff] = await Promise.all([
     getTranslations("settings.creativeSquads"),
-    prisma.creativeSquad.findMany({ orderBy: { sort: "asc" } }),
+    // Nạp kèm trưởng team KỂ CẢ khi họ đã nghỉ / chuyển phòng — chính ca đó mới cần cảnh báo.
+    prisma.creativeSquad.findMany({
+      orderBy: { sort: "asc" },
+      include: { lead: { select: { fullName: true, isActive: true, department: { select: { code: true } } } } },
+    }),
     prisma.staff.findMany({
       where: { department: { code: "CREATIVE" }, isActive: true },
       orderBy: { fullName: "asc" },
@@ -41,7 +45,16 @@ export default async function CreativeSquadsSettingsPage() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">{t("squadsTitle")}</h2>
         {squads.map((s) => (
-          <SquadRow key={s.id} squad={s} staffOptions={staffOptions} />
+          <SquadRow
+            key={s.id}
+            squad={s}
+            staffOptions={staffOptions}
+            // Trưởng team KHÔNG còn nằm trong danh sách chọn được ⇒ ô thả xuống sẽ hiện "Chưa gán"
+            // trong khi DB vẫn trỏ vào họ. Truyền tên xuống để hàng đó nói thẳng người đã nghỉ là ai.
+            staleLeadName={
+              s.lead && (!s.lead.isActive || s.lead.department?.code !== "CREATIVE") ? s.lead.fullName : null
+            }
+          />
         ))}
       </section>
 

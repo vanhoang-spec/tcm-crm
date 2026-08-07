@@ -1486,6 +1486,25 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       gần như ai cũng giao việc Creative được. Muốn đúng tinh thần "CD điều phối, trưởng team giao
       người" thì phải gỡ mã đó khỏi các vai không liên quan; đó là quyết định chính sách của BGĐ,
       cố ý không tự làm trong đợt này.
+    - ⚠ **TRƯỞNG TEAM ĐÃ NGHỈ — vá 07/08/2026 (CR-1c).** `CreativeSquad.leadStaffId` là CON TRỎ,
+      KHÔNG tự rỗng khi người đó nghỉ (nghỉ chỉ set `isActive = false`). Trước bản vá, cả **ba** chỗ
+      gửi thông báo cho trưởng team đều chỉ kiểm `leadStaffId != null` ⇒ tin bay vào tài khoản đã
+      nghỉ, **im lặng**, tới lúc có người thắc mắc "sao mãi không ai nhận việc" mới lộ. Cùng loại
+      lỗi con-trỏ-mồ-côi đã trả giá khi giải thể team A2 (mục 10.18).
+      · Nay ba chỗ (spawn từ Order · `routeCreativeTask` · nhắc quá hạn) dùng chung hằng
+        **`ACTIVE_SQUAD_LEAD`** ở `lib/creative.ts` = còn hoạt động **VÀ** thuộc phòng CREATIVE —
+        khớp đúng phép kiểm lúc GÁN trong `settings/creative-squads/actions.ts`. ⚠ Sửa một bên thì
+        phải sửa bên kia, hai đường phải cùng luật.
+      · ⚠ **Ca task chưa giao người + trưởng team đã nghỉ ⇒ KHÔNG còn ai để gửi, và CỐ Ý không set
+        cờ `deadlineReminderSentAt`.** Task nằm chờ tới khi admin gán trưởng team mới. Đánh dấu "đã
+        nhắc" trong khi chẳng ai nhận được gì mới là thứ nguy hiểm. Đổi lại: vòng quét 5 phút vẫn
+        lôi task đó lên mỗi lượt — chấp nhận, vì cảnh báo đỏ ở Settings là đường sửa.
+      · **Màn Settings hiện cảnh báo đỏ đích danh** (`settings.creativeSquads.staleLead`). Cần thiết
+        vì ô thả xuống chỉ liệt kê người ĐANG làm việc: trưởng team đã nghỉ thì ô hiện "— Chưa gán —"
+        trong khi DB vẫn trỏ vào họ — nhìn tưởng chưa gán, thực ra đang gán vào người không còn ở đó.
+      · Verify bằng số: trưởng team còn làm việc ⇒ nhắc quá hạn 0 → 1; đánh dấu nghỉ rồi chạy lại ⇒
+        1 → 1 (không gửi thêm) và cờ KHÔNG được set. Trên browser: hàng Graphic 2D hiện đúng dòng đỏ
+        nêu tên người đã nghỉ; chọn người khác rồi Lưu thì cảnh báo tắt.
     - ⚠ **3 team nhỏ seed ra RỖNG — không tự gán ai.** Chưa gán trưởng team thì luồng điều-phối-rồi-
       giao chưa chạy, nhưng CD vẫn giao thẳng như cũ nên không có gì hỏng. Gán ở
       `/settings/creative-squads`.

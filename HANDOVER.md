@@ -1517,7 +1517,22 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `c2deb47`** (07/08/2026 09:44) — **CR-1 + CR-1b Creative**: 3 team nhỏ,
+**Production đang chạy `f04b39a`** (07/08/2026 15:49) — **CR-1c**: trưởng team đã nghỉ không còn
+nhận thông báo vào khoảng không (mục 10.32). Chạy `bash scripts/deploy.sh` **đường LAN**, fingerprint
+khớp. **KHÔNG migration mới** (67 migration, "No pending migrations"), **không mã quyền mới**. Backup
+TRƯỚC deploy: `~/backup/*-20260807-154919*` trên server + `D:/TCM/backup-prod-20260807-154919/` máy dev.
+
+Đối chiếu production sau deploy — **không đổi một dòng dữ liệu nào**: nhân sự/khách/dự án **36/68/25**
+· dòng CO/CE **483** · grant **1312** · coTotal+ceTotal 5 bảng **không lệch một đồng** ·
+`integrity_check` **ok** / `foreign_key_check` **0 dòng**. Ba team nhỏ vẫn để trống trưởng team đúng
+ý chủ dự án; team thứ ba đã mang tên **"3D — Animation/AI"**. Health check: `/login` 200 ·
+`/creative`, `/settings/creative-squads` 307 về login · pm2 online, **restart 0** · `[jobs] scheduler bật`.
+
+---
+
+### Deploy trước đó — 07/08/2026 lúc 09:44
+
+**Production khi đó chạy `c2deb47`** — **CR-1 + CR-1b Creative**: 3 team nhỏ,
 điều phối việc có hạn, flow v2 (mục 10.32). Chạy `bash scripts/deploy.sh` **đường LAN
 192.168.1.111:22**, fingerprint khớp. **1 migration mới** áp sạch (`creative_squads` — bảng
 `creative_squad` MỚI + 2 cột nullable thêm bằng ALTER TABLE), **không mã quyền mới**. Backup TRƯỚC

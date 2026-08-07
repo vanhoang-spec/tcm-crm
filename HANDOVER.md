@@ -1394,9 +1394,9 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       toàn văn trong kho hồ sơ (mới lọc theo phòng ban/vị trí/trạng thái) · đọc CV là ảnh scan (OCR)
       · gắn ứng viên đã nhận sang hồ sơ nhân sự · nhắc lịch phỏng vấn qua notification trước giờ hẹn.
 
-32. **CREATIVE — CR-1 XONG 06/08/2026: 3 team nhỏ + điều phối việc + duyệt nhiều bên**
-    (2 migration VIẾT TAY `20260812000000_creative_squads` + `20260812010000_creative_task_approvers`;
-    **KHÔNG mã quyền mới**). **CHƯA DEPLOY** tại thời điểm ghi mục này — production vẫn chạy `35314b1`.
+32. **CREATIVE — CR-1 + CR-1b XONG 06–07/08/2026: 3 team nhỏ + điều phối việc, flow v2**
+    (1 migration VIẾT TAY `20260812000000_creative_squads`; **KHÔNG mã quyền mới**).
+    **ĐÃ DEPLOY 07/08/2026** — production chạy `c2deb47`, xem §11.
 
     Cơ cấu chốt với chủ dự án: phòng Creative chia **3 team nhỏ** — `CREATIVE` (idea & chiến lược) ·
     `GRAPHIC_2D` (Key Visual, master KV) · `MULTIMEDIA` (3D/Animation/AI, kiêm nhiệm).
@@ -1498,7 +1498,43 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `35314b1`** (06/08/2026 14:27) — **TD-1 Tuyển dụng** (mục 10.31). Chạy
+**Production đang chạy `c2deb47`** (07/08/2026 09:44) — **CR-1 + CR-1b Creative**: 3 team nhỏ,
+điều phối việc có hạn, flow v2 (mục 10.32). Chạy `bash scripts/deploy.sh` **đường LAN
+192.168.1.111:22**, fingerprint khớp. **1 migration mới** áp sạch (`creative_squads` — bảng
+`creative_squad` MỚI + 2 cột nullable thêm bằng ALTER TABLE), **không mã quyền mới**. Backup TRƯỚC
+deploy ở hai nơi: `~/backup/*-20260807-094456*` trên server + `D:/TCM/backup-prod-20260807-094456/`
+máy dev.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — **khớp từng số, không đổi một dòng nào**:
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| coTotal + ceTotal 5 bảng CO/CE | (10 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO/CE / dòng grant quyền | 483 / 1312 | **483 / 1312** |
+| 3 team nhỏ Creative | — | **CREATIVE · GRAPHIC_2D · MULTIMEDIA**, lead trống, 0 người |
+| bảng `creative_task_approver` | — | **KHÔNG CÓ** (đúng — CR-1b đã gỡ trước khi deploy) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Marker seed `20260806_creative_squads` có đủ. Health check: `/login` 200 · `/creative`,
+`/creative/my`, `/settings/creative-squads`, `/bidding` đều 307 về login · pm2 `online`,
+**restart 0** · `[jobs] scheduler bật`.
+
+⚠ **VIỆC PHẢI LÀM TRƯỚC KHI TEAM DÙNG THẬT — 3 team nhỏ đang RỖNG.** Seed chỉ dựng 3 team, CỐ Ý
+không tự gán ai. Vào `/settings/creative-squads` để (a) gán **trưởng team** cho từng team, (b) phân
+6 nhân sự Creative vào team, (c) đổi tên hiển thị team thứ ba từ "Multimedia — 3D/Animation/AI"
+thành **"3D"** theo quyết định flow v2. Chưa gán thì luồng điều-phối-rồi-giao chưa chạy, nhưng CD
+vẫn giao thẳng như cũ nên KHÔNG có gì hỏng.
+
+⚠ **7 task Creative cũ trên production đều CHƯA có team** (`squadId` null) — đúng thiết kế, chúng
+sinh ra trước CR-1. Chúng nằm ở nhóm "Chờ điều phối về team" trên bảng; CD điều phối dần, hoặc cứ
+giao thẳng như trước.
+
+---
+
+### Deploy trước đó — 06/08/2026 lúc 14:27
+
+**Production khi đó chạy `35314b1`** — **TD-1 Tuyển dụng** (mục 10.31). Chạy
 `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **1 migration mới** áp
 sạch (`recruit_td1` — 5 bảng MỚI, không đụng cột nào của bảng cũ), **7 mã quyền mới**. Backup TRƯỚC
 deploy ở hai nơi: `~/backup/*-20260806-142708*` trên server + `D:/TCM/backup-prod-20260806-142708/`

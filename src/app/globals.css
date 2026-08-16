@@ -173,11 +173,14 @@ body {
   #org-chart-print-area,
   #org-chart-print-area *,
   #costsheet-print-area,
-  #costsheet-print-area * {
+  #costsheet-print-area *,
+  #cashflow-print-area,
+  #cashflow-print-area * {
     visibility: visible;
   }
   #org-chart-print-area,
-  #costsheet-print-area {
+  #costsheet-print-area,
+  #cashflow-print-area {
     position: absolute;
     left: 0;
     top: 0;

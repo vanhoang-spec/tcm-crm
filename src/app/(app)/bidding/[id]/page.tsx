@@ -68,6 +68,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           approvedBy: true,
           rejectedBy: true,
           sections: { orderBy: { sort: "asc" }, include: { lines: { orderBy: { sort: "asc" } } } },
+          // FIN-B: revNo mới nhất để biết bản sống đã duyệt chưa + chống duyệt nhầm bản chưa xem.
+          revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } },
         },
       },
     },
@@ -235,7 +237,12 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
   // Badge "chờ duyệt" hiện cho mọi người (thông tin), nhưng NÚT duyệt/từ chối chỉ hiện với người có
   // quyền: server đã chặn bằng requirePermission, mà chặn kiểu đó là đá người dùng về Dashboard —
   // bấm một nút rồi văng ra không lời giải thích thì tệ hơn là không thấy nút.
-  const pendingApproval = !!sheet && !sheet.approvedById && !sheet.rejectedAt;
+  // FIN-B: "chờ duyệt" = bản SỐNG chưa được duyệt — gồm cả bảng chưa duyệt lần nào LẪN bảng đã
+  // duyệt nhưng vừa lưu phát sinh (approvedRevNo tụt lại sau revNo mới nhất). Duyệt lại là duyệt
+  // phần phát sinh, trần chi ở module ④ chỉ nhảy lúc đó.
+  const latestRevNo = sheet?.revisions[0]?.revNo ?? 0;
+  const approvedCurrent = !!sheet && sheet.approvedRevNo != null && sheet.approvedRevNo === latestRevNo;
+  const pendingApproval = !!sheet && latestRevNo > 0 && !sheet.rejectedAt && !approvedCurrent;
   const canApproveCostSheet = pendingApproval && (await hasPermission("bidding.costsheet.approve"));
   // Sửa bảng đòi CẢ quyền sửa LẪN quyền xem giá vốn: payload đã bị tước số CE khi thiếu view_cost,
   // cho lưu là ghi đè CE thành rỗng — mất số của Account mà không ai thấy.
@@ -243,14 +250,16 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
   const sheetCoTotal = sheet ? toNum(sheet.coTotal) : 0;
   const sheetCeTotal = sheet ? toNum(sheet.ceTotal) : 0;
   const sheetMarginPct = sheet ? computeMarginPct(sheetCeTotal, sheetCoTotal) : 0;
-  const sheetApprovalTone = !sheet ? "neutral" : sheet.rejectedAt ? "danger" : sheet.approvedById ? "success" : "warning";
+  const sheetApprovalTone = !sheet ? "neutral" : sheet.rejectedAt ? "danger" : approvedCurrent ? "success" : "warning";
   const sheetApprovalLabel = !sheet
     ? tCostsheet("noSheet")
     : sheet.rejectedAt
       ? tCostsheet("rejected")
-      : sheet.approvedById
-        ? tCostsheet("approved")
-        : tCostsheet("pendingApproval");
+      : approvedCurrent
+        ? tCostsheet("approvedRev", { rev: latestRevNo })
+        : sheet.approvedRevNo != null
+          ? tCostsheet("pendingReapproval", { approved: sheet.approvedRevNo, latest: latestRevNo })
+          : tCostsheet("pendingApproval");
   const lastRound = project.biddingRounds[project.biddingRounds.length - 1] ?? null;
 
   const orderData: OrderData[] = project.orders.map((o) => ({
@@ -396,7 +405,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
                 </Link>
               </>
             )}
-            {canApproveCostSheet && <span className="hidden sm:block"><ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} belowMinMargin={sheetMarginPct < minMargin} /></span>}
+            {canApproveCostSheet && <span className="hidden sm:block"><ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} latestRevNo={latestRevNo} belowMinMargin={sheetMarginPct < minMargin} /></span>}
           </div>
         </div>
         {sheet?.rejectedAt && (
@@ -430,7 +439,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           </div>
           {canApproveCostSheet && (
             <div className="col-span-2">
-              <ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} belowMinMargin={sheetMarginPct < minMargin} />
+              <ApproveCostSheetActions projectId={project.id} costSheetId={sheet!.id} latestRevNo={latestRevNo} belowMinMargin={sheetMarginPct < minMargin} />
             </div>
           )}
         </div>

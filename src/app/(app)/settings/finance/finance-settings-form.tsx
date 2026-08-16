@@ -7,17 +7,7 @@ import { saveFinanceSettings, type FinanceSettingsState } from "./actions";
 
 const input = "h-10 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
-export function FinanceSettingsForm({
-  maxCount,
-  maxAmount,
-  weeklyBuckets,
-  monthlyBuckets,
-}: {
-  maxCount: number;
-  maxAmount: number;
-  weeklyBuckets: number;
-  monthlyBuckets: number;
-}) {
+export function FinanceSettingsForm({ maxCount, maxAmount }: { maxCount: number; maxAmount: number }) {
   const [state, formAction, pending] = useActionState<FinanceSettingsState, FormData>(saveFinanceSettings, {});
   const t = useTranslations("settings.finance");
 
@@ -35,23 +25,6 @@ export function FinanceSettingsForm({
             <label className="mb-1 block text-xs font-medium text-foreground">{t("maxAmount")}</label>
             <p className="mb-1 text-xs text-muted-foreground">{t("maxAmountHint")}</p>
             <NumberField name="maxAmount" defaultValue={maxAmount} className={input} />
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-border pt-4">
-        <h2 className="text-sm font-semibold text-foreground">{t("cashflowTitle")}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">{t("cashflowDesc")}</p>
-        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground">{t("weeklyBuckets")}</label>
-            <p className="mb-1 text-xs text-muted-foreground">{t("weeklyBucketsHint")}</p>
-            <NumberField name="weeklyBuckets" defaultValue={weeklyBuckets} className={input} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-foreground">{t("monthlyBuckets")}</label>
-            <p className="mb-1 text-xs text-muted-foreground">{t("monthlyBucketsHint")}</p>
-            <NumberField name="monthlyBuckets" defaultValue={monthlyBuckets} className={input} />
           </div>
         </div>
       </div>

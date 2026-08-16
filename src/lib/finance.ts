@@ -28,7 +28,33 @@ export function financeLineKey(stableKey: string): string {
 }
 
 /**
+ * FIN-B — đồng bộ trần chi CHỈ KHI bản CO sống đã được duyệt.
+ *
+ * `syncFinanceCostLines` đọc từ dòng CO SỐNG, nên chỉ được phép chạy khi bản sống == bản đã duyệt
+ * (`approvedRevNo` == revNo mới nhất — mỗi lần lưu đều sinh revision nên hai điều này tương đương).
+ * Mọi đường sync NGOÀI approveCostSheet (nút Làm mới, vào Processing) phải đi qua hàm này — gọi
+ * thẳng syncFinanceCostLines là kéo số CHƯA DUYỆT vào trần chi, vô hiệu hoá cổng duyệt.
+ */
+export async function syncIfApproved(
+  projectId: string,
+): Promise<{ status: "SYNCED" | "PENDING_APPROVAL" | "NEVER_APPROVED" | "NO_SHEET" }> {
+  const sheet = await prisma.costSheet.findFirst({
+    where: { projectId, version: "CTRACT" },
+    orderBy: { createdAt: "desc" },
+    select: { approvedRevNo: true, revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } } },
+  });
+  if (!sheet) return { status: "NO_SHEET" };
+  if (sheet.approvedRevNo == null) return { status: "NEVER_APPROVED" };
+  const latest = sheet.revisions[0]?.revNo ?? 0;
+  if (sheet.approvedRevNo !== latest) return { status: "PENDING_APPROVAL" };
+  await syncFinanceCostLines(projectId);
+  return { status: "SYNCED" };
+}
+
+/**
  * Đồng bộ (Refresh) các dòng chi phí từ CostSheet CTRACT mới nhất xuống FinanceCostLine.
+ * ⚠ FIN-B: hàm này KHÔNG tự kiểm trạng thái duyệt — người gọi hợp lệ chỉ có approveCostSheet
+ * (vừa set con trỏ xong) và syncIfApproved (đã kiểm). Đừng gọi thẳng từ chỗ khác.
  * - Lấy CẢ dòng Chi hộ (section isProxy) nhưng gắn cờ `isProxy` để tách bạch: Chi hộ là tiền ứng
  *   giùm khách, có trần chi riêng theo dòng như mọi dòng khác nhưng KHÔNG thuộc giá vốn nên không
  *   được cộng vào trần cấp dự án (xem projectDisbursement) và không vào margin (bất biến #2).

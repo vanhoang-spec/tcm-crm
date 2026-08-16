@@ -7,13 +7,11 @@ import { requirePermission } from "@/lib/permissions";
 
 export default async function SettingsFinancePage() {
   await requirePermission("settings.finance.manage");
-  const [t, tIndex, maxCount, maxAmount, weeklyBuckets, monthlyBuckets] = await Promise.all([
+  const [t, tIndex, maxCount, maxAmount] = await Promise.all([
     getTranslations("settings.finance"),
     getTranslations("settings.index"),
     getNumberSetting("finance", "max_advance_count_per_staff", 3),
     getNumberSetting("finance", "max_outstanding_advance_amount_per_staff", 50_000_000),
-    getNumberSetting("finance", "cashflow_weekly_buckets", 4),
-    getNumberSetting("finance", "cashflow_monthly_buckets", 2),
   ]);
 
   return (
@@ -27,7 +25,7 @@ export default async function SettingsFinancePage() {
         <p className="mt-1 text-sm text-muted-foreground">{t("desc")}</p>
       </div>
 
-      <FinanceSettingsForm maxCount={maxCount} maxAmount={maxAmount} weeklyBuckets={weeklyBuckets} monthlyBuckets={monthlyBuckets} />
+      <FinanceSettingsForm maxCount={maxCount} maxAmount={maxAmount} />
     </div>
   );
 }

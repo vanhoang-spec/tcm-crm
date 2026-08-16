@@ -157,6 +157,13 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── 🛒 Thu mua (PO) ──
   { code: "purchasing.po.manage", module: "purchasing", labelVi: "Tạo / huỷ đơn đặt hàng NCC (PO)", labelEn: "Create / cancel purchase orders" },
   { code: "purchasing.po.receive", module: "purchasing", labelVi: "Xác nhận nhận hàng trên PO", labelEn: "Confirm goods received on POs" },
+  // PUR-1 (16/08/2026) — sub-module Thu mua: hồ sơ NCC theo nhóm + yêu cầu báo giá (RFQ).
+  { code: "purchasing.view", module: "purchasing", labelVi: "Mở sub-module Thu mua (RFQ, danh sách NCC)", labelEn: "Open Purchasing (RFQs, vendor list)" },
+  { code: "purchasing.rfq.manage", module: "purchasing", labelVi: "Tạo / gửi RFQ, nhập báo giá NCC, trình Account", labelEn: "Create / send RFQs, enter vendor quotes, submit to Account" },
+  // AI bóc file báo giá + so sánh tốn tiền theo LƯỢT — tách mã như clients.kb.generate / recruit.ai_parse.
+  // Kiểm bằng hasPermission BÊN TRONG action đã có requirePermission("purchasing.rfq.manage").
+  { code: "purchasing.rfq.ai", module: "purchasing", labelVi: "Dùng AI đọc file báo giá & so sánh NCC", labelEn: "Use AI to parse vendor quotes & compare" },
+  { code: "purchasing.vendor.manage", module: "purchasing", labelVi: "Sửa hồ sơ NCC, nhóm hàng, tài liệu HĐ/PO", labelEn: "Edit vendor profiles, groups, contract/PO documents" },
 
   // ── ④ Chi phí & Công nợ ──
   { code: "finance.view", module: "finance", labelVi: "Xem tài chính & công nợ", labelEn: "View finance & receivables", sensitive: true },

@@ -13,13 +13,14 @@ const TABS: { key: keyof Labels; seg: string }[] = [
 ];
 
 /** Thanh sub-module Finance — dàn ngang on-top (mirror workspace-nav). Cuộn ngang trên mobile. */
-export function FinanceNav({ labels }: { labels: Labels }) {
+export function FinanceNav({ labels, showCashflow }: { labels: Labels; showCashflow: boolean }) {
   const pathname = usePathname();
   const base = "/finance";
+  const tabs = showCashflow ? TABS : TABS.filter((t) => t.key !== "cashflow");
 
   return (
     <nav className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-2">
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const href = base + t.seg;
         const active = t.seg === "" ? pathname === base : pathname.startsWith(href);
         return (

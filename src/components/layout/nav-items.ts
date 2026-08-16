@@ -18,6 +18,8 @@ import {
   FileCheck,
   Receipt,
   Megaphone,
+  HandCoins,
+  ShoppingCart,
 } from "lucide-react";
 
 export type NavItem = {
@@ -49,7 +51,12 @@ export const NAV_ITEMS: NavItem[] = [
   { module: "③", labelKey: "projects", href: "/projects", icon: Briefcase, status: "active", permission: "projects.view" },
   { module: "✦", labelKey: "creative", href: "/creative", icon: Palette, status: "active", permission: "creative.view" },
   { module: "⑧", labelKey: "inventory", href: "/inventory", icon: Warehouse, status: "active", permission: "inventory.view" },
+  // Thu mua (PUR-1) — RFQ + hồ sơ NCC. Đặt ngay dưới Kho: hàng mua về đi vào kho / ra hiện trường.
+  { module: null, labelKey: "purchasing", href: "/purchasing", icon: ShoppingCart, status: "active", permission: "purchasing.view" },
   { module: "④", labelKey: "finance", href: "/finance", icon: Wallet, status: "active", permission: "finance.view" },
+  // Tạm ứng của tôi — trang CÁ NHÂN, mở theo finance.advance.request (20 nhóm) chứ không phải
+  // finance.view (5 vai): ai chạy hiện trường cũng phải đề nghị được tạm ứng và thấy hạn mức mình.
+  { module: null, labelKey: "advances", href: "/advances", icon: HandCoins, status: "active", permission: "finance.advance.request" },
   { module: null, labelKey: "mkt", href: "/mkt", icon: Megaphone, status: "active", permission: "mkt.view" },
   { module: "⑤", labelKey: "staff", href: "/staff", icon: UsersRound, status: "active", permission: "staff.view" },
   { module: "⑥", labelKey: "kpi", href: "/kpi", icon: Award, status: "active", permission: "kpi.view" },

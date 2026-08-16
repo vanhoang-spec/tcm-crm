@@ -185,6 +185,10 @@ model Staff {
   costSheetRevisions          CostSheetRevision[]       @relation("CostSheetRevisionCreatedBy")
   costSheetsSentToLiquidation CostSheet[]               @relation("CostSheetSentToLiquidationBy")
   guestInvitesCreated         GuestInvite[]             @relation("GuestInviteCreatedBy")
+  vendorDocumentsUploaded     VendorDocument[]          @relation("VendorDocumentUploadedBy")
+  rfqsCreated                 Rfq[]                     @relation("RfqCreatedBy")
+  rfqsSubmitted               Rfq[]                     @relation("RfqSubmittedBy")
+  rfqsConfirmed               Rfq[]                     @relation("RfqConfirmedBy")
   creativeTasksAssigned       CreativeTask[]            @relation("CreativeTaskAssignee")
   creativeTasksCd             CreativeTask[]            @relation("CreativeTaskAssignedBy")
   creativeTasksReviewed       CreativeTask[]            @relation("CreativeTaskReviewedBy")
@@ -543,24 +547,247 @@ model ClientTransfer {
 /// Nhà cung cấp — master dùng chung; cost_line trỏ vào để truy nguồn giá mua.
 model Vendor {
   id        String   @id @default(cuid())
+  /// PUR-2: chuẩn 3 ký tự A-Z0-9 (như Client.code) — mã cũ dài hơn vẫn giữ được, ĐỔI thì phải theo chuẩn.
+  /// KHÔNG vào mã sinh nào (PO/RFQ đều theo mã dự án) nên đổi mã không hỏng dữ liệu.
   code      String   @unique
+  /// Tên GIAO DỊCH / hiển thị ngắn ("Sông Lam"). Tên pháp nhân đầy đủ ở legalName (khuôn Client.legalNameVi).
   name      String
-  category  String // PCC | PRO | OPE | OTHER
+  legalName String?
+  category  String // PCC | PRO | OPE | OTHER — PHÒNG phụ trách (không phải nhóm hàng; nhóm hàng xem VendorGroup)
+  /// Người liên hệ CHÍNH — 3 cột cũ, nay ĐỒNG BỘ từ VendorContact.isPrimary để chỗ đọc cũ không đổi.
+  /// Nguồn sự thật của người liên hệ (1..N) là bảng vendor_contact.
   contact   String?
   phone     String?
   email     String?
   taxCode   String?
+  /// PUR-1 — hồ sơ NCC "đủ thông tin căn bản": địa chỉ, tài khoản ngân hàng (phiếu chi NCC cần),
+  /// điều khoản thanh toán thường áp (vd "cọc 50%, còn lại sau khi xuất HĐ"), ghi chú.
+  address           String?
+  bankName          String?
+  bankAccountNo     String?
+  bankAccountHolder String?
+  paymentTermsNote  String?
+  note              String?
+  /// PUR-2 — giá trị các TRƯỜNG TUỲ CHỈNH admin định nghĩa ở /settings/vendor-fields (VendorFieldDef):
+  /// JSON object { <fieldKey>: value }. Trường bị tắt vẫn giữ giá trị, chỉ không hiện trên form.
+  customJson        String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  contacts         VendorContact[]
   costLines        CostLine[]
   financeCostLines FinanceCostLine[]
   advancesReceived Advance[]         @relation("AdvanceRecipientVendor")
   vendorPayments   VendorPayment[]
   purchaseOrders   PurchaseOrder[]
+  groups           VendorGroup[]
+  documents        VendorDocument[]
+  rfqVendors       RfqVendor[]
 
   @@map("vendor")
+}
+
+/// PUR-2 — NGƯỜI LIÊN HỆ của NCC (1..N; yêu cầu chủ dự án 16/08/2026: "cho phép thêm người liên hệ
+/// thứ 2 hoặc thứ 3"). isPrimary = người chính — đồng bộ ngược vào Vendor.contact/phone/email.
+model VendorContact {
+  id        String   @id @default(cuid())
+  vendorId  String
+  name      String
+  title     String? // chức danh / vai trò: kế toán, kinh doanh, kỹ thuật…
+  phone     String?
+  email     String?
+  isPrimary Boolean  @default(false)
+  sort      Int      @default(0)
+  note      String?
+  createdAt DateTime @default(now())
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@map("vendor_contact")
+}
+
+/// PUR-2 — TRƯỜNG TUỲ CHỈNH của hồ sơ NCC, admin định nghĩa ở /settings/vendor-fields. Giá trị lưu ở
+/// Vendor.customJson theo `key`. `key` sinh từ nhãn lúc tạo và KHÔNG đổi (là khoá JSON của mọi NCC).
+/// Không xoá — chỉ tắt isActive (giá trị đã nhập vẫn còn, mirror Vendor/ClientGroup).
+model VendorFieldDef {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  labelVi   String
+  labelEn   String?
+  /// TEXT | NUMBER | DATE | SELECT | BOOL | TEXTAREA
+  type      String   @default("TEXT")
+  /// JSON string[] cho SELECT.
+  optionsJson String?
+  hint      String?
+  required  Boolean  @default(false)
+  sort      Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vendor_field_def")
+}
+
+/// PUR-1 — NCC thuộc NHÓM HÀNG nào (mã nhóm = mã MẪU FORM RFQ trong lib/rfq-templates.ts; danh
+/// mục ở CODE vì mỗi nhóm ứng với một form có thật). Một NCC nhiều nhóm (Sông Lam vừa thiết bị
+/// sự kiện vừa POSM cho thuê) — bảng nối thay vì CSV để lọc được bằng SQL.
+model VendorGroup {
+  id        String @id @default(cuid())
+  vendorId  String
+  groupCode String
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, groupCode])
+  @@index([groupCode])
+  @@map("vendor_group")
+}
+
+/// PUR-1 — kho tài liệu theo NCC: báo giá đã nhận, PO/order đã chốt, HỢP ĐỒNG đã ký — PUR lưu để
+/// tracking và tham chiếu giá về sau (quyết định chủ dự án 15/08/2026). File ở storage/rfq-uploads,
+/// đường đọc duy nhất /api/vendor-doc/[id] KIỂM belongs-to (mirror /api/project-file/[id]).
+model VendorDocument {
+  id           String    @id @default(cuid())
+  vendorId     String
+  projectId    String?
+  /// QUOTE | PO | CONTRACT | OTHER
+  kind         String    @default("OTHER")
+  title        String
+  fileKey      String
+  mime         String
+  size         Int       @default(0)
+  amount       BigInt?
+  signedAt     DateTime?
+  note         String?
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+
+  vendor     Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy Staff?   @relation("VendorDocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([vendorId])
+  @@index([projectId])
+  @@map("vendor_document")
+}
+
+/// PUR-1 — YÊU CẦU BÁO GIÁ (RFQ) gửi N nhà cung cấp cho một nhóm dòng CO cùng loại hàng.
+/// Vòng đời: DRAFT → SENT (đã phát link/gửi mẫu) → COMPARING (đã có báo giá, đang so) → SUBMITTED
+/// (PUR trình Account) → CONFIRMED (Account chốt, đã ghi vào CO) | CANCELED.
+model Rfq {
+  id               String    @id @default(cuid())
+  code             String    @unique // {project.code}-RFQ{n}
+  projectId        String
+  departmentTaskId String? // việc PCC gốc (Order từ Account) — nối để board biết việc đã có RFQ
+  /// Mã mẫu form = mã nhóm hàng (lib/rfq-templates.ts): EVENT_EQUIPMENT | AV_LED | POSM_RENTAL |
+  /// PRODUCTION_PRINT | OUTSOURCED_STAFF | SPECIAL_STRUCTURE.
+  groupCode        String
+  title            String
+  note             String?
+  deadline         DateTime? // hạn NCC gửi báo giá — UTC-midnight
+  status           String    @default("DRAFT")
+  createdById      String?
+  /// PUR-1b — bản nháp so sánh do AI sinh (JSON, đã qua Zod) và lựa chọn CUỐI của PUR (từng dòng →
+  /// rfqVendorId + lý do). finalJson là thứ Account đọc để chốt.
+  aiJson           String?
+  finalJson        String?
+  submittedAt      DateTime?
+  submittedById    String?
+  confirmedAt      DateTime?
+  confirmedById    String?
+  /// revNo của bản CO sinh ra khi Account "chốt & đưa vào CO" (đi qua saveCostSheet).
+  appliedRevNo     Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  departmentTask DepartmentTask? @relation(fields: [departmentTaskId], references: [id], onDelete: SetNull)
+  createdBy      Staff?          @relation("RfqCreatedBy", fields: [createdById], references: [id])
+  submittedBy    Staff?          @relation("RfqSubmittedBy", fields: [submittedById], references: [id])
+  confirmedBy    Staff?          @relation("RfqConfirmedBy", fields: [confirmedById], references: [id])
+  lines          RfqLine[]
+  vendors        RfqVendor[]
+
+  @@index([projectId])
+  @@index([status])
+  @@map("rfq")
+}
+
+/// Dòng RFQ = MỘT dòng CO cần báo giá. ⚠ Neo bằng `costLineStableKey`, KHÔNG FK CostLine.id: dòng
+/// CO bị tạo lại mỗi lần lưu bảng, chỉ stableKey mới bền (tiền lệ FinanceCostLine.lineKey). Các
+/// trường còn lại là ẢNH CHỤP lúc tạo RFQ để NCC nhìn thấy đúng thứ được hỏi kể cả khi CO đổi.
+model RfqLine {
+  id                String   @id @default(cuid())
+  rfqId             String
+  costLineStableKey String
+  itemName          String
+  specs             String?
+  unit              String?
+  quantity          Float    @default(1)
+  /// Đơn giá CO TRƯỚC THUẾ lúc tạo — tham chiếu để so (PUR có view_paycap nên được thấy).
+  refUnitPrice      BigInt?
+  sort              Int      @default(0)
+
+  rfq        Rfq            @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  quoteLines RfqQuoteLine[]
+
+  @@index([rfqId])
+  @@map("rfq_line")
+}
+
+/// Một NCC được mời trên một RFQ. Token cổng NCC lưu HASH (sha256) như GuestInvite — token thô chỉ
+/// hiện một lần cho PUR copy. INVITED → SUBMITTED (đã có báo giá) | DECLINED (NCC từ chối).
+/// submittedVia: PORTAL (NCC tự điền qua link) | MANUAL (PUR nhập hộ) | FILE (PUR upload file, AI bóc).
+model RfqVendor {
+  id             String    @id @default(cuid())
+  rfqId          String
+  vendorId       String
+  tokenHash      String?   @unique
+  tokenExpiresAt DateTime?
+  revokedAt      DateTime?
+  status         String    @default("INVITED")
+  submittedAt    DateTime?
+  submittedVia   String?
+  /// File NCC gửi (nếu có) — storage/rfq-uploads, đọc qua /api/rfq-file/[id] kiểm belongs-to.
+  fileKey        String?
+  fileName       String?
+  /// Điều khoản chung theo mẫu (JSON theo `terms` của template): thanh toán, VAT, giao hàng…
+  termsJson      String?
+  note           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  rfq        Rfq            @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendor     Vendor         @relation(fields: [vendorId], references: [id])
+  quoteLines RfqQuoteLine[]
+
+  @@unique([rfqId, vendorId])
+  @@index([vendorId])
+  @@map("rfq_vendor")
+}
+
+/// Báo giá của MỘT NCC cho MỘT dòng RFQ. `amount` server tính lại bằng computeQuoteLineAmount
+/// (không tin client) — quantity × Π(hệ số theo mẫu trong extraJson) × unitPrice.
+model RfqQuoteLine {
+  id          String  @id @default(cuid())
+  rfqVendorId String
+  rfqLineId   String
+  unitPrice   BigInt  @default(0)
+  /// NCC báo SL khác SL hỏi (vd chỉ có 20 cái thay vì 30) — null = đúng SL hỏi.
+  quantity    Float?
+  amount      BigInt  @default(0)
+  /// Cột mở rộng theo mẫu (shows/days/headcount/…) — JSON object key→value.
+  extraJson   String?
+  note        String?
+
+  rfqVendor RfqVendor @relation(fields: [rfqVendorId], references: [id], onDelete: Cascade)
+  rfqLine   RfqLine   @relation(fields: [rfqLineId], references: [id], onDelete: Cascade)
+
+  @@unique([rfqVendorId, rfqLineId])
+  @@index([rfqLineId])
+  @@map("rfq_quote_line")
 }
 
 /// Tham số hệ thống theo module/scope — vd min_margin_pct, auto_approve_threshold.
@@ -707,6 +934,8 @@ model Project {
   timelineItems         TimelineItem[]
   staffing              ProjectStaffing[]
   guestInvites          GuestInvite[]
+  vendorDocuments       VendorDocument[]
+  rfqs                  Rfq[]
   creativeTasks         CreativeTask[]
   departmentTasks       DepartmentTask[]
   financeCostLines      FinanceCostLine[]
@@ -1043,6 +1272,10 @@ model CostSheet {
   marginOverrideNote          String?
   approvedById                String?
   approvedAt                  DateTime?
+  /// FIN-B — revNo của bản ĐÃ DUYỆT gần nhất (con trỏ theo revNo, khuôn FinanceCostLine.sourceRevNo).
+  /// Trần chi (payCap ở module ④) CHỈ đồng bộ khi duyệt; null = chưa duyệt lần nào → dự án chưa có
+  /// trần chi, chưa tạm ứng/thanh toán được. Duyệt phát sinh = duyệt bản mới → con trỏ nhảy theo.
+  approvedRevNo               Int?
   rejectedById                String?
   rejectedNote                String?
   rejectedAt                  DateTime?
@@ -1582,6 +1815,7 @@ model DepartmentTask {
   assignedBy Staff?            @relation("DepartmentTaskAssignedBy", fields: [assignedById], references: [id])
   reviewedBy Staff?            @relation("DepartmentTaskReviewedBy", fields: [reviewedById], references: [id])
   orderedBy  Staff?            @relation("DepartmentTaskOrderedBy", fields: [orderedById], references: [id])
+  rfqs       Rfq[]
 
   @@unique([orderId, sourceKey]) // backstop DB cho spawn idempotent — 2 dispatch song song không tạo task trùng (NULL không đụng nhau trong SQLite)
   @@index([projectId, department, status])

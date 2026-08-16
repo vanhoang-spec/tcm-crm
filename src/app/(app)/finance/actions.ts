@@ -5,7 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
-import { syncFinanceCostLines, lineDisbursement, projectDisbursement, getStaffAdvanceQuota } from "@/lib/finance";
+import { syncIfApproved, lineDisbursement, projectDisbursement, getStaffAdvanceQuota } from "@/lib/finance";
 import { arDefaultDueDate } from "@/lib/ar";
 import { clientBillableTotal } from "@/lib/bidding";
 import { toNum } from "@/lib/utils";
@@ -64,8 +64,10 @@ async function notifyFinanceDept(type: string, title: string, body: string | nul
 
 export async function refreshFinanceCostLines(projectId: string) {
   await requirePermission("finance.costlines.refresh");
-  await syncFinanceCostLines(projectId);
-  await audit("finance_cost_line", projectId, "REFRESH", {});
+  // FIN-B: "Làm mới" chỉ chữa được sync trượt của bản ĐÃ DUYỆT — bản mới chưa duyệt thì không kéo
+  // vào trần chi (kéo vào là nút này thành cửa sau vô hiệu hoá cổng duyệt).
+  const { status } = await syncIfApproved(projectId);
+  await audit("finance_cost_line", projectId, "REFRESH", { status });
   revalidatePath("/finance");
 }
 
@@ -409,7 +411,10 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
         // Cùng công thức với projectDisbursement: loại phiếu huỷ, và loại khoản chi gắn dòng Chi hộ
         // (capBase đã bỏ dòng Chi hộ thì tử số cũng phải bỏ — bất biến #2).
         const [capAgg, advAgg, payAgg] = await Promise.all([
-          tx.financeCostLine.aggregate({ where: { projectId, isStale: false, isProxy: false }, _sum: { netAmount: true } }),
+          // payCap chứ KHÔNG phải netAmount — đồng bộ với projectDisbursement (CE-1). Trước đây chỗ
+          // này sót lại netAmount: pre-check ngoài tính theo payCap, check quyết định trong này lại
+          // theo netAmount (luôn ≤ payCap) ⇒ phiếu hợp lệ trên dự án có dòng VAT chọn % bị chặn oan.
+          tx.financeCostLine.aggregate({ where: { projectId, isStale: false, isProxy: false }, _sum: { payCap: true } }),
           tx.advance.aggregate({
             where: { projectId, status: { not: "CANCELED" }, financeCostLine: { isProxy: false } },
             _sum: { amount: true },
@@ -420,7 +425,7 @@ export async function createVendorPayment(_prev: FinanceFormStateWithValues, for
           }),
         ]);
         const remaining =
-          Number(capAgg._sum.netAmount ?? 0) - Number(advAgg._sum.amount ?? 0) - Number(payAgg._sum.amount ?? 0);
+          Number(capAgg._sum.payCap ?? 0) - Number(advAgg._sum.amount ?? 0) - Number(payAgg._sum.amount ?? 0);
         if (Number(amount) > remaining && !overCapNote) throw new Error("EXCEED_PROJECT");
         const created = await tx.vendorPayment.create({
           data: {

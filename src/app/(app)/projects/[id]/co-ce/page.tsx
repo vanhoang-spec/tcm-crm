@@ -207,7 +207,10 @@ export default async function ProjectCoCePage({
 
   const hasAcceptanceRev = (sheet?.revisions ?? []).some((r) => r.kind === "ACCEPTANCE");
   const goNogoBlocked = project.goNogoStatus === "PENDING";
-  const pendingApproval = !!sheet && !sheet.approvedById && !sheet.rejectedAt;
+  // FIN-B: chờ duyệt = bản SỐNG chưa duyệt (chưa lần nào HOẶC vừa lưu phát sinh sau lần duyệt cuối).
+  const latestRevNo = (sheet?.revisions ?? []).reduce((mx, r) => Math.max(mx, r.revNo), 0);
+  const pendingApproval =
+    !!sheet && latestRevNo > 0 && !sheet.rejectedAt && (sheet.approvedRevNo == null || sheet.approvedRevNo < latestRevNo);
   const sentRev = sheet?.sentToLiquidationRevision ?? null;
 
   return (
@@ -269,7 +272,7 @@ export default async function ProjectCoCePage({
           <section className="rounded-xl border border-border bg-surface p-5">
             {pendingApproval && (
               <div className="mb-3">
-                <ApproveCostSheetActions projectId={id} costSheetId={sheet.id} />
+                <ApproveCostSheetActions projectId={id} costSheetId={sheet.id} latestRevNo={latestRevNo} />
               </div>
             )}
             {goNogoBlocked ? (

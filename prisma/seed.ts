@@ -551,6 +551,55 @@ async function main() {
     await prisma.vendor.upsert({ where: { code: v.code }, update: {}, create: v });
   }
 
+  // ── PUR-1 (16/08/2026) — NCC THẬT rút từ 2 bảng tổng hợp báo giá PUR đang dùng (FE Sport Day
+  // 2026 + KUN 2025/2026), gán sẵn NHÓM HÀNG = mã mẫu form RFQ (lib/rfq-templates.ts). Chỉ tên +
+  // nhóm; liên hệ/MST/tài khoản PUR bổ sung sau ở /purchasing/vendors. One-shot có marker; chỉ tạo
+  // khi CHƯA có NCC trùng tên (không đè NCC admin đã sửa tay). Chạy lại là no-op.
+  const PUR_VENDORS_KEY = "20260816_pur_vendors";
+  const purVendorsMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: PUR_VENDORS_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!purVendorsMarker) {
+    // PUR-2: mã NCC đúng 3 ký tự (khuôn Client.code). Chỉ tạo khi chưa trùng tên/mã.
+    const rows: { code: string; name: string; groups: string[] }[] = [
+      { code: "SLM", name: "Sông Lam", groups: ["EVENT_EQUIPMENT", "POSM_RENTAL"] },
+      { code: "FSS", name: "FS Sound Light Co., Ltd", groups: ["AV_LED"] },
+      { code: "TDA", name: "Thể Thao Đông Á", groups: ["PRODUCTION_PRINT"] },
+      { code: "TTH", name: "Tất Thành", groups: ["AV_LED", "POSM_RENTAL"] },
+      { code: "PLM", name: "Phương Lam", groups: ["POSM_RENTAL"] },
+      { code: "NPH", name: "Như Phương", groups: ["PRODUCTION_PRINT"] },
+      { code: "VPR", name: "Vietpro", groups: ["POSM_RENTAL"] },
+      { code: "DHG", name: "Đại Hưng", groups: ["PRODUCTION_PRINT"] },
+      { code: "MHG", name: "Minh Hoàng", groups: ["PRODUCTION_PRINT"] },
+      { code: "SGC", name: "SGC", groups: ["AV_LED"] },
+      { code: "NTD", name: "Nam Thái Dương", groups: ["EVENT_EQUIPMENT"] },
+      { code: "TSK", name: "Công Ty TNHH TM DV Thiện Sự Kiện", groups: ["EVENT_EQUIPMENT", "AV_LED"] },
+      { code: "AVU", name: "Anh Vũ", groups: ["AV_LED"] },
+      { code: "TNG", name: "Trường Nguyên", groups: ["AV_LED"] },
+      { code: "VAR", name: "Vietart", groups: ["AV_LED"] },
+      { code: "HAD", name: "Cty TNHH DV Bảo vệ Chuyên nghiệp Hoàng Anh Đạt", groups: ["OUTSOURCED_STAFF"] },
+      { code: "BMB", name: "Bảo vệ Miền Bắc", groups: ["OUTSOURCED_STAFF"] },
+    ];
+    let created = 0;
+    for (const r of rows) {
+      const exists = await prisma.vendor.findFirst({ where: { OR: [{ code: r.code }, { name: r.name }] }, select: { id: true } });
+      const vendorId =
+        exists?.id ?? (await prisma.vendor.create({ data: { code: r.code, name: r.name, category: "PCC" }, select: { id: true } })).id;
+      if (!exists) created++;
+      for (const g of r.groups) {
+        await prisma.vendorGroup.upsert({
+          where: { vendorId_groupCode: { vendorId, groupCode: g } },
+          update: {},
+          create: { vendorId, groupCode: g },
+        });
+      }
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: PUR_VENDORS_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ created, listed: rows.length }) },
+    });
+    console.log(`[seed] PUR-1: ${created} NCC mới từ bảng tổng hợp báo giá (marker ${PUR_VENDORS_KEY})`);
+  }
+
   // ── CO/CE template mẫu — section-based, mỗi Nhóm dự án 1 mẫu chuẩn, có hạng mục Chi hộ ──
   async function seedCostsheetTemplate(
     name: string,
@@ -1708,6 +1757,40 @@ async function main() {
     console.log(`[seed] 3 team nhỏ Creative đã dựng (marker ${SQUADS_KEY})`);
   }
 
+  // ── FIN-B (15/08/2026) — baseline duyệt CO: trần chi nay đi theo bản ĐÃ DUYỆT (approvedRevNo).
+  // Bảng đang chạy (dự án đã có dòng trần chi ở module ④) coi bản MỚI NHẤT hiện tại là bản đã
+  // duyệt — BGĐ đã ngầm chấp nhận trần đang vận hành; không có bước này thì ngày deploy mọi dự án
+  // MẤT trần chi cho tới khi BGĐ duyệt lại từng bảng. CỐ Ý không đặt approvedById/approvedAt:
+  // ghi tên một người vào lần duyệt không tồn tại là bịa lịch sử (bài học offboard A2, mục 10.18).
+  // Bảng CHƯA có dòng trần chi giữ nguyên null → cổng duyệt gác từ đầu, đúng thiết kế.
+  const FINB_KEY = "20260815_fin_b_baseline";
+  const finbMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: FINB_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!finbMarker) {
+    const ctractSheets = await prisma.costSheet.findMany({
+      where: { version: "CTRACT", approvedRevNo: null },
+      select: {
+        id: true,
+        projectId: true,
+        revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } },
+      },
+    });
+    let baselined = 0;
+    for (const s of ctractSheets) {
+      const latest = s.revisions[0]?.revNo;
+      if (latest == null) continue;
+      const lineCount = await prisma.financeCostLine.count({ where: { projectId: s.projectId } });
+      if (lineCount === 0) continue; // chưa từng có trần chi → để cổng duyệt gác
+      await prisma.costSheet.update({ where: { id: s.id }, data: { approvedRevNo: latest } });
+      baselined++;
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: FINB_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ baselined }) },
+    });
+    console.log(`[seed] FIN-B baseline: ${baselined} bảng CO coi bản mới nhất là đã duyệt (marker ${FINB_KEY})`);
+  }
+
   const kbCategories = await seedOptionSet("kb_category", "Danh mục cơ sở tri thức", [
     { code: "GENERAL", labelVi: "Chung", labelEn: "General" },
     { code: "CREDENTIALS", labelVi: "Năng lực (Credentials)", labelEn: "Credentials" },
@@ -2145,9 +2228,25 @@ async function main() {
     "recruit.decide": ["HR_MANAGER", "BOARD_OF_MANAGEMENT"],
   };
 
+  /**
+   * PUR-1 (16/08/2026) — 4 mã sub-module Thu mua. Cùng khuôn RECRUIT_POLICY: MỘT nguồn sự thật nuôi
+   * cả `isRestricted` + `purCodesFor` (DB dựng-từ-đầu) + backfill `20260816_pur_*` (DB đang chạy).
+   * - `purchasing.view` mở cho cả ACCOUNT (Account xem RFQ để cùng chốt với PUR) + kế toán/CFO/BGĐ.
+   * - Ba mã còn lại chỉ PUR + BGĐ. AI tách riêng vì tính tiền theo lượt.
+   * ⚠ Lọc theo MÃ ROLE, không theo nhóm — bài học SECURITY_GUARD-trong-nhóm-WAREHOUSE (10.15).
+   */
+  const PUR_ROLES = ["PURCHASING_MANAGER", "PURCHASING_STAFF", "BOARD_OF_MANAGEMENT"];
+  const PUR_POLICY: Record<string, string[]> = {
+    "purchasing.view": [...PUR_ROLES, "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER", "ACCOUNT_STAFF", "CFO", "ACCOUNTANT_STAFF"],
+    "purchasing.rfq.manage": PUR_ROLES,
+    "purchasing.rfq.ai": PUR_ROLES,
+    "purchasing.vendor.manage": PUR_ROLES,
+  };
+
   const isRestricted = (code: string) =>
     code in MONEY_POLICY || // chính sách quyền chạm tiền — xem MONEY_POLICY ngay trên
     code in RECRUIT_POLICY || // hồ sơ ứng viên = dữ liệu cá nhân người ngoài — xem RECRUIT_POLICY
+    code in PUR_POLICY || // sub-module Thu mua — xem PUR_POLICY
     code.startsWith("kpi.") || // (1)
     code.startsWith("settings.") || // (1)
     code.startsWith("payroll.") || // module chưa làm — chưa ai có
@@ -2342,6 +2441,12 @@ async function main() {
       .filter(([, allowed]) => allowed.includes(roleCode))
       .map(([code]) => code);
 
+  /** Mã Thu mua (PUR-1) mà role này được giữ theo PUR_POLICY. */
+  const purCodesFor = (roleCode: string) =>
+    Object.entries(PUR_POLICY)
+      .filter(([, allowed]) => allowed.includes(roleCode))
+      .map(([code]) => code);
+
   const grantCodesFor = (r: (typeof roleSeeds)[number]) =>
     EXPLICIT_GRANTS[r.code]
       ? new Set(EXPLICIT_GRANTS[r.code])
@@ -2352,6 +2457,7 @@ async function main() {
           ...moneyCodesFor(r.code),
           ...adminCodesFor(r.code),
           ...recruitCodesFor(r.code),
+          ...purCodesFor(r.code),
         ]);
 
   for (const r of roleSeeds) {
@@ -2617,6 +2723,19 @@ async function main() {
       key: "20260806_recruit_decide",
       codes: ["recruit.jd.manage", "recruit.decide"],
       roleFilter: (r) => r.code === "HR_MANAGER" || r.groupCode === "BOD",
+    },
+
+    // 16/08/2026 THU MUA (PUR-1) — 4 mã mới, dịch từ PUR_POLICY sang đường backfill (DB đang chạy).
+    // Sửa PUR_POLICY thì sửa cả đây cho khớp. Lọc theo MÃ ROLE.
+    {
+      key: "20260816_pur_view",
+      codes: ["purchasing.view"],
+      roleFilter: (r) => PUR_POLICY["purchasing.view"].includes(r.code),
+    },
+    {
+      key: "20260816_pur_manage",
+      codes: ["purchasing.rfq.manage", "purchasing.rfq.ai", "purchasing.vendor.manage"],
+      roleFilter: (r) => PUR_ROLES.includes(r.code),
     },
   ];
   for (const bf of backfills) {

@@ -46,6 +46,8 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
   let lineData: LineData[] = [];
   let lastRevNo = 0;
   let currentRevNo = 0;
+  let approvedRevNo: number | null = null;
+  let hasSheet = false;
   if (projectId) {
     const [lines, vendors, staff, currentRev] = await Promise.all([
       prisma.financeCostLine.findMany({
@@ -62,18 +64,21 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
       }),
       prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
       prisma.staff.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
-      // revNo HIỆN TẠI của CO/CE — để so với sourceRevNo và cảnh báo khi dữ liệu đã cũ.
-      prisma.costSheetRevision.findFirst({
-        where: { costSheet: { projectId, version: "CTRACT" } },
-        orderBy: { revNo: "desc" },
-        select: { revNo: true },
+      // FIN-B: revNo mới nhất + revNo ĐÃ DUYỆT — trần chi đi theo bản duyệt, banner phải nói rõ
+      // bản sống đã vượt bản duyệt bao xa (chờ duyệt) hay sync của bản duyệt bị trượt (bấm Làm mới).
+      prisma.costSheet.findFirst({
+        where: { projectId, version: "CTRACT" },
+        orderBy: { createdAt: "desc" },
+        select: { approvedRevNo: true, revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } } },
       }),
     ]);
     // MIN chứ không phải MAX: đồng bộ KHÔNG nằm trong transaction, hỏng giữa chừng thì một phần
     // dòng mang revNo mới còn phần kia giữ trần cũ. Lấy MAX sẽ bằng revNo hiện tại và làm TẮT băng
     // cảnh báo bên dưới — đúng lúc cần bật nhất. Lấy MIN: chỉ cần một dòng còn cũ là còn cảnh báo.
     lastRevNo = lines.length > 0 ? lines.reduce((mn, l) => Math.min(mn, l.sourceRevNo), Infinity) : 0;
-    currentRevNo = currentRev?.revNo ?? 0;
+    currentRevNo = currentRev?.revisions[0]?.revNo ?? 0;
+    approvedRevNo = currentRev?.approvedRevNo ?? null;
+    hasSheet = !!currentRev;
     const vendorOpts = vendors.map((v) => ({ id: v.id, label: v.name }));
     const staffOpts = staff.map((s) => ({ id: s.id, label: s.fullName }));
     lineData = lines.map((l) => {
@@ -160,14 +165,20 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
         <div className="rounded-xl border border-dashed border-border-strong p-6 text-center text-sm text-muted-foreground">{t("noProject")}</div>
       ) : lineData.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border-strong p-6 text-center">
-          <p className="text-sm text-muted-foreground">{t("noSheet")}</p>
-          <div className="mt-3">
-            <form action={refreshFinanceCostLines.bind(null, projectId)}>
-              <button type="submit" className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium hover:bg-surface-2">
-                <RefreshCw className="h-3.5 w-3.5" /> {t("refresh")}
-              </button>
-            </form>
-          </div>
+          {/* FIN-B: có bảng CO nhưng CHƯA DUYỆT → nói thẳng lý do chưa có trần chi; nút Làm mới
+              giấu đi vì syncIfApproved sẽ từ chối — bấm mà không có gì xảy ra là nút nói dối. */}
+          <p className="text-sm text-muted-foreground">
+            {hasSheet && approvedRevNo == null ? t("notApprovedYet") : t("noSheet")}
+          </p>
+          {!(hasSheet && approvedRevNo == null) && (
+            <div className="mt-3">
+              <form action={refreshFinanceCostLines.bind(null, projectId)}>
+                <button type="submit" className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium hover:bg-surface-2">
+                  <RefreshCw className="h-3.5 w-3.5" /> {t("refresh")}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       ) : (
         <section className="rounded-xl border border-border bg-surface p-4">
@@ -183,12 +194,18 @@ export default async function FinanceAdvancesPage({ searchParams }: { searchPara
               </div>
             );
           })()}
-          {/* Dữ liệu đã cũ: CO/CE đã sang revision mới hơn lần đồng bộ gần nhất. Nay CO/CE tự đồng bộ
-              khi lưu, nên banner này chỉ xuất hiện khi lần sync đó thất bại — vẫn phải có, vì số
-              tiền cũ nghĩa là TRẦN CHI sai: CO/CE giảm thì cho chi vượt, tăng thì chặn nhầm. */}
-          {currentRevNo > lastRevNo && lineData.length > 0 && (
+          {/* FIN-B — hai banner với hai hệ quy chiếu KHÁC NHAU, đừng gộp:
+              (a) bản sống vượt bản DUYỆT → trần đứng yên là ĐÚNG, chờ BGĐ/CFO duyệt (thông tin);
+              (b) sync của bản duyệt bị trượt (sourceRevNo < approvedRevNo) → trần đang SAI,
+                  bấm Làm mới để chữa (cảnh báo đỏ — CO giảm thì cho chi vượt, tăng thì chặn nhầm). */}
+          {approvedRevNo != null && currentRevNo > approvedRevNo && (
+            <div className="mb-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+              {t("pendingApprovalInfo", { approved: approvedRevNo, latest: currentRevNo })}
+            </div>
+          )}
+          {approvedRevNo != null && lineData.length > 0 && lastRevNo < approvedRevNo && (
             <div className="mb-3 rounded-lg border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger">
-              {t("outdatedWarning", { synced: lastRevNo, current: currentRevNo })}
+              {t("outdatedWarning", { synced: lastRevNo, current: approvedRevNo })}
             </div>
           )}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

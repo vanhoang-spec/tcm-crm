@@ -259,7 +259,18 @@ function ReverseDisbursedForm({ advanceId, t }: { advanceId: string; t: (k: stri
   );
 }
 
-function NewAdvanceForm({ line, t }: { line: LineData; t: (k: string, v?: Record<string, string | number>) => string }) {
+/**
+ * Form đề nghị tạm ứng cho MỘT dòng chi phí. Export để trang "Tạm ứng của tôi" (/advances) dùng
+ * lại — một form, một hành vi; đường ghi vẫn là requestAdvance với đủ trần + hạn mức phía server.
+ * Prop chỉ đòi đúng các trường form cần, để nơi gọi không phải dựng cả LineData của bảng kế toán.
+ */
+export function NewAdvanceForm({
+  line,
+  t,
+}: {
+  line: Pick<LineData, "id" | "remaining" | "vendorId" | "vendors" | "staff">;
+  t: (k: string, v?: Record<string, string | number>) => string;
+}) {
   const [state, formAction, pending] = useActionState<FinanceFormState, FormData>(requestAdvance.bind(null, line.id), {});
   const [type, setType] = useState<"VENDOR" | "STAFF">(line.vendorId ? "VENDOR" : "STAFF");
 

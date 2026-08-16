@@ -115,6 +115,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
 | ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 |
+| — | Thu mua (PUR) | `/purchasing` | **XONG (PUR-1a + 1b, 16/08/2026)**: hồ sơ NCC theo 6 nhóm hàng + kho tài liệu HĐ/PO + lịch sử giá · RFQ từ dòng CO → 6 mẫu form → cổng NCC token / PUR nhập hộ / upload file + AI bóc → so sánh (số tính bằng code, AI nhận xét) → PUR chọn + lý do → trình Account → **Account chốt → ghi vào CO** (revision mới, chờ duyệt FIN-B) — xem mục 10.36 · **PUR-2**: hồ sơ NCC mở rộng (mã 3 ký tự, tên pháp nhân, N người liên hệ, trường tuỳ chỉnh khai ở `/settings/vendor-fields`) — mục 10.37 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
@@ -125,7 +126,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 112 model Prisma · 67 migration · 76 file `src/lib` · 3731 key i18n × 2 ngôn ngữ · 138 mã quyền.
+**Quy mô:** 120 model Prisma · 70 migration · 82 file `src/lib` · 4072 key i18n × 2 ngôn ngữ · 142 mã quyền.
 
 ---
 
@@ -1512,6 +1513,342 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       dòng thay vì ghi đè `deliverableLinkUrl`) · báo cáo tải theo tuần & thời gian chờ từng khâu ·
       ước lượng khối lượng + độ ưu tiên · sửa phần chi phí (vẫn chạy trên lương mẫu 20tr — **đừng
       đọc bảng đó để ra quyết định**) · siết grant `creative.task.*` · nối task theo thứ tự trước-sau.
+
+33. **TẠM ỨNG — VÁ TRẦN payCap + TRANG "TẠM ỨNG CỦA TÔI" (FIN-A) — 14/08/2026** (KHÔNG migration,
+    KHÔNG mã quyền mới). Kết quả rà soát flow tạm ứng/thanh toán NCC theo yêu cầu chủ dự án.
+    - **Lõi chống-chi-vượt theo dòng CO xác nhận ĐÃ KÍN**: trần dòng = `payCap`, tử số đếm cả tạm
+      ứng LẪN phiếu chi, check quyết định trong transaction, vượt trần cấp dự án đòi
+      `finance.vendor_payment.over_cap` + lý do + audit. ⚠ **Trần đi theo bản CO SỐNG mới nhất đã
+      LƯU, không phải bản đã qua nút duyệt** — muốn "chỉ nở trần khi được duyệt" là thay đổi chính
+      sách, chưa làm.
+    - ⚠ **Đã vá điểm sót CE-1**: check trong transaction của phiếu chi CẤP DỰ ÁN
+      (`createVendorPayment` nhánh không gắn dòng) còn cộng `netAmount` trong khi pre-check đã theo
+      `payCap` ⇒ dự án có dòng VAT chọn % bị chặn CHẶT HƠN pre-check (đo trên T002: lệch 512.000đ —
+      phiếu trong dải đó qua pre-check rồi bị chặn oan trong transaction). Chiều lệch an toàn (chặt
+      chứ không hở) nhưng hai cửa nói hai luật. Nay cả hai cùng đọc `payCap`.
+    - **Trang mới `/advances` "Tạm ứng của tôi"** — vá lỗ tiếp cận: form đề nghị tạm ứng trước đây
+      CHỈ nằm ở `/finance` (gác `finance.view`, 5 vai) trong khi `finance.advance.request` cấp cho
+      20 nhóm ⇒ phần lớn người có quyền đề nghị không mở được trang để đề nghị. Trang mới gác đúng
+      `finance.advance.request`; nav "Tạm ứng" hiện theo mã đó.
+      · Hiện: hạn mức của TÔI (realtime, cùng nguồn số với chốt chặn) · lịch sử tạm ứng CỦA TÔI
+        (lọc ở CÂU TRUY VẤN: requestedById HOẶC recipientStaffId = mình) · bảng dòng chi phí RÚT
+        GỌN chỉ có "còn được ứng" + form.
+      · ⚠ **CỐ Ý không dùng lại AdvanceBoard của /finance**: bảng đó mang nút kế toán và tạm ứng
+        của NGƯỜI KHÁC kèm số tài khoản ngân hàng của họ. Form thì DÙNG CHUNG (`NewAdvanceForm`
+        export từ advance-board.tsx, prop kiểu Pick) — một form, một hành vi, đường ghi vẫn là
+        `requestAdvance` với đủ trần + hạn mức. Đã soi HTML thô ở vai Field Supervisor: không có
+        số tài khoản người khác / CO tổng / tạm ứng người khác (chuỗi nhãn kế toán trong HTML là
+        bundle i18n dùng chung toàn app, không phải dữ liệu).
+    - **Verify trên browser (act-as CAO NHẬT PHONG — OPERATIONS_STAFF, có request KHÔNG có view):**
+      nav có "Tạm ứng" không có "Chi phí & Công nợ" · GEN-001 hiện trần 6.912.000 (payCap gồm VAT
+      8%, không phải net 6.400.000) · đề nghị 1tr ⇒ quota 0→1 lần, dòng 12,5tr→11,5tr, lịch sử hiện
+      "Chờ Kế toán chi", 3 người phòng kế toán nhận notification · đề nghị 12tr > 11,5tr ⇒ server
+      chặn kèm đúng số còn lại, không sinh bản ghi · bảng `/finance` phía kế toán khớp từng số.
+      Khoản test đã xoá sạch (advance + notification + audit), dev.db về nguyên trạng.
+    - **CHƯA LÀM (ghi nhận từ đợt rà soát, chờ Cashflow v2):** bảng toàn danh mục "cash out từng
+      dự án + % trên CO" · sổ phát sinh CO có mã/lý do · dự kiến chi từ phần CO chưa thành phiếu ·
+      thu dự kiến từ CollectionMilestone CHƯA xuất hóa đơn (hiện forecast chỉ đọc hóa đơn đã phát
+      hành) · overhead + lương vào cashflow (`OverheadSpend` chưa có cột dueDate) · khung thời gian
+      tự chọn tháng/quý/năm. *(Toàn bộ danh sách này — trừ sổ phát sinh CO — đã làm ở 10.34.)*
+
+34. **CASHFLOW v2 — XONG 15/08/2026** (KHÔNG migration — `OverheadSpend.expectedDate` hoá ra đã có
+    sẵn từ OVH-1; KHÔNG mã quyền mới). Viết lại `/finance/cashflow` thành báo cáo dòng tiền dự kiến
+    toàn danh mục, khung thời gian tự chọn.
+    - ⚠ **Gác `dashboard.cashflow` (BGĐ + CFO; ADMIN sàn cứng), KHÔNG còn là `finance.view`** —
+      quyết định chủ dự án 14/08/2026: báo cáo cashflow chỉ CFO/CEO/Admin. Tab "Dòng tiền" trên
+      thanh Finance ẨN theo đúng mã đó (truyền `showCashflow` từ layout — chỉ TRANG TRÍ, hàng rào
+      thật là `requirePermission` ở đầu cả trang chính LẪN trang in). Đã verify act-as Kế toán:
+      không tab, gõ thẳng URL cả 2 route bị đá về SAFE_LANDING, HTML không mang số nào.
+    - **Nguồn số (7 nguồn, `lib/cashflow.ts` — realtime, không cache):** THU = hóa đơn còn phải thu
+      (hạn + đệm 14 ngày) + **đợt thu C5 chưa xuất hóa đơn** (% động trên billable CO/CE sống, cùng
+      công thức trang Nghiệm thu; trừ phần đã xuất để không đếm trùng nhánh hóa đơn). CHI = phiếu
+      chi SCHEDULED + tạm ứng REQUESTED + khoản chi văn phòng đã lên phiếu (theo `expectedDate`,
+      thiếu thì cuối tháng ghi nhận) + **phần ngân sách LOCKED của tháng chưa thành phiếu** — tách
+      2 dòng LƯƠNG (item `actualSource=PAYROLL`) và CHI VĂN PHÒNG, cùng cơ sở `amountTotal` với màn
+      Overhead, tháng đã qua không dựng. ⚠ Khi làm module ⑦ Lương: thay NGUỒN của dòng
+      `PAYROLL_PLAN`, đừng cộng thêm — cộng là đếm lương hai lần.
+    - ⚠ **"Chưa lên lịch" là khối RIÊNG, cố ý KHÔNG bịa ngày** (quyết định chủ dự án): đợt thu
+      chưa có hạn + phần CO còn lại chưa thành phiếu của dự án ĐANG CHẠY (Finished thì phần chưa
+      chi là tiết kiệm được, không phải khoản sắp chi). Gán ngày ước cho chúng là báo cáo nói dối.
+    - **Khung thời gian:** tháng này / quý này / đến hết năm / tùy chọn từ–đến, chia bucket theo
+      tuần hoặc THÁNG DƯƠNG LỊCH; luôn bắt đầu từ HÔM NAY (phần đã xảy ra nằm ở Dashboard MTD —
+      trộn số thực vào số dự báo là hai bản chất trong một bảng). Quá hạn dồn vào cột đầu; khoản
+      SAU khung đếm riêng thành dòng "còn N khoản ngoài khung" — không có nó thì khung hẹp đọc
+      thành "hết nghĩa vụ". Bảng "Cash out theo dự án": trần chi (Σ payCap ngoài Chi hộ) · đã chi
+      (tạm ứng đã chi + phiếu PAID) · % · cam kết (chờ chi + SCHEDULED) · còn lại.
+    - **Xuất PDF = trang in `/finance/cashflow/print`** (vùng `#cashflow-print-area` thêm vào
+      globals.css, nút gọi hộp thoại in → Save as PDF — đúng tiền lệ BM02, không thư viện PDF).
+      Nền trắng chữ đen CỐ ĐỊNH để PDF không phụ thuộc theme đang bật.
+    - **Đã GỠ theo cùng đợt:** `getCashflowForecast`/`getCashflowBucketConfig` cũ + 2 setting
+      `cashflow_weekly_buckets`/`cashflow_monthly_buckets` + khối cấu hình bucket ở
+      `/settings/finance` (khung giờ chọn ngay trên trang báo cáo, để knob chết là UI nói dối).
+      Hai dòng setting cũ còn trong DB, không ai đọc.
+    - **Verify bằng số (headless gọi thẳng `getCashflowOutlook` + browser admin + act-as):** hóa
+      đơn T002 quá hạn 80tr dồn cột đầu · milestone test 10%×120tr hạn 25/08 ra ĐÚNG 12tr ở bucket
+      T9 (25/08+14=08/09), 5% không hạn ra đúng 6tr ở "Chưa lên lịch" · T002 remaining **−2.954.666
+      trùng khớp tuyệt đối** số đo lúc vá payCap (10.33) · lương ngân sách 1.069.818.503đ/tháng
+      T8–T11, T12 1.706.909.604đ (tháng thưởng) · khối "sau khung" 23,5 tỷ = đúng ngân sách 2027
+      nhân bản T12×12 · khung tùy chọn 01–30/09 chỉ ra khoản T9 · from/to hỏng rơi về tháng, không
+      ném lỗi · chưa đăng nhập 307 cả 2 route. Milestone test đã xoá, dev.db nguyên trạng.
+    - **CHƯA LÀM (cố ý):** sổ phát sinh CO có mã/lý do theo tỉnh (đã ghi ở 10.22) · biểu đồ (bảng
+      số trước, hình sau khi có dữ liệu thật dày) · số dư tiền mặt đầu kỳ (app không giữ số dư
+      ngân hàng — lũy kế là DÒNG CHẢY, không phải SỐ DƯ, đọc nhầm là tưởng sắp hết tiền).
+
+35. **FIN-B — TRẦN CHI ĐI THEO BẢN CO ĐÃ DUYỆT — XONG 15/08/2026** (migration VIẾT TAY
+    `20260815000000_fin_b_co_approval` — bẫy RedefineTables lần 8, một cột `cost_sheet.approvedRevNo`;
+    KHÔNG mã quyền mới — dùng lại `bidding.costsheet.approve`, 2 vai BGĐ + CFO). Quyết định chủ dự
+    án 15/08/2026: *CO duyệt lần đầu, phát sinh duyệt bổ sung, trần chi theo dòng đổi theo TỪNG LẦN
+    DUYỆT* — **thay bất biến cũ "trần đi theo bản CO sống mới nhất đã LƯU"** (10.33 ghi nhận).
+    - **Con trỏ theo `revNo`, không phải FK** (khuôn `FinanceCostLine.sourceRevNo`): revision bất
+      biến và `@@unique([costSheetId, revNo])` nên revNo là đủ; so sánh duyệt/sống/đã-sync đều là
+      phép so số nguyên.
+    - ⚠ **`syncIfApproved` là CỔNG DUY NHẤT cho mọi đường sync ngoài duyệt** (`lib/finance.ts`):
+      chỉ sync khi `approvedRevNo == revNo mới nhất` (mỗi lần lưu đều sinh revision nên "bản sống
+      == bản duyệt" ⇔ đẳng thức đó). Ba đường cũ đã đổi: `saveCostSheet` **KHÔNG còn sync** (lưu
+      chỉ sinh revision, trần đứng yên) · `moveToProcessing` và nút "Làm mới" ở /finance đi qua
+      `syncIfApproved`. **Gọi thẳng `syncFinanceCostLines` từ chỗ mới nào khác là mở cửa sau kéo
+      số CHƯA DUYỆT vào trần chi** — người gọi hợp lệ chỉ có `approveCostSheet` (vừa set con trỏ,
+      bản sống = bản duyệt) và `syncIfApproved`.
+    - **`approveCostSheet` mở rộng, không đẻ action mới**: form mang `revNo` bản người duyệt ĐANG
+      NHÌN → server đối chiếu bản mới nhất, lệch là từ chối (`approveStaleRev`) — Account lưu thêm
+      bản trong lúc người duyệt đang đọc thì không duyệt nhầm bản chưa xem. Duyệt xong: set
+      `approvedRevNo` → sync trần (nuốt lỗi như tiền lệ, có nút Làm mới chữa) → audit ghi `v{N}`.
+      Margin gate + override giữ nguyên. Duyệt lại sau phát sinh dùng đúng nút này ("Duyệt bản vN");
+      `rejectedAt` đã được saveCostSheet xoá khi lưu bản mới (hành vi có sẵn) nên vòng từ chối →
+      sửa → trình lại tự chạy.
+    - **"Chờ duyệt" đổi nghĩa ở CẢ HAI trang** (bidding/[id] + projects/[id]/co-ce): = bản SỐNG
+      chưa duyệt — gồm chưa-duyệt-lần-nào LẪN đã-lưu-phát-sinh (`approvedRevNo < latest`). Badge 3
+      trạng thái: "Đã duyệt (vN)" · "vM chờ duyệt — trần theo vN" · "Chờ duyệt".
+    - **/finance nói rõ hai ca KHÁC NHAU, đừng gộp**: (a) bản sống vượt bản duyệt → banner VÀNG
+      "trần giữ theo bản đã duyệt, chờ duyệt" — trần đứng yên là ĐÚNG, không có nút gì; (b)
+      `sourceRevNo < approvedRevNo` (sync bản duyệt bị trượt) → banner ĐỎ + nút Làm mới — trần
+      đang SAI. Bảng có CO nhưng chưa duyệt lần nào → thông điệp "trần mở khi BGĐ/CFO duyệt" và
+      GIẤU nút Làm mới (bấm mà syncIfApproved từ chối thì nút thành nói dối).
+    - **Baseline một lần trong seed** (marker `20260815_fin_b_baseline`): bảng CTRACT đã có dòng
+      trần chi ở module ④ → coi bản MỚI NHẤT là đã duyệt (BGĐ đã ngầm chấp nhận trần đang chạy;
+      thiếu bước này thì ngày deploy mọi dự án MẤT trần chi). CỐ Ý không đặt `approvedById/At` —
+      ghi tên người vào lần duyệt không tồn tại là bịa lịch sử. Bảng CHƯA có trần chi giữ null →
+      cổng gác từ đầu. Đo trên dev.db: 4 bảng baseline (T002/T006/T013/T025), T005 giữ null.
+    - **Verify end-to-end bằng số trên browser (T002):** đổi VAT dòng GEN-001 8%→10% → lưu ⇒ bản
+      sống v5, trần VẪN 6.912.000 theo v4, /finance hiện đúng "v4 → v5", nút hiện "Duyệt bản v5"
+      (hidden revNo=5) → duyệt ⇒ `approvedRevNo=5`, trần nhảy **7.040.000**, audit `v5` kèm tên
+      người duyệt → đổi về 8% + lưu + duyệt v6 ⇒ trần về **6.912.000**, coTotal/ceTotal không đổi
+      một đồng. Headless: 4 trạng thái `syncIfApproved` (SYNCED / PENDING_APPROVAL — số dòng trần
+      đứng yên / NEVER_APPROVED / NO_SHEET) đều đúng. tsc/eslint/build/i18n 0-0 sạch.
+    - **Hệ quả vận hành phải biết:** (a) dự án MỚI dựng CO xong **chưa tạm ứng/chi được** cho tới
+      lần duyệt đầu — cổng mở két chính là nút duyệt; (b) ⚠ `bidding.costsheet.approve` trên
+      production đang đúng 2 vai BGĐ + CFO — **từ nay mỗi phát sinh CO đều chờ 1 trong 2 vai đó
+      duyệt thì hiện trường mới ứng/chi phần chênh**, BGĐ cần biết mình là nút cổ chai mới; (c)
+      CE-5 import-sinh-version và mọi đường qua saveCostSheet tự thừa hưởng (không sync khi lưu).
+    - **CHƯA LÀM (cố ý):** notification cho người có quyền duyệt khi có bản chờ ("bấm vào là thấy"
+      — badge đã hiện ở hai trang; thêm notification thì hỏi chủ dự án) · khoá sửa CO sau khi duyệt
+      (Account vẫn sửa tự do, chỉ trần bị giữ — đúng flow thương lượng nhiều vòng của CE-5) · duyệt
+      một bản CŨ hơn bản sống (chỉ duyệt được bản mới nhất — muốn "quay về v cũ" thì sửa CO về nội
+      dung đó rồi lưu + duyệt, giữ một đường ghi duy nhất).
+
+36. **THU MUA — PUR-1a + PUR-1b XONG 16/08/2026: sub-module Thu mua = hồ sơ NCC theo nhóm + RFQ theo mẫu +
+    cổng NCC + AI bóc file + so sánh → trình → Account chốt vào CO** (migration `20260816000000_pur_rfq` — Prisma sinh đúng ALTER TABLE cho 6 cột
+    Vendor + 6 CREATE TABLE, đã kiểm không DROP; **4 mã quyền mới, 138 → 142**). Kết quả rà soát
+    Purchasing theo yêu cầu chủ dự án 15/08/2026 (đọc 12/13 file báo giá NCC thật ở
+    `D:\TCM\PUR\ANH HOÀNG BÁO GIÁ`): app đã có Order→`DepartmentTask` PCC và PO neo dòng CO, nhưng
+    toàn bộ khoảng giữa (tìm NCC → xin báo giá → so → chốt với Account → đưa vào CO) làm ngoài app —
+    bằng chứng là file `2- BG TỔNG HỢP` PUR ghép tay ~14 NCC + báo giá vòng 2. PUR-1b (cùng ngày)
+    khép vòng: so sánh → PUR trình → Account chốt → ghi vào CO — xem các gạch đầu dòng **[1b]** dưới.
+    - **6 mẫu form = 6 nhóm hàng, danh mục Ở CODE** (`lib/rfq-templates.ts`, khuôn `quote-templates.ts`):
+      EVENT_EQUIPMENT · AV_LED · POSM_RENTAL · PRODUCTION_PRINT · OUTSOURCED_STAFF · SPECIAL_STRUCTURE.
+      Mỗi mẫu có cột dòng mở rộng, điều khoản chung, và **CÔNG THỨC THÀNH TIỀN RIÊNG**
+      (`computeQuoteLineAmount` — MỘT nguồn sự thật cho cổng NCC, form nhập hộ, AI, server): mặc định
+      SL × Π(hệ số) × đơn giá; nhân sự thuê ngoài = ngày × người × giờ × đơn giá/GIỜ + cơm × người × ngày;
+      mô hình đặc biệt = Σ 4 khối. **25/25 test số khớp file thật** (bảo vệ Hoàng Anh Đạt 12.900.000 ·
+      BV Miền Bắc 6.300.000 gồm cơm · Thiện Sự Kiện 6.750.000 · Anh Vũ 180.000.000 · mascot 190tr).
+      `suggestRfqTemplate` gợi ý mẫu từ tên dòng CO theo **RANH GIỚI TỪ** — bản đầu so chuỗi con,
+      khoá "ao" (áo) trúng "b**ao** ve" nên bảo vệ bị gợi ý thành in ấn; đã vá + test.
+      ⚠ `VendorGroup.groupCode` và `Rfq.groupCode` CÙNG danh mục này — "mỗi nhóm kèm form của nhóm".
+    - **Schema:** `Vendor` +6 cột hồ sơ (địa chỉ, ngân hàng ×3, điều khoản TT, ghi chú) · `vendor_group`
+      (NCC nhiều nhóm — Sông Lam vừa thiết bị vừa POSM) · `vendor_document` (kho báo giá/PO/HĐ theo
+      NCC, "chốt order/ký HĐ thì PUR lưu để tham chiếu giá") · `rfq` · `rfq_line` · `rfq_vendor` ·
+      `rfq_quote_line`. ⚠ **`RfqLine.costLineStableKey` là CHUỖI, KHÔNG FK CostLine.id** — dòng CO bị
+      tạo lại mỗi lần lưu, chỉ stableKey bền (tiền lệ `FinanceCostLine.lineKey`); PUR-1b ghi ngược
+      giá chốt vào CO theo khoá này. `RfqLine` là ẢNH CHỤP (tên/mô tả/ĐVT/SL/`refUnitPrice` = đơn giá
+      CO TRƯỚC THUẾ) để NCC thấy đúng thứ được hỏi kể cả khi CO đổi.
+    - **Quyền (`PUR_POLICY` trong seed — nguồn sự thật cho `isRestricted` + `purCodesFor` + 2 backfill
+      `20260816_pur_*`, khuôn RECRUIT_POLICY, lọc theo MÃ ROLE):** `purchasing.view` (PUR + BGĐ + 3 vai
+      ACCOUNT + CFO + kế toán = 8 vai — Account xem RFQ để cùng chốt) · `purchasing.rfq.manage` ·
+      `purchasing.rfq.ai` (đặc quyền AI, kiểm `hasPermission` BÊN TRONG action) · `purchasing.vendor.manage`
+      (3 mã sau: PUR + BGĐ = 3 vai). Đo trên dev.db 8/3/3/3, grant 1312 → 1329, seed lần 2 no-op.
+      **"Chốt & đưa vào CO" (1b) KHÔNG cần mã mới** — sẽ đi qua `saveCostSheet` nên tự đòi
+      `bidding.costsheet.edit` (Account): PUR trình, Account chốt.
+    - **Quản lý NCC chuyển nhà**: `/settings/vendors` nay CHỈ redirect sang `/purchasing/vendors`
+      (một UI NCC duy nhất; gác OR `purchasing.vendor.manage` ‖ `settings.vendors.manage` để ai từng
+      có quyền cũ không mất). Trang mới: lọc theo nhóm, hồ sơ đủ trường (ô CHỮ controlled — bẫy
+      requestFormReset), gán 6 nhóm, kho tài liệu (route `/api/vendor-doc/[id]` KIỂM belongs-to, mirror
+      `/api/project-file`), RFQ đã tham gia. Seed one-shot `20260816_pur_vendors`: **17 NCC thật** từ 2
+      bảng tổng hợp (chỉ tên + nhóm, code tự sinh; chỉ tạo khi chưa trùng tên/mã).
+    - **RFQ:** `/purchasing` = khối "Order PCC đang chờ" trên MỌI dự án (lối vào tổng — trước chỉ xem
+      trong từng dự án) + danh sách RFQ · `/purchasing/rfq/new` tick dòng CO (chỉ QTY_PRICE/FIXED, không
+      dòng %, không dòng kho K3; server đọc lại theo stableKey — không tin payload) → mẫu (gợi ý) → NCC
+      lọc theo nhóm (+ "hiện mọi NCC") · `/purchasing/rfq/[id]`: phát hành (DRAFT→SENT), từng NCC có
+      **tạo link cổng** (token 32 byte base64url, DB lưu **sha256** khuôn GuestInvite, hết hạn = hạn báo
+      giá + 7 ngày hoặc 30 ngày, phát lại = thu hồi cũ), **xuất Excel mẫu** (`/api/rfq/[id]/template.xlsx`
+      — khung y file RFQ TCM đang gửi, công thức thành tiền Excel, cột ẩn `__line` mang id dòng; **CỐ Ý
+      KHÔNG in giá CO** vì file đi ra ngoài), **nhập hộ**, **upload file + AI bóc**, NCC từ chối.
+      ⚠ Bug đã vá lúc verify: checkbox "tick cả hạng mục" gọi `toggle` từng dòng trong vòng lặp → mỗi
+      lượt so với snapshot cũ, sai với >1 dòng; nay `setMany` một lần setState.
+    - ⚠ **Đường ghi báo giá DUY NHẤT `writeVendorQuote` ở `lib/rfq-server.ts` (server-only), dùng chung
+      cho 3 lối vào** (PUR nhập hộ · PUR lưu sau AI · cổng NCC). CỐ Ý không đặt ở file `"use server"`:
+      mọi export của file action là endpoint gọi được từ client, mà hàm này KHÔNG tự gác quyền (mỗi lối
+      gác kiểu riêng — quyền PUR hoặc token NCC). Cùng lý do `loadRfqByToken` cũng ở lib. Server LUÔN
+      tính lại `amount` bằng `computeQuoteLineAmount`; dòng không có đơn giá = NCC không báo → không lưu.
+      Có báo giá đầu tiên → RFQ SENT→COMPARING (vẫn nhận thêm; NCC gửi lại = ghi đè, có audit).
+      Đã gỡ một `export type { RfqStatus }` khỏi file "use server" trước khi vấp (bẫy 10.23).
+    - **Cổng NCC `(guest)/rfq/[token]`** — không đăng nhập, gác HOÀN TOÀN bằng token; hết hạn/thu hồi/RFQ
+      đóng → thông báo, không form. Chỉ hiện tên NCC được mời + dòng hỏi giá + form mẫu + báo giá của
+      CHÍNH họ; **KHÔNG hiện giá CO, KHÔNG hiện NCC khác** (đã curl không cookie: có "Kính gửi Hoàng Anh
+      Đạt", không có 800.000/2.500.000, không có tên NCC kia). Form dùng chung `components/rfq/quote-form.tsx`
+      với PUR (thành tiền realtime bằng đúng hàm server). Gửi xong → notification cho người tạo RFQ.
+    - **AI bóc file (`lib/ai/rfq-prompts.ts`, Zod `rfqParseSchema`):** LƯU FILE TRƯỚC (hồ sơ phải giữ được
+      kể cả AI không đọc nổi) → `extractTextFromFile` → DeepSeek → Zod → **TRẢ VỀ FORM cho PUR sửa rồi
+      Lưu**, KHÔNG ghi thẳng (mirror `parseCvWithAi`); id dòng lạ bị loại; dòng file không khớp dòng RFQ
+      vào panel "không khớp", KHÔNG tự thêm. Verify bằng **file BV Miền Bắc thật**: 4,5s, confidence 0,8,
+      khớp ca đầu → đơn giá **50.000/giờ**, 2 người, 10 giờ, ca 22:00–08:00, cơm 30.000 (đúng dòng 8 file),
+      5 ca còn lại vào "không khớp" (không bịa), terms trích đúng VAT 8% + ghi chú nguyên văn; PUR sửa
+      "SL báo" về 1 thì thành tiền = **1.060.000** = cột Tổng cộng dòng 8 file thật.
+      ⚠ **`extractTextFromFile` cắt 6.000 ký tự/file** (trần của helper dùng chung KB/CV/MKT) — báo giá
+      Excel dài nhiều sheet (Sông Lam 900 dòng, Nam Thái Dương 3 tỉnh) AI chỉ thấy phần đầu. Nâng trần là
+      sửa helper dùng chung — chưa làm, ghi nhận. `.xls` cũ (BEDU/Trần Gia) và ảnh scan: cho tải lên
+      lưu hồ sơ nhưng AI báo "không đọc được" — đúng thiết kế, PUR nhập tay.
+    - **Verify (browser T002, act-as 3 vai):** tạo RFQ 2 dòng/2 NCC bảo vệ (mẫu gợi ý đúng từ "Đội
+      PG/PB") · phát hành · link token → tab riêng không cookie mở được, NCC điền 5n×2ng×12h×75k, SL báo 1
+      → **9.000.000** đúng file Hoàng Anh Đạt, gửi → DB `amount` server tính lại khớp, terms lưu, RFQ →
+      COMPARING, notification tới người tạo · upload file thật + AI → form điền sẵn → Lưu `via=FILE` ·
+      thu hồi link → cổng từ chối · Excel mẫu 200 đúng MIME, tên file UTF-8 chuẩn · act-as PUR Manager:
+      thấy nav + giá CO tham chiếu (được phép — view_paycap) + nút quản lý, HTML không CE/margin ·
+      act-as Account Staff: mở được RFQ, thấy báo giá, **không** nút nhập hộ/tạo link/huỷ · chưa đăng
+      nhập: 3 trang 307, 3 API 401. Audit chuỗi `CREATE→ISSUE→TOKEN_ISSUE→QUOTE_SAVE→AI_PARSE→QUOTE_SAVE`.
+      RFQ test + file đã xoá, dev.db nguyên trạng. tsc/eslint/build/i18n 0-0 sạch, migrate diff rỗng.
+    - **[1b] SO SÁNH — SỐ TÍNH BẰNG CODE, AI CHỈ VIẾT CHỮ.** `lib/rfq-compare.ts` (thuần, 17/17 test):
+      `buildCompareMatrix` ra rẻ nhất/chênh %/thiếu NCC/vượt CO từng dòng + tổng theo NCC (coverage,
+      CO tham chiếu CÙNG DÒNG để so cùng mẫu số, số dòng rẻ nhất) + `bestMixTotal`. `rfqCompareMessages`
+      nhận ma trận ĐÃ TÍNH dạng text; Zod `rfqCompareSchema` chỉ có câu chữ (summary/lineSuggestions/
+      termsNotes/risks) — **số AI trả về không bao giờ dùng làm số so sánh**; gợi ý trỏ id lạ bị loại.
+      Verify thật: AI nhận ra Tất Thành rẻ hơn nhưng "chưa gồm xăng" + coverage 50%, Sông Lam cọc 50% +
+      VAT 8% — đúng thứ PUR cần, không bịa số.
+    - **[1b] PUR chọn + lý do → Trình:** `finalJson` = `{picks: {lineId → {rfqVendorId, reason}}, note}`;
+      chỉ nhận NCC ĐÃ BÁO dòng đó; **mỗi dòng đã chọn phải có lý do** mới trình được (thống kê "vì sao
+      chọn" chỉ dùng được khi lý do có thật — cùng nguyên tắc giải trình thua thầu B2). Trình → SUBMITTED
+      + notify PIC + Leader dự án. Account trả lại (bắt buộc lý do) hoặc PUR tự rút về → COMPARING.
+    - ⚠ **[1b] AI ĐƯỢC CHỐT — kiểm THEO BẢN GHI (`canConfirmRfq`), KHÔNG chỉ mã quyền.** Phát hiện lúc
+      verify: `bidding.costsheet.edit` đang cấp cho **20 vai kể cả PUR** (grant mặc định rộng, chưa từng
+      siết ở 10.16), nên gác bằng mã đó thì PUR tự chốt được — sai câu chốt "PUR trình, Account chốt".
+      Nay: (PIC hoặc Leader của dự án + `costsheet.edit`) HOẶC `bidding.costsheet.approve` (BGĐ/CFO).
+      Đã verify: act-as PUR Manager → không nút chốt, chỉ rút về; act-as HỒ HỒNG PHƯỚC (PIC T002) → chốt
+      được. **Ghi nhận cho BGĐ:** `costsheet.edit` 20 vai là chính sách nên xem lại riêng.
+    - ⚠ **[1b] "CHỐT & ĐƯA VÀO CO" = MỘT đường ghi:** `buildSheetPayloadFromDb` (đúng hàm CE-5) → sửa
+      `vendorId` + `unitPrice` (hoặc chuyển `FIXED`/`fixedAmount` khi NCC báo theo KHỐI hoặc SL khác SL
+      hỏi) của các dòng đã chọn theo **stableKey** → gọi CHÍNH `saveCostSheet` → revision `origin="RFQ"`,
+      note "Chốt NCC theo {mã}"; `Rfq.status=CONFIRMED`, `appliedRevNo`. Dòng CO đã biến mất khỏi bảng
+      sống → bỏ qua + báo số dòng. ⚠ **Bảng chế độ CŨ phải truyền `ceTotal` HIỆN HÀNH** vào form —
+      CE-5 truyền "0" được vì bảng đó ở chế độ CE theo dòng (server tự suy); áp "0" cho bảng cũ là ghi
+      CE về 0, margin âm. **Vì FIN-B, bản mới CHỜ BGĐ/CFO duyệt** trần chi mới nở — action cố ý không
+      sync. Chuỗi đầy đủ: PUR trình → Account chốt → BGĐ duyệt → két mở.
+    - **[1b] Lịch sử giá theo NCC** (`loadVendorPriceHistory`, tính LÚC ĐỌC từ 3 sổ, không bảng riêng):
+      báo giá RFQ đã CHỐT (chỉ dòng Account CHỌN NCC đó — dòng thua không phải "giá đã chốt") · dòng CO
+      sống trỏ vendorId · dòng PO. Cố ý KHÔNG gộp giữa 3 sổ: cùng hạng mục hiện ở cả 3 là thông tin
+      (giá báo → giá vào CO → giá đặt). Tab ở `/purchasing/vendors/[id]`.
+    - **[1b] Vá FIN-B nhánh AUTO-DUYỆT theo ngưỡng** (FR-12: margin đạt + dưới `auto_approve_threshold`
+      100tr, hoặc override có lý do): `saveCostSheet` vốn đặt `approvedById` nhưng FIN-B (10.35) sót
+      `approvedRevNo` → bảng nhỏ "duyệt trên giấy" mà trần chi không mở, badge lại báo "chờ duyệt".
+      Nay nhánh này set `approvedRevNo` + sync trần như `approveCostSheet`. Đây là ngoại lệ nhất quán,
+      không phải cửa sau: hệ thống đã coi là duyệt thì con trỏ phải theo.
+    - **[1b] Verify end-to-end trên T002 (browser + DB, act-as 3 vai):** RFQ mẫu POSM 2 dòng, Sông Lam
+      báo 720k/2.600k, Tất Thành chỉ báo Xe 2.300k → ma trận "CO 18.900.000 · rẻ nhất từng dòng
+      **17.260.000**" (khớp tính tay) → AI nhận xét (4–5s) → chọn Sông Lam cho PG + Tất Thành cho Xe,
+      lý do từng dòng, tổng **17.260.000 (−1.640.000 so CO)** → Trình (notify PIC Phước + Leader Yến) →
+      act-as PUR Manager: KHÔNG nút chốt → act-as PIC Phước: chốt ⇒ **CO v7 origin=RFQ, coTotal
+      17.260.000, CE giữ 120tr, 2 dòng đúng NCC + đơn giá, trần chi VẪN theo v6** → BGĐ duyệt v7 ⇒ trần
+      **6.220.800** (5.760.000×1,08) và **11.500.000**, dòng trần mang đúng NCC · lịch sử giá Sông Lam
+      chỉ nhận dòng thắng · audit `AI_COMPARE→SELECTION_SAVE→SUBMIT_TO_ACCOUNT→CONFIRM_INTO_CO`. Dữ
+      liệu test đã dọn, T002 trả về đúng v6 / 18.900.000 / trần 6.912.000–12.500.000.
+    - **CHƯA LÀM (cắt cố ý — muốn thêm hỏi chủ dự án):** gửi email tự động cho NCC (SMTP trống) · đàm
+      phán vòng 2 có lịch sử (v1: NCC gửi lại = ghi đè) · đọc `.xls` cũ (cần lib `xlsx`) · xếp hạng NCC ·
+      tạo PO một nút từ RFQ · nhắc hạn RFQ qua notification · nâng trần 6.000 ký tự của
+      `extractTextFromFile` (helper dùng chung).
+
+37. **THU MUA — PUR-2 XONG 16/08/2026: hồ sơ NCC mở rộng + trường tuỳ chỉnh ở Settings** (migration
+    `20260816010000_pur2_vendor_profile` — Prisma sinh đúng ALTER TABLE 2 cột + 2 CREATE TABLE, đã kiểm không
+    DROP; **KHÔNG mã quyền mới**). Yêu cầu chủ dự án 16/08/2026: PUR nhập được mã 3 ký tự · tên pháp nhân ·
+    địa chỉ · MST · người liên hệ (tên/ĐT/email, thêm người thứ 2, thứ 3…) · điều khoản thanh toán · ghi chú;
+    **Settings cho phép khai thêm trường mới** để quản lý NCC.
+    - **Schema:** `Vendor` +`legalName` (tên pháp nhân — `name` giữ vai TÊN GỌI NGẮN hiện ở mọi ô chọn/RFQ) +
+      `customJson` (giá trị trường tuỳ chỉnh, khoá = `VendorFieldDef.key`) · bảng MỚI `vendor_contact`
+      (name/title/phone/email/isPrimary/sort, tối đa `MAX_VENDOR_CONTACTS` = 5, cascade theo NCC) · bảng MỚI
+      `vendor_field_def` (key @unique, labelVi/En, type TEXT|TEXTAREA|NUMBER|DATE|SELECT|BOOL, optionsJson,
+      hint, required, sort, isActive).
+    - ⚠ **3 cột liên hệ CŨ (`Vendor.contact/phone/email`) = người liên hệ CHÍNH, đồng bộ mỗi lần lưu**
+      (`writeContacts` xoá-tạo lại bảng con rồi ghi người ★ lên 3 cột cũ). Chỗ đọc cũ không phải đổi; NCC tạo
+      trước PUR-2 mở form sửa vẫn thấy liên hệ cũ ở dòng đầu (trang chi tiết suy từ 3 cột khi bảng con rỗng).
+      Không đặt cột mới thay 3 cột cũ là cố ý — một nguồn ghi (`writeContacts`), hai nơi đọc.
+    - ⚠ **MÃ NCC: đúng 3 ký tự A-Z0-9 khi TẠO hoặc khi ĐỔI (`VENDOR_CODE_RE`, khuôn `Client.code`); mã cũ dài
+      hơn (V-PCC-01, 17 NCC seed…) vẫn hợp lệ khi KHÔNG đổi (`VENDOR_CODE_LEGACY_RE`).** Không ép đổi hàng
+      loạt: mã NCC hiện chỉ HIỂN THỊ (RFQ detail), không vào mã sinh nào — đã grep. Form tạo tự GỢI Ý mã 3 ký tự
+      từ tên (`suggestVendorCode`, chữ đầu ≤3 từ chính) cho tới khi PUR tự gõ vào ô mã; server vẫn kiểm chuẩn +
+      trùng. **17 NCC seed đổi sang mã 3 ký tự** (SLM · FSS · TDA · TTH · PLM · NPH · VPR · DHG · MHG · SGC ·
+      NTD · TSK · AVU · TNG · VAR · HAD · BMB) — trên dev.db đổi bằng script; production CHƯA chạy seed PUR
+      (chưa deploy) nên sẽ tạo thẳng mã mới.
+    - **Trường tuỳ chỉnh — `/settings/vendor-fields`** (gác `settings.vendors.manage` = BGĐ + PUR Manager; card
+      mới ở trang Thiết lập): tạo/sửa nhãn vi-en, kiểu, danh sách lựa chọn (mỗi dòng một), gợi ý, bắt buộc, thứ
+      tự, bật/tắt. ⚠ **`key` sinh MỘT LẦN từ nhãn Việt (`fieldKeyFromLabel`, trùng thì `_2`, `_3`) và KHÔNG
+      đổi được** — đó là khoá JSON của mọi NCC đã nhập. **KHÔNG có đường xoá** — tắt là ẩn khỏi form, giá trị
+      cũ vẫn nằm trong `customJson` (mirror ClientGroup / JobPosition).
+    - ⚠ **`collectCustomValues` (lib thuần `vendor-fields.ts`) là MỘT nguồn sự thật cho đường ghi**: đọc
+      `cf_<key>` theo danh sách trường ĐANG BẬT đọc lại ở server (không tin client), ép kiểu, **GIỮ NGUYÊN giá
+      trị của trường đã tắt** (tắt trường ≠ xoá dữ liệu), trả `missing` cho trường bắt buộc bỏ trống → action
+      chặn `CUSTOM_REQUIRED` kèm tên trường đích danh. Ô số là `NumberField` nên input ẩn gửi số CHUẨN — parser
+      `Number(s)`, đừng bóc dấu chấm/phẩy ở đây (bóc là hỏng số thập phân).
+    - ⚠ **BẪY MỚI TÌM RA — `requestFormReset` của React 19 KHÔNG chỉ xoá ô chữ, mà còn RESET `<select>`,
+      checkbox, radio, KỂ CẢ KHI CHÚNG LÀ CONTROLLED.** Chuẩn cũ "ô CHỮ phải controlled" (OVH/MKT/KB) chỉ cứu
+      được input/textarea vì React đồng bộ `defaultValue` cho chúng; với select/checkbox/radio React KHÔNG khôi
+      phục sau `form.reset()`. Đã tái hiện trên form tạo NCC: action báo lỗi mã ⇒ nhóm hàng BỎ TICK, người
+      liên hệ ★ nhảy về người đầu, ô "Xếp hạng" về rỗng — IM LẶNG; sửa mã rồi Lưu là ghi sai (React state vẫn
+      đúng, nhưng FormData đọc từ DOM). Cách vá ở PUR-2: `<form onReset={(e) => e.preventDefault()}>` — sự
+      kiện `reset` do `form.reset()` bắn ra là CANCELABLE, chặn nó là mọi ô (kể cả uncontrolled) giữ nguyên
+      sau action lỗi; áp cho 4 form (tạo/sửa NCC, tạo/sửa trường). Form không cần reset thật: tạo NCC xong thì
+      `redirect`, tạo trường xong thì remount khối nhập theo `key` (mẫu "điều chỉnh state lúc render"), sửa
+      thì giá trị trên form = giá trị đã lưu. Verify sau vá: submit lỗi 2 lần liên tiếp, nhóm/★/xếp hạng/năng
+      lực/liên hệ 3 đều còn nguyên. **Mọi form `useActionState` có select/checkbox/radio trong app đều mang
+      bẫy này** (vd `category` NCC, `leadStaffId` team…) — hiện chỉ mất lựa chọn CHƯA LƯU sau một lần lỗi, chưa
+      vá đại trà (không thuộc phạm vi PUR-2), nhưng thêm form mới thì dùng `onReset` này.
+    - Ô số tuỳ chỉnh là `NumberField` **KHÔNG điều khiển** (`defaultValue`): `onChange` của NumberField chỉ trả
+      số nên bản controlled biến "xoá trắng" thành **0** (đã tái hiện: xoá ô rồi lưu ⇒ `nang_luc… = 0`);
+      uncontrolled thì ô trống gửi `""` ⇒ server xoá khoá. An toàn vì form đã chặn reset. Verify: nhập 250 →
+      lưu → 250; xoá trắng → lưu → khoá biến mất khỏi `customJson`.
+    - ⚠ **Trường "bắt buộc" áp cho MỌI NCC khi LƯU, kể cả NCC cũ**: đánh dấu bắt buộc một trường mới thì lần
+      sửa kế tiếp của NCC cũ bị chặn cho tới khi điền (đã thấy trên V-OPE-01: "Thiếu thông tin bắt buộc: Xếp
+      hạng NCC"). Loud, không silent — cố ý giữ; muốn "bắt buộc chỉ với NCC mới" thì phải hỏi chủ dự án.
+    - **Đã dọn:** namespace i18n `settings.vendors` (24 key × 2) mồ côi từ PUR-1a (form cũ đã gỡ, trang chỉ
+      redirect) — xoá theo quy tắc "dọn rác do chính mình tạo".
+    - **Verify:** tsc · eslint · i18n **0/0 (4072 key)** · `next build` sạch, có route `/settings/vendor-fields` ·
+      `migrate diff` rỗng · test thuần: `suggestVendorCode` luôn ra 3 ký tự hoặc rỗng (Sông Lam → SLA, Vietpro
+      → VIE, Thiện Sự Kiện → TSK, "A" → "") · `fieldKeyFromLabel` ("Năng lực tối đa (người)" →
+      `nang_luc_toi_da_nguoi`) · `collectCustomValues` giữ khoá cũ, ép SELECT/NUMBER/DATE/BOOL, báo đúng 2
+      trường bắt buộc thiếu · chưa đăng nhập: 2 route mới 307 về login.
+      **Browser (dev.db, act-as 2 vai):** Settings tạo trường SELECT "Xếp hạng NCC" (A/B/C, bắt buộc, gợi ý) →
+      key `xep_hang_ncc`, form tạo tự trắng; tạo trường NUMBER "Năng lực tối đa (người)" → key
+      `nang_luc_toi_da_nguoi`, sort 2 · form NCC: gõ tên "Công ty TNHH Sự kiện Ánh Dương" ⇒ ô mã tự gợi ý
+      **SKA** (bỏ CONG/TY/TNHH); mã "AD" ⇒ server chặn "phải đúng 3 ký tự"; bỏ trống Xếp hạng ⇒ "Thiếu thông
+      tin bắt buộc: Xếp hạng NCC" (đích danh); mã "SLM" khi sửa ⇒ "Mã NCC đã tồn tại"; lưu hợp lệ ⇒ DB đúng
+      từng cột: 3 `vendor_contact` (★ = người thứ 2, đồng bộ xuống `contact/phone/email`), nhóm
+      OUTSOURCED_STAFF, `customJson {"xep_hang_ncc":"B","nang_luc_toi_da_nguoi":150}` (số thật, không chuỗi),
+      audit CREATE/UPDATE ghi `ADG→ADX` · sửa: bỏ liên hệ 3 + đổi ★ ⇒ 2 dòng, ★ đúng, h1 đổi mã · tắt trường
+      "Năng lực" ở Settings rồi lưu lại NCC (trường không còn trên form) ⇒ giá trị 120 VẪN trong `customJson` ·
+      NCC cũ V-OPE-01: form sửa hiện liên hệ cũ ở dòng đầu, lưu với mã dài "V-OPE-01" vẫn qua, liên hệ chuyển
+      sang bảng con · danh sách hiện tên pháp nhân + liên hệ ★ · act-as Account Manager (chỉ `purchasing.view`):
+      trang NCC chỉ-đọc liệt kê pháp nhân/MST/địa chỉ/điều khoản/2 liên hệ/Xếp hạng, HTML không có số tài khoản,
+      không form; `/settings/vendor-fields` bị đá về Dashboard · Settings: đổi sang SELECT không lựa chọn ⇒ lỗi
+      và kiểu trên form VẪN là SELECT (không nhảy về TEXT). Dữ liệu test đã dọn (NCC ADX + 2 trường + audit),
+      V-OPE-01 trả về nguyên trạng, dev.db 20 NCC / 0 contact / 0 def.
+    - **CHƯA LÀM (cố ý):** import NCC từ Excel · lịch sử thay đổi hồ sơ NCC (chỉ AuditLog chung) · trường tuỳ
+      chỉnh xuất hiện trong so sánh RFQ / lọc danh sách · gộp hai NCC trùng.
 
 ---
 

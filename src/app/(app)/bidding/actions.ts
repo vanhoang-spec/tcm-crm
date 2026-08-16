@@ -10,7 +10,7 @@ import { stringifyAudit, toNum } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
 import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, isRevisionKind, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH, computeCeAggregates, sheetHasLineCe, type CeSectionInput } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
-import { syncFinanceCostLines } from "@/lib/finance";
+import { syncFinanceCostLines, syncIfApproved } from "@/lib/finance";
 import { lockCreativeTasksForProject } from "@/lib/creative";
 import { lockDepartmentTasksForProject } from "@/lib/department-tasks";
 import { recomputeClientStatus } from "@/lib/client-status";
@@ -575,7 +575,7 @@ export async function saveCostSheet(
     rejectedAt: null,
   };
 
-  await prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     let sheetId: string;
     if (existing) {
       await tx.costSheet.update({ where: { id: existing.id }, data: sheetData });
@@ -705,17 +705,24 @@ export async function saveCostSheet(
         snapshotJson,
       },
     });
+    return { sheetId, revNo };
   });
 
-  // Đồng bộ ngay xuống module ④ (Chi phí & Công nợ). CO/CE chỉ đổi được qua đúng action này nên
-  // "sync khi có thay đổi" là đủ và chính xác tuyệt đối — không cần quét định kỳ toàn hệ thống.
+  // FIN-B: LƯU KHÔNG CÒN ĐỒNG BỘ trần chi. Trần (payCap ở module ④) chỉ nhảy khi bản được DUYỆT —
+  // approveCostSheet set con trỏ approvedRevNo rồi mới sync. Account cứ lưu phát sinh thoải mái,
+  // hiện trường vẫn ứng/chi theo bản đã duyệt gần nhất cho tới khi bản mới được duyệt.
   //
-  // NGOÀI transaction và nuốt lỗi CÓ CHỦ Ý: bảng CO/CE đã lưu xong, không được để lỗi đồng bộ làm
-  // hỏng cả thao tác lưu. Nếu sync hỏng thì trang Chi phí vẫn còn nút "Làm mới" và banner lệch rev.
-  try {
-    await syncFinanceCostLines(projectId);
-  } catch (e) {
-    console.error("[bidding] đồng bộ dòng chi phí thất bại sau khi lưu CO/CE:", e);
+  // NGOẠI LỆ NHẤT QUÁN: nhánh AUTO-DUYỆT theo ngưỡng (FR-12: margin đạt + dưới auto_approve_threshold,
+  // hoặc người có quyền override đã ghi lý do) vốn đặt approvedById ở trên — "đã duyệt" thì con trỏ
+  // approvedRevNo cũng phải trỏ vào bản này và trần chi mở theo, không thì hai cột nói hai chuyện
+  // (badge báo "chờ duyệt" trong khi approvedById có tên). Vá 16/08/2026 — FIN-B bỏ sót nhánh này.
+  if (approvedNow) {
+    await prisma.costSheet.update({ where: { id: saved.sheetId }, data: { approvedRevNo: saved.revNo } });
+    try {
+      await syncFinanceCostLines(projectId);
+    } catch (e) {
+      console.error("[bidding] đồng bộ trần chi thất bại sau khi auto-duyệt CO/CE:", e);
+    }
   }
 
   revalidatePath(`/bidding/${projectId}`);
@@ -742,8 +749,20 @@ export async function approveCostSheet(
   const t = await getTranslations("bidding.validation");
   const staffId = await getCurrentStaffId();
 
-  const sheet = await prisma.costSheet.findUnique({ where: { id: costSheetId } });
+  const sheet = await prisma.costSheet.findUnique({
+    where: { id: costSheetId },
+    include: { revisions: { orderBy: { revNo: "desc" }, take: 1, select: { revNo: true } } },
+  });
   if (!sheet) return { error: t("notFound") };
+
+  // FIN-B — chống duyệt nhầm bản chưa nhìn thấy: form mang theo revNo lúc RENDER; Account lưu
+  // thêm bản mới trong lúc người duyệt đang đọc thì revNo lệch → bắt xem lại rồi duyệt bản mới.
+  const latestRevNo = sheet.revisions[0]?.revNo ?? 0;
+  if (latestRevNo === 0) return { error: t("notFound") }; // chưa lưu lần nào thì không có gì để duyệt
+  const seenRevNo = Number(formData.get("revNo") ?? NaN);
+  if (!Number.isFinite(seenRevNo) || seenRevNo !== latestRevNo) {
+    return { error: t("approveStaleRev", { seen: Number.isFinite(seenRevNo) ? seenRevNo : 0, latest: latestRevNo }) };
+  }
 
   const minMargin = await getNumberSetting("bidding", "min_margin_pct", 31);
   const marginPct = computeMarginPct(toNum(sheet.ceTotal), toNum(sheet.coTotal));
@@ -763,6 +782,7 @@ export async function approveCostSheet(
     data: {
       approvedById: staffId,
       approvedAt: new Date(),
+      approvedRevNo: latestRevNo, // FIN-B: duyệt là duyệt ĐÚNG BẢN NÀY — phát sinh sau phải duyệt lại
       rejectedById: null,
       rejectedNote: null,
       rejectedAt: null,
@@ -774,13 +794,22 @@ export async function approveCostSheet(
       entityType: "cost_sheet",
       entityId: costSheetId,
       field: "approved",
-      newValue: "true",
+      newValue: `v${latestRevNo}`,
       action: "UPDATE",
       changedBy: staffId,
       reason: overrideData?.marginOverrideNote ?? null,
     },
   });
+  // FIN-B: duyệt xong mới đồng bộ trần chi xuống module ④ (con trỏ vừa set = bản sống nên đọc dòng
+  // sống là đúng). Nuốt lỗi có chủ ý như saveCostSheet trước đây: duyệt đã ghi xong, lỗi đồng bộ
+  // không được làm hỏng thao tác — trang Chi phí còn nút "Làm mới" (nay cũng chỉ sync khi đã duyệt).
+  try {
+    await syncFinanceCostLines(projectId);
+  } catch (e) {
+    console.error("[bidding] đồng bộ trần chi thất bại sau khi duyệt CO/CE:", e);
+  }
   revalidatePath(`/bidding/${projectId}`);
+  revalidatePath("/finance");
   revalidatePath("/reminders");
   return {};
 }
@@ -987,14 +1016,12 @@ export async function moveToProcessing(
   await prisma.project.update({ where: { id: projectId }, data: { statusId: processingId, processingAt: new Date() } });
   await audit(projectId, "status", project.status.code, "PROCESSING", staffId, "move to processing");
 
-  // Dựng dòng chi phí NGAY khi vào thực thi: từ đây dự án mới được tạm ứng/thanh toán, mà mỗi dòng
-  // chi phí chính là TRẦN CHI. Bảng CO/CE lưu qua saveCostSheet đã tự đồng bộ, nhưng bảng nhập thẳng
-  // vào DB (seed/nhập liệu) thì chưa — không có bước này, dự án vào thực thi với 0 đối tượng trần chi
-  // cho tới khi có người nhớ bấm "Làm mới".
-  // Nuốt lỗi có chủ ý như ở saveCostSheet: đã đổi trạng thái rồi, lỗi đồng bộ không được làm hỏng
-  // thao tác; trang Chi phí vẫn còn nút "Làm mới" nếu bước này trượt.
+  // Dựng dòng chi phí khi vào thực thi — NHƯNG từ FIN-B chỉ khi bảng CO đã DUYỆT và bản duyệt là
+  // bản sống (syncIfApproved). Bảng chưa duyệt thì dự án vào thực thi với 0 trần chi là ĐÚNG THIẾT
+  // KẾ: cổng duyệt chính là thứ mở két. Nuốt lỗi có chủ ý: đã đổi trạng thái rồi, lỗi đồng bộ
+  // không được làm hỏng thao tác; trang Chi phí vẫn còn nút "Làm mới" nếu bước này trượt.
   try {
-    await syncFinanceCostLines(projectId);
+    await syncIfApproved(projectId);
   } catch (e) {
     console.error("[bidding] đồng bộ dòng chi phí thất bại khi vào Processing:", e);
   }

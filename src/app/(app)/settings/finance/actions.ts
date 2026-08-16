@@ -24,22 +24,14 @@ export async function saveFinanceSettings(
   const t = await getTranslations("settings.finance");
   const maxCount = Number(formData.get("maxCount") ?? NaN);
   const maxAmount = Number(formData.get("maxAmount") ?? NaN);
-  const weeklyBuckets = Number(formData.get("weeklyBuckets") ?? NaN);
-  const monthlyBuckets = Number(formData.get("monthlyBuckets") ?? NaN);
-  if (
-    !Number.isFinite(maxCount) || maxCount < 1 ||
-    !Number.isFinite(maxAmount) || maxAmount < 0 ||
-    !Number.isFinite(weeklyBuckets) || weeklyBuckets < 0 || weeklyBuckets > 12 ||
-    !Number.isFinite(monthlyBuckets) || monthlyBuckets < 0 || monthlyBuckets > 12 ||
-    weeklyBuckets + monthlyBuckets < 1
-  ) {
+  // Hai setting cashflow_*_buckets cũ đã nghỉ hưu cùng bản forecast cũ — Cashflow v2 chọn khung
+  // thời gian ngay trên trang báo cáo, không còn gì đọc chúng.
+  if (!Number.isFinite(maxCount) || maxCount < 1 || !Number.isFinite(maxAmount) || maxAmount < 0) {
     return { error: t("errorInvalid") };
   }
   const staffId = await getCurrentStaffId();
   await upsertSetting("max_advance_count_per_staff", String(Math.round(maxCount)), staffId);
   await upsertSetting("max_outstanding_advance_amount_per_staff", String(Math.round(maxAmount)), staffId);
-  await upsertSetting("cashflow_weekly_buckets", String(Math.round(weeklyBuckets)), staffId);
-  await upsertSetting("cashflow_monthly_buckets", String(Math.round(monthlyBuckets)), staffId);
   revalidatePath("/settings/finance");
   revalidatePath("/finance");
   revalidatePath("/finance/cashflow");

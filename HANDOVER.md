@@ -1854,6 +1854,17 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
+⚠ **CHỜ DEPLOY — `e6c2e18` (16/08/2026, đã push `origin/master`) CHƯA lên production.** Gói FIN-A + Cashflow v2
++ FIN-B + PUR-1a/1b + PUR-2 (mục 10.33–10.37): **3 migration mới** (`fin_b_co_approval`, `pur_rfq`,
+`pur2_vendor_profile`, đều additive), **4 mã quyền mới** (138 → 142, backfill PUR_POLICY), seed one-shot 17 NCC +
+baseline FIN-B. Tối 16/08 `deploy.sh --check` dừng ở B1: máy dev đứng ở mạng `192.168.0.x` (không phải LAN
+công ty) và NAT cổng 2222 timeout suốt 45 phút dù `app.tcmbtl.com` vẫn 200 — đúng ca đã ghi ở §8.1. Kế hoạch
+chủ dự án: **sáng 17/08 nối Wi-Fi công ty rồi chạy `bash scripts/deploy.sh`** (đường LAN). Sau deploy đối
+chiếu như mọi lần: nhân sự/khách/dự án 36/68/25 · coTotal+ceTotal 5 bảng không đổi · grant 1312 → **1329**
+(+17 = 4 mã PUR) · `cost_sheet.approvedRevNo` khác null đúng ở các bảng đã có trần chi · bảng `rfq*`,
+`vendor_contact`, `vendor_field_def` trống · 17 NCC seed mã 3 ký tự · `[jobs] scheduler bật`. Nhắc BGĐ hai
+điểm vận hành của FIN-B (mục 10.35): trần chi chỉ nở khi BGĐ/CFO duyệt bản CO; cashflow chỉ BGĐ/CFO/Admin.
+
 **Production đang chạy `f04b39a`** (07/08/2026 15:49) — **CR-1c**: trưởng team đã nghỉ không còn
 nhận thông báo vào khoảng không (mục 10.32). Chạy `bash scripts/deploy.sh` **đường LAN**, fingerprint
 khớp. **KHÔNG migration mới** (67 migration, "No pending migrations"), **không mã quyền mới**. Backup

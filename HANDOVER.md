@@ -123,10 +123,11 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Hồ sơ ISO | `/iso` | Xong (sổ đăng ký 25 loại hồ sơ / dự án, 8 loại app tự chấm, tab `/projects/[id]/iso`, xuất Excel 33 cột — xem mục 10.20) |
 | — | Bài đăng MKT | `/mkt` | Xong (bài LinkedIn/Fanpage: Account nộp ý chính + ảnh → AI DeepSeek viết riêng từng kênh → HR duyệt, copy đăng tay; banner nhịp tuần; phân tích insights quý — xem mục 10.23) |
+| — | Họp Account tuần | `/meetings` | Xong (biên bản tuần theo từng team Account: dòng theo dự án gom nhóm theo khách + RAG + việc có người/hạn tự mang sang tuần sau; đồng bộ hai chiều với buổi họp trên Claude Project — dán/tải biên bản cho AI bóc, xuất gói họp tuần; CHỈ BGĐ + trưởng team — xem mục 10.39) |
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 120 model Prisma · 70 migration · 83 file `src/lib` · 4086 key i18n × 2 ngôn ngữ · 142 mã quyền.
+**Quy mô:** 123 model Prisma · 71 migration · 85 file `src/lib` · 4174 key i18n × 2 ngôn ngữ · 145 mã quyền.
 
 ---
 
@@ -1885,6 +1886,121 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       eslint · i18n 0/0 (4086 key) · build sạch.
     - **CHƯA LÀM (cố ý):** nhắc điền qua notification/banner toàn app (chỉ có banner ở `/profile`) · nhân sự tự
       sửa ngày đã có · HR sửa chức danh (vẫn chưa sửa được trong app — nợ cũ ở mục 10.1).
+
+39. **HỌP ACCOUNT TEAM HẰNG TUẦN — MEET-1 + MEET-2 XONG 18/08/2026** (migration
+    `20260817000000_account_meetings`, 3 bảng MỚI `account_meeting` / `account_meeting_row` /
+    `account_meeting_action`; **3 mã quyền mới, 142 → 145**). Chủ dự án họp mỗi tuần với từng team
+    Account trong một Project trên claude.ai; module này đưa biên bản vào app làm NGUỒN SỰ THẬT, và
+    đồng bộ hai chiều với buổi họp đó.
+    - **Quyết định đã chốt (17/08/2026):** dòng neo theo **DỰ ÁN, gom nhóm theo khách** (khách chưa
+      có dự án chạy vẫn được một dòng riêng) · đồng bộ Claude làm **hai đợt** (đợt 1 dán/tải file +
+      AI + xuất gói họp; **MCP connector là đợt 2, CHƯA làm**) · việc cần làm thì **ghi + báo người
+      được giao + tự mang sang tuần sau nếu chưa xong** · quyền **CHỈ BGĐ + trưởng team**, thành
+      viên chỉ nhận thông báo · **AI vẫn là DeepSeek**, không thêm provider Anthropic (đã cân nhắc
+      và bỏ: Claude Project là thuê bao, KHÔNG có API đọc nội dung chat — ba bề mặt khác nhau).
+    - ⚠ **TRƯỞNG TEAM KHÔNG CÓ MÃ QUYỀN NÀO — kiểm THEO BẢN GHI** (`meetings/access.ts`, khuôn
+      `canConfirmRfq` mục 10.36). Đừng đi tìm `requirePermission("meetings.*")` cho họ.
+      `requireMeetingAccess()` cho qua khi `canViewAll || leadTeamIds.length`; **ngược lại mới gọi
+      `requirePermission("meetings.view")`** để bị đá về SAFE_LANDING — gác thẳng bằng mã quyền là
+      dựng lại đúng vòng lặp 307 ở mục 10.1. Nav đẩy chuỗi `"meetings.view"` tổng hợp vào mảng
+      quyền của Sidebar cho trưởng team; đó chỉ là TRANG TRÍ, hàng rào thật ở page + action.
+    - **`MEETING_POLICY` trong seed** (khuôn `PUR_POLICY`) nuôi cả `isRestricted` + `meetingCodesFor`
+      + 2 backfill `20260817_meetings_*`, lọc theo **MÃ ROLE**. Đo trên dev.db: `meetings.view` 1 ·
+      `meetings.manage` 1 · `meetings.ai_import` 3 vai = **1329 → 1334**; `db:seed` lần hai no-op.
+    - **Sửa kèm một bug CÓ SẴN:** `PERMISSION_MODULES` thiếu `"recruit"` ⇒ 7 mã `recruit.*` của TD-1
+      **không hiện trong ma trận `/settings/roles`** (trang lọc theo danh sách module). Thêm cả
+      `recruit` lẫn `meetings`. ⚠ Thêm mã quyền mà quên khai module là quyền tồn tại nhưng BGĐ không
+      tick được — tsc/eslint/build đều SẠCH, không có kiểm tự động nào bắt.
+    - **Việc cần làm không COPY sang tuần sau**: action thuộc TUẦN SINH RA nó; tuần W liệt kê mọi
+      action `OPEN` có `meeting.weekStart < W` (`carryOverActions`). Đánh dấu xong ghi `doneAt` +
+      `doneInMeetingId`, KHÔNG báo lại. Notification fan-out **SAU transaction** (SQLite
+      single-writer), `notifiedAt` chống gửi lại.
+    - ⚠ **HAI BUG REACT ĐÃ VÁ — ĐỌC TRƯỚC KHI SỬA PANEL NHẬP BIÊN BẢN:**
+      (a) **`<form>` lồng `<form>`** — panel AI nằm trong form chính của biên bản. HTML cấm, React ném
+          *"A React form was unexpectedly submitted"* + lỗi hydration. Nay `MeetingForm` render
+          `<div>` bọc: **panel đứng NGOÀI, `<form>` biên bản đứng sau**.
+      (b) **"Too many re-renders"** — panel gọi `onParsed` (setState của CHA) trong thân render theo
+          mẫu "điều chỉnh state lúc render". ⚠ Mẫu đó **chỉ hợp lệ khi setState là của CHÍNH
+          component đang render**. Nay `useActionState` của AI + gói họp nằm ở `MeetingForm`, panel
+          chỉ nhận `aiState/aiAction/packState/packAction` làm prop.
+          ⚠ **VÀ phải chốt theo chính `aiState.parsed`, KHÔNG theo identity của `aiState`.** Bản vá
+          đầu chốt theo `aiState` nên ngay lần render ĐẦU (kể cả render phía server, chưa ai bấm AI)
+          đã khác `null` ⇒ setState trong thân render ⇒ lặp lại đúng lỗi cũ và **trang trả 500**.
+          Với `parsed`: chưa chạy AI thì `undefined`, không setState lần nào.
+    - **MEET-2 — chiều Claude → app** (`parseMinutesWithAi`): dán text HOẶC tải file → AI bóc → **TRẢ
+      VỀ FORM để người duyệt**, KHÔNG ghi thẳng DB (mirror `parseCvWithAi`). `rawMinutes` +
+      `aiParsedAt` chỉ ghi khi bấm Lưu. Mọi output qua Zod (`aiChatJson` chỉ ép kiểu — mục 10.14):
+      `rag` không phải GREEN/YELLOW/RED → null; `dueDate` không phải `YYYY-MM-DD` → null.
+      **KHÔNG `$transaction` quanh call AI.**
+    - **MEET-2 — chiều app → Claude**: nút "Xuất gói họp tuần" dựng markdown (`meetings-server.ts`)
+      từ ĐÚNG các nguồn đang chạy (`getTimelineOverdueItems`, `getArOverdueItems`,
+      `getCareOverdueClients`, CO/CE bản CTRACT mới nhất) nên số khớp `/reminders` và `/finance`.
+      ⚠ **Margin chỉ vào gói khi người bấm có `bidding.costsheet.view_cost`** — gói này được COPY ra
+      NGOÀI app.
+    - ⚠ **BỐN THỨ CHỈ LỘ RA KHI CHẠY FILE HỌP THẬT** (`Dashboard_Account1.html` chủ dự án gửi
+      18/08/2026 — 13 khách, 20 job, 38 action item). Cả bốn đều đã vá và có test:
+      1. **File thật là HTML, không phải .md/.docx.** Dashboard Claude Project xuất ra là HTML một
+         trang ⇒ thêm `text/html` vào `MEETING_FILE_MIME_TYPES` + nhánh `htmlToText` trong
+         `extract-text.ts` (regex, không kéo thêm thư viện). Đo: 94KB HTML → **35.209 ký tự text
+         sạch**, không lọt thẻ/script.
+      2. **Trần ký tự 20k cắt mất TOÀN BỘ 38 việc** — phần "việc cần làm" nằm ở CUỐI trang.
+         `MAX_MEETING_TEXT_CHARS` **20.000 → 40.000**.
+      3. **Output vượt 6000 token ⇒ JSON bị cắt giữa chừng ⇒ `AiError EMPTY`.** Vá hai đầu, phải đi
+         **cùng nhau**: `maxTokens` 6000 → **8000** (trần của deepseek-chat) VÀ hạn mức ký tự nói rõ
+         trong prompt (quy tắc 8) khớp với trần Zod (`update` 1500→600, `risks`/`nextSteps`
+         800→400). ⚠ Chỉ nâng token mà để model viết dài là vẫn tràn. Thêm mã lỗi `AI_TOO_LONG` để
+         người dùng biết đường xử lý thay vì thấy lỗi AI chung chung.
+      4. **Model "điền cho đủ" danh sách dự án**: prompt có đưa danh sách dự án của team để nó điền
+         đúng mã, và nó trả về mỗi dự án một dòng — đo được **17 dòng thì 11 dòng RỖNG TUẾCH**. Vá
+         cả hai đầu: luật trong prompt ("dự án nào biên bản không nói gì thì KHÔNG đưa vào rows") và
+         **lưới chặn thuần trong `matchParsedRows`** — không RAG, không chữ nào thì bỏ hẳn. Dòng
+         rỗng không phải nội dung họp; để lọt là nó ghi đè chuỗi trống lên thứ người dùng đã gõ tay.
+    - ⚠ **KHỚP THEO TÊN DỰ ÁN PHẢI ĐỒNG Ý VỚI KHÁCH** (`clientOf` là một nguồn sự thật cho cả phép
+      kiểm chéo lẫn dòng mức khách). Tên dự án ngành này trùng như cơm bữa: đo trên file thật, dòng
+      của **Saigon Centre ("Christmas Decoration 2026") khớp trúng dự án "Christmas Decor" của AEON
+      Hạ Long** — tức ghi tình hình khách này vào dự án khách khác, IM LẶNG. Nay biên bản có nêu
+      khách mà khách không khớp thì bỏ khớp theo tên, rơi xuống dòng mức khách — thà thô hơn gán nhầm.
+    - **Verify (25/25 test thuần + file họp THẬT + browser act-as 3 vai):** bóc HTML 35.209 ký tự,
+      không cắt · AI 32s → 23 dòng + 38 việc, confidence 0,9 → **10 dòng khớp** (AHL tách đúng T005
+      Xmas / T006 Black Friday; SGC vào đúng dự án của chính nó) + **13 dòng vào "chưa khớp"** =
+      đúng những khách CHƯA CÓ trong dev.db (TAS, HMT, MTC, IMV, VCRE) — **app không bịa ra khách
+      hay dự án nào** · khớp người theo tên gọi ngắn thật trong file ("Tươi", "Trương Tươi" →
+      TRƯƠNG VĂN TƯƠI), tên người ngoài công ty → để trống chờ chọn tay · gói họp tuần 3.164 ký tự,
+      17 dự án, có margin đúng vai · **act-as HỒ HỒNG PHƯỚC (lead A1)**: chỉ thấy tab A1, gõ thẳng
+      `?team=A3` bị đá về A1 không lộ dữ liệu, không vòng lặp 307 · **act-as TRƯƠNG VĂN TƯƠI (A1,
+      không phải lead)**: đá về Dashboard, nav không có mục "Họp", HTML thô không có nội dung họp
+      nào (chuỗi RAG trong HTML là bundle i18n dùng chung, không phải dữ liệu) · dữ liệu test đã
+      dọn sạch, dev.db 36 nhân sự / 68 khách / 25 dự án. tsc · eslint · i18n **0/0 (4174 key)** ·
+      `next build` sạch có route `/meetings` · `migrate diff` rỗng.
+    - ⚠ **KỲ VỌNG VẬN HÀNH:** dev.db là sandbox nên chỉ 7/12 mã khách trong file thật tồn tại; trên
+      production (68 khách thật) tỷ lệ khớp sẽ cao hơn hẳn.
+    - **VIỆC ĐƯỢC PHÉP CHƯA GÁN NGƯỜI** (quyết định chủ dự án 18/08/2026, đảo lại thiết kế ban đầu):
+      `AccountMeetingAction.assigneeStaffId` **nullable**. Lý do đo được từ file thật: **28/38 việc
+      không ghi người phụ trách** — đó là đúng nguồn, không phải AI đọc sót; bắt gán đủ mới cho lưu
+      là ép người chủ trì bịa tên ngay tại buổi họp. Việc chưa gán **vẫn mang sang tuần sau** như mọi
+      việc còn mở, chỉ là **chưa báo cho ai**; gán người sau rơi đúng nhánh "đổi người phụ trách" nên
+      thông báo bay đi lúc đó. Form hiện dòng cảnh báo đếm số việc chưa gán; gói họp tuần in
+      "CHƯA GÁN NGƯỜI" để buổi họp còn chốt.
+      ⚠ Migration `account_meetings` được **sửa TẠI CHỖ** (cột `TEXT` thay vì `TEXT NOT NULL`) chứ
+      không đẻ thêm migration dựng lại bảng: lúc đổi, migration này **chưa push, chưa deploy**, và cả
+      3 bảng đang **rỗng tuyệt đối** (script sửa có chốt chặn: có dòng nào là dừng). Nếu đã deploy rồi
+      thì KHÔNG được làm kiểu này — phải thêm migration mới.
+      ⚠ Sau khi đổi schema phải **`prisma generate` với dev server ĐÃ TẮT**: lần đầu chạy khi server
+      còn sống thì Windows khoá `query_engine-windows.dll.node` ⇒ EPERM ⇒ **types mới nhưng runtime
+      cũ**, và Prisma ném `Argument 'meeting' is missing` rất khó hiểu (nó không khớp được
+      `assigneeStaffId: null` với schema cũ nên rơi sang biến thể checked-create). tsc SẠCH trong lúc
+      đó — không có gì bắt được ngoài việc chạy thật.
+    - ⚠ **Dữ liệu gửi ra DeepSeek:** biên bản đi NGUYÊN VĂN (≤40.000 ký tự) — dashboard thật có tên
+      khách, giá trị hợp đồng, tên người phía khách. Hộp xác nhận trước nút AI nói rõ điều đó (cùng
+      chuẩn đã áp cho CV tuyển dụng và kho kiến thức khách hàng).
+    - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** **MCP connector (đợt 2)** để claude.ai gọi
+      thẳng vào app — cần OAuth 2.1 + Dynamic Client Registration + hardening endpoint công khai,
+      và phải kiểm trước gói claude.ai của công ty có bật "custom connectors" không · tự ghi
+      `CareNote` khi lưu dòng khách (auto-append sẽ reset đồng hồ chăm sóc mỗi tuần, hỏng tín hiệu
+      BGĐ) · lưu file biên bản lên đĩa (chỉ giữ text ở `rawMinutes`) · nhắc họp qua notification ·
+      xuất biên bản ra Excel/PDF · hai người sửa cùng lúc thì người lưu sau thắng, im lặng · sửa
+      trần 6.000 ký tự của `extractTextFromFile` cho các module cũ (MEET-2 truyền trần riêng, 5 chỗ
+      gọi cũ không đổi).
 
 ---
 

@@ -20,6 +20,7 @@ import {
   Megaphone,
   HandCoins,
   ShoppingCart,
+  CalendarCheck,
 } from "lucide-react";
 
 export type NavItem = {
@@ -47,6 +48,10 @@ export const NAV_ITEMS: NavItem[] = [
   // luồng nghiệp vụ tuần tự bên dưới.
   { module: null, labelKey: "ai", href: "/ai", icon: Sparkles, status: "active", accent: true },
   { module: "①", labelKey: "clients", href: "/clients", icon: Users, status: "active", permission: "clients.view" },
+  // Họp Account team — BGĐ có mã meetings.view; TRƯỞNG TEAM không có mã nào (kiểm theo bản ghi
+  // Team.leadStaffId) nên layout tự nối "meetings.view" vào mảng quyền của Sidebar cho họ. Trang trí:
+  // hàng rào thật là requireMeetingAccess() ở page/action.
+  { module: null, labelKey: "meetings", href: "/meetings", icon: CalendarCheck, status: "active", permission: "meetings.view" },
   { module: "②", labelKey: "bidding", href: "/bidding", icon: Gavel, status: "active", permission: "bidding.view" },
   { module: "③", labelKey: "projects", href: "/projects", icon: Briefcase, status: "active", permission: "projects.view" },
   { module: "✦", labelKey: "creative", href: "/creative", icon: Palette, status: "active", permission: "creative.view" },

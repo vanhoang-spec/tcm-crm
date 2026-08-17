@@ -39,6 +39,7 @@ model Team {
   loansAsBorrower PlanningLoanRequest[] @relation("LoanFromTeam")
   loansAsLender   PlanningLoanRequest[] @relation("LoanToTeam")
   jobPositions    JobPosition[]
+  accountMeetings AccountMeeting[]
 
   @@map("team")
 }
@@ -266,6 +267,9 @@ model Staff {
   candidatesDecided           Candidate[]               @relation("CandidateDecidedBy")
   interviewsAsInterviewer     Interview[]               @relation("InterviewInterviewer")
   interviewsCreated           Interview[]               @relation("InterviewCreatedBy")
+  accountMeetingsCreated      AccountMeeting[]          @relation("AccountMeetingCreatedBy")
+  accountMeetingsFinalized    AccountMeeting[]          @relation("AccountMeetingFinalizedBy")
+  accountMeetingActions       AccountMeetingAction[]    @relation("AccountMeetingActionAssignee")
 
   @@map("staff")
 }
@@ -479,6 +483,7 @@ model Client {
   invoices            ClientInvoice[]
   inventoryItemsOwned InventoryItem[]  @relation("InventoryItemOwnerClient")
   kbSpace             ClientKbSpace?
+  meetingRows         AccountMeetingRow[]
 
   @@index([groupId])
   @@map("client")
@@ -963,6 +968,7 @@ model Project {
   isoDocs             ProjectIsoDoc[]
   mktPosts            MktPost[]
   group               ProjectGroup?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  meetingRows         AccountMeetingRow[]
 
   @@index([ownerTeamId, statusId])
   @@map("project")
@@ -3505,4 +3511,82 @@ model InterviewScore {
 
   @@unique([interviewId, criterionCode])
   @@map("interview_score")
+}
+
+// ─────────────────────────────────────────────────────────
+// HỌP ACCOUNT TEAM HẰNG TUẦN (MEET-1, 17/08/2026)
+// ─────────────────────────────────────────────────────────
+
+/// Biên bản họp tuần của MỘT team Account. Một meeting / team / tuần (weekStart = thứ Hai, UTC-midnight
+/// theo quy ước ngày nghiệp vụ HANDOVER 4.3). Quyền: BGĐ (mã meetings.*) + trưởng team (kiểm theo bản ghi
+/// Team.leadStaffId, KHÔNG có mã quyền) — xem app/(app)/meetings/access.ts.
+model AccountMeeting {
+  id            String    @id @default(cuid())
+  teamId        String
+  weekStart     DateTime
+  note          String? // ghi chú chung của buổi họp
+  rawMinutes    String? // biên bản thô dán/tải lên (giữ bản gốc; AI chỉ đọc từ đây khi người dùng bấm Lưu)
+  aiParsedAt    DateTime?
+  finalizedAt   DateTime? // đã chốt → khoá rows/actions của tuần này (vẫn đánh DONE việc từ tuần sau)
+  finalizedById String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  team        Team                   @relation(fields: [teamId], references: [id])
+  createdBy   Staff?                 @relation("AccountMeetingCreatedBy", fields: [createdById], references: [id])
+  finalizedBy Staff?                 @relation("AccountMeetingFinalizedBy", fields: [finalizedById], references: [id])
+  rows        AccountMeetingRow[]
+  actions     AccountMeetingAction[]
+
+  @@unique([teamId, weekStart])
+  @@map("account_meeting")
+}
+
+/// Một dòng cập nhật = một DỰ ÁN (projectId) hoặc một KHÁCH chưa có dự án chạy (projectId null).
+/// Không @@unique([meetingId, projectId]) vì projectId NULL — SQLite coi NULL khác nhau; chặn trùng ở action.
+model AccountMeetingRow {
+  id        String  @id @default(cuid())
+  meetingId String
+  clientId  String
+  projectId String?
+  rag       String? // GREEN | YELLOW | RED — 3 giá trị cứng có logic màu, không OptionSet
+  update    String?
+  risks     String?
+  nextSteps String?
+  sort      Int     @default(0)
+
+  meeting AccountMeeting         @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  client  Client                 @relation(fields: [clientId], references: [id])
+  project Project?               @relation(fields: [projectId], references: [id])
+  actions AccountMeetingAction[]
+
+  @@index([meetingId])
+  @@index([projectId])
+  @@map("account_meeting_row")
+}
+
+/// Việc cần làm chốt trong họp. Thuộc TUẦN SINH RA nó (meetingId); tuần sau liệt kê mọi việc OPEN của team
+/// có meeting.weekStart < tuần đang xem (carry-over không copy dòng). Xoá dòng → rowId = null, việc còn nguyên.
+model AccountMeetingAction {
+  id              String    @id @default(cuid())
+  meetingId       String
+  rowId           String?
+  title           String
+  assigneeStaffId String?
+  dueDate         DateTime?
+  status          String    @default("OPEN") // OPEN | DONE
+  doneAt          DateTime?
+  doneInMeetingId String? // tuần đánh dấu xong (chỉ thông tin, không FK)
+  notifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  meeting  AccountMeeting     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  row      AccountMeetingRow? @relation(fields: [rowId], references: [id], onDelete: SetNull)
+  assignee Staff?             @relation("AccountMeetingActionAssignee", fields: [assigneeStaffId], references: [id])
+
+  @@index([meetingId])
+  @@index([assigneeStaffId, status])
+  @@map("account_meeting_action")
 }

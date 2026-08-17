@@ -35,6 +35,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // ĐANG THAO TÁC, nên admin đang "act as" nhân viên thường sẽ thấy đúng menu của nhân viên đó.
   // Set không serialize được sang client component → truyền mảng.
   const navPermissions = [...(await getMyPermissions())];
+  // Trưởng team Account thấy mục "Họp Account" dù KHÔNG có mã meetings.view (quyền của họ kiểm theo bản
+  // ghi Team.leadStaffId — xem meetings/access.ts). Chỉ nối vào mảng dùng cho Sidebar/Header; các phép
+  // đếm chuông ở dưới vẫn dùng mã thật nên không đụng gì.
+  if (!navPermissions.includes("meetings.view") && currentStaffId) {
+    const leadsTeam = await prisma.team.count({ where: { leadStaffId: currentStaffId, isActive: true } });
+    if (leadsTeam > 0) navPermissions.push("meetings.view");
+  }
   // Chuông đếm ĐÚNG những khối người này xem được ở /reminders — nếu không, tài khoản hẹp quyền
   // (thủ kho, bảo vệ) thấy con số của việc họ không mở ra được, bấm vào thì trang trống.
   const [careItems, biddingItems, pendingApprovals, timelineItems, stockRequestItems, arItems, unreadNotifications, staffRows] =

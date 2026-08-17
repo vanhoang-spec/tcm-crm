@@ -39,6 +39,8 @@ export const PERMISSION_MODULES = [
   "finance",
   "purchasing",
   "staff",
+  "recruit",
+  "meetings",
   "kpi",
   "payroll",
   "chat",
@@ -62,6 +64,10 @@ export const PERMISSION_MODULE_LABELS: Record<string, { labelVi: string; labelEn
   finance: { labelVi: "④ Chi phí & Công nợ", labelEn: "④ Finance & receivables" },
   purchasing: { labelVi: "🛒 Thu mua (PO)", labelEn: "🛒 Purchasing (PO)" },
   staff: { labelVi: "⑤ Nhân sự & chấm công", labelEn: "⑤ Staff & timekeeping" },
+  // ⚠ "recruit" từng THIẾU ở đây (TD-1) ⇒ 7 mã recruit.* không hiện trong ma trận /settings/roles dù grant có
+  // trong DB — ma trận lặp theo PERMISSION_MODULES. Thêm module mới thì phải thêm cả hai chỗ.
+  recruit: { labelVi: "⑤ Tuyển dụng", labelEn: "⑤ Recruitment" },
+  meetings: { labelVi: "Họp Account team", labelEn: "Account team meetings" },
   kpi: { labelVi: "⑥ KPI", labelEn: "⑥ KPI" },
   payroll: { labelVi: "⑦ Lương (chưa làm)", labelEn: "⑦ Payroll (not built)" },
   chat: { labelVi: "⑨ Trao đổi", labelEn: "⑨ Chat" },
@@ -196,6 +202,14 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "recruit.salary.view", module: "recruit", labelVi: "Xem lương mong muốn của ứng viên", labelEn: "View candidate expected salary", sensitive: true },
   { code: "recruit.interview.manage", module: "recruit", labelVi: "Đặt lịch phỏng vấn, phân công người phỏng vấn", labelEn: "Schedule interviews & assign interviewers" },
   { code: "recruit.decide", module: "recruit", labelVi: "Chốt kết quả tuyển: Thành công / Từ chối", labelEn: "Decide outcome: hire / reject", sensitive: true },
+
+  // ── Họp Account team hằng tuần (MEET-1) ──
+  // Trưởng team KHÔNG cần mã nào: kiểm theo bản ghi Team.leadStaffId trong app/(app)/meetings/access.ts
+  // (khuôn recruit: người phỏng vấn / trưởng bộ phận). Hai mã view/manage là cho BGĐ nhìn/ghi MỌI team.
+  // ⚠ `meetings.ai_import` tách riêng vì AI tính tiền theo LƯỢT — kiểm hasPermission BÊN TRONG action.
+  { code: "meetings.view", module: "meetings", labelVi: "Xem biên bản họp tuần của MỌI team Account", labelEn: "View weekly meeting minutes of ALL Account teams" },
+  { code: "meetings.manage", module: "meetings", labelVi: "Ghi / chốt biên bản, giao việc cho MỌI team Account", labelEn: "Write / finalize minutes, assign actions for ALL Account teams" },
+  { code: "meetings.ai_import", module: "meetings", labelVi: "Dùng AI đọc biên bản họp (tốn phí theo lượt)", labelEn: "Use AI to parse meeting minutes (billed per call)" },
 
   // ── ⑥ KPI ──
   { code: "kpi.view", module: "kpi", labelVi: "Xem KPI & quỹ performance", labelEn: "View KPI & performance pool", sensitive: true },

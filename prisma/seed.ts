@@ -2243,10 +2243,25 @@ async function main() {
     "purchasing.vendor.manage": PUR_ROLES,
   };
 
+  /**
+   * MEET-1 (17/08/2026) — 3 mã module Họp Account team. Cùng khuôn PUR_POLICY.
+   * - view/manage CHỈ BGĐ (nhìn/ghi MỌI team). Trưởng team KHÔNG có mã: kiểm theo bản ghi Team.leadStaffId
+   *   trong app/(app)/meetings/access.ts (quyết định chủ dự án 17/08: chỉ BGĐ + trưởng team; thành viên
+   *   chỉ nhận Notification việc được giao).
+   * - ai_import: BGĐ + Account Manager/Director (trưởng team hiện là Account Manager; giữ mã AI mà không
+   *   phải lead thì action vẫn chặn ở bước access → vô hại). AI tách riêng vì tính tiền theo lượt.
+   */
+  const MEETING_POLICY: Record<string, string[]> = {
+    "meetings.view": ["BOARD_OF_MANAGEMENT"],
+    "meetings.manage": ["BOARD_OF_MANAGEMENT"],
+    "meetings.ai_import": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER"],
+  };
+
   const isRestricted = (code: string) =>
     code in MONEY_POLICY || // chính sách quyền chạm tiền — xem MONEY_POLICY ngay trên
     code in RECRUIT_POLICY || // hồ sơ ứng viên = dữ liệu cá nhân người ngoài — xem RECRUIT_POLICY
     code in PUR_POLICY || // sub-module Thu mua — xem PUR_POLICY
+    code in MEETING_POLICY || // họp Account team — xem MEETING_POLICY
     code.startsWith("kpi.") || // (1)
     code.startsWith("settings.") || // (1)
     code.startsWith("payroll.") || // module chưa làm — chưa ai có
@@ -2447,6 +2462,12 @@ async function main() {
       .filter(([, allowed]) => allowed.includes(roleCode))
       .map(([code]) => code);
 
+  /** Mã Họp Account team (MEET-1) mà role này được giữ theo MEETING_POLICY. */
+  const meetingCodesFor = (roleCode: string) =>
+    Object.entries(MEETING_POLICY)
+      .filter(([, allowed]) => allowed.includes(roleCode))
+      .map(([code]) => code);
+
   const grantCodesFor = (r: (typeof roleSeeds)[number]) =>
     EXPLICIT_GRANTS[r.code]
       ? new Set(EXPLICIT_GRANTS[r.code])
@@ -2458,6 +2479,7 @@ async function main() {
           ...adminCodesFor(r.code),
           ...recruitCodesFor(r.code),
           ...purCodesFor(r.code),
+          ...meetingCodesFor(r.code),
         ]);
 
   for (const r of roleSeeds) {
@@ -2736,6 +2758,19 @@ async function main() {
       key: "20260816_pur_manage",
       codes: ["purchasing.rfq.manage", "purchasing.rfq.ai", "purchasing.vendor.manage"],
       roleFilter: (r) => PUR_ROLES.includes(r.code),
+    },
+
+    // 17/08/2026 HỌP ACCOUNT TEAM (MEET-1) — 3 mã mới, dịch từ MEETING_POLICY sang đường backfill.
+    // Sửa MEETING_POLICY thì sửa cả đây cho khớp. Lọc theo MÃ ROLE.
+    {
+      key: "20260817_meetings_view_manage",
+      codes: ["meetings.view", "meetings.manage"],
+      roleFilter: (r) => MEETING_POLICY["meetings.view"].includes(r.code),
+    },
+    {
+      key: "20260817_meetings_ai",
+      codes: ["meetings.ai_import"],
+      roleFilter: (r) => MEETING_POLICY["meetings.ai_import"].includes(r.code),
     },
   ];
   for (const bf of backfills) {

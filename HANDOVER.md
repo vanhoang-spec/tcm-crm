@@ -1890,6 +1890,19 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
+**Production đang chạy `1240a87`** (17/08/2026 16:31) — **Nhân sự: ngày sinh / ngày đi làm đầu tiên tuỳ chọn +
+tự bổ sung ở Hồ sơ cá nhân** (mục 10.38). Chạy `bash scripts/deploy.sh` đường LAN, fingerprint khớp. **KHÔNG migration
+mới** (70, "No pending migrations"), **không mã quyền mới**. Backup TRƯỚC deploy: `~/backup/*-20260817-163101*` trên
+server + `D:/TCM/backup-prod-20260817-163101/` máy dev. Đối chiếu sau deploy — **không đổi một dòng dữ liệu nào**:
+nhân sự/khách/dự án **36/68/25** · dòng CO/CE **483** · grant **1329** · coTotal+ceTotal 5 bảng không đổi · NCC 20 ·
+`integrity_check` ok / `foreign_key_check` 0 · pm2 online, restart 0 · `[jobs] scheduler bật` · error log không thêm
+dòng nào · `/login` 200, `/profile` + `/settings/staff` 307 về login. Ghi nhận: **0 nhân sự đang làm việc thiếu ngày
+sinh/ngày đi làm đầu tiên** trên production — form tự bổ sung ở `/profile` chỉ hiện với tài khoản tạo mới sau này.
+
+---
+
+### Deploy trước đó — 17/08/2026 lúc 09:55
+
 **Production đang chạy `4333800`** (17/08/2026 09:55, = `e6c2e18` + ghi chú HANDOVER) — **FIN-A + Cashflow v2 +
 FIN-B + PUR-1a/1b + PUR-2** (mục 10.33–10.37). Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**,
 fingerprint khớp (tối 16/08 đã thử từ ngoài: NAT cổng 2222 timeout suốt 45 phút dù `app.tcmbtl.com` vẫn 200 — đúng

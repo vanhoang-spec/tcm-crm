@@ -850,7 +850,7 @@
     "staff": {
       "backToSettings": "Quay lại Cài đặt",
       "title": "Nhân sự",
-      "desc": "Danh sách nhân sự TCM — tạo tài khoản mới bắt buộc nhập ngày sinh và ngày đi làm đầu tiên.",
+      "desc": "Danh sách nhân sự TCM — tạo tài khoản mới chỉ cần họ tên + tài khoản đăng nhập; ngày sinh và ngày đi làm đầu tiên có thể để trống, nhân sự tự bổ sung ở Hồ sơ cá nhân.",
       "addStaff": "Thêm nhân sự",
       "fullNamePlaceholder": "Họ và tên",
       "emailPlaceholder": "Email công ty hoặc tên tài khoản",
@@ -902,7 +902,10 @@
       "cancelEdit": "Huỷ",
       "save": "Lưu",
       "saved": "Đã lưu.",
-      "payrollExemptShort": "Không tính lương"
+      "payrollExemptShort": "Không tính lương",
+      "dobLabel": "Ngày sinh",
+      "firstWorkDateLabel": "Ngày đi làm đầu tiên",
+      "datesOptionalHint": "Ngày sinh và ngày đi làm đầu tiên nhập theo DD/MM/YYYY, có thể để trống — nhân sự tự bổ sung ở Hồ sơ cá nhân; sửa sai thì HR sửa ở nút \"Sửa tài khoản\". Chưa có ngày đi làm đầu tiên thì phép năm tạm tính từ đầu năm."
     },
     "warehouses": {
       "title": "Kho & địa điểm",
@@ -3400,7 +3403,18 @@
     "errorNoSession": "Không xác định được nhân sự hiện tại.",
     "errorNoFile": "Vui lòng chọn 1 ảnh.",
     "errorInvalidType": "Chỉ nhận ảnh JPG, PNG hoặc WebP.",
-    "errorTooLarge": "Ảnh vượt quá 3MB."
+    "errorTooLarge": "Ảnh vượt quá 3MB.",
+    "personalTitle": "Thông tin cá nhân",
+    "dob": "Ngày sinh",
+    "firstWorkDate": "Ngày đi làm đầu tiên",
+    "notSet": "— chưa có —",
+    "datesMissingHint": "Bạn chưa cập nhật đủ ngày sinh / ngày đi làm đầu tiên. Ngày đi làm đầu tiên dùng để tính phép năm và kỷ niệm thâm niên; ngày sinh dùng cho lời chúc sinh nhật.",
+    "datesLockedHint": "Cần sửa ngày sinh hoặc ngày đi làm đầu tiên? Liên hệ HR (Thiết lập → Nhân sự → Sửa tài khoản).",
+    "saveDates": "Lưu thông tin",
+    "datesSaved": "Đã lưu.",
+    "errorDob": "Ngày sinh không hợp lệ — nhập theo DD/MM/YYYY, không ở tương lai.",
+    "errorFirstWorkDate": "Ngày đi làm đầu tiên không hợp lệ — nhập theo DD/MM/YYYY.",
+    "errorNothingToSave": "Chưa nhập ngày nào để lưu."
   },
   "kpi": {
     "title": "KPI & Lương hiệu suất",

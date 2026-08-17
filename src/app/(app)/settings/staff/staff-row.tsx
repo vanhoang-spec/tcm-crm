@@ -98,6 +98,15 @@ export function StaffRow({
               <input type="checkbox" name="payrollExempt" defaultChecked={staff.payrollExempt} className="h-3.5 w-3.5 rounded border-border-strong" />
               {t("payrollExemptLabel")}
             </label>
+            {/* HR là đường SỬA duy nhất của 2 ngày này (nhân sự chỉ tự điền khi còn trống ở /profile). Để trống = xoá. */}
+            <label className="flex items-center gap-1.5 text-[11px]">
+              <span className="w-28 shrink-0">{t("dobLabel")}</span>
+              <input name="dateOfBirth" defaultValue={staff.dateOfBirth ? formatDate(staff.dateOfBirth) : ""} placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}" className="h-7 w-28 rounded-md border border-border-strong bg-surface px-2 text-xs" />
+            </label>
+            <label className="flex items-center gap-1.5 text-[11px]">
+              <span className="w-28 shrink-0">{t("firstWorkDateLabel")}</span>
+              <input name="firstWorkDate" defaultValue={staff.firstWorkDate ? formatDate(staff.firstWorkDate) : ""} placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}" className="h-7 w-28 rounded-md border border-border-strong bg-surface px-2 text-xs" />
+            </label>
             <div className="flex items-center gap-1.5">
               <button
                 type="submit"

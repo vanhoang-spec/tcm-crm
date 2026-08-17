@@ -5,6 +5,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { AVATAR_MIME_TYPES, MAX_AVATAR_BYTES, saveStaffAvatar, deleteStaffAvatar } from "@/lib/staff-avatar-storage";
+import { parseDob, parseFirstWorkDate } from "@/lib/staff-dates";
+import { formatDate } from "@/lib/utils";
 
 export type AvatarFormState = { error?: string; success?: boolean };
 
@@ -46,4 +48,51 @@ export async function removeMyAvatar(_formData: FormData): Promise<void> {
   await prisma.staff.update({ where: { id: staffId }, data: { avatarKey: null } });
   await deleteStaffAvatar(staff.avatarKey);
   revalidateAvatar();
+}
+
+export type DatesFormState = { error?: string; success?: boolean };
+
+/**
+ * Nhân sự TỰ BỔ SUNG ngày sinh / ngày đi làm đầu tiên khi HR để trống lúc tạo tài khoản
+ * (quyết định chủ dự án 17/08/2026). CHỈ điền được ô CÒN TRỐNG — ngày đã có thì bỏ qua dù form có gửi
+ * (ngày đi làm đầu tiên quyết định phép năm + thâm niên, tự sửa lùi ngày là tự cộng phép); sửa sai thì
+ * HR làm ở /settings/staff ("Sửa tài khoản").
+ */
+export async function updateMyDates(_prev: DatesFormState, formData: FormData): Promise<DatesFormState> {
+  const t = await getTranslations("profile");
+  const staffId = await getCurrentStaffId();
+  if (!staffId) return { error: t("errorNoSession") };
+  const me = await prisma.staff.findUnique({ where: { id: staffId }, select: { dateOfBirth: true, firstWorkDate: true } });
+  if (!me) return { error: t("errorNoSession") };
+
+  const dobRaw = String(formData.get("dateOfBirth") ?? "").trim();
+  const firstRaw = String(formData.get("firstWorkDate") ?? "").trim();
+  const data: { dateOfBirth?: Date; firstWorkDate?: Date } = {};
+  if (!me.dateOfBirth && dobRaw) {
+    const d = parseDob(dobRaw);
+    if (!d) return { error: t("errorDob") };
+    data.dateOfBirth = d;
+  }
+  if (!me.firstWorkDate && firstRaw) {
+    const d = parseFirstWorkDate(firstRaw);
+    if (!d) return { error: t("errorFirstWorkDate") };
+    data.firstWorkDate = d;
+  }
+  if (Object.keys(data).length === 0) return { error: t("errorNothingToSave") };
+
+  await prisma.staff.update({ where: { id: staffId }, data });
+  await prisma.auditLog.create({
+    data: {
+      entityType: "staff",
+      entityId: staffId,
+      field: Object.keys(data).join(","),
+      // dd/mm/yyyy địa phương — cột lưu local-midnight, toISOString() sẽ lùi 1 ngày.
+      newValue: JSON.stringify(Object.fromEntries(Object.entries(data).map(([k, v]) => [k, formatDate(v)]))),
+      action: "UPDATE",
+      changedBy: staffId,
+    },
+  });
+  revalidatePath("/profile");
+  revalidatePath("/settings/staff");
+  return { success: true };
 }

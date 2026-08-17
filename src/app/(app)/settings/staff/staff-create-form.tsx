@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useState } from "react";
 import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { createStaff, type StaffFormState } from "./actions";
@@ -18,40 +18,34 @@ export function StaffCreateForm({
   roles: { id: string; name: string }[];
 }) {
   const [state, formAction, pending] = useActionState<StaffFormState, FormData>(createStaff, {});
-  const formRef = useRef<HTMLFormElement>(null);
   const t = useTranslations("settings.staff");
+  // Trước đây form gọi `form.reset()` sau MỌI lần chạy action, kể cả khi action trả lỗi → HR gõ 8 ô, sai
+  // một ô ngày là mất sạch. Nay: chặn reset (cả requestFormReset của React 19) và chỉ remount khối nhập theo
+  // key khi action THÀNH CÔNG (mẫu "điều chỉnh state lúc render", không useEffect).
+  const [seen, setSeen] = useState(state);
+  const [resetKey, setResetKey] = useState(0);
+  if (state !== seen) {
+    setSeen(state);
+    if (!state.error) setResetKey((k) => k + 1);
+  }
 
   return (
-    <form
-      ref={formRef}
-      action={async (formData) => {
-        await formAction(formData);
-        formRef.current?.reset();
-      }}
-      className="space-y-3 rounded-xl border border-dashed border-border-strong p-4"
-    >
+    <form action={formAction} onReset={(e) => e.preventDefault()} className="space-y-3 rounded-xl border border-dashed border-border-strong p-4">
       <p className="text-xs font-medium text-muted-foreground">{t("addStaff")}</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div key={resetKey} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input name="fullName" placeholder={t("fullNamePlaceholder")} required className={inputClass} />
         {/* type="text": tài khoản vận hành nội bộ gõ tên ngắn không có "@" (xem normalizeLoginId). */}
         <input name="email" type="text" autoCapitalize="none" spellCheck={false} placeholder={t("emailPlaceholder")} required className={inputClass} />
         <input name="title" placeholder={t("titlePlaceholder")} className={inputClass} />
-        <input
-          name="dateOfBirth"
-          placeholder="DD/MM/YYYY"
-          required
-          pattern="\d{2}/\d{2}/\d{4}"
-          title={t("dobHint")}
-          className={inputClass}
-        />
-        <input
-          name="firstWorkDate"
-          placeholder="DD/MM/YYYY"
-          required
-          pattern="\d{2}/\d{2}/\d{4}"
-          title={t("firstWorkDateHint")}
-          className={inputClass}
-        />
+        {/* Hai ngày TUỲ CHỌN (17/08/2026): nhãn hiện rõ, để trống thì nhân sự tự bổ sung ở Hồ sơ cá nhân. */}
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium text-muted-foreground">{t("dobLabel")}</span>
+          <input name="dateOfBirth" placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}" title={t("dobHint")} className={inputClass} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium text-muted-foreground">{t("firstWorkDateLabel")}</span>
+          <input name="firstWorkDate" placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}" title={t("firstWorkDateHint")} className={inputClass} />
+        </label>
         <select name="departmentId" defaultValue="" className={inputClass}>
           <option value="">{t("noDepartment")}</option>
           {departments.map((d) => (
@@ -78,8 +72,7 @@ export function StaffCreateForm({
       <p className="text-[11px] text-muted-foreground">{t("loginIdHint")}</p>
       <p className="text-[11px] text-muted-foreground">{t("roleHint")}</p>
       <p className="text-[11px] text-muted-foreground">{t("payrollExemptHint")}</p>
-      <p className="text-[11px] text-muted-foreground">{t("dobHint")}</p>
-      <p className="text-[11px] text-muted-foreground">{t("firstWorkDateHint")}</p>
+      <p className="text-[11px] text-muted-foreground">{t("datesOptionalHint")}</p>
       <div className="flex items-center gap-3">
         <button
           type="submit"

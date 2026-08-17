@@ -126,7 +126,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 120 model Prisma · 70 migration · 82 file `src/lib` · 4072 key i18n × 2 ngôn ngữ · 142 mã quyền.
+**Quy mô:** 120 model Prisma · 70 migration · 83 file `src/lib` · 4086 key i18n × 2 ngôn ngữ · 142 mã quyền.
 
 ---
 
@@ -1849,6 +1849,42 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       V-OPE-01 trả về nguyên trạng, dev.db 20 NCC / 0 contact / 0 def.
     - **CHƯA LÀM (cố ý):** import NCC từ Excel · lịch sử thay đổi hồ sơ NCC (chỉ AuditLog chung) · trường tuỳ
       chỉnh xuất hiện trong so sánh RFQ / lọc danh sách · gộp hai NCC trùng.
+
+38. **NHÂN SỰ — NGÀY SINH / NGÀY ĐI LÀM ĐẦU TIÊN TUỲ CHỌN + TỰ BỔ SUNG Ở HỒ SƠ — 17/08/2026** (KHÔNG migration,
+    KHÔNG mã quyền mới; hai cột vốn đã nullable). Yêu cầu chủ dự án: form "Thêm nhân sự" có 2 ô ngày không ghi
+    ô nào là gì → nay có nhãn rõ; và 2 ô này **tuỳ chọn** lúc tạo, nhân sự **tự điền bổ sung** sau.
+    - **Form tạo** (`settings/staff/staff-create-form.tsx`): 2 ô có nhãn "Ngày sinh" / "Ngày đi làm đầu tiên",
+      bỏ `required` (vẫn `pattern` DD/MM/YYYY khi có nhập). `createStaff` chỉ parse khi ô không rỗng.
+    - **Hồ sơ cá nhân `/profile`** — card "Thông tin cá nhân": hiện 2 ngày; thiếu ngày nào thì hiện banner +
+      form CHỈ cho ngày còn trống (`ProfileDatesForm` → `updateMyDates`). ⚠ **Server chỉ ghi ô CÒN TRỐNG**, ngày
+      đã có thì bỏ qua dù form có gửi: ngày đi làm đầu tiên quyết định phép năm (`timekeeping.ts`) + thâm niên
+      (`occasions.ts`), cho tự sửa lùi ngày là tự cộng phép. Đã có đủ thì card chỉ-đọc + câu "liên hệ HR".
+    - **HR sửa sai ở đâu:** dialog "Sửa tài khoản" trên `/settings/staff` (`updateStaffLogin`) nay có thêm 2 ô
+      ngày — trước đây KHÔNG action nào sửa được 2 cột này (gõ sai lúc tạo là kẹt dưới DB). Để trống = xoá (để
+      nhân sự nhập lại), audit ghi cũ→mới cả 4 trường.
+    - **Parser dùng chung `lib/staff-dates.ts`** (`parseDob` chặn tương lai + <1940; `parseFirstWorkDate` không
+      chặn tương lai) — tách khỏi `settings/staff/actions.ts` vì file `"use server"` không export được hàm
+      thường. ⚠ Hai cột này lưu **LOCAL midnight** (`new Date(y,m,d)`) từ trước, KHÁC quy ước UTC-midnight của
+      cột ngày nghiệp vụ (mục 4.3) — cố ý giữ nguyên để nhất quán với dữ liệu đã có; mọi chỗ đọc so bằng thành
+      phần địa phương. Đừng "sửa" sang `Date.UTC` một mình phía ghi.
+    - ⚠ **Hệ quả nghiệp vụ khi để trống ngày đi làm đầu tiên**: `entitlementForYear` coi như vào làm từ đầu
+      năm → người vào giữa năm mà chưa điền sẽ thấy phép năm ĐỦ 12 tháng cho tới khi điền. Ghi rõ ở hint form
+      tạo và banner hồ sơ; HR nên nhìn cột "—" trong bảng nhân sự để nhắc.
+    - **Sửa kèm (cùng form, phát hiện lúc verify):** form "Thêm nhân sự" trước đây gọi `form.reset()` sau MỌI lần
+      chạy action kể cả khi action TRẢ LỖI → HR gõ 8 ô, sai một ô ngày là mất sạch (tái hiện được). Nay chặn reset
+      (`onReset preventDefault`, mục 10.37) + chỉ remount khối nhập theo `key` khi action thành công. Verify: nhập
+      ngày sinh 05/03/2099 → lỗi, họ tên/email/phòng ban/checkbox/ngày kia còn nguyên; sửa lại → tạo được, form trắng.
+    - **Audit ghi ngày dd/mm/yyyy ĐỊA PHƯƠNG** (`formatDate`), không `toISOString()` — cột local-midnight qua ISO
+      sẽ lùi 1 ngày (10/10/1990 → "1990-10-09"), đã thấy và sửa trước khi commit.
+    - **Verify (dev.db, browser + DB):** tạo nhân sự KHÔNG nhập ngày → tạo được, bảng hiện "—/—" · ngày ảo 31/02 và
+      ngày sinh tương lai bị server chặn, ngày đi làm đầu tiên ở tương lai (01/09/2026) được nhận · HR "Sửa tài
+      khoản": dialog prefill 2 ngày, sửa/xoá trắng đều đúng, audit cũ→mới · act-as nhân sự test: `/profile` hiện
+      ngày HR đã điền chỉ-đọc + form CHỈ cho ngày còn trống, sai định dạng bị chặn và giữ giá trị, lưu xong card
+      khoá; gửi rỗng → "Chưa nhập ngày nào để lưu"; **nhét tay ô `dateOfBirth` vào form** (ngày sinh đã có) →
+      server bỏ qua, chỉ ghi ngày còn trống (DB vẫn 10/10/1990). Test staff đã xoá, dev.db 36 nhân sự. tsc ·
+      eslint · i18n 0/0 (4086 key) · build sạch.
+    - **CHƯA LÀM (cố ý):** nhắc điền qua notification/banner toàn app (chỉ có banner ở `/profile`) · nhân sự tự
+      sửa ngày đã có · HR sửa chức danh (vẫn chưa sửa được trong app — nợ cũ ở mục 10.1).
 
 ---
 

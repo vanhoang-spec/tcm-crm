@@ -4,6 +4,8 @@ import { getCurrentStaff } from "@/lib/current-staff";
 import { checkPasswordAge } from "@/lib/password";
 import { StaffAvatar } from "@/components/ui/staff-avatar";
 import { ProfileAvatarForm } from "./profile-avatar-form";
+import { ProfileDatesForm } from "./profile-dates-form";
+import { formatDate } from "@/lib/utils";
 
 export default async function ProfilePage() {
   const [t, tAuth, me] = await Promise.all([
@@ -44,6 +46,29 @@ export default async function ProfilePage() {
         <div className="mt-5 border-t border-border pt-4">
           <ProfileAvatarForm hasAvatar={!!me.avatarKey} />
         </div>
+      </div>
+
+      {/* Thông tin cá nhân — ngày sinh / ngày đi làm đầu tiên: HR có thể để trống lúc tạo, nhân sự tự bổ sung ở đây. */}
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("personalTitle")}</h2>
+        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+          <div className="flex gap-2">
+            <dt className="w-40 shrink-0 text-xs text-muted-foreground">{t("dob")}</dt>
+            <dd className="text-foreground">{me.dateOfBirth ? formatDate(me.dateOfBirth) : t("notSet")}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-40 shrink-0 text-xs text-muted-foreground">{t("firstWorkDate")}</dt>
+            <dd className="text-foreground">{me.firstWorkDate ? formatDate(me.firstWorkDate) : t("notSet")}</dd>
+          </div>
+        </dl>
+        {!me.dateOfBirth || !me.firstWorkDate ? (
+          <>
+            <p className="mt-3 rounded-lg border border-warning/30 bg-warning-bg px-3 py-2 text-xs text-warning">{t("datesMissingHint")}</p>
+            <ProfileDatesForm needDob={!me.dateOfBirth} needFirstWorkDate={!me.firstWorkDate} />
+          </>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">{t("datesLockedHint")}</p>
+        )}
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-5">

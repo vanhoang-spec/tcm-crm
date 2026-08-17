@@ -850,13 +850,13 @@
     "staff": {
       "backToSettings": "Back to Settings",
       "title": "Staff",
-      "desc": "TCM staff directory — new accounts require a date of birth and first work date.",
+      "desc": "TCM staff list — a new account only needs full name + login; date of birth and first working day can be left blank for the employee to fill in on their profile.",
       "addStaff": "Add staff",
       "fullNamePlaceholder": "Full name",
       "emailPlaceholder": "Company email or account name",
       "titlePlaceholder": "Title",
-      "dobHint": "Date of birth — DD/MM/YYYY format (e.g. 05/03/1998)",
-      "firstWorkDateHint": "First work date at TCM — DD/MM/YYYY format (can differ from the CRM account creation date)",
+      "dobHint": "Date of birth — DD/MM/YYYY (e.g. 05/03/1998)",
+      "firstWorkDateHint": "First working day at TCM — DD/MM/YYYY (may differ from the CRM account creation date)",
       "noDepartment": "No department",
       "noTeam": "No team",
       "errorRequired": "Please fill in full name and email.",
@@ -902,7 +902,10 @@
       "cancelEdit": "Cancel",
       "save": "Save",
       "saved": "Saved.",
-      "payrollExemptShort": "Unpaid by TCM"
+      "payrollExemptShort": "Unpaid by TCM",
+      "dobLabel": "Date of birth",
+      "firstWorkDateLabel": "First working day",
+      "datesOptionalHint": "Date of birth and first working day use DD/MM/YYYY and may be left blank — the employee fills them in on their profile; corrections are made by HR via \"Edit account\". Without a first working day, annual leave is provisionally counted from the start of the year."
     },
     "warehouses": {
       "title": "Warehouses & locations",
@@ -3400,7 +3403,18 @@
     "errorNoSession": "Could not determine the current staff member.",
     "errorNoFile": "Please select an image.",
     "errorInvalidType": "Only JPG, PNG, or WebP images are accepted.",
-    "errorTooLarge": "Image exceeds 3MB."
+    "errorTooLarge": "Image exceeds 3MB.",
+    "personalTitle": "Personal information",
+    "dob": "Date of birth",
+    "firstWorkDate": "First working day",
+    "notSet": "— not set —",
+    "datesMissingHint": "Your date of birth / first working day is incomplete. The first working day drives annual leave and work anniversaries; the date of birth is used for birthday greetings.",
+    "datesLockedHint": "Need to change your date of birth or first working day? Contact HR (Settings → Staff → Edit account).",
+    "saveDates": "Save",
+    "datesSaved": "Saved.",
+    "errorDob": "Invalid date of birth — use DD/MM/YYYY, not in the future.",
+    "errorFirstWorkDate": "Invalid first working day — use DD/MM/YYYY.",
+    "errorNothingToSave": "No date entered to save."
   },
   "kpi": {
     "title": "KPI & Performance Pay",

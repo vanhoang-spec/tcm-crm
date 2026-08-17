@@ -7,6 +7,8 @@ import { getCurrentStaffId, isAdminStaff } from "@/lib/current-staff";
 import { createPasswordResetToken, isAllowedLoginDomain, normalizeLoginId, RESET_TOKEN_TTL_MIN } from "@/lib/auth-session";
 import { isMailConfigured, resetPasswordUrl, sendPasswordResetEmail } from "@/lib/mailer";
 import { requirePermission } from "@/lib/permissions";
+import { parseDob, parseFirstWorkDate } from "@/lib/staff-dates";
+import { formatDate } from "@/lib/utils";
 
 export type StaffFormState = {
   error?: string;
@@ -16,39 +18,7 @@ export type StaffFormState = {
   resetUrl?: string;
 };
 
-const DOB_REGEX = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-
-/** Parse "DD/MM/YYYY" → Date, trả null nếu sai định dạng/ngày không hợp lệ/ở tương lai. */
-function parseDob(input: string): Date | null {
-  const m = DOB_REGEX.exec(input.trim());
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  const year = Number(m[3]);
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null; // chặn ngày ảo VD 31/02
-  if (d.getTime() > Date.now()) return null; // không cho ngày sinh ở tương lai
-  if (year < 1940) return null; // chặn giá trị phi thực tế
-  return d;
-}
-
-/**
- * Parse "DD/MM/YYYY" cho ngày đi làm đầu tiên → Date, trả null nếu sai định dạng/ngày không hợp lệ.
- * KHÔNG chặn tương lai (khác parseDob) — HR có thể tạo tài khoản CRM trước ngày nhân sự thật sự bắt đầu làm.
- */
-function parseFirstWorkDate(input: string): Date | null {
-  const m = DOB_REGEX.exec(input.trim());
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  const year = Number(m[3]);
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  if (year < 1940) return null;
-  return d;
-}
-
-/** Tạo nhân sự mới — bắt buộc ngày sinh + ngày đi làm đầu tiên (cả 2 DD/MM/YYYY, có thể khác nhau và khác ngày tạo tài khoản). */
+/** Tạo nhân sự mới — ngày sinh + ngày đi làm đầu tiên TUỲ CHỌN (DD/MM/YYYY; để trống thì nhân sự tự bổ sung ở /profile). */
 export async function createStaff(_prev: StaffFormState, formData: FormData): Promise<StaffFormState> {
   await requirePermission("settings.staff.manage");
   const t = await getTranslations("settings.staff");
@@ -68,11 +38,13 @@ export async function createStaff(_prev: StaffFormState, formData: FormData): Pr
   // được (login chỉ nhận email công ty / tài khoản nội bộ) mà không có cảnh báo nào.
   if (!isAllowedLoginDomain(email)) return { error: t("errorLoginDomain") };
 
-  const dob = parseDob(dobRaw);
-  if (!dob) return { error: t("errorDobFormat") };
+  // Hai ngày TUỲ CHỌN lúc tạo (quyết định chủ dự án 17/08/2026): HR có thể để trống, nhân sự tự bổ sung
+  // ở Hồ sơ cá nhân. Có nhập thì phải đúng định dạng.
+  const dob = dobRaw ? parseDob(dobRaw) : null;
+  if (dobRaw && !dob) return { error: t("errorDobFormat") };
 
-  const firstWorkDate = parseFirstWorkDate(firstWorkDateRaw);
-  if (!firstWorkDate) return { error: t("errorFirstWorkDateFormat") };
+  const firstWorkDate = firstWorkDateRaw ? parseFirstWorkDate(firstWorkDateRaw) : null;
+  if (firstWorkDateRaw && !firstWorkDate) return { error: t("errorFirstWorkDateFormat") };
 
   const existing = await prisma.staff.findUnique({ where: { email } });
   if (existing) return { error: t("errorEmailExists", { email }) };
@@ -124,24 +96,37 @@ export async function updateStaffLogin(staffId: string, _prev: StaffFormState, f
   const t = await getTranslations("settings.staff");
   const email = normalizeLoginId(String(formData.get("email") ?? ""));
   const payrollExempt = formData.get("payrollExempt") === "on";
+  const dobRaw = String(formData.get("dateOfBirth") ?? "").trim();
+  const firstWorkDateRaw = String(formData.get("firstWorkDate") ?? "").trim();
   if (!email) return { error: t("errorRequired") };
   if (!isAllowedLoginDomain(email)) return { error: t("errorLoginDomain") };
+  // Ngày sinh / ngày đi làm đầu tiên: HR là đường SỬA duy nhất (nhân sự chỉ tự điền khi còn trống ở
+  // /profile). Để trống = xoá (để nhân sự nhập lại), có nhập thì phải đúng DD/MM/YYYY.
+  const dob = dobRaw ? parseDob(dobRaw) : null;
+  if (dobRaw && !dob) return { error: t("errorDobFormat") };
+  const firstWorkDate = firstWorkDateRaw ? parseFirstWorkDate(firstWorkDateRaw) : null;
+  if (firstWorkDateRaw && !firstWorkDate) return { error: t("errorFirstWorkDateFormat") };
 
-  const target = await prisma.staff.findUnique({ where: { id: staffId }, select: { email: true, payrollExempt: true } });
+  const target = await prisma.staff.findUnique({
+    where: { id: staffId },
+    select: { email: true, payrollExempt: true, dateOfBirth: true, firstWorkDate: true },
+  });
   if (!target) return { error: t("errorRequired") };
   if (email !== target.email) {
     const clash = await prisma.staff.findUnique({ where: { email }, select: { id: true } });
     if (clash && clash.id !== staffId) return { error: t("errorEmailExists", { email }) };
   }
 
-  await prisma.staff.update({ where: { id: staffId }, data: { email, payrollExempt } });
+  await prisma.staff.update({ where: { id: staffId }, data: { email, payrollExempt, dateOfBirth: dob, firstWorkDate } });
+  // Audit ghi dd/mm/yyyy ĐỊA PHƯƠNG — cột lưu local-midnight nên toISOString() sẽ lùi 1 ngày (07:00 UTC hôm trước).
+  const iso = (d: Date | null) => (d ? formatDate(d) : null);
   await prisma.auditLog.create({
     data: {
       entityType: "staff",
       entityId: staffId,
-      field: "email,payrollExempt",
-      oldValue: JSON.stringify({ email: target.email, payrollExempt: target.payrollExempt }),
-      newValue: JSON.stringify({ email, payrollExempt }),
+      field: "email,payrollExempt,dateOfBirth,firstWorkDate",
+      oldValue: JSON.stringify({ email: target.email, payrollExempt: target.payrollExempt, dateOfBirth: iso(target.dateOfBirth), firstWorkDate: iso(target.firstWorkDate) }),
+      newValue: JSON.stringify({ email, payrollExempt, dateOfBirth: iso(dob), firstWorkDate: iso(firstWorkDate) }),
       action: "UPDATE",
       changedBy: await getCurrentStaffId(),
     },

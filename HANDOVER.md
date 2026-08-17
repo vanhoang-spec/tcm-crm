@@ -1854,16 +1854,43 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-⚠ **CHỜ DEPLOY — `e6c2e18` (16/08/2026, đã push `origin/master`) CHƯA lên production.** Gói FIN-A + Cashflow v2
-+ FIN-B + PUR-1a/1b + PUR-2 (mục 10.33–10.37): **3 migration mới** (`fin_b_co_approval`, `pur_rfq`,
-`pur2_vendor_profile`, đều additive), **4 mã quyền mới** (138 → 142, backfill PUR_POLICY), seed one-shot 17 NCC +
-baseline FIN-B. Tối 16/08 `deploy.sh --check` dừng ở B1: máy dev đứng ở mạng `192.168.0.x` (không phải LAN
-công ty) và NAT cổng 2222 timeout suốt 45 phút dù `app.tcmbtl.com` vẫn 200 — đúng ca đã ghi ở §8.1. Kế hoạch
-chủ dự án: **sáng 17/08 nối Wi-Fi công ty rồi chạy `bash scripts/deploy.sh`** (đường LAN). Sau deploy đối
-chiếu như mọi lần: nhân sự/khách/dự án 36/68/25 · coTotal+ceTotal 5 bảng không đổi · grant 1312 → **1329**
-(+17 = 4 mã PUR) · `cost_sheet.approvedRevNo` khác null đúng ở các bảng đã có trần chi · bảng `rfq*`,
-`vendor_contact`, `vendor_field_def` trống · 17 NCC seed mã 3 ký tự · `[jobs] scheduler bật`. Nhắc BGĐ hai
-điểm vận hành của FIN-B (mục 10.35): trần chi chỉ nở khi BGĐ/CFO duyệt bản CO; cashflow chỉ BGĐ/CFO/Admin.
+**Production đang chạy `4333800`** (17/08/2026 09:55, = `e6c2e18` + ghi chú HANDOVER) — **FIN-A + Cashflow v2 +
+FIN-B + PUR-1a/1b + PUR-2** (mục 10.33–10.37). Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**,
+fingerprint khớp (tối 16/08 đã thử từ ngoài: NAT cổng 2222 timeout suốt 45 phút dù `app.tcmbtl.com` vẫn 200 — đúng
+ca §8.1; sáng 17/08 nối Wi-Fi công ty là qua). **3 migration mới** áp sạch (`fin_b_co_approval`, `pur_rfq`,
+`pur2_vendor_profile` — đều additive), **4 mã quyền mới** (138 → 142). Script tự xoá 2 file mồ côi
+(`settings/vendors/actions.ts` + `vendor-forms.tsx`). Backup TRƯỚC deploy ở hai nơi:
+`~/backup/*-20260817-095541*` trên server + `D:/TCM/backup-prod-20260817-095541/` máy dev.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — dữ liệu cũ **không đổi một dòng nào**:
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| coTotal + ceTotal 5 bảng CO/CE | (10 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO/CE | 483 | **483** |
+| dòng grant quyền | 1312 | **1329** (+17 = đúng 4 mã PUR: view 8 vai · rfq.manage / rfq.ai / vendor.manage 3 vai) |
+| `cost_sheet.approvedRevNo` (baseline FIN-B) | — | **T002 = 2, T013 = 3, T025 = 1** (= bản mới nhất của đúng 3 bảng đang có trần chi; T005/T006 giữ null vì chưa có trần) |
+| NCC | 3 | **20** (17 NCC seed mã 3 ký tự, 20 dòng nhóm hàng) |
+| bảng `rfq*` / `vendor_contact` / `vendor_field_def` / `vendor_document` | — | **0 / 0 / 0 / 0** (chưa ai nhập, đúng như mong đợi) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Marker seed đủ 4: `20260815_fin_b_baseline` = `{baselined: 3}` · `20260816_pur_view` · `20260816_pur_manage` ·
+`20260816_pur_vendors` = `{created: 17, listed: 17}`. Health check: `/login` 200 · `/purchasing`,
+`/purchasing/vendors`, `/advances`, `/finance/cashflow`, `/finance/cashflow/print`, `/settings/vendor-fields` đều
+307 về login · cổng NCC `/rfq/<token-sai>` 200 (trang báo link không hợp lệ, không form) · 3 route API
+(`/api/vendor-doc`, `/api/rfq-file`, `/api/rfq/[id]/template.xlsx`) trả **401** · pm2 `online`, **restart 0** ·
+`[jobs] scheduler bật` · error log **không thêm dòng nào** sau 09:55.
+
+⚠ **HAI ĐIỂM VẬN HÀNH BGĐ PHẢI BIẾT TỪ HÔM NAY** (mục 10.35, 10.34): (a) **trần chi/tạm ứng chỉ nở khi BGĐ hoặc CFO
+bấm "Duyệt bản vN"** trên CO — mọi phát sinh CO (kể cả Account chốt NCC từ RFQ) đều đứng ở "chờ duyệt" cho tới lúc
+đó; ba dự án đang chạy đã được baseline nên hôm nay không ai mất trần; (b) `/finance/cashflow` nay chỉ BGĐ/CFO/Admin.
+**Việc cần làm trước khi PUR dùng thật:** vào `/purchasing/vendors` bổ sung liên hệ/hồ sơ cho 17 NCC seed (mới có tên
++ nhóm); muốn thêm trường quản lý NCC thì khai ở `/settings/vendor-fields`.
+
+---
+
+### Deploy trước đó — 07/08/2026 lúc 15:49
 
 **Production đang chạy `f04b39a`** (07/08/2026 15:49) — **CR-1c**: trưởng team đã nghỉ không còn
 nhận thông báo vào khoảng không (mục 10.32). Chạy `bash scripts/deploy.sh` **đường LAN**, fingerprint

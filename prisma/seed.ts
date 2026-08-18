@@ -2294,6 +2294,7 @@ async function main() {
     // Kho v2 K2: tách vai theo spec (đề xuất ≠ duyệt ≠ xác nhận thực tế) — xem WAREHOUSE_EXTRA
     code === "inventory.request.approve" ||
     code === "inventory.request.approve_any" ||
+    code === "inventory.request.approve_overhead" || // K6-4: HR Manager duyệt hàng overhead — xem extraByRole.HR_MANAGER
     code === "inventory.issue.confirm" ||
     code === "inventory.intake.confirm" ||
     code === "inventory.lot.convert" ||
@@ -2415,7 +2416,10 @@ async function main() {
     // HR) nên HR Manager đính hồ sơ và xuất báo cáo được.
     // ⚠ MKT post đi theo MÃ ROLE, KHÔNG theo nhóm HR: nhóm HR còn có `ADMIN_STAFF` (hành chính),
     // cấp theo nhóm là lặp lại đúng bẫy SECURITY_GUARD-trong-nhóm-WAREHOUSE đã phải vá (mục 10.15).
-    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate"],
+    // K6-4 (18/08/2026): Senior HR Manager DUYỆT đề xuất dùng hàng OVERHEAD công ty (mua từ ngân sách chung). Cần CẢ
+    // gate `inventory.request.approve` (câu đầu action) lẫn mã phạm vi `approve_overhead`; với phiếu của dự án thì
+    // canApproveIssue vẫn đòi PIC/Leader/trưởng team nên HR không duyệt lấn được.
+    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "inventory.request.approve", "inventory.request.approve_overhead"],
     HR_STAFF: ["mkt.review", "mkt.generate"],
     CFO: [...EXEC_EXTRA, ...BIDDING_APPROVE_EXTRA], // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
@@ -2790,6 +2794,12 @@ async function main() {
       key: "20260817_meetings_ai",
       codes: ["meetings.ai_import"],
       roleFilter: (r) => MEETING_POLICY["meetings.ai_import"].includes(r.code),
+    },
+    // K6-4: HR Manager duyệt hàng overhead — theo MÃ ROLE (nhóm HR còn ADMIN_STAFF, bẫy 10.15)
+    {
+      key: "20260818_kho_k6_approve_overhead",
+      codes: ["inventory.request.approve", "inventory.request.approve_overhead"],
+      roleFilter: (r) => r.code === "HR_MANAGER",
     },
   ];
   for (const bf of backfills) {

@@ -26,6 +26,7 @@ import {
   confirmableStatus,
   effectiveApproved,
   lotOwnerKey,
+  OVERHEAD_OWNER_KEY,
   parseApprovedQuantities,
   remainingReserve,
   type RequestType,
@@ -446,7 +447,8 @@ export async function createIssueRequest(_prev: RequestFormState, formData: Form
     const k = lotOwnerKey(byId.get(l.itemId)!, projectId);
     groups.set(k, [...(groups.get(k) ?? []), l]);
   }
-  const ownerProjectIds = [...groups.keys()].filter((k) => k && !k.startsWith("client:"));
+  const isProjectKey = (k: string) => !!k && k !== OVERHEAD_OWNER_KEY && !k.startsWith("client:");
+  const ownerProjectIds = [...groups.keys()].filter(isProjectKey);
   const ownerProjects = await prisma.project.findMany({
     where: { id: { in: ownerProjectIds } },
     select: { id: true, code: true, ownerId: true, leaderId: true, ownerTeam: { select: { code: true, leadStaffId: true } } },
@@ -462,7 +464,7 @@ export async function createIssueRequest(_prev: RequestFormState, formData: Form
       let idx = 0;
       for (const [ownerKey, groupLines] of groups) {
         const code = await nextRequestCode(tx, "ISSUE", new Date(now.getTime() + idx++));
-        const ownerProjectId = ownerKey && !ownerKey.startsWith("client:") ? ownerKey : null;
+        const ownerProjectId = isProjectKey(ownerKey) ? ownerKey : null;
         const splitNote = groups.size > 1 ? `[Tách ${idx}/${groups.size} theo chủ sở hữu]` : "";
         const req = await tx.stockRequest.create({
           data: {
@@ -472,6 +474,7 @@ export async function createIssueRequest(_prev: RequestFormState, formData: Form
             warehouseId,
             projectId,
             ownerProjectId,
+            isOverhead: ownerKey === OVERHEAD_OWNER_KEY, // K6-4: HR Manager duyệt
             expectedReturnAt: hasReusable ? expectedReturnAt : null,
             note: [splitNote, note].filter(Boolean).join(" ") || null,
             createdById: staffId,
@@ -484,7 +487,12 @@ export async function createIssueRequest(_prev: RequestFormState, formData: Form
   );
   for (const c of created) {
     await audit(c.id, "CREATE", groups.size > 1 ? `split ${groups.size}` : undefined);
-    const owner = c.ownerKey && !c.ownerKey.startsWith("client:") ? ownerById.get(c.ownerKey) : null;
+    // K6-4: phiếu hàng OVERHEAD → báo người có mã approve_overhead (Senior HR Manager), không báo PIC.
+    if (c.ownerKey === OVERHEAD_OWNER_KEY) {
+      await notifyByPermission("inventory.request.approve_overhead", "INVENTORY_REQUEST_PENDING", `Đề xuất dùng hàng overhead ${c.code} chờ duyệt`, `${project.code} xin dùng ${c.count} dòng hàng chung công ty`, projectId);
+      continue;
+    }
+    const owner = isProjectKey(c.ownerKey) ? ownerById.get(c.ownerKey) : null;
     // Báo đúng người duyệt: dự án CHỦ (nếu hàng của chủ khác) hoặc dự án đang xin — PIC + Leader, không có thì trưởng
     // team, không có nữa thì nhóm duyệt-mọi-dự-án.
     const target = owner ?? project;
@@ -522,10 +530,15 @@ export async function approveIssueRequest(requestId: string, _prev: RequestFormS
   // Ngoại lệ có chủ đích (mirror finance over_cap): hasPermission BÊN TRONG action đã có
   // requirePermission ở đầu — quyền "duyệt mọi dự án" chỉ nới phạm vi, không mở thêm cửa mới.
   const approveAny = await hasPermission("inventory.request.approve_any");
-  // K6: người duyệt = team Account của dự án CHỦ SỞ HỮU hàng (ownerProject); hàng chung TCM / của chính dự án xin thì
-  // là dự án xin (K2). Trưởng team là fallback (canApproveIssue).
-  const approverProject = req.ownerProject ?? req.project;
-  if (!canApproveIssue(approverProject, staffId, approveAny)) return { error: t("errorNotPic") };
+  // K6: người duyệt = team Account của dự án CHỦ SỞ HỮU hàng (ownerProject); hàng của chính dự án xin thì là dự án
+  // xin (K2). Trưởng team là fallback (canApproveIssue). K6-4: phiếu hàng OVERHEAD → CHỈ mã approve_overhead
+  // (Senior HR Manager); approve_any KHÔNG bao — quyết định chủ dự án 18/08/2026.
+  if (req.isOverhead) {
+    if (!(await hasPermission("inventory.request.approve_overhead"))) return { error: t("errorNotOverheadApprover") };
+  } else {
+    const approverProject = req.ownerProject ?? req.project;
+    if (!canApproveIssue(approverProject, staffId, approveAny)) return { error: t("errorNotPic") };
+  }
 
   // K6: số duyệt TỪNG DÒNG 0..n từ form (thiếu ô = duyệt đủ dòng đó); dưới đề xuất thì bắt buộc lý do.
   const approved = parseApprovedQuantities(req.lines, (id) => (formData.get(`qty_${id}`) === null ? null : String(formData.get(`qty_${id}`))));
@@ -586,7 +599,7 @@ export async function approveIssueRequest(requestId: string, _prev: RequestFormS
   const items = await prisma.inventoryItem.findMany({ where: { id: { in: req.lines.map((l) => l.itemId) } }, select: { id: true, code: true } });
   const codeOf = new Map(items.map((i) => [i.id, i.code]));
   const detail = decided.map((l) => `${codeOf.get(l.itemId) ?? l.itemId}: ${l.approvedQuantity}/${l.quantity}`).join(" · ");
-  const ownerTag = req.ownerProject ? ` (chủ hàng: ${req.ownerProject.code})` : "";
+  const ownerTag = req.isOverhead ? " (hàng overhead công ty)" : req.ownerProject ? ` (chủ hàng: ${req.ownerProject.code})` : "";
   if (outcome === "REJECTED") {
     await notifyStaff([req.createdById], "INVENTORY_REQUEST_REJECTED", `Đề xuất xuất kho ${req.code} bị từ chối${ownerTag}`, reason, req.projectId);
   } else {
@@ -614,7 +627,9 @@ export async function rejectIssueRequest(requestId: string, _prev: RequestFormSt
 
   const staffId = await getCurrentStaffId();
   const approveAny = await hasPermission("inventory.request.approve_any");
-  if (!canApproveIssue(req.ownerProject ?? req.project, staffId, approveAny)) return { error: t("errorNotPic") };
+  if (req.isOverhead) {
+    if (!(await hasPermission("inventory.request.approve_overhead"))) return { error: t("errorNotOverheadApprover") };
+  } else if (!canApproveIssue(req.ownerProject ?? req.project, staffId, approveAny)) return { error: t("errorNotPic") };
 
   const done = await prisma.stockRequest.updateMany({
     where: { id: requestId, status: "PROPOSED" },
@@ -623,7 +638,7 @@ export async function rejectIssueRequest(requestId: string, _prev: RequestFormSt
   if (done.count === 0) return { error: t("errorAlreadyProcessed") };
   await prisma.stockRequestLine.updateMany({ where: { requestId }, data: { approvedQuantity: 0 } });
   await audit(requestId, "UPDATE", `reject: ${reason}`);
-  await notifyStaff([req.createdById], "INVENTORY_REQUEST_REJECTED", `Đề xuất xuất kho ${req.code} bị từ chối${req.ownerProject ? ` (chủ hàng: ${req.ownerProject.code})` : ""}`, reason, req.projectId);
+  await notifyStaff([req.createdById], "INVENTORY_REQUEST_REJECTED", `Đề xuất xuất kho ${req.code} bị từ chối${req.isOverhead ? " (hàng overhead công ty)" : req.ownerProject ? ` (chủ hàng: ${req.ownerProject.code})` : ""}`, reason, req.projectId);
   revalidate();
   return { success: true };
 }

@@ -2643,6 +2643,9 @@ model StockRequest {
   /// K6 (18/08/2026): dự án SỞ HỮU hàng của cả phiếu (sau khi tách theo chủ) — team Account của dự án này DUYỆT.
   /// null = hàng chung TCM / hàng của chính dự án xin → PIC/Leader dự án xin duyệt (K2). Với DESTROY = dự án chủ lô khách.
   ownerProjectId   String?
+  /// K6-4: phiếu xin dùng hàng OVERHEAD công ty (mua từ ngân sách chung) — Senior HR Manager duyệt (mã approve_overhead),
+  /// KHÔNG phải PIC dự án và approve_any KHÔNG bao. Tách phiếu riêng khỏi hàng của dự án xin.
+  isOverhead       Boolean   @default(false)
   purchaseOrderId  String? // INTAKE từ PO (module 🛒) — chỉ để đối chiếu, PO vẫn là làn cam kết riêng
   expectedReturnAt DateTime? // ISSUE có dòng tái sử dụng — chép sang phiếu XE lúc xác nhận
   note             String?

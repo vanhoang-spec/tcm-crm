@@ -137,28 +137,34 @@ export function reserveDrift(approvedQty: number, qtyInCostSheet: number): "MATC
 // tạo lô. Trạng thái P ("Theo dự án") thêm nghĩa ĐỘC QUYỀN. Đây là MỘT nguồn sự thật cho cả nhãn trong
 // picker (K6-1) lẫn "ai duyệt" (K6-2) — hai bên lệch nhau là OPS thấy một đằng, phiếu chạy một nẻo.
 
-export const LOT_OWNER_KINDS = ["TCM", "MINE", "OTHER_PROJECT", "CLIENT"] as const;
+export const LOT_OWNER_KINDS = ["OVERHEAD", "MINE", "OTHER_PROJECT", "CLIENT"] as const;
 export type LotOwnerKind = (typeof LOT_OWNER_KINDS)[number];
 
 /**
- * TCM = hàng chung, không dự án nào sở hữu → PIC/Leader dự án ĐANG XIN duyệt (K2).
+ * OVERHEAD = hàng công ty mua từ ngân sách chung (overhead), dùng cho hoạt động hằng ngày, không dự án nào sở hữu →
+ *   SENIOR HR MANAGER duyệt (mã inventory.request.approve_overhead; K6-4 — quyết định chủ dự án 18/08/2026), KHÔNG
+ *   phải PIC dự án xin, và approve_any KHÔNG bao.
  * MINE = sở hữu bởi chính dự án đang xin → PIC/Leader dự án đó duyệt (K2).
  * OTHER_PROJECT = hàng TCM mua từ chi phí dự án KHÁC → team Account của dự án chủ duyệt ("ưu tiên").
  * CLIENT = hàng khách gửi → team Account của dự án chủ (khách đó) quyết định cuối cùng — mọi mục đích, kể cả hủy.
  */
 export function lotOwnerKind(lot: { ownerClientId: string | null; boundProjectId: string | null }, requestingProjectId: string | null): LotOwnerKind {
   if (lot.ownerClientId) return "CLIENT";
-  if (!lot.boundProjectId) return "TCM";
+  if (!lot.boundProjectId) return "OVERHEAD";
   return lot.boundProjectId === requestingProjectId ? "MINE" : "OTHER_PROJECT";
 }
 
+/** Khoá tách của phiếu hàng OVERHEAD (K6-4) — riêng một phiếu, HR Manager duyệt. */
+export const OVERHEAD_OWNER_KEY = "overhead";
+
 /**
- * Khoá TÁCH đề xuất (K6-2): các dòng cùng khoá đi chung một phiếu, cùng một người duyệt. Hàng chung TCM
- * và hàng của chính dự án đang xin gộp chung (cùng người duyệt = PIC/Leader dự án xin); hàng của chủ khác
- * tách theo dự án chủ.
+ * Khoá TÁCH đề xuất (K6-2): các dòng cùng khoá đi chung một phiếu, cùng một người duyệt. Hàng của chính dự án
+ * đang xin = khoá "" (PIC/Leader dự án xin duyệt); hàng OVERHEAD công ty = khoá riêng (HR Manager duyệt — K6-4);
+ * hàng của chủ khác tách theo dự án chủ.
  */
 export function lotOwnerKey(lot: { ownerClientId: string | null; boundProjectId: string | null }, requestingProjectId: string | null): string {
   const kind = lotOwnerKind(lot, requestingProjectId);
-  if (kind === "TCM" || kind === "MINE") return "";
+  if (kind === "MINE") return "";
+  if (kind === "OVERHEAD") return OVERHEAD_OWNER_KEY;
   return lot.boundProjectId ?? `client:${lot.ownerClientId}`;
 }

@@ -57,7 +57,7 @@ export async function getOrderStockLines(orderId: string, projectId: string): Pr
   }
 
   return lines.map((l) => {
-    const available: Record<LotOwnerKind, number> = { TCM: 0, MINE: 0, OTHER_PROJECT: 0, CLIENT: 0 };
+    const available: Record<LotOwnerKind, number> = { OVERHEAD: 0, MINE: 0, OTHER_PROJECT: 0, CLIENT: 0 };
     for (const it of byProduct.get(l.productId) ?? []) {
       const kind = lotOwnerKind(it, projectId);
       // Số hiển thị = khả dụng chung + giữ chỗ CÒN TRỐNG của chính dự án này (cùng phép cộng của form đề xuất).

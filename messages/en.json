@@ -3226,8 +3226,8 @@
       "errUNKNOWN_PRODUCT": "Product code not found (use an existing code, e.g. PO-0042, or leave blank to create)",
       "errINCONSISTENT_PRODUCT": "Rows of the same product declare different unit / reusability / part count / group (or differ from the existing product)",
       "formOwnerProject": "Owning project",
-      "ownerProjectTcm": "— TCM general stock (company overhead) —",
-      "ownerProjectHint": "Bought from a project's budget → tag that project (client + Account team follow) — that team has priority and approves when another project asks. Choose explicitly; general stock must be chosen too.",
+      "ownerProjectTcm": "— Company overhead stock (shared budget, daily use) —",
+      "ownerProjectHint": "Bought from a project's budget → tag that project (client + Account team follow) — that team has priority and approves when another project asks. Company overhead stock (shared budget) → first option — the Senior HR Manager approves its use.",
       "ownerProjectRequiredHint": "Project-bound / Client-bound status: owning project is required.",
       "ownerProjectClientHint": "Client-owned goods: picking the project sets the client (the project's client) and its Account team decides every use / disposal of this lot.",
       "errorProjectClientMismatch": "The chosen client is not the client of the owning project — change one of them.",
@@ -3338,7 +3338,6 @@
       "filterCondition": "Condition",
       "filterOwner": "Owner",
       "ownerALL": "Any owner",
-      "ownerTCM": "TCM general stock",
       "ownerMINE": "This project's",
       "ownerOTHER_PROJECT": "Another project's",
       "ownerCLIENT": "Client-owned",
@@ -3367,7 +3366,11 @@
       "orderHintDesc": "Click \"Pick lot\" to open the catalogue pre-filtered by product; to take = need − requested − issued.",
       "orderHintNeed": "need {need}, {remaining} still to take",
       "orderHintPicked": "picking {n}",
-      "orderHintPick": "Pick lot"
+      "orderHintPick": "Pick lot",
+      "ownerOVERHEAD": "Company overhead (shared) · Senior HR Manager approves",
+      "overheadApprover": "Company overhead stock (shared budget) — Senior HR Manager approves",
+      "errorNotOverheadApprover": "This request is for company OVERHEAD stock — only the Senior HR Manager (overhead approval permission) can approve or reject it.",
+      "notOverheadApproverHint": "This request uses company OVERHEAD stock (shared budget) — only the Senior HR Manager approves; project PIC / Leader / Account team leads cannot."
     },
     "consumption": {
       "title": "Project material consumption",
@@ -3384,21 +3387,21 @@
     },
     "orderStock": {
       "title": "Stock items per Order",
-      "subtitle": "Account listed products + quantities needed. Available stock is split by owner — other projects' goods and client-owned goods can still be requested; the owning team approves.",
+      "subtitle": "Account listed products + quantities needed. Available stock is split by owner — company overhead (HR Manager approves), this project's, other projects' / client-owned (owning team approves).",
       "requestFromOrder": "File issue request from order",
       "colProduct": "Product",
       "colNeed": "Need",
       "colRequested": "Requested",
       "colIssued": "Issued",
       "colAvailable": "Available by owner",
-      "availTCM": "TCM general: {n}",
       "availMINE": "This project's: {n}",
       "availOTHER": "Other projects: {n}",
       "availCLIENT": "Client-owned: {n}",
       "availNone": "None in stock",
       "shortfall": "short by {n} — needs purchase",
-      "ownerHint": "Requesting other projects' or client-owned goods auto-splits the request and routes it to the owning Account team for per-line approval.",
-      "notExecutingYet": "Project is not in execution yet — issue requests open once it is (table shown for preparation)."
+      "ownerHint": "Company overhead stock is approved by the Senior HR Manager; other projects' / client-owned goods by the owning Account team per line — requests auto-split by owner.",
+      "notExecutingYet": "Project is not in execution yet — issue requests open once it is (table shown for preparation).",
+      "availOVERHEAD": "Company overhead: {n}"
     }
   },
   "staff": {

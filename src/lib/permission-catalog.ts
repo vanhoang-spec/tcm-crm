@@ -154,6 +154,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "inventory.request.create", module: "inventory", labelVi: "Đề xuất xuất kho / báo hàng về", labelEn: "Propose issue / report incoming goods" },
   { code: "inventory.request.approve", module: "inventory", labelVi: "Duyệt đề xuất xuất kho (dự án mình phụ trách)", labelEn: "Approve issue requests (own projects)" },
   { code: "inventory.request.approve_any", module: "inventory", labelVi: "Duyệt đề xuất xuất kho của MỌI dự án", labelEn: "Approve issue requests of any project", sensitive: true },
+  // K6-4 (18/08/2026): hàng OVERHEAD công ty (mua từ ngân sách chung, dùng cho hoạt động hằng ngày) do Senior HR
+  // Manager duyệt — KHÔNG phải PIC dự án, và approve_any KHÔNG bao mã này (quyết định chủ dự án). Là mã PHẠM VI kiểm
+  // BÊN TRONG action đã gác inventory.request.approve (mirror approve_any) — không có requirePermission riêng.
+  { code: "inventory.request.approve_overhead", module: "inventory", labelVi: "Duyệt đề xuất dùng hàng OVERHEAD công ty (dùng chung)", labelEn: "Approve requests for company OVERHEAD stock (shared)", sensitive: true },
   { code: "inventory.reservation.approve", module: "inventory", labelVi: "Duyệt giữ chỗ tồn kho cho dự án (vào CO giá 0)", labelEn: "Approve stock reservations into cost sheets", sensitive: true },
   { code: "inventory.issue.confirm", module: "inventory", labelVi: "Thủ kho xác nhận thực xuất", labelEn: "Keeper confirms goods issued" },
   { code: "inventory.intake.confirm", module: "inventory", labelVi: "Thủ kho xác nhận thực nhập", labelEn: "Keeper confirms goods received" },

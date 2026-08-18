@@ -54,8 +54,8 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
     isIssue &&
     req.status === "PROPOSED" &&
     perms.has("inventory.request.approve") &&
-    !!approverProject &&
-    canApproveIssue(approverProject, staffId, perms.has("inventory.request.approve_any"));
+    // K6-4: phiếu hàng OVERHEAD → chỉ mã approve_overhead (Senior HR Manager); approve_any không bao
+    (req.isOverhead ? perms.has("inventory.request.approve_overhead") : !!approverProject && canApproveIssue(approverProject, staffId, perms.has("inventory.request.approve_any")));
   // K6: đề xuất hủy hàng khách — team Account chủ duyệt; lô khách cũ không có dự án chủ thì chỉ approve_any
   const showApproveDestroy =
     isDestroy &&
@@ -80,6 +80,8 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
     ...(req.createdBy ? [{ label: t("createdBy"), value: req.createdBy.fullName }] : []),
     ...(req.project?.owner ? [{ label: t("projectPic"), value: req.project.owner.fullName }] : []),
     ...(req.project?.leader ? [{ label: t("projectLeader"), value: req.project.leader.fullName }] : []),
+    // K6-4: phiếu hàng overhead công ty — Senior HR Manager duyệt
+    ...(req.isOverhead ? [{ label: t("ownerProjectApprover"), value: t("overheadApprover") }] : []),
     // K6: nói rõ AI duyệt phiếu này — dự án chủ hàng + PIC/Leader/trưởng team của nó
     ...(req.ownerProject
       ? [{
@@ -153,7 +155,7 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
                   {/* K6: người duyệt phải thấy lô này CỦA AI — hàng chung TCM / dự án này / dự án khác / khách gửi */}
                   {(() => {
                     const kind = lotOwnerKind(l.item, req.projectId);
-                    if (kind === "TCM") return <p className="text-[11px] text-muted-foreground">{t("ownerTCM")}</p>;
+                    if (kind === "OVERHEAD") return <p className="text-[11px] text-muted-foreground">{t("ownerOVERHEAD")}</p>;
                     if (kind === "MINE") return <p className="text-[11px] text-success">{t("ownerMineShort", { project: l.item.boundProject?.code ?? "" })}</p>;
                     if (kind === "OTHER_PROJECT") return <p className="text-[11px] text-warning">{t("ownerOtherShort", { project: l.item.boundProject?.code ?? "", team: l.item.boundProject?.ownerTeam?.code ?? "?" })}</p>;
                     return <p className="text-[11px] text-brand-600">{t("ownerClientShort", { client: l.item.ownerClient?.code ?? "", project: l.item.boundProject?.code ?? "—", team: l.item.boundProject?.ownerTeam?.code ?? "?" })}</p>;
@@ -182,7 +184,9 @@ export default async function StockRequestDetailPage({ params }: { params: Promi
         </ul>
       </section>
 
-      {blockedByPic && <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{t("notPicHint")}</p>}
+      {blockedByPic && (
+        <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted-foreground">{req.isOverhead ? t("notOverheadApproverHint") : t("notPicHint")}</p>
+      )}
       {showApprove && <ApproveForm requestId={req.id} lines={req.lines.map((l) => ({ id: l.id, code: l.item.code, name: l.item.name, unit: l.item.unit, quantity: l.quantity }))} />}
       {showApproveDestroy && <ApproveForm requestId={req.id} kind="DESTROY" lines={req.lines.map((l) => ({ id: l.id, code: l.item.code, name: l.item.name, unit: l.item.unit, quantity: l.quantity }))} />}
       {showApproveReserve && <ApproveForm requestId={req.id} kind="RESERVE" />}

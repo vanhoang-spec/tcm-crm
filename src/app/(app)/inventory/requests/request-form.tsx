@@ -37,7 +37,7 @@ export type GroupOption = { code: string; name: string };
 /** K6-3: dòng vật dụng từ Order — để OPS đề xuất đúng sản phẩm/số lượng Account cần */
 export type OrderLineHint = { productCode: string; productName: string; quantity: number; requested: number; issued: number };
 /** Bộ lọc chủ sở hữu trong picker — cùng thang với lotOwnerKind (lib/inventory-request.ts). */
-const OWNER_FILTERS = ["ALL", "TCM", "MINE", "OTHER_PROJECT", "CLIENT"] as const;
+const OWNER_FILTERS = ["ALL", "OVERHEAD", "MINE", "OTHER_PROJECT", "CLIENT"] as const;
 export type WarehouseOption = { id: string; name: string };
 export type ProjectOption = { id: string; code: string; name: string };
 export type PoOption = { id: string; label: string };
@@ -357,7 +357,7 @@ export function RequestForm({
                           {r.statusCode && <Badge tone={r.statusCode === "R" ? "success" : "neutral"}>{tItems(`status${r.statusCode}` as Parameters<typeof tItems>[0])}</Badge>}
                           {r.conditionCode && <Badge tone="neutral">{tItems(`cond${r.conditionCode}` as Parameters<typeof tItems>[0])}</Badge>}
                           {/* K6: nhãn CHỦ SỞ HỮU — quyết định ai duyệt. Hàng của chủ khác vẫn xin được (K6-2), chỉ là người duyệt khác. */}
-                          {r.ownerKind === "TCM" && <Badge tone="neutral">{t("ownerTCM")}</Badge>}
+                          {r.ownerKind === "OVERHEAD" && <Badge tone="neutral">{t("ownerOVERHEAD")}</Badge>}
                           {r.ownerKind === "MINE" && <Badge tone="success">{t("ownerMineShort", { project: r.boundProjectCode ?? "" })}</Badge>}
                           {r.ownerKind === "OTHER_PROJECT" && <Badge tone="warning">{t("ownerOtherShort", { project: r.boundProjectCode ?? "", team: r.boundTeamCode ?? "?" })}</Badge>}
                           {r.ownerKind === "CLIENT" && <Badge tone="brand">{t("ownerClientShort", { client: r.ownerClientCode ?? "", project: r.boundProjectCode ?? "—", team: r.boundTeamCode ?? "?" })}</Badge>}

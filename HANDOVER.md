@@ -114,7 +114,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) + **Tuyển dụng** (`/staff/recruit` — vị trí & JD gắn org chart, nhận CV, AI đọc CV điền hồ sơ, lịch phỏng vấn 3 vòng có xác nhận + file lịch .ics, phiếu chấm điểm, kho hồ sơ; xem mục 10.31) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
-| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 · **K6 (18/08/2026):** dự án sở hữu cho mọi lô, đề xuất tách theo chủ + team Account CHỦ duyệt từng dòng 0..n, phản hồi OPS, cổng hủy hàng khách (DH), Order OPE/PRO mang sản phẩm + SL → tab Vận hành/Sản xuất thấy tồn theo chủ → đề xuất từ order — xem mục 10.41 |
+| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 · **K6 (18/08/2026):** dự án sở hữu cho mọi lô, đề xuất tách theo chủ + team Account CHỦ duyệt từng dòng 0..n, phản hồi OPS, cổng hủy hàng khách (DH), Order OPE/PRO mang sản phẩm + SL → tab Vận hành/Sản xuất thấy tồn theo chủ → đề xuất từ order, hàng OVERHEAD công ty tách riêng — Senior HR Manager duyệt (K6-4) — xem mục 10.41 |
 | — | Thu mua (PUR) | `/purchasing` | **XONG (PUR-1a + 1b, 16/08/2026)**: hồ sơ NCC theo 6 nhóm hàng + kho tài liệu HĐ/PO + lịch sử giá · RFQ từ dòng CO → 6 mẫu form → cổng NCC token / PUR nhập hộ / upload file + AI bóc → so sánh (số tính bằng code, AI nhận xét) → PUR chọn + lý do → trình Account → **Account chốt → ghi vào CO** (revision mới, chờ duyệt FIN-B) — xem mục 10.36 · **PUR-2**: hồ sơ NCC mở rộng (mã 3 ký tự, tên pháp nhân, N người liên hệ, trường tuỳ chỉnh khai ở `/settings/vendor-fields`) — mục 10.37 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 125 model Prisma · 74 migration · 86 file `src/lib` · 4255 key i18n × 2 ngôn ngữ · 145 mã quyền.
+**Quy mô:** 125 model Prisma · 74 migration · 86 file `src/lib` · 4258 key i18n × 2 ngôn ngữ · 146 mã quyền.
 
 ---
 
@@ -2083,10 +2083,13 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 41. **KHO K6 — LIÊN KẾT ACCOUNT ↔ OPS: DUYỆT THEO CHỦ SỞ HỮU, DUYỆT TỪNG DÒNG, ORDER MANG SỐ LƯỢNG — 18/08/2026**
     (2 migration VIẾT TAY additive: `20260818010000_k6_owner_approval` — cột FK `stock_request.ownerProjectId` +
-    `stock_request_line.approvedQuantity`; `20260818020000_order_stock_lines` — bảng MỚI `project_order_stock_line`;
-    **KHÔNG mã quyền mới**). Yêu cầu chủ dự án 18/08/2026 rà lại flow chart kho ở góc nhìn Account/OPS; 4 quyết
-    định chốt cùng ngày: (1) lúc mua/nhập phải gắn DỰ ÁN sở hữu (→ khách, → team Account); (2) team Account
-    SỞ HỮU item duyệt việc dùng; (3) đề xuất gom hàng nhiều chủ thì TỰ TÁCH; (4) Order mang số lượng — làm ngay.
+    `stock_request_line.approvedQuantity` + `stock_request.isOverhead` (K6-4, nối thêm TẠI CHỖ vì migration chưa
+    push, chưa deploy — mục 10.39 đã nêu điều kiện); `20260818020000_order_stock_lines` — bảng MỚI
+    `project_order_stock_line`; **1 mã quyền mới ở K6-4: `inventory.request.approve_overhead`, 145 → 146**). Yêu cầu
+    chủ dự án 18/08/2026 rà lại flow chart kho ở góc nhìn Account/OPS; 4 quyết định chốt cùng ngày: (1) lúc mua/nhập
+    phải gắn DỰ ÁN sở hữu (→ khách, → team Account); (2) team Account SỞ HỮU item duyệt việc dùng; (3) đề xuất gom
+    hàng nhiều chủ thì TỰ TÁCH; (4) Order mang số lượng — làm ngay. **Quyết định thứ 5 cùng ngày (K6-4):** hàng
+    OVERHEAD công ty (ngân sách chung, dùng hằng ngày) tách RIÊNG khỏi hàng của dự án — **Senior HR Manager duyệt**.
     - **Đo trước khi sửa (K2 đang chạy):** câu "ai được dùng hàng của người khác" trả lời bằng cách **CẤM**
       (`errorBoundOtherProject` / `wrongClient` ở `createIssueRequest`), người duyệt luôn là PIC dự án **ĐANG XIN**,
       duyệt cả phiếu hoặc không, duyệt xong **chỉ báo thủ kho không báo OPS**, hủy hàng khách chỉ cần quyền thủ kho,
@@ -2095,24 +2098,39 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       P thêm nghĩa ĐỘC QUYỀN như cũ. Đây là widen ngữ nghĩa cột có sẵn, KHÔNG thêm cột: một lô chỉ có một dự án
       sở hữu, và cột này đã nằm trong 6 thuộc tính định nghĩa lô (`resolveTargetLot` khớp theo nó) nên "bàn của
       KUN" và "bàn chung" tự thành hai lô khác nhau. Form tạo lô: ô "Dự án sở hữu" LUÔN hiện, bắt buộc với hàng
-      khách gửi + P/C, **"Hàng chung TCM (chi phí công ty)" là lựa chọn tường minh** (giả định em nói trước với chủ
-      dự án: điểm 3 của anh nói "item nào mua từ chi phí dự án nào" ⇒ vẫn có item không mua từ dự án). Hàng khách gửi:
+      khách gửi + P/C, **"Hàng overhead công ty (ngân sách chung)" là lựa chọn tường minh** = `boundProjectId` null
+      (chủ dự án xác nhận ở K6-4: item mua bằng ngân sách overhead, dùng hằng ngày, không thuộc dự án nào). Hàng khách gửi:
       chọn dự án là ra khách (khách = khách của dự án), khai lệch bị chặn `errorProjectClientMismatch`. CSV thêm cột
       **"Mã dự án"** sau "Mã KH" (15 cột), bỏ `STATUS_P_NOT_SUPPORTED` (P nay nhập được qua CSV vì có dự án).
     - ⚠ **`lotOwnerKind` / `lotOwnerKey` (`lib/inventory-request.ts`) là MỘT nguồn sự thật cho cả NHÃN trong picker
-      lẫn ĐỊNH TUYẾN duyệt** — hai bên lệch nhau là OPS thấy một đằng, phiếu chạy một nẻo. Bốn loại: `TCM` (chung)
-      · `MINE` (của chính dự án xin) · `OTHER_PROJECT` (mua từ chi phí dự án khác — team chủ duyệt, "ưu tiên") ·
-      `CLIENT` (khách gửi — team chủ **quyết định cuối**, kể cả hủy). Picker đề xuất (`RequestPickerItem` +14 trường)
-      hiện nhãn `[TCM chung]` / `[Của dự án T013 · team A3 duyệt]` / `[Khách LO2 gửi · dự án T013 · team A3 quyết
-      định]` và 4 bộ lọc nhóm / trạng thái / tình trạng / chủ sở hữu ("smart search"); trang chi tiết đề xuất hiện
-      chủ sở hữu từng dòng + dòng "Chủ hàng · người duyệt: T013 (A3) — TRẦN THU HÀ".
-    - **Lập đề xuất TÁCH theo chủ ngay lúc lập** (`createIssueRequest`): khoá `""` = TCM chung + của chính dự án
-      xin (gộp chung — cùng người duyệt = PIC/Leader dự án xin, K2); khoá khác = id dự án chủ → phiếu riêng với
-      `ownerProjectId`, note `[Tách i/n theo chủ sở hữu]`, mã DX liên tiếp. Chặn cứng chỉ còn cho trạng thái P độc
-      quyền. Báo đúng người duyệt: PIC + Leader dự án chủ → không có thì TRƯỞNG TEAM (`Team.leadStaffId`, PLN-1 —
-      `approverStaffIds`) → không có nữa thì `approve_any`. `canApproveIssue` nhận thêm `ownerTeam.leadStaffId`.
+      lẫn ĐỊNH TUYẾN duyệt** — hai bên lệch nhau là OPS thấy một đằng, phiếu chạy một nẻo. Bốn loại: `OVERHEAD`
+      (ngân sách chung công ty, `boundProjectId` null — **Senior HR Manager duyệt**, K6-4) · `MINE` (của chính dự án
+      xin) · `OTHER_PROJECT` (mua từ chi phí dự án khác — team chủ duyệt, "ưu tiên") · `CLIENT` (khách gửi — team chủ
+      **quyết định cuối**, kể cả hủy). Picker đề xuất (`RequestPickerItem` +14 trường) hiện nhãn `[Overhead công ty
+      (dùng chung) · Senior HR Manager duyệt]` / `[Của dự án T013 · team A3 duyệt]` / `[Khách LO2 gửi · dự án T013 ·
+      team A3 quyết định]` và 4 bộ lọc nhóm / trạng thái / tình trạng / chủ sở hữu ("smart search"); trang chi tiết
+      đề xuất hiện chủ sở hữu từng dòng + dòng "Chủ hàng · người duyệt: T013 (A3) — TRẦN THU HÀ" (phiếu overhead:
+      "Hàng overhead công ty (ngân sách chung) — Senior HR Manager duyệt").
+    - **Lập đề xuất TÁCH theo chủ ngay lúc lập** (`createIssueRequest`, khoá `lotOwnerKey`): khoá `""` = của chính
+      dự án xin (người duyệt = PIC/Leader dự án xin, K2); khoá `"overhead"` (`OVERHEAD_OWNER_KEY`) = hàng overhead
+      → phiếu riêng `isOverhead=true`; khoá khác = id dự án chủ → phiếu riêng với `ownerProjectId`. Mỗi phiếu tách
+      mang note `[Tách i/n theo chủ sở hữu]`, mã DX liên tiếp. Chặn cứng chỉ còn cho trạng thái P độc quyền. Báo
+      đúng người duyệt: PIC + Leader dự án chủ → không có thì TRƯỞNG TEAM (`Team.leadStaffId`, PLN-1 —
+      `approverStaffIds`) → không có nữa thì `approve_any`; phiếu overhead báo cho **mọi người có
+      `inventory.request.approve_overhead`** (title riêng "Đề xuất dùng hàng overhead … chờ duyệt").
+      `canApproveIssue` nhận thêm `ownerTeam.leadStaffId`.
       ⚠ RESERVE (K3, Account giữ chỗ cho dự án mình) VẪN chặn hàng của chủ khác — cho giữ chỗ chéo mà người duyệt
       là Kế toán/HR (không phải chủ) là đi vòng qua chủ hàng.
+    - ⚠ **K6-4 — PHIẾU OVERHEAD (`StockRequest.isOverhead`) CHỈ `inventory.request.approve_overhead` duyệt/từ chối;
+      `approve_any` KHÔNG BAO** — kiểm ở CẢ trang (`showApprove`, hint đích danh `notOverheadApproverHint`) LẪN server
+      (`approveIssueRequest` + `rejectIssueRequest` → `errorNotOverheadApprover`). Đây là mã DUYỆT chồng lên
+      `inventory.request.approve` (trang + action vẫn đòi mã gốc trước), cấp cho đúng **HR_MANAGER** — `isRestricted`
+      + `extraByRole.HR_MANAGER` (thêm cả `inventory.request.approve` để HR vào được form duyệt) + backfill
+      `20260818_kho_k6_approve_overhead` lọc theo MÃ ROLE. Đo trên dev.db: `approve` 5 vai (BGĐ + 3 ACCOUNT +
+      HR_MANAGER), `approve_overhead` **1 vai**, grant 1329 → **1336**, seed lần 2 no-op. Cột `isOverhead` giữ
+      riêng thay vì suy từ "mọi dòng đều `boundProjectId` null" vì phiếu là hồ sơ định tuyến — lô đổi chủ sau này
+      (phiếu CD) không được đổi người duyệt của phiếu đang treo. Muốn BGĐ cũng duyệt được hàng overhead thì tick mã
+      này cho BGĐ ở `/settings/roles`, không sửa code.
     - **Duyệt TỪNG DÒNG 0..n** (`StockRequestLine.approvedQuantity`; null = phiếu trước K6 → `effectiveApproved` =
       số đề xuất): form duyệt có ô số từng dòng, hạ dưới đề xuất là ô lý do hiện ra + nút đổi "Duyệt theo số đã
       nhập", 0 hết là nút đỏ "Xác nhận từ chối"; server (`parseApprovedQuantities` + `approvalOutcome`) chặn dưới
@@ -2149,10 +2167,22 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       nút ẩn đúng · T002 (thực thi) → form prefill T002, "cần 9, còn phải lấy 9", bấm "Chọn lô" → picker điền `PO-0001`,
       3 lô đúng 3 nhãn theo vai T002, chọn .02 ×4 → "đang chọn 4". tsc · eslint · build · i18n **0/0 (4255 key)** ·
       `migrate diff` rỗng · seed lần 2 no-op. Dữ liệu test dọn sạch (0 SP / 0 lô / 0 đề xuất / 0 dòng order kho, 19 node).
+    - **Verify K6-4 (browser + DB, act-as 2 vai):** 1 đề xuất **4 lô 4 chủ** (T002 xin: bàn overhead · ghế của T013 ·
+      sữa KUN khách của T013 · bàn của chính T002) → tách **3 phiếu**: DX-001 `isOverhead=true` → thông báo đúng
+      **TRẦN THỊ HẢI YẾN (HR_MANAGER)**; DX-002 ghế + sữa cùng chủ T013 → Trần Thu Hà (A3); DX-003 hàng của chính
+      T002 → Phước + Yến · trang DX-001 hiện "Chủ hàng · người duyệt: Hàng overhead công ty — Senior HR Manager duyệt"
+      · **act-as TRẦN THU HÀ (Account Director, có `approve` + `approve_any`)**: DX-003 hiện nút Duyệt (approve_any
+      đúng), DX-001 KHÔNG có nút + hint đích danh; **2 lần POST giả mạo action duyệt** với id phiếu overhead → server
+      từ chối, phiếu vẫn PROPOSED / `approvedQuantity` null · **act-as HẢI YẾN**: duyệt DX-001 → APPROVED, người duyệt
+      đúng, OPS nhận "duyệt đủ (hàng overhead công ty) — PO-0001.01: 1/1", thủ kho nhận "chờ soạn hàng". tsc · eslint
+      · `next build` · i18n **0/0 (4258 key)** · `migrate diff` rỗng · seed lần 2 no-op (1336). Test data dọn sạch,
+      dev.db 36/68/25 · 19 node · 0 SP/lô/đề xuất.
     - **Sửa kèm (lỗi CÓ SẴN từ commit gốc 25/07):** `bidding.detail.briefLinkMissing` thiếu key i18n — trang bidding
       của dự án chưa có brief link ném MISSING_MESSAGE. Đã thêm vi/en.
     - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** duyệt hủy cho hàng TCM mua từ chi phí dự án (chỉ hàng khách
-      qua cổng DH — đúng câu chốt) · siết `inventory.item.manage` / `import_csv` / `transfer.*` đang mở 21/21 nhóm
+      qua cổng DH — đúng câu chốt) · duyệt hủy / giữ chỗ (RESERVE) cho hàng overhead qua HR (K6-4 chỉ định tuyến đề
+      xuất XUẤT KHO; hủy hàng overhead thủ kho vẫn làm thẳng, giữ chỗ K3 vẫn Kế toán/HR theo mã cũ) · gộp cờ
+      `isOverhead` + `ownerProjectId` thành một cột "chủ hàng" duy nhất · siết `inventory.item.manage` / `import_csv` / `transfer.*` đang mở 21/21 nhóm
       quyền (chính sách BGĐ, xem 10.11 nợ) · giữ chỗ K3 gộp theo sản phẩm · gợi ý tự chia lô theo số cần khi bấm
       "Chọn lô" (hiện OPS tự chọn từng lô) · Order PCC/PLANNING mang vật dụng (chỉ OPE/PRO — hai bộ phận nhận hàng
       vật lý) · nhắc người duyệt qua notification định kỳ khi phiếu treo lâu.

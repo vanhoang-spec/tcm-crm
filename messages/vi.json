@@ -3226,8 +3226,8 @@
       "errUNKNOWN_PRODUCT": "Mã SP không tồn tại (dùng mã có sẵn, vd PO-0042, hoặc để trống để tạo mới)",
       "errINCONSISTENT_PRODUCT": "Các dòng cùng sản phẩm khai ĐVT / tái sử dụng / số phần / nhóm khác nhau (hoặc khác sản phẩm có sẵn)",
       "formOwnerProject": "Dự án sở hữu",
-      "ownerProjectTcm": "— Hàng chung TCM (mua từ chi phí công ty) —",
-      "ownerProjectHint": "Mua từ chi phí dự án nào thì gắn dự án đó (tự ra khách + team Account) — team đó ưu tiên dùng và duyệt khi dự án khác xin. Chọn tường minh; hàng chung TCM cũng phải chọn.",
+      "ownerProjectTcm": "— Hàng overhead công ty (ngân sách chung, dùng hằng ngày) —",
+      "ownerProjectHint": "Mua từ chi phí dự án nào thì gắn dự án đó (tự ra khách + team Account) — team đó ưu tiên dùng và duyệt khi dự án khác xin. Hàng overhead công ty (ngân sách chung) chọn dòng đầu — Senior HR Manager duyệt việc dùng.",
       "ownerProjectRequiredHint": "Trạng thái Theo dự án / Theo khách hàng: bắt buộc gắn dự án sở hữu.",
       "ownerProjectClientHint": "Hàng khách gửi: chọn dự án là ra khách (khách của dự án) và team Account quyết định mọi việc dùng / hủy lô này.",
       "errorProjectClientMismatch": "Khách đã chọn không phải khách của dự án sở hữu — chọn lại một trong hai.",
@@ -3338,7 +3338,6 @@
       "filterCondition": "Tình trạng",
       "filterOwner": "Chủ sở hữu",
       "ownerALL": "Mọi chủ sở hữu",
-      "ownerTCM": "Hàng chung TCM",
       "ownerMINE": "Của dự án này",
       "ownerOTHER_PROJECT": "Của dự án khác",
       "ownerCLIENT": "Hàng khách gửi",
@@ -3367,7 +3366,11 @@
       "orderHintDesc": "Bấm \"Chọn lô\" để mở danh mục đã lọc sẵn theo sản phẩm; số cần lấy = cần − đã đề xuất − đã xuất.",
       "orderHintNeed": "cần {need}, còn phải lấy {remaining}",
       "orderHintPicked": "đang chọn {n}",
-      "orderHintPick": "Chọn lô"
+      "orderHintPick": "Chọn lô",
+      "ownerOVERHEAD": "Overhead công ty (dùng chung) · Senior HR Manager duyệt",
+      "overheadApprover": "Hàng overhead công ty (ngân sách chung) — Senior HR Manager duyệt",
+      "errorNotOverheadApprover": "Phiếu này xin dùng hàng OVERHEAD công ty — chỉ Senior HR Manager (quyền duyệt hàng overhead) mới duyệt/từ chối được.",
+      "notOverheadApproverHint": "Phiếu này xin dùng hàng OVERHEAD công ty (ngân sách chung) — chỉ Senior HR Manager duyệt, PIC / Leader / trưởng team Account không duyệt được."
     },
     "consumption": {
       "title": "Tiêu hao vật tư theo dự án",
@@ -3384,21 +3387,21 @@
     },
     "orderStock": {
       "title": "Vật dụng theo Order",
-      "subtitle": "Account đã ghi sản phẩm + số lượng cần. Tồn khả dụng chia theo chủ sở hữu — hàng của dự án khác / hàng khách gửi vẫn xin được, team chủ duyệt.",
+      "subtitle": "Account đã ghi sản phẩm + số lượng cần. Tồn khả dụng chia theo chủ sở hữu — overhead công ty (HR Manager duyệt), của dự án này, của dự án khác / hàng khách gửi (team chủ duyệt).",
       "requestFromOrder": "Đề xuất xuất kho theo order",
       "colProduct": "Sản phẩm",
       "colNeed": "Cần",
       "colRequested": "Đã đề xuất",
       "colIssued": "Đã xuất",
       "colAvailable": "Tồn khả dụng theo chủ sở hữu",
-      "availTCM": "TCM chung: {n}",
       "availMINE": "Của dự án này: {n}",
       "availOTHER": "Dự án khác: {n}",
       "availCLIENT": "Hàng khách gửi: {n}",
       "availNone": "Không có tồn",
       "shortfall": "thiếu {n} — cần mua thêm",
-      "ownerHint": "Đề xuất lấy hàng của dự án khác / hàng khách gửi sẽ tự tách phiếu và chuyển cho team Account chủ hàng duyệt từng dòng.",
-      "notExecutingYet": "Dự án chưa vào giai đoạn thực thi — chưa đề xuất xuất kho được (bảng để chuẩn bị trước)."
+      "ownerHint": "Hàng overhead công ty do Senior HR Manager duyệt; hàng của dự án khác / hàng khách gửi do team Account chủ hàng duyệt từng dòng — đề xuất tự tách phiếu theo chủ.",
+      "notExecutingYet": "Dự án chưa vào giai đoạn thực thi — chưa đề xuất xuất kho được (bảng để chuẩn bị trước).",
+      "availOVERHEAD": "Overhead công ty: {n}"
     }
   },
   "staff": {

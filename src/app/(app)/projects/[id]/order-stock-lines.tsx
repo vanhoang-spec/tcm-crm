@@ -56,7 +56,7 @@ export async function OrderStockLines({ projectId, department }: { projectId: st
           <tbody>
             {lines.map((l) => {
               const remaining = Math.max(0, l.quantity - l.requested - l.issued);
-              const totalAvail = l.available.TCM + l.available.MINE + l.available.OTHER_PROJECT + l.available.CLIENT;
+              const totalAvail = l.available.OVERHEAD + l.available.MINE + l.available.OTHER_PROJECT + l.available.CLIENT;
               return (
                 <tr key={l.id} className="border-b border-border last:border-0">
                   <td className="py-2 pr-3">
@@ -69,7 +69,7 @@ export async function OrderStockLines({ projectId, department }: { projectId: st
                   <td className="py-2 pr-3 text-right tabular-nums">{l.issued}</td>
                   <td className="py-2 pr-3">
                     <div className="flex flex-wrap items-center gap-1">
-                      {l.available.TCM > 0 && <Badge tone="neutral">{t("availTCM", { n: l.available.TCM })}</Badge>}
+                      {l.available.OVERHEAD > 0 && <Badge tone="neutral">{t("availOVERHEAD", { n: l.available.OVERHEAD })}</Badge>}
                       {l.available.MINE > 0 && <Badge tone="success">{t("availMINE", { n: l.available.MINE })}</Badge>}
                       {l.available.OTHER_PROJECT > 0 && <Badge tone="warning">{t("availOTHER", { n: l.available.OTHER_PROJECT })}</Badge>}
                       {l.available.CLIENT > 0 && <Badge tone="brand">{t("availCLIENT", { n: l.available.CLIENT })}</Badge>}

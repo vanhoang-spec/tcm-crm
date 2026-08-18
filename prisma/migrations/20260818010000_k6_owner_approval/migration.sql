@@ -9,3 +9,6 @@ CREATE INDEX "stock_request_ownerProjectId_idx" ON "stock_request"("ownerProject
 
 -- AlterTable
 ALTER TABLE "stock_request_line" ADD COLUMN "approvedQuantity" INTEGER;
+
+-- AlterTable (K6-4: phiếu hàng overhead công ty — HR Manager duyệt)
+ALTER TABLE "stock_request" ADD COLUMN "isOverhead" BOOLEAN NOT NULL DEFAULT false;

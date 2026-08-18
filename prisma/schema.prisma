@@ -960,6 +960,7 @@ model Project {
   stockDocuments      StockDocument[]       @relation("StockDocProject")
   stockDocumentsFrom  StockDocument[]       @relation("StockDocFromProject")
   stockRequests       StockRequest[]
+  stockRequestsOwned  StockRequest[] @relation("StockRequestOwnerProject") // K6: phiếu xin dùng hàng mà dự án này SỞ HỮU
   inventoryHoldings   ProjectHolding[]
   inventoryItemsBound InventoryItem[]       @relation("InventoryItemBoundProject")
   planningJobs        PlanningJob[]
@@ -2488,7 +2489,7 @@ model InventoryItem {
   statusCode          String? // R|P|C|W|L|D — xem ITEM_STATUS_CODES lib/inventory.ts; đổi qua phiếu CONVERT
   conditionCode       String? // B|P|S — brand new / mới một phần / second hand; đổi qua phiếu CONVERT
   ownerClientId       String? // null = hàng TCM (segment mã "TCM"); BẮT BUỘC khi node gốc isClientOwned
-  boundProjectId      String? // bắt buộc app-layer khi statusCode=P (hàng theo chính xác dự án)
+  boundProjectId      String? // K6 (18/08/2026): DỰ ÁN SỞ HỮU lô — mua từ chi phí dự án đó / khách gửi cho dự án đó; null = hàng chung TCM. Gán lúc tạo lô, quyết định TEAM ACCOUNT nào duyệt việc dùng (xem lib/inventory-request.ts lotOwnerKind). Bắt buộc với hàng khách gửi + trạng thái P/C; trạng thái P thêm nghĩa ĐỘC QUYỀN (dự án khác không xin được).
   expiryDate          DateTime? // hàng khách có date — hết hạn: chặn xuất dùng, chỉ còn phiếu DESTROY
   clientDocNo         String? // số phiếu xuất kho của KHÁCH khi gửi hàng (nhóm isClientOwned)
   /// K4 — MỨC cảnh báo hạn dùng ĐÃ nhắc (YELLOW|ORANGE|RED|EXPIRED). KHÔNG phải cờ một-lần: chỉ
@@ -2611,12 +2612,15 @@ model StockBalance {
 model StockRequest {
   id               String    @id @default(cuid())
   code             String    @unique // {DX|DN}-{YYMM}-{seq3}, retry P2002 khi trùng
-  type             String // ISSUE | INTAKE
+  type             String // ISSUE | INTAKE | RESERVE | TRANSFER | DESTROY (K6: đề xuất hủy hàng khách gửi, mã DH)
   status           String    @default("PROPOSED") // PROPOSED | APPROVED | REJECTED | CANCELED | DONE
   warehouseId      String // ISSUE = kho xuất; INTAKE = kho nhận; RESERVE = kho đang giữ; TRANSFER = kho NGUỒN
   /// K4 — TRANSFER (đề xuất chuyển kho): kho ĐÍCH. Các loại khác để null.
   toWarehouseId    String?
-  projectId        String? // bắt buộc khi ISSUE
+  projectId        String? // bắt buộc khi ISSUE (dự án ĐANG XIN dùng hàng)
+  /// K6 (18/08/2026): dự án SỞ HỮU hàng của cả phiếu (sau khi tách theo chủ) — team Account của dự án này DUYỆT.
+  /// null = hàng chung TCM / hàng của chính dự án xin → PIC/Leader dự án xin duyệt (K2). Với DESTROY = dự án chủ lô khách.
+  ownerProjectId   String?
   purchaseOrderId  String? // INTAKE từ PO (module 🛒) — chỉ để đối chiếu, PO vẫn là làn cam kết riêng
   expectedReturnAt DateTime? // ISSUE có dòng tái sử dụng — chép sang phiếu XE lúc xác nhận
   note             String?
@@ -2637,6 +2641,7 @@ model StockRequest {
   warehouse     Warehouse          @relation("StockRequestWarehouse", fields: [warehouseId], references: [id])
   toWarehouse   Warehouse?         @relation("StockRequestToWarehouse", fields: [toWarehouseId], references: [id])
   project       Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  ownerProject  Project?           @relation("StockRequestOwnerProject", fields: [ownerProjectId], references: [id], onDelete: SetNull)
   purchaseOrder PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   createdBy     Staff?             @relation("StockRequestCreatedBy", fields: [createdById], references: [id])
   approvedBy    Staff?             @relation("StockRequestApprovedBy", fields: [approvedById], references: [id])
@@ -2648,6 +2653,7 @@ model StockRequest {
 
   @@index([type, status])
   @@index([projectId])
+  @@index([ownerProjectId])
   @@map("stock_request")
 }
 
@@ -2656,7 +2662,10 @@ model StockRequestLine {
   requestId         String
   itemId            String
   quantity          Int // số đề xuất (>0)
-  confirmedQuantity Int? // thủ kho ghi số thực xuất/thực nhập (≤ quantity); chênh lệch hiện vĩnh viễn
+  /// K6: số Account CHO PHÉP từng dòng (0..quantity) — 0 = từ chối dòng, <quantity = duyệt một phần, =quantity = đủ.
+  /// null = phiếu duyệt trước K6 hoặc loại không duyệt theo dòng → coi như = quantity (effectiveApproved).
+  approvedQuantity  Int?
+  confirmedQuantity Int? // thủ kho ghi số thực xuất/thực nhập (≤ số ĐÃ DUYỆT); chênh lệch hiện vĩnh viễn
   note              String?
   sort              Int     @default(0)
 

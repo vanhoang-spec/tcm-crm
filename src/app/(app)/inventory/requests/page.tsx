@@ -54,6 +54,8 @@ export default async function StockRequestsPage({
         ]
       : []),
     ...(perms.has("inventory.transfer.create") ? [{ href: "/inventory/requests/new/transfer", label: t("newTransferRequest") }] : []),
+    // K6: thủ kho đề xuất hủy hàng khách gửi (team Account chủ duyệt)
+    ...(perms.has("inventory.destroy") ? [{ href: "/inventory/requests/new/destroy", label: t("newDestroyRequest") }] : []),
   ];
 
   return (

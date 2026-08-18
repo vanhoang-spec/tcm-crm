@@ -521,6 +521,9 @@ export async function createDestroyDoc(_prev: DocFormState, formData: FormData):
   if (!note) return { error: t("errorReasonRequired") };
   const { lines, error } = await parseLines(formData, { allowNegative: false });
   if (error) return { error };
+  // K6: hàng KHÁCH GỬI không hủy thẳng — phải qua đề xuất hủy (DH) để team Account chủ quyết định.
+  const clientLots = await prisma.inventoryItem.findMany({ where: { id: { in: lines.map((l) => l.itemId) }, ownerClientId: { not: null } }, select: { code: true } });
+  if (clientLots.length > 0) return { error: t("errorClientLotNeedsRequest", { items: clientLots.map((c) => c.code).join(", ") }) };
 
   const staffId = await getCurrentStaffId();
   let docId = "";

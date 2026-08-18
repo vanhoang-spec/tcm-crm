@@ -7,11 +7,11 @@ import { requirePermission } from "@/lib/permissions";
 export default async function NewIntakeRequestPage() {
   await requirePermission("inventory.request.create");
   const t = await getTranslations("inventory.requests");
-  const { warehouseOptions, pickerItems, poOptions } = await loadRequestFormData("INTAKE");
+  const { warehouseOptions, pickerItems, poOptions, groupOptions } = await loadRequestFormData("INTAKE");
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <h1 className="text-lg font-semibold text-foreground">{t("newIntakeRequest")}</h1>
-      <RequestForm kind="INTAKE" warehouses={warehouseOptions} items={pickerItems} purchaseOrders={poOptions} />
+      <RequestForm kind="INTAKE" warehouses={warehouseOptions} items={pickerItems} purchaseOrders={poOptions} groups={groupOptions} />
     </div>
   );
 }

@@ -63,7 +63,7 @@ export default async function InventoryItemsPage({
       orderBy: { code: "asc" },
     }),
     prisma.client.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }),
-    prisma.project.findMany({ select: { id: true, code: true, name: true }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.project.findMany({ select: { id: true, code: true, name: true, client: { select: { code: true } }, ownerTeam: { select: { code: true } } }, orderBy: { createdAt: "desc" }, take: 200 }),
   ]);
   // Ô chọn "sản phẩm có sẵn" của form tạo lô cần MỌI sản phẩm đang hoạt động, không theo bộ lọc của trang.
   const activeProducts = await prisma.inventoryProduct.findMany({
@@ -85,7 +85,7 @@ export default async function InventoryItemsPage({
     nextLotSeq: (p.lots[0]?.seq ?? 0) + 1,
   }));
   const clientOptions: ClientOption[] = clients;
-  const projectOptions: ProjectOption[] = projects;
+  const projectOptions: ProjectOption[] = projects.map((p) => ({ id: p.id, code: p.code, name: p.name, clientCode: p.client?.code ?? null, teamCode: p.ownerTeam?.code ?? null }));
   const now = new Date();
 
   const expiryBadge = (expiry: Date | null) => {

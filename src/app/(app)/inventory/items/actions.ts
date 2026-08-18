@@ -147,18 +147,28 @@ export async function createItem(_prev: ItemFormState, formData: FormData): Prom
     rootClientOwned = root.isClientOwned;
   }
 
-  // ── Ràng buộc lô (như v2) ──
-  if (rootClientOwned && !ownerClientId) return { error: t("errorClientRequired") };
+  // ── Ràng buộc lô ──
+  // K6: boundProjectId = DỰ ÁN SỞ HỮU cho MỌI lô (mua từ chi phí dự án / khách gửi cho dự án) — quyết định team
+  // Account nào duyệt việc dùng. Bắt buộc với hàng khách gửi (nhóm isClientOwned), trạng thái P (độc quyền) và C;
+  // để trống = "Hàng chung TCM" (mua từ chi phí công ty) — người nhập phải CHỌN tường minh trên form.
   if (statusCode === "C" && !ownerClientId) return { error: t("errorClientRequired") };
-  if (statusCode === "P" && !boundProjectId) return { error: t("errorBoundProjectRequired") };
-  if (ownerClientId && !(await prisma.client.findUnique({ where: { id: ownerClientId }, select: { id: true } }))) return { error: t("errorInvalid") };
-  if (boundProjectId && !(await prisma.project.findUnique({ where: { id: boundProjectId }, select: { id: true } }))) return { error: t("errorInvalid") };
+  if ((rootClientOwned || statusCode === "P" || statusCode === "C") && !boundProjectId) return { error: t("errorBoundProjectRequired") };
+  let resolvedOwnerClientId = ownerClientId;
+  if (boundProjectId) {
+    const project = await prisma.project.findUnique({ where: { id: boundProjectId }, select: { id: true, clientId: true } });
+    if (!project) return { error: t("errorInvalid") };
+    // Hàng khách gửi: khách = khách của dự án sở hữu (chọn dự án là hiển nhiên ra khách) — không cho khai lệch.
+    if (rootClientOwned) resolvedOwnerClientId = project.clientId;
+    else if (ownerClientId && ownerClientId !== project.clientId) return { error: t("errorProjectClientMismatch") };
+  }
+  if (rootClientOwned && !resolvedOwnerClientId) return { error: t("errorClientRequired") };
+  if (resolvedOwnerClientId && !(await prisma.client.findUnique({ where: { id: resolvedOwnerClientId }, select: { id: true } }))) return { error: t("errorInvalid") };
 
   const attrs: LotAttrs = {
     statusCode: statusCode as ItemStatusCode,
     conditionCode: conditionCode as ItemConditionCode,
-    ownerClientId,
-    boundProjectId: statusCode === "P" ? boundProjectId : null,
+    ownerClientId: resolvedOwnerClientId,
+    boundProjectId,
     expiryDate,
     clientDocNo,
   };
@@ -311,15 +321,19 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
     rootCode: string;
     rootClientOwned: boolean;
     clientId: string | null;
+    /** K6: dự án sở hữu (null = hàng chung TCM) */
+    projectId: string | null;
   };
   const resolved: ResolvedRow[] = [];
   if (rows.length > 0) {
-    const [nodes, clients, warehouses, products] = await Promise.all([
+    const [nodes, clients, warehouses, products, projects] = await Promise.all([
       prisma.inventoryCategory.findMany({ where: { isActive: true } }),
       prisma.client.findMany({ where: { isActive: true }, select: { id: true, code: true } }),
       prisma.warehouse.findMany({ where: { isActive: true }, select: { id: true, code: true } }),
       prisma.inventoryProduct.findMany({ where: { isActive: true }, select: productSelect }),
+      prisma.project.findMany({ select: { id: true, code: true, clientId: true } }),
     ]);
+    const projectByCode = new Map(projects.map((pr) => [pr.code.toUpperCase(), pr]));
     const roots = new Map(nodes.filter((n) => !n.parentId && n.code).map((n) => [n.code!.toUpperCase(), n]));
     const byName = new Map<string, typeof nodes>();
     for (const n of nodes) {
@@ -380,9 +394,19 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
         continue;
       }
       if (!existingProduct) existingProduct = productByRootName.get(`${root.id}‖${r.name.trim().toLowerCase()}`) ?? null;
-      if (r.statusCode === "P") {
-        // Lô theo chính xác dự án cần gắn dự án — CSV không có cột này, nhập tay qua form
-        rowErrors.push({ line: r.line, message: "STATUS_P_NOT_SUPPORTED" });
+      // K6: dự án sở hữu — bắt buộc với hàng khách gửi + trạng thái P/C; trống = hàng chung TCM.
+      let projectId: string | null = null;
+      let projectClientId: string | null = null;
+      if (r.projectCode) {
+        const pr = projectByCode.get(r.projectCode);
+        if (!pr) {
+          rowErrors.push({ line: r.line, message: "UNKNOWN_PROJECT" });
+          continue;
+        }
+        projectId = pr.id;
+        projectClientId = pr.clientId;
+      } else if (root.isClientOwned || r.statusCode === "P" || r.statusCode === "C") {
+        rowErrors.push({ line: r.line, message: "MISSING_PROJECT" });
         continue;
       }
       let clientId: string | null = null;
@@ -392,7 +416,14 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
           rowErrors.push({ line: r.line, message: "UNKNOWN_CLIENT" });
           continue;
         }
-      } else if (root.isClientOwned || r.statusCode === "C") {
+        // Khách khai tay phải là khách của dự án sở hữu — không cho hàng của khách này gắn dự án của khách khác.
+        if (projectClientId && clientId !== projectClientId) {
+          rowErrors.push({ line: r.line, message: "PROJECT_CLIENT_MISMATCH" });
+          continue;
+        }
+      } else if (root.isClientOwned) {
+        clientId = projectClientId; // hàng khách gửi: khách suy từ dự án
+      } else if (r.statusCode === "C") {
         rowErrors.push({ line: r.line, message: "MISSING_CLIENT" });
         continue;
       }
@@ -401,7 +432,7 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
         continue;
       }
       const productKey = existingProduct ? existingProduct.id : `new:${root.id}‖${r.name.trim().toLowerCase()}`;
-      resolved.push({ ...r, productKey, existingProduct, catNodeId: existingProduct?.catNodeId ?? node.id, rootCode: root.code, rootClientOwned: root.isClientOwned, clientId });
+      resolved.push({ ...r, productKey, existingProduct, catNodeId: existingProduct?.catNodeId ?? node.id, rootCode: root.code, rootClientOwned: root.isClientOwned, clientId, projectId });
     }
 
     // Nhất quán trong cùng SẢN PHẨM (ĐVT / tái sử dụng / số phần / node) + không trùng (lô, kho)
@@ -472,7 +503,7 @@ export async function importItemsCsv(_prev: ImportFormState, formData: FormData)
           statusCode: l.statusCode as ItemStatusCode,
           conditionCode: l.conditionCode as ItemConditionCode,
           ownerClientId: l.clientId,
-          boundProjectId: null,
+          boundProjectId: l.projectId,
           expiryDate: l.expiryRaw ? new Date(l.expiryRaw) : null,
           clientDocNo: l.clientDocNo || null,
         };

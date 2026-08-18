@@ -22,7 +22,7 @@ export type CategoryOption = {
   isClientOwned: boolean;
 };
 export type ClientOption = { id: string; code: string; name: string };
-export type ProjectOption = { id: string; code: string; name: string };
+export type ProjectOption = { id: string; code: string; name: string; clientCode?: string | null; teamCode?: string | null };
 /** Sản phẩm có sẵn để treo lô mới vào — nextLotSeq để xem trước mã lô sẽ sinh. */
 export type ProductOption = {
   id: string;
@@ -94,8 +94,11 @@ export function ItemForm({
   const selectedNode = useMemo(() => categories.find((c) => c.id === catNodeId) ?? null, [categories, catNodeId]);
   const rootCode = productMode === "existing" ? selectedProduct?.rootCode : selectedNode?.rootCode;
   const clientOwned = productMode === "existing" ? !!selectedProduct?.isClientOwned : !!selectedNode?.isClientOwned;
-  const needClient = clientOwned || statusCode === "C";
-  const needProject = statusCode === "P";
+  // K6: hàng khách gửi → KHÔNG chọn khách tay (khách = khách của dự án sở hữu); trạng thái C thì phải chọn khách.
+  const needClient = !clientOwned && statusCode === "C";
+  // K6: dự án sở hữu bắt buộc với hàng khách gửi + P + C; còn lại được để "Hàng chung TCM" nhưng phải chọn tường minh.
+  const needProject = clientOwned || statusCode === "P" || statusCode === "C";
+  const projectLabel = (p: ProjectOption) => `${p.code} — ${p.name}${p.clientCode ? ` · ${p.clientCode}` : ""}${p.teamCode ? ` · ${p.teamCode}` : ""}`;
   const codePreview =
     productMode === "existing"
       ? selectedProduct
@@ -205,29 +208,35 @@ export function ItemForm({
           </select>
         </label>
         <label className="space-y-1 text-xs text-muted-foreground">
-          {t("formClient")}
+          {t("formOwnerProject")}
           <SearchableSelect
-            name="ownerClientId"
-            value={ownerClientId}
-            onChange={setOwnerClientId}
-            required={needClient}
+            name="boundProjectId"
+            value={boundProjectId}
+            onChange={setBoundProjectId}
+            required={needProject}
             options={[
-              { value: "", label: t("clientTcm") },
-              ...clients.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` })),
+              ...(needProject ? [] : [{ value: "", label: t("ownerProjectTcm") }]),
+              ...projects.map((p) => ({ value: p.id, label: projectLabel(p) })),
             ]}
           />
-          {needClient && <span className="block text-[11px] leading-snug text-warning">{t("clientRequiredHint")}</span>}
+          <span className={"block text-[11px] leading-snug " + (needProject ? "text-warning" : "")}>
+            {clientOwned ? t("ownerProjectClientHint") : needProject ? t("ownerProjectRequiredHint") : t("ownerProjectHint")}
+          </span>
         </label>
-        {needProject && (
+        {!clientOwned && (
           <label className="space-y-1 text-xs text-muted-foreground">
-            {t("formBoundProject")}
+            {t("formClient")}
             <SearchableSelect
-              name="boundProjectId"
-              value={boundProjectId}
-              onChange={setBoundProjectId}
-              required
-              options={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+              name="ownerClientId"
+              value={ownerClientId}
+              onChange={setOwnerClientId}
+              required={needClient}
+              options={[
+                { value: "", label: t("clientTcm") },
+                ...clients.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` })),
+              ]}
             />
+            {needClient && <span className="block text-[11px] leading-snug text-warning">{t("clientRequiredHint")}</span>}
           </label>
         )}
         {clientOwned && (

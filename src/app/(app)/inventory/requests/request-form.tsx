@@ -6,7 +6,10 @@ import { Minus, Plus, X } from "lucide-react";
 import { NumberField } from "@/components/ui/number-field";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createIntakeRequest, createIssueRequest, createReserveRequest, createTransferRequest, type RequestFormState } from "./actions";
+import { Badge } from "@/components/ui/badge";
+import { ITEM_CONDITION_CODES, ITEM_STATUS_CODES } from "@/lib/inventory-lot";
+import { lotOwnerKind } from "@/lib/inventory-request";
+import { createDestroyRequest, createIntakeRequest, createIssueRequest, createReserveRequest, createTransferRequest, type RequestFormState } from "./actions";
 
 const input =
   "h-11 rounded-lg border border-border-strong bg-surface px-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
@@ -19,7 +22,20 @@ export type RequestPickerItem = {
   isReusable: boolean;
   /** ISSUE: tồn khả dụng theo kho (đã trừ phần đã duyệt chưa xuất). INTAKE: chỉ hiển thị tồn hiện có. */
   available: Record<string, number>;
+  // ── K6 smart search: nhãn để OPS biết lô này của ai TRƯỚC KHI đề xuất, và để lọc ──
+  productCode: string | null;
+  groupCode: string | null; // mã nhóm gốc 2 ký tự (PO/DT/…)
+  statusCode: string | null;
+  conditionCode: string | null;
+  ownerClientId: string | null;
+  ownerClientCode: string | null;
+  boundProjectId: string | null;
+  boundProjectCode: string | null;
+  boundTeamCode: string | null; // team Account của dự án sở hữu — người sẽ duyệt
 };
+export type GroupOption = { code: string; name: string };
+/** Bộ lọc chủ sở hữu trong picker — cùng thang với lotOwnerKind (lib/inventory-request.ts). */
+const OWNER_FILTERS = ["ALL", "TCM", "MINE", "OTHER_PROJECT", "CLIENT"] as const;
 export type WarehouseOption = { id: string; name: string };
 export type ProjectOption = { id: string; code: string; name: string };
 export type PoOption = { id: string; label: string };
@@ -31,6 +47,7 @@ const ACTION_BY_KIND = {
   INTAKE: createIntakeRequest,
   RESERVE: createReserveRequest,
   TRANSFER: createTransferRequest,
+  DESTROY: createDestroyRequest, // K6: đề xuất hủy hàng khách gửi — thủ kho lập, team Account chủ duyệt
 } as const;
 
 export function RequestForm({
@@ -40,17 +57,21 @@ export function RequestForm({
   projects,
   purchaseOrders,
   reservedFree,
+  groups = [],
 }: {
-  kind: "ISSUE" | "INTAKE" | "RESERVE" | "TRANSFER";
+  kind: "ISSUE" | "INTAKE" | "RESERVE" | "TRANSFER" | "DESTROY";
   warehouses: WarehouseOption[];
   items: RequestPickerItem[];
   projects?: ProjectOption[];
   purchaseOrders?: PoOption[];
   /** `${kho}|${item}|${dự án}` → giữ chỗ CÒN TRỐNG; cộng lại cho đúng dự án đang chọn. */
   reservedFree?: Record<string, number>;
+  /** K6 smart search: danh sách nhóm gốc để lọc. */
+  groups?: GroupOption[];
 }) {
   const [state, formAction, pending] = useActionState<RequestFormState, FormData>(ACTION_BY_KIND[kind], {});
   const t = useTranslations("inventory.requests");
+  const tItems = useTranslations("inventory.items");
 
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
   const [toWarehouseId, setToWarehouseId] = useState(kind === "TRANSFER" ? warehouses[1]?.id ?? "" : "");
@@ -59,6 +80,12 @@ export function RequestForm({
   const [lines, setLines] = useState<Line[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // K6 smart search: lọc nhóm / trạng thái / tình trạng / chủ sở hữu — mặc định KHÔNG lọc gì để không giấu hàng;
+  // nhãn chủ sở hữu trên từng dòng là thứ chính, bộ lọc chỉ để thu hẹp khi danh mục dài.
+  const [fGroup, setFGroup] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const [fCond, setFCond] = useState("");
+  const [fOwner, setFOwner] = useState<(typeof OWNER_FILTERS)[number]>("ALL");
 
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
   // Số hiển thị = khả dụng chung + phần giữ chỗ CÒN TRỐNG của chính dự án đang chọn (hàng đó vẫn
@@ -72,9 +99,13 @@ export function RequestForm({
   const pickerRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items
-      .filter((it) => !q || it.code.toLowerCase().includes(q) || it.name.toLowerCase().includes(q))
-      .map((it) => ({ ...it, qty: availableFor(it.id) }));
-  }, [search, items, availableFor]);
+      .filter((it) => !q || it.code.toLowerCase().includes(q) || it.name.toLowerCase().includes(q) || (it.productCode ?? "").toLowerCase().includes(q))
+      .filter((it) => !fGroup || it.groupCode === fGroup)
+      .filter((it) => !fStatus || it.statusCode === fStatus)
+      .filter((it) => !fCond || it.conditionCode === fCond)
+      .filter((it) => fOwner === "ALL" || lotOwnerKind(it, projectId || null) === fOwner)
+      .map((it) => ({ ...it, qty: availableFor(it.id), ownerKind: lotOwnerKind(it, projectId || null) }));
+  }, [search, items, availableFor, fGroup, fStatus, fCond, fOwner, projectId]);
 
   const hasReusableLine = kind === "ISSUE" && lines.some((l) => itemById.get(l.itemId)?.isReusable);
 
@@ -88,7 +119,7 @@ export function RequestForm({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-xs text-muted-foreground">
-          {kind === "ISSUE" || kind === "TRANSFER" ? t("formFromWarehouse") : t("formToWarehouse")}
+          {kind === "ISSUE" || kind === "TRANSFER" || kind === "DESTROY" ? t("formFromWarehouse") : t("formToWarehouse")}
           <select name="warehouseId" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className={input + " w-full"}>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
@@ -144,8 +175,9 @@ export function RequestForm({
           </label>
         )}
         <label className="space-y-1 text-xs text-muted-foreground sm:col-span-2">
-          {t("formNote")}
-          <input name="note" className={input + " w-full"} />
+          {kind === "DESTROY" ? t("destroyReason") : t("formNote")}
+          <input name="note" required={kind === "DESTROY"} className={input + " w-full"} />
+          {kind === "DESTROY" && <span className="block text-[11px] leading-snug">{t("destroyReasonHint")}</span>}
         </label>
       </div>
 
@@ -238,6 +270,32 @@ export function RequestForm({
                 <X className="h-5 w-5" />
               </button>
             </div>
+            {/* K6 smart search — 4 bộ lọc nhanh */}
+            <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <select value={fGroup} onChange={(e) => setFGroup(e.target.value)} aria-label={t("filterGroup")} className={input + " h-9 text-xs"}>
+                <option value="">{t("filterGroup")}</option>
+                {groups.map((g) => (
+                  <option key={g.code} value={g.code}>{g.code} — {g.name}</option>
+                ))}
+              </select>
+              <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label={t("filterStatus")} className={input + " h-9 text-xs"}>
+                <option value="">{t("filterStatus")}</option>
+                {ITEM_STATUS_CODES.map((c) => (
+                  <option key={c} value={c}>{tItems(`status${c}` as Parameters<typeof tItems>[0])}</option>
+                ))}
+              </select>
+              <select value={fCond} onChange={(e) => setFCond(e.target.value)} aria-label={t("filterCondition")} className={input + " h-9 text-xs"}>
+                <option value="">{t("filterCondition")}</option>
+                {ITEM_CONDITION_CODES.map((c) => (
+                  <option key={c} value={c}>{tItems(`cond${c}` as Parameters<typeof tItems>[0])}</option>
+                ))}
+              </select>
+              <select value={fOwner} onChange={(e) => setFOwner(e.target.value as (typeof OWNER_FILTERS)[number])} aria-label={t("filterOwner")} className={input + " h-9 text-xs"}>
+                {OWNER_FILTERS.map((k) => (
+                  <option key={k} value={k}>{t(`owner${k}` as Parameters<typeof t>[0])}</option>
+                ))}
+              </select>
+            </div>
             <ul className="mt-2 max-h-[55vh] space-y-1 overflow-y-auto">
               {pickerRows.map((r) => {
                 const added = lines.some((l) => l.itemId === r.id);
@@ -256,9 +314,18 @@ export function RequestForm({
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium text-foreground">{r.name}</span>
                         <span className="font-mono text-xs text-muted-foreground">{r.code}</span>
+                        <span className="mt-0.5 flex flex-wrap gap-1">
+                          {r.statusCode && <Badge tone={r.statusCode === "R" ? "success" : "neutral"}>{tItems(`status${r.statusCode}` as Parameters<typeof tItems>[0])}</Badge>}
+                          {r.conditionCode && <Badge tone="neutral">{tItems(`cond${r.conditionCode}` as Parameters<typeof tItems>[0])}</Badge>}
+                          {/* K6: nhãn CHỦ SỞ HỮU — quyết định ai duyệt. Hàng của chủ khác vẫn xin được (K6-2), chỉ là người duyệt khác. */}
+                          {r.ownerKind === "TCM" && <Badge tone="neutral">{t("ownerTCM")}</Badge>}
+                          {r.ownerKind === "MINE" && <Badge tone="success">{t("ownerMineShort", { project: r.boundProjectCode ?? "" })}</Badge>}
+                          {r.ownerKind === "OTHER_PROJECT" && <Badge tone="warning">{t("ownerOtherShort", { project: r.boundProjectCode ?? "", team: r.boundTeamCode ?? "?" })}</Badge>}
+                          {r.ownerKind === "CLIENT" && <Badge tone="brand">{t("ownerClientShort", { client: r.ownerClientCode ?? "", project: r.boundProjectCode ?? "—", team: r.boundTeamCode ?? "?" })}</Badge>}
+                        </span>
                       </span>
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        {kind === "ISSUE" || kind === "TRANSFER" ? t("availableAt", { count: r.qty }) : ""}
+                        {kind === "ISSUE" || kind === "TRANSFER" || kind === "DESTROY" ? t("availableAt", { count: r.qty }) : ""}
                         {r.unit ? ` ${r.unit}` : ""}
                       </span>
                     </button>

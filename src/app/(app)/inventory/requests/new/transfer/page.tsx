@@ -7,11 +7,11 @@ import { requirePermission } from "@/lib/permissions";
 export default async function NewTransferRequestPage() {
   await requirePermission("inventory.transfer.create");
   const t = await getTranslations("inventory.requests");
-  const { warehouseOptions, pickerItems } = await loadRequestFormData("TRANSFER");
+  const { warehouseOptions, pickerItems, groupOptions } = await loadRequestFormData("TRANSFER");
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <h1 className="text-lg font-semibold text-foreground">{t("newTransferRequest")}</h1>
-      <RequestForm kind="TRANSFER" warehouses={warehouseOptions} items={pickerItems} />
+      <RequestForm kind="TRANSFER" warehouses={warehouseOptions} items={pickerItems} groups={groupOptions} />
     </div>
   );
 }

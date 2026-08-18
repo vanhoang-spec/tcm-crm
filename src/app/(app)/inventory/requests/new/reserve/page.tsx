@@ -10,7 +10,7 @@ import { requirePermission } from "@/lib/permissions";
 export default async function NewReserveRequestPage() {
   await requirePermission("inventory.request.create");
   const t = await getTranslations("inventory.requests");
-  const { warehouseOptions, pickerItems, projectOptions, reservedFree } = await loadRequestFormData("RESERVE");
+  const { warehouseOptions, pickerItems, projectOptions, reservedFree, groupOptions } = await loadRequestFormData("RESERVE");
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <h1 className="text-lg font-semibold text-foreground">{t("newReserveRequest")}</h1>
@@ -20,6 +20,7 @@ export default async function NewReserveRequestPage() {
         items={pickerItems}
         projects={projectOptions}
         reservedFree={reservedFree}
+        groups={groupOptions}
       />
     </div>
   );

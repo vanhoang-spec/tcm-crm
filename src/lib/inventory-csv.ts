@@ -16,6 +16,7 @@ export const INVENTORY_CSV_COLUMNS = [
   "Trạng thái",
   "Tình trạng",
   "Mã KH",
+  "Mã dự án",
   "Hạn dùng",
   "Số phiếu KH",
   "ĐVT",
@@ -39,7 +40,9 @@ export type ParsedInventoryRow = {
   categoryRef: string;
   statusCode: string; // R|P|C|W|L|D — bắt buộc khai (không mặc định ngầm)
   conditionCode: string; // B|P|S
-  clientCode: string; // "" = hàng TCM
+  clientCode: string; // "" = hàng TCM (hàng khách gửi: có thể để trống → suy từ dự án sở hữu)
+  /** K6: mã DỰ ÁN SỞ HỮU (mua từ chi phí dự án đó / khách gửi cho dự án đó); "" = hàng chung TCM */
+  projectCode: string;
   /** "YYYY-MM-DD" — UTC midnight theo quy ước app; "" = không có hạn dùng */
   expiryRaw: string;
   clientDocNo: string;
@@ -132,21 +135,22 @@ export function parseInventoryCsv(buffer: Buffer): { rows: ParsedInventoryRow[];
   for (let r = 1; r < parsed.length; r++) {
     const line = r + 1;
     const cells = parsed[r].map((c) => c.trim());
-    const [productCode, name, categoryRef, statusRaw, condRaw, clientCode, expiryRaw, clientDocNo, unit, reusableRaw, partCountRaw, warehouseCode, quantityRaw, note] = [
+    const [productCode, name, categoryRef, statusRaw, condRaw, clientCode, projectCode, expiryRaw, clientDocNo, unit, reusableRaw, partCountRaw, warehouseCode, quantityRaw, note] = [
       (cells[0] ?? "").toUpperCase(),
       cells[1] ?? "",
       cells[2] ?? "",
       (cells[3] ?? "").toUpperCase(),
       (cells[4] ?? "").toUpperCase(),
       (cells[5] ?? "").toUpperCase(),
-      cells[6] ?? "",
+      (cells[6] ?? "").toUpperCase(),
       cells[7] ?? "",
       cells[8] ?? "",
-      (cells[9] ?? "").toLowerCase(),
-      cells[10] ?? "",
+      cells[9] ?? "",
+      (cells[10] ?? "").toLowerCase(),
       cells[11] ?? "",
       cells[12] ?? "",
       cells[13] ?? "",
+      cells[14] ?? "",
     ];
 
     // Có Mã SP thì Tên/Nhóm không bắt buộc (lấy từ sản phẩm); không có thì phải khai để tìm/tạo sản phẩm.
@@ -207,6 +211,7 @@ export function parseInventoryCsv(buffer: Buffer): { rows: ParsedInventoryRow[];
       statusCode: statusRaw,
       conditionCode: condRaw,
       clientCode,
+      projectCode,
       expiryRaw,
       clientDocNo,
       unit,
@@ -225,19 +230,19 @@ export function parseInventoryCsv(buffer: Buffer): { rows: ParsedInventoryRow[];
  * (id sản phẩm có sẵn, hoặc khoá "mới" theo nhóm gốc + tên) — lô = sản phẩm + tổ hợp thuộc tính.
  */
 export function lotKey(productKey: string, r: ParsedInventoryRow): string {
-  return [productKey, r.statusCode, r.conditionCode, r.clientCode, r.expiryRaw, r.clientDocNo].join("‖");
+  return [productKey, r.statusCode, r.conditionCode, r.clientCode, r.projectCode, r.expiryRaw, r.clientDocNo].join("‖");
 }
 
-/** File mẫu sinh từ chính INVENTORY_CSV_COLUMNS — 5 dòng: thường / lô thứ hai cùng sản phẩm / second-hand / bộ 3 phần / hàng khách có date. Cột Mã SP để trống = tạo sản phẩm mới theo (nhóm, tên); điền mã có sẵn (PO-0042) = thêm lô vào sản phẩm đó. */
+/** File mẫu sinh từ chính INVENTORY_CSV_COLUMNS — 5 dòng: hàng chung TCM / lô thứ hai cùng sản phẩm / mua từ chi phí dự án / bộ 3 phần / hàng khách gửi có date. Cột Mã SP để trống = tạo sản phẩm mới theo (nhóm, tên); điền mã có sẵn (PO-0042) = thêm lô vào sản phẩm đó. Cột Mã dự án = DỰ ÁN SỞ HỮU (K6); trống = hàng chung TCM. */
 export function buildSampleCsv(): string {
   const esc = (v: string) => (/[",;\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
   const lines = [
     INVENTORY_CSV_COLUMNS.map(esc).join(","),
-    ["", "Áo PG trắng size M", "DP", "R", "B", "", "", "", "cái", "Y", "", "HCM", "50", ""].map(esc).join(","),
-    ["", "Áo PG trắng size M", "DP", "R", "S", "", "", "", "cái", "Y", "", "HCM", "12", "Cùng sản phẩm dòng trên → lô thứ hai (.02)"].map(esc).join(","),
-    ["", "Loa di động JBL", "Âm thanh", "R", "S", "", "", "", "cái", "Y", "", "HCM", "4", "Đã qua 2 event"].map(esc).join(","),
-    ["", "Backdrop khung rời", "Backdrop", "R", "S", "", "", "", "bộ", "Y", "3", "HCM", "2", "Số lượng = số bộ đủ"].map(esc).join(","),
-    ["", "Sữa mẫu 180ml", "Hàng hóa chạy project", "C", "B", "DHG", "2026-12-31", "PXK-0123", "thùng", "N", "", "HCM", "20", "Hàng khách gửi"].map(esc).join(","),
+    ["", "Áo PG trắng size M", "DP", "R", "B", "", "", "", "", "cái", "Y", "", "HCM", "50", "Hàng chung TCM — Mã dự án trống"].map(esc).join(","),
+    ["", "Áo PG trắng size M", "DP", "R", "S", "", "", "", "", "cái", "Y", "", "HCM", "12", "Cùng sản phẩm dòng trên → lô thứ hai (.02)"].map(esc).join(","),
+    ["", "Loa di động JBL", "Âm thanh", "R", "S", "", "T013LO226A3", "", "", "cái", "Y", "", "HCM", "4", "Mua từ chi phí dự án T013 → team dự án đó duyệt khi ai xin dùng"].map(esc).join(","),
+    ["", "Backdrop khung rời", "Backdrop", "R", "S", "", "", "", "", "bộ", "Y", "3", "HCM", "2", "Số lượng = số bộ đủ"].map(esc).join(","),
+    ["", "Sữa mẫu 180ml", "Hàng hóa chạy project", "C", "B", "", "T013LO226A3", "2026-12-31", "PXK-0123", "thùng", "N", "", "HCM", "20", "Hàng khách gửi: khách suy từ dự án"].map(esc).join(","),
   ];
   return lines.join("\r\n") + "\r\n";
 }

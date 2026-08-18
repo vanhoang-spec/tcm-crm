@@ -3,7 +3,7 @@
 // Hỗ trợ: BOM UTF-8, CRLF/LF, field trong ngoặc kép (kèm "" escape),
 // sniff delimiter `,` vs `;` (Excel VN hay xuất `;`).
 // INVENTORY_CSV_COLUMNS là nguồn sự thật duy nhất cho cả parser lẫn file mẫu.
-// Kho v2 (27/07/2026): KHÔNG còn cột "Mã" — mã lô sinh tự động {G}.{ST}.{TT}.{KH3}.{seq3};
+// Mã lô v3 (18/08/2026): cột đầu là "Mã SP" (PO-0042, để trống = tạo sản phẩm mới theo nhóm+tên); mã LÔ PO-0042.01 sinh tự động;
 // mỗi dòng là (lô × kho); action gom các dòng cùng lô thành MỘT item, nhiều kho nhiều phiếu NK.
 // ─────────────────────────────────────────────────────────
 

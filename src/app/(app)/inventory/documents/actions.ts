@@ -28,6 +28,7 @@ import {
   type ItemStatusCode,
 } from "@/lib/inventory";
 import { hasPermission, requirePermission } from "@/lib/permissions";
+import { notifyStaff, projectPicIds } from "@/lib/inventory-notify";
 
 export type DocFormState = { error?: string; success?: boolean };
 
@@ -49,6 +50,12 @@ function revalidate() {
   revalidatePath("/inventory");
   revalidatePath("/inventory/documents");
   revalidatePath("/reminders");
+}
+
+/** Người lập đề xuất đứng sau một phiếu do thủ kho chốt (DX/DK → XE/CK) — để báo ngược về đúng người. */
+async function requestCreatorOfDoc(docId: string): Promise<string | null> {
+  const req = await prisma.stockRequest.findFirst({ where: { documentId: docId }, select: { createdById: true } });
+  return req?.createdById ?? null;
 }
 
 /** Parse + validate dòng hàng chung: item tồn tại, active, stockable, không trùng; qty nguyên ≠ 0 (âm chỉ cho ADJUST). */
@@ -211,6 +218,14 @@ export async function confirmTransferReceive(docId: string, _prev: DocFormState,
   });
   if (!done) return { error: t("errorAlreadyProcessed") };
   await audit(docId, "UPDATE", "confirm receive");
+  // K7: báo thủ kho gửi + người lập đề xuất — trước đây kho đích nhận thiếu/đủ mà bên gửi không hay.
+  const shortLines = doc.lines.filter((l) => (received.get(l.id) ?? 0) < l.quantity).length;
+  await notifyStaff(
+    [doc.createdById, await requestCreatorOfDoc(docId)],
+    "INVENTORY_TRANSFER_RECEIVED",
+    `Kho đích đã nhận phiếu chuyển kho ${doc.code}`,
+    shortLines > 0 ? `Nhận THIẾU ở ${shortLines} dòng — kiểm lại hàng trên đường.` : "Nhận đủ."
+  );
   revalidate();
   return { success: true };
 }
@@ -233,6 +248,7 @@ export async function cancelTransfer(docId: string, _prev: DocFormState, _formDa
   });
   if (!done) return { error: t("errorAlreadyProcessed") };
   await audit(docId, "UPDATE", "cancel transfer");
+  await notifyStaff([doc.createdById, await requestCreatorOfDoc(docId)], "INVENTORY_TRANSFER_CANCELED", `Phiếu chuyển kho ${doc.code} đã bị hủy — hàng hoàn về kho nguồn`, null); // K7
   revalidate();
   return { success: true };
 }
@@ -330,9 +346,13 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
   } catch (e) {
     if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
     if (e instanceof Error && e.message === "SEQ_FULL") return { error: t("errorSeqFull") };
+    // K7: bộ tách phần lệch số phần / lô mất sản phẩm — báo lỗi tử tế thay vì trang 500.
+    if (e instanceof Error && (e.message === "CONVERT_TARGET_PARTS" || e.message === "NO_PRODUCT")) return { error: t("errorConvertTarget") };
     throw e;
   }
   await audit(docId, "CREATE");
+  // K7: PIC/Leader dự án biết đồ đã về kho (đây là chỗ đóng kỳ chiến dịch, họ cần nắm còn gì ngoài site).
+  await notifyStaff(await projectPicIds(projectId), "INVENTORY_RETURNED", `Đã trả về kho ${lines.length} dòng hàng của dự án`, redeclared.length > 0 ? `${redeclared.length} dòng khai lại trạng thái/tình trạng lúc về.` : null, projectId);
   revalidate();
   redirect(`/inventory/documents/${docId}`);
 }
@@ -379,6 +399,8 @@ export async function createLossDoc(_prev: DocFormState, formData: FormData): Pr
     throw e;
   }
   await audit(docId, "CREATE", note);
+  // K7: mất/hỏng tài sản ở hiện trường phải tới tai PIC/Leader dự án — không chỉ nằm trong sổ cái.
+  await notifyStaff(await projectPicIds(projectId), "INVENTORY_LOSS", `Báo mất/hỏng ${lines.length} dòng hàng ở hiện trường dự án`, note, projectId);
   revalidate();
   redirect(`/inventory/documents/${docId}`);
 }
@@ -404,15 +426,21 @@ export async function createHoldingTransfer(_prev: DocFormState, formData: FormD
     prisma.project.findUnique({ where: { id: projectId }, include: { status: true } }),
     prisma.inventoryItem.findMany({
       where: { id: { in: lines.map((l) => l.itemId) } },
-      select: { id: true, code: true, expiryDate: true, ownerClientId: true, boundProjectId: true },
+      select: { id: true, code: true, expiryDate: true, statusCode: true, ownerClientId: true, boundProjectId: true },
     }),
   ]);
   if (!target || !(EXECUTION_STATUS_CODES as readonly string[]).includes(target.status.code)) return { error: t("errorProjectRequired") };
 
   const expired = items.filter((i) => expiryLevel(i.expiryDate, new Date()) === "EXPIRED");
   if (expired.length > 0) return { error: t("errorExpired", { items: expired.map((i) => i.code).join(", ") }) };
-  const wrongProject = items.filter((i) => i.boundProjectId && i.boundProjectId !== projectId);
-  if (wrongProject.length > 0) return { error: t("errorBoundOtherProject", { items: wrongProject.map((i) => i.code).join(", ") }) };
+  // K7 (sửa regression K6): `boundProjectId` nay là DỰ ÁN SỞ HỮU của MỌI lô mua từ chi phí dự án, không còn chỉ lô P.
+  // Chuyển đồ hiện trường không có bước duyệt, nên chỉ cho đi khi CHỦ HÀNG đứng ở một trong hai đầu — bên GỬI là chủ
+  // (chủ tự đưa = đồng ý) hoặc bên NHẬN là chủ (về nhà) — hoặc hàng overhead. Chủ là dự án THỨ BA thì phải trả về kho
+  // rồi bên nhận lập đề xuất DX cho chủ duyệt. Riêng trạng thái P (độc quyền) của dự án khác thì bên nhận không được dùng.
+  const exclusive = items.filter((i) => i.statusCode === "P" && i.boundProjectId && i.boundProjectId !== projectId);
+  if (exclusive.length > 0) return { error: t("errorBoundOtherProject", { items: exclusive.map((i) => i.code).join(", ") }) };
+  const thirdParty = items.filter((i) => i.boundProjectId && i.boundProjectId !== projectId && i.boundProjectId !== fromProjectId);
+  if (thirdParty.length > 0) return { error: t("errorBoundThirdProject", { items: thirdParty.map((i) => i.code).join(", ") }) };
   const wrongClient = items.filter((i) => i.ownerClientId && i.ownerClientId !== target.clientId);
   if (wrongClient.length > 0) return { error: t("errorOtherClientGoods", { items: wrongClient.map((i) => i.code).join(", ") }) };
 
@@ -450,6 +478,8 @@ export async function createHoldingTransfer(_prev: DocFormState, formData: FormD
     throw e;
   }
   await audit(docId, "CREATE");
+  // K7: bên NHẬN phải được báo — trước đây phiếu CH nằm PENDING mà không ai ở dự án nhận hay biết.
+  await notifyStaff(await projectPicIds(projectId), "INVENTORY_HOLDING_INCOMING", `Đồ từ hiện trường dự án khác đang chuyển sang dự án của bạn`, `${lines.length} dòng hàng — vào Phiếu kho xác nhận khi nhận ĐỦ; nhận thiếu thì hủy phiếu để bên gửi lập báo mất.`, projectId);
   revalidate();
   redirect(`/inventory/documents/${docId}`);
 }
@@ -483,6 +513,7 @@ export async function confirmHoldingReceive(docId: string, _prev: DocFormState, 
   });
   if (!done) return { error: t("errorAlreadyProcessed") };
   await audit(docId, "UPDATE", "confirm holding receive");
+  await notifyStaff([doc.createdById, ...(doc.fromProjectId ? await projectPicIds(doc.fromProjectId) : [])], "INVENTORY_HOLDING_RECEIVED", `Bên nhận đã xác nhận nhận đủ phiếu chuyển đồ ${doc.code}`, null, doc.fromProjectId); // K7
   revalidate();
   return { success: true };
 }
@@ -505,6 +536,13 @@ export async function cancelHoldingTransfer(docId: string, _prev: DocFormState, 
   });
   if (!done) return { error: t("errorAlreadyProcessed") };
   await audit(docId, "UPDATE", "cancel holding transfer");
+  await notifyStaff(
+    [doc.createdById !== staffId ? doc.createdById : null, ...(doc.projectId ? await projectPicIds(doc.projectId) : [])],
+    "INVENTORY_HOLDING_CANCELED",
+    `Phiếu chuyển đồ hiện trường ${doc.code} đã bị hủy — hàng hoàn về bên gửi`,
+    null,
+    doc.fromProjectId
+  ); // K7
   revalidate();
   return { success: true };
 }
@@ -600,6 +638,9 @@ async function resolveTargetLot(
     ownerClientId: src.ownerClientId,
     boundProjectId: src.boundProjectId,
     expiryDate: src.expiryDate,
+    // K7: đủ SÁU thuộc tính định nghĩa lô — cùng luật với findExistingLot (items/actions.ts). Thiếu clientDocNo thì hàng
+    // khách gửi (mỗi phiếu khách một lô) trả về khai lại bị gộp vào lô mang số phiếu KHÁC.
+    clientDocNo: src.clientDocNo,
     isActive: true,
   };
   const found = await tx.inventoryItem.findFirst({ where: lotWhere, include: { parts: { orderBy: { partNo: "asc" } } } });
@@ -682,7 +723,7 @@ export async function createConvertDoc(_prev: DocFormState, formData: FormData):
   for (const input of inputs) {
     const src = srcById.get(input.itemId);
     if (!src || !src.isActive) return { error: t("errorInvalid") };
-    // Chỉ lô v2 (đủ node + trạng thái + tình trạng); phần con phải chuyển từ item cha (cả bộ)
+    // Phần con của bộ tách phần phải chuyển từ item cha (cả bộ); lô không gắn sản phẩm (dữ liệu trước v3 — hiện không có) thì chặn.
     if (src.parentItemId) return { error: t("errorConvertPart", { item: src.code }) };
     if (!src.productId || !src.statusCode || !src.conditionCode) return { error: t("errorConvertLegacy", { item: src.code }) };
     if (src.statusCode === input.toStatus && src.conditionCode === input.toCond) {
@@ -732,6 +773,8 @@ export async function createConvertDoc(_prev: DocFormState, formData: FormData):
   } catch (e) {
     if (e instanceof InsufficientStockError) return { error: await insufficientMessage(e.itemId) };
     if (e instanceof Error && e.message === "SEQ_FULL") return { error: t("errorSeqFull") };
+    // K7: bộ tách phần lệch số phần / lô mất sản phẩm — báo lỗi tử tế thay vì trang 500.
+    if (e instanceof Error && (e.message === "CONVERT_TARGET_PARTS" || e.message === "NO_PRODUCT")) return { error: t("errorConvertTarget") };
     throw e;
   }
   await audit(docId, "CREATE");

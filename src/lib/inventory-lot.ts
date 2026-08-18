@@ -12,12 +12,6 @@ export type ItemStatusCode = (typeof ITEM_STATUS_CODES)[number];
 export const ITEM_CONDITION_CODES = ["B", "P", "S"] as const;
 export type ItemConditionCode = (typeof ITEM_CONDITION_CODES)[number];
 
-/**
- * Nhãn hiển thị cho chủ sở hữu khi hàng thuộc TCM (ownerClientId null). Từ mã lô v3 KHÔNG còn nằm trong
- * mã — chỉ dùng để hiện chữ "TCM" ở cột chủ sở hữu.
- */
-export const TCM_OWNER_SEG = "TCM";
-
 // ── Mã lô v3 (18/08/2026) — SẢN PHẨM là danh tính, LÔ là trạng thái ────────────────────────────
 //
 //   PO  -  0042  .  01

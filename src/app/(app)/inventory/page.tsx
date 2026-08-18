@@ -29,7 +29,8 @@ export default async function InventoryStockPage({
   const [warehouses, tree, pendingCount] = await Promise.all([
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: [{ isMain: "desc" }, { code: "asc" }] }),
     getCategoryTree(),
-    prisma.stockDocument.count({ where: { type: "TRANSFER", status: "PENDING" } }),
+    // K7: đếm cả phiếu CHUYỂN ĐỒ HIỆN TRƯỜNG (CH) đang chờ bên nhận — trước đây chỉ CK, phiếu CH treo không ai thấy.
+    prisma.stockDocument.count({ where: { type: { in: ["TRANSFER", "HOLDING"] }, status: "PENDING" } }),
   ]);
   // Lọc theo node = cả nhánh con
   const subtreeIds = (rootId: string): string[] => {

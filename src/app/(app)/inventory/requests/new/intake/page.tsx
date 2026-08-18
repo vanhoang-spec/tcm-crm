@@ -3,7 +3,7 @@ import { RequestForm } from "../../request-form";
 import { loadRequestFormData } from "../../load";
 import { requirePermission } from "@/lib/permissions";
 
-/** Workflow c: PUR/OPE/Account báo hàng về kho (PO, hàng khách gửi, đồ site quay về) — thủ kho nhận. */
+/** Workflow c: PUR/OPE/Account báo hàng về kho (PO, hàng khách gửi, tồn đầu kỳ) — thủ kho nhận. Đồ từ SITE về đi phiếu TH (K5), KHÔNG qua đây. */
 export default async function NewIntakeRequestPage() {
   await requirePermission("inventory.request.create");
   const t = await getTranslations("inventory.requests");

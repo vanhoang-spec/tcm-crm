@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Minus, Plus, X } from "lucide-react";
 import { NumberField } from "@/components/ui/number-field";
@@ -116,6 +117,8 @@ export function RequestForm({
   }, [search, items, availableFor, fGroup, fStatus, fCond, fOwner, projectId]);
 
   const hasReusableLine = kind === "ISSUE" && lines.some((l) => itemById.get(l.itemId)?.isReusable);
+  // K7: chỉ ISSUE/RESERVE có "dự án đang xin" — DN/DK/DH không có, nên nhãn "của dự án khác · team duyệt" là sai ngữ cảnh.
+  const hasProjectContext = kind === "ISSUE" || kind === "RESERVE";
 
   return (
     <form action={formAction} className="space-y-4 pb-20">
@@ -180,6 +183,11 @@ export function RequestForm({
               options={[{ value: "", label: t("noPo") }, ...(purchaseOrders ?? []).map((p) => ({ value: p.id, label: p.label }))]}
             />
             <span className="block text-[11px] leading-snug">{t("intakeSourceHint")}</span>
+            <span className="block text-[11px] leading-snug">
+              <Link href="/inventory/documents/new/return" className="text-brand-600 hover:underline">{t("intakeSiteReturnLink")}</Link>
+              {" · "}
+              <Link href="/inventory/items" className="text-brand-600 hover:underline">{t("intakeNewLotLink")}</Link>
+            </span>
           </label>
         )}
         <label className="space-y-1 text-xs text-muted-foreground sm:col-span-2">
@@ -196,7 +204,9 @@ export function RequestForm({
             ? t("reserveFlowHint")
             : kind === "TRANSFER"
               ? t("transferFlowHint")
-              : t("intakeFlowHint")}
+              : kind === "DESTROY"
+                ? t("destroyFlowHint")
+                : t("intakeFlowHint")}
       </p>
 
       <div className="space-y-2">
@@ -330,7 +340,7 @@ export function RequestForm({
                 ))}
               </select>
               <select value={fOwner} onChange={(e) => setFOwner(e.target.value as (typeof OWNER_FILTERS)[number])} aria-label={t("filterOwner")} className={input + " h-9 text-xs"}>
-                {OWNER_FILTERS.map((k) => (
+                {OWNER_FILTERS.filter((k) => hasProjectContext || k !== "MINE").map((k) => (
                   <option key={k} value={k}>{t(`owner${k}` as Parameters<typeof t>[0])}</option>
                 ))}
               </select>
@@ -359,7 +369,13 @@ export function RequestForm({
                           {/* K6: nhãn CHỦ SỞ HỮU — quyết định ai duyệt. Hàng của chủ khác vẫn xin được (K6-2), chỉ là người duyệt khác. */}
                           {r.ownerKind === "OVERHEAD" && <Badge tone="neutral">{t("ownerOVERHEAD")}</Badge>}
                           {r.ownerKind === "MINE" && <Badge tone="success">{t("ownerMineShort", { project: r.boundProjectCode ?? "" })}</Badge>}
-                          {r.ownerKind === "OTHER_PROJECT" && <Badge tone="warning">{t("ownerOtherShort", { project: r.boundProjectCode ?? "", team: r.boundTeamCode ?? "?" })}</Badge>}
+                          {r.ownerKind === "OTHER_PROJECT" && (
+                            <Badge tone="warning">
+                              {hasProjectContext
+                                ? t("ownerOtherShort", { project: r.boundProjectCode ?? "", team: r.boundTeamCode ?? "?" })
+                                : t("ownerProjectShort", { project: r.boundProjectCode ?? "", team: r.boundTeamCode ?? "?" })}
+                            </Badge>
+                          )}
                           {r.ownerKind === "CLIENT" && <Badge tone="brand">{t("ownerClientShort", { client: r.ownerClientCode ?? "", project: r.boundProjectCode ?? "—", team: r.boundTeamCode ?? "?" })}</Badge>}
                         </span>
                       </span>

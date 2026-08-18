@@ -5,7 +5,7 @@ import { getCategoryTree } from "@/lib/inventory";
 import { CategoryCreateForm, CategoryEditForm, type ParentOption } from "./category-forms";
 import { requirePermission } from "@/lib/permissions";
 
-/** Cây danh mục kho v2 (≤3 cấp) — node gốc mang ký tự đầu của mã lô, admin thêm/bớt được (spec mục I+II). */
+/** Cây danh mục kho v2 (≤3 cấp) — node gốc mang 2 ký tự đầu của mã sản phẩm (PO-0042), admin thêm/bớt được (spec mục I+II). */
 export default async function InventoryCategoriesPage() {
   await requirePermission("inventory.item.manage");
   const t = await getTranslations("settings.inventoryCategories");

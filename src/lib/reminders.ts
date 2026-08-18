@@ -597,7 +597,7 @@ export async function checkExpiryWarnings(): Promise<void> {
 export type StockRequestReminderItem = {
   requestId: string;
   code: string;
-  type: string; // ISSUE | INTAKE
+  type: string; // ISSUE | INTAKE | TRANSFER | DESTROY | RESERVE
   /** APPROVE = chờ Account duyệt · CONFIRM = chờ thủ kho chốt số thực tế */
   waitingFor: "APPROVE" | "CONFIRM";
   projectCode: string | null;
@@ -609,16 +609,17 @@ export type StockRequestReminderItem = {
 
 /**
  * Đề xuất kho đang treo (Kho v2 K2) — mỗi vai nhìn thấy phần việc của mình:
- * ISSUE PROPOSED chờ Account duyệt · ISSUE APPROVED + INTAKE PROPOSED chờ thủ kho xác nhận thực tế.
- * Thuần computed cho /reminders; notification riêng đã bắn lúc chuyển trạng thái.
+ * PROPOSED chờ người duyệt (ISSUE/TRANSFER/DESTROY/RESERVE) · APPROVED (ISSUE/TRANSFER/DESTROY) + INTAKE PROPOSED chờ
+ * thủ kho xác nhận thực tế. K7: thêm DK/DH/GC — trước đây chỉ DX + DN nên đề xuất điều chuyển / hủy / giữ chỗ treo
+ * không bao giờ lên /reminders. Thuần computed; notification riêng đã bắn lúc chuyển trạng thái.
  */
 export async function getStockRequestReminders(teamCode?: string): Promise<StockRequestReminderItem[]> {
   const now = new Date();
   const requests = await prisma.stockRequest.findMany({
     where: {
       OR: [
-        { type: "ISSUE", status: { in: ["PROPOSED", "APPROVED"] } },
-        { type: "INTAKE", status: "PROPOSED" },
+        { type: { in: ["ISSUE", "TRANSFER", "DESTROY"] }, status: { in: ["PROPOSED", "APPROVED"] } },
+        { type: { in: ["INTAKE", "RESERVE"] }, status: "PROPOSED" },
       ],
       ...(teamCode ? { project: { ownerTeam: { code: teamCode } } } : {}),
     },
@@ -629,7 +630,7 @@ export async function getStockRequestReminders(teamCode?: string): Promise<Stock
     requestId: r.id,
     code: r.code,
     type: r.type,
-    waitingFor: r.type === "ISSUE" && r.status === "PROPOSED" ? "APPROVE" : "CONFIRM",
+    waitingFor: r.type !== "INTAKE" && r.status === "PROPOSED" ? "APPROVE" : "CONFIRM",
     projectCode: r.project?.code ?? null,
     warehouseName: r.warehouse.name,
     lineCount: r.lines.length,

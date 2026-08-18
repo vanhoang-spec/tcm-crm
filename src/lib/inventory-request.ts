@@ -123,12 +123,52 @@ export function remainingReserve(approvedReserved: number, usedByIssues: number)
   return Math.max(0, approvedReserved - usedByIssues);
 }
 
-/** Lệch giữa số đã duyệt giữ chỗ và số đang dùng trong CO/CE — chỉ để cảnh báo, không chặn. */
-export function reserveDrift(approvedQty: number, qtyInCostSheet: number): "MATCH" | "MISSING" | "LESS" | "MORE" {
-  if (qtyInCostSheet <= 0) return "MISSING";
-  if (qtyInCostSheet < approvedQty) return "LESS";
-  if (qtyInCostSheet > approvedQty) return "MORE";
-  return "MATCH";
+// ── K7: giữ chỗ K3 CÒN TRỐNG — MỘT phép tính dùng chung cho form (requests/load.ts) và server (requests/actions.ts) ──
+// Trước K7 hai bên tự tính riêng và LỆCH nhau (form không trừ phiếu TH, server có) — HANDOVER 10.11 nợ #2.
+
+export type ReserveLedgerRow = { warehouseId: string; itemId: string; projectId: string | null; quantity: number };
+export type IssueUsageRow = ReserveLedgerRow & { status: string; approvedQuantity: number | null; confirmedQuantity: number | null };
+
+/** Khoá (kho | lô | dự án) — cùng định dạng ở cả hai bên và ở `reservedFree` truyền xuống form. */
+export function reserveKey(warehouseId: string, itemId: string, projectId: string | null): string {
+  return `${warehouseId}|${itemId}|${projectId ?? ""}`;
+}
+
+/** Số một lệnh xuất đang "đòi" trên giữ chỗ: đã xuất → số thực xuất; đã duyệt → số DUYỆT (K6); còn đề xuất → số đề xuất. */
+export function issueUsage(row: { status: string; quantity: number; approvedQuantity: number | null; confirmedQuantity: number | null }): number {
+  if (row.status === "DONE") return row.confirmedQuantity ?? effectiveApproved(row);
+  if (row.status === "APPROVED") return effectiveApproved(row);
+  return row.quantity;
+}
+
+/**
+ * Giữ chỗ còn trống theo khoá (kho|lô|dự án) = SL đã duyệt giữ chỗ − SL dự án đó đã đòi qua lệnh xuất + SL đã TRẢ VỀ
+ * KHO (phiếu TH nhả lại trần: giữ chỗ nghĩa là "được dùng N cái cho dự án này", không phải "được xuất tổng cộng N cái
+ * trọn đời" — không trừ thì chiến dịch xuất-trả nhiều ngày K4 bị chặn oan ngay vòng hai).
+ * Trả CẢ entry free = 0 để caller biết lô CÓ giữ chỗ (trần bật) dù đã dùng hết.
+ */
+export function reserveFreeMap(
+  reserved: ReserveLedgerRow[],
+  used: IssueUsageRow[],
+  returned: ReserveLedgerRow[]
+): Map<string, { reserved: number; free: number }> {
+  const reservedBy = new Map<string, number>();
+  for (const r of reserved) {
+    const k = reserveKey(r.warehouseId, r.itemId, r.projectId);
+    reservedBy.set(k, (reservedBy.get(k) ?? 0) + r.quantity);
+  }
+  const usedBy = new Map<string, number>();
+  for (const u of used) {
+    const k = reserveKey(u.warehouseId, u.itemId, u.projectId);
+    usedBy.set(k, (usedBy.get(k) ?? 0) + issueUsage(u));
+  }
+  for (const r of returned) {
+    const k = reserveKey(r.warehouseId, r.itemId, r.projectId);
+    usedBy.set(k, Math.max(0, (usedBy.get(k) ?? 0) - r.quantity));
+  }
+  const out = new Map<string, { reserved: number; free: number }>();
+  for (const [k, qty] of reservedBy) out.set(k, { reserved: qty, free: remainingReserve(qty, usedBy.get(k) ?? 0) });
+  return out;
 }
 
 // ── K6 (18/08/2026): CHỦ SỞ HỮU của lô so với dự án đang xin ─────────────────────────────────────

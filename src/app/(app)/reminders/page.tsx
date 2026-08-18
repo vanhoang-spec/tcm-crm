@@ -56,9 +56,10 @@ export default async function RemindersPage({
     finance: perms.has("finance.view"),
     inventory: perms.has("inventory.view"),
   };
-  const [t, tClients, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, stockRequestItems, expiringLots, notifications] = await Promise.all([
+  const [t, tClients, tInv, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, stockRequestItems, expiringLots, notifications] = await Promise.all([
     getTranslations("reminders"),
     getTranslations("clients.list"),
+    getTranslations("inventory.requests"),
     getLocale() as Promise<Locale>,
     prisma.team.findMany({ orderBy: { code: "asc" } }),
     can.clients ? getCareOverdueClients(team) : [],
@@ -387,6 +388,7 @@ export default async function RemindersPage({
                 <Link href={`/inventory/requests/${item.requestId}`} className="text-sm font-medium text-foreground hover:text-brand-600">
                   {item.code}
                   {item.projectCode ? ` · ${item.projectCode}` : ""}
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">· {tInv(`type${item.type}` as Parameters<typeof tInv>[0])}</span>
                 </Link>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                   <Badge tone={item.waitingFor === "CONFIRM" ? "warning" : "neutral"}>

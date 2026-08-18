@@ -4,7 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { DateField } from "@/components/ui/date-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { ITEM_CONDITION_CODES, ITEM_STATUS_CODES, TCM_OWNER_SEG, buildLotCode } from "@/lib/inventory-lot";
+import { ITEM_CONDITION_CODES, ITEM_STATUS_CODES, buildLotCode } from "@/lib/inventory-lot";
 import { createItem, updateItem, updateProduct, type ItemFormState } from "./actions";
 
 const input =
@@ -325,7 +325,7 @@ export function LotEditForm({ item }: { item: ItemEditPayload }) {
         <span className="font-mono font-semibold text-foreground">{item.code}</span>
         {item.statusCode ? ` · ${t(`status${item.statusCode}` as Parameters<typeof t>[0])}` : ""}
         {item.conditionCode ? ` · ${t(`cond${item.conditionCode}` as Parameters<typeof t>[0])}` : ""}
-        {` · ${item.clientLabel ?? TCM_OWNER_SEG}`}
+        {` · ${item.clientLabel ?? t("clientTcm")}`}
         {item.boundProjectCode ? ` · ${item.boundProjectCode}` : ""}
         <span className="mt-0.5 block">{t("editLockedHint")}</span>
       </p>

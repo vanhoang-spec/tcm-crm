@@ -24,6 +24,8 @@ export default async function StockRequestsPage({
     include: {
       warehouse: { select: { name: true } },
       project: { select: { code: true, name: true } },
+      // K7: chủ hàng của phiếu (K6) — ba phiếu tách từ một đề xuất trước đây nhìn y hệt nhau trên danh sách.
+      ownerProject: { select: { code: true, ownerTeam: { select: { code: true } } } },
       createdBy: { select: { fullName: true } },
       lines: { select: { id: true } },
     },
@@ -35,13 +37,23 @@ export default async function StockRequestsPage({
   const canIssue = perms.has("inventory.issue.confirm");
   const canIntake = perms.has("inventory.intake.confirm");
   const canApproveTransfer = perms.has("inventory.transfer.approve");
-  // "Chờ mình": người duyệt thấy đề xuất PROPOSED; thủ kho thấy lệnh đã duyệt + báo hàng về
+  const canApproveReserve = perms.has("inventory.reservation.approve");
+  const canDestroy = perms.has("inventory.destroy");
+  const canApproveOverhead = perms.has("inventory.request.approve_overhead");
+  // "Chờ mình": người duyệt thấy đề xuất PROPOSED; thủ kho thấy lệnh đã duyệt + báo hàng về.
+  // K7: thêm DH (chủ duyệt → thủ kho chốt) và GC (Kế toán/HR duyệt) — trước đây hai loại này không bao giờ được ghim.
+  // Phiếu overhead chỉ ghim cho người có approve_overhead (approve_any KHÔNG bao — K6-4).
   const isMine = (r: (typeof requests)[number]) =>
-    (canApprove && r.type === "ISSUE" && r.status === "PROPOSED") ||
+    (r.type === "ISSUE" && r.status === "PROPOSED" && (r.isOverhead ? canApproveOverhead : canApprove)) ||
     (canIssue && r.type === "ISSUE" && r.status === "APPROVED") ||
     (canIntake && r.type === "INTAKE" && r.status === "PROPOSED") ||
     (canApproveTransfer && r.type === "TRANSFER" && r.status === "PROPOSED") ||
-    (canIssue && r.type === "TRANSFER" && r.status === "APPROVED");
+    (canIssue && r.type === "TRANSFER" && r.status === "APPROVED") ||
+    (canApprove && r.type === "DESTROY" && r.status === "PROPOSED") ||
+    (canDestroy && r.type === "DESTROY" && r.status === "APPROVED") ||
+    (canApproveReserve && r.type === "RESERVE" && r.status === "PROPOSED");
+  const ownerLabel = (r: (typeof requests)[number]) =>
+    r.isOverhead ? t("ownerColOverhead") : r.ownerProject ? `${r.ownerProject.code} (${r.ownerProject.ownerTeam?.code ?? "?"})` : r.type === "ISSUE" || r.type === "DESTROY" ? t("ownerColOwn") : "—";
   const ordered = [...requests.filter(isMine), ...requests.filter((r) => !isMine(r))];
   const pendingMine = requests.filter(isMine).length;
 
@@ -119,6 +131,7 @@ export default async function StockRequestsPage({
                 {t(`type${r.type}` as Parameters<typeof t>[0])} · {r.warehouse.name}
                 {r.project ? ` · ${r.project.code}` : ""} · {t("lineCount", { count: r.lines.length })}
               </p>
+              {(r.type === "ISSUE" || r.type === "DESTROY") && <p className="mt-0.5 text-xs text-muted-foreground">{t("colOwner")}: {ownerLabel(r)}</p>}
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {formatDate(r.createdAt)}
                 {r.createdBy ? ` · ${r.createdBy.fullName}` : ""}
@@ -131,13 +144,14 @@ export default async function StockRequestsPage({
       {/* Desktop table */}
       <div className="hidden rounded-xl border border-border bg-surface sm:block">
         <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="sticky top-0 z-10 border-b border-border bg-surface text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-2.5">{t("colCode")}</th>
                 <th className="px-4 py-2.5">{t("colType")}</th>
                 <th className="px-4 py-2.5">{t("colWarehouse")}</th>
                 <th className="px-4 py-2.5">{t("colProject")}</th>
+                <th className="px-4 py-2.5">{t("colOwner")}</th>
                 <th className="px-4 py-2.5">{t("colCreatedBy")}</th>
                 <th className="px-4 py-2.5">{t("colDate")}</th>
                 <th className="px-4 py-2.5">{t("colStatus")}</th>
@@ -146,7 +160,7 @@ export default async function StockRequestsPage({
             <tbody>
               {ordered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
                     {t("empty")}
                   </td>
                 </tr>
@@ -161,6 +175,7 @@ export default async function StockRequestsPage({
                   <td className="px-4 py-2.5">{t(`type${r.type}` as Parameters<typeof t>[0])}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{r.warehouse.name}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{r.project?.code ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{ownerLabel(r)}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{r.createdBy?.fullName ?? "—"}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{formatDate(r.createdAt)}</td>
                   <td className="px-4 py-2.5">

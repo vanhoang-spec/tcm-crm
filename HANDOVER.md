@@ -114,7 +114,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) + **Tuyển dụng** (`/staff/recruit` — vị trí & JD gắn org chart, nhận CV, AI đọc CV điền hồ sơ, lịch phỏng vấn 3 vòng có xác nhận + file lịch .ics, phiếu chấm điểm, kho hồ sơ; xem mục 10.31) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
-| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 · **K6 (18/08/2026):** dự án sở hữu cho mọi lô, đề xuất tách theo chủ + team Account CHỦ duyệt từng dòng 0..n, phản hồi OPS, cổng hủy hàng khách (DH), Order OPE/PRO mang sản phẩm + SL → tab Vận hành/Sản xuất thấy tồn theo chủ → đề xuất từ order, hàng OVERHEAD công ty tách riêng — Senior HR Manager duyệt (K6-4) — xem mục 10.41 |
+| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 · **K6 (18/08/2026):** dự án sở hữu cho mọi lô, đề xuất tách theo chủ + team Account CHỦ duyệt từng dòng 0..n, phản hồi OPS, cổng hủy hàng khách (DH), Order OPE/PRO mang sản phẩm + SL → tab Vận hành/Sản xuất thấy tồn theo chủ → đề xuất từ order, hàng OVERHEAD công ty tách riêng — Senior HR Manager duyệt (K6-4) — xem mục 10.41 · **K7 (18/08/2026):** rà toàn module trước tồn đầu kỳ — sửa 5 lỗi thật (CH chủ sở hữu regression K6, hint DN, giữ chỗ 2 bên lệch, hết hạn kiểm ở duyệt/chốt, clientDocNo lô đích) + thông báo phiếu kho/hủy đề xuất, DN "không có hàng về", cột chủ hàng, reminders DK/DH/GC — xem mục 10.42 |
 | — | Thu mua (PUR) | `/purchasing` | **XONG (PUR-1a + 1b, 16/08/2026)**: hồ sơ NCC theo 6 nhóm hàng + kho tài liệu HĐ/PO + lịch sử giá · RFQ từ dòng CO → 6 mẫu form → cổng NCC token / PUR nhập hộ / upload file + AI bóc → so sánh (số tính bằng code, AI nhận xét) → PUR chọn + lý do → trình Account → **Account chốt → ghi vào CO** (revision mới, chờ duyệt FIN-B) — xem mục 10.36 · **PUR-2**: hồ sơ NCC mở rộng (mã 3 ký tự, tên pháp nhân, N người liên hệ, trường tuỳ chỉnh khai ở `/settings/vendor-fields`) — mục 10.37 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 125 model Prisma · 74 migration · 86 file `src/lib` · 4258 key i18n × 2 ngôn ngữ · 146 mã quyền.
+**Quy mô:** 125 model Prisma · 74 migration · 86 file `src/lib` · 4264 key i18n × 2 ngôn ngữ · 146 mã quyền.
 
 ---
 
@@ -306,14 +306,13 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
    - **Form trả đồ tách thành `return-form.tsx`** (đúng tiền lệ `convert-form.tsx` của K1); `doc-form.tsx` nay
      chỉ còn IMPORT/ADJUST/DESTROY/LOSS và GỌN HƠN trước.
 
-   **HAI THỨ CÒN NỢ, ĐÃ BÁO CHỦ DỰ ÁN (không thuộc phạm vi K5):**
-   1. `confirmIntakeRequest` (báo hàng về DN) chỉ `creditBalance`, KHÔNG `debitHolding`. Ai còn làm theo quy
-      trình cũ ("đồ site quay về = tạo lô mới ở tab Danh mục rồi báo hàng về") sẽ cộng tồn lên lô mới trong khi
-      holding lô cũ treo vĩnh viễn → sau 15 ngày dự án bị khoá xuất. **Từ K5, đồ từ site về PHẢI đi phiếu TH;**
-      DN chỉ dùng cho hàng PO / hàng khách gửi / tồn đầu kỳ.
-   2. `requests/load.ts` (màn hình lập đề xuất) KHÔNG trừ phiếu RETURN khi tính tồn khả dụng, trong khi
-      `requests/actions.ts` (server) CÓ trừ — lệch có từ K3, không phải do K5. Hệ quả: form hiện số khả dụng
-      rộng hơn thực tế rồi server mới báo lỗi. Nên gom hai bên về một hàm dùng chung.
+   **HAI THỨ TỪNG NỢ SAU K5 — ĐÃ TRẢ Ở K7 (18/08/2026, mục 10.42):**
+   1. `confirmIntakeRequest` (báo hàng về DN) chỉ `creditBalance`, KHÔNG `debitHolding` — GIỮ NGUYÊN theo thiết
+      kế ("đồ từ site về PHẢI đi phiếu TH; DN chỉ cho hàng PO / hàng khách gửi / tồn đầu kỳ"), nhưng K7 đã sửa
+      cái UI từng CHỈ ĐƯỜNG SAI: hint form DN không còn nhắc "đồ từ hiện trường quay về", thay bằng cảnh báo +
+      link thẳng sang phiếu TH.
+   2. `requests/load.ts` không trừ phiếu RETURN khi tính giữ chỗ còn trống trong khi server có — K7 gom hai bên về
+      MỘT hàm thuần `reserveFreeMap` (`lib/inventory-request.ts`), 11/11 test.
 
    **Kho v2 KHÔNG CÒN đợt nào.** Những thứ đã cân nhắc và CẮT theo nguyên tắc "không thêm thứ không ai yêu
    cầu" (muốn làm phải xin chủ dự án trước): tiêu hao quy ra tiền, model `Campaign` riêng, nhận thiếu trên
@@ -2051,7 +2050,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **`resolveTargetLot` (phiếu CD + TH khai lại) nay khớp theo `productId`** + trạng thái/tình trạng/chủ/dự án/
       hạn dùng, KHÔNG còn theo tên + catNodeId; bỏ tham số `rootCode` và hai vòng `resolveRootCategory` ở
       caller. Nguồn thiếu `productId` (item trước v3 — hiện không có) → `errorConvertLegacy`.
-    - **CSV: cột "Mã SP" đứng ĐẦU** (14 cột). Điền mã có sẵn (`PO-0042`) → lô treo vào sản phẩm đó và
+    - **CSV: cột "Mã SP" đứng ĐẦU** (15 cột kể cả "Mã dự án" của K6). Điền mã có sẵn (`PO-0042`) → lô treo vào sản phẩm đó và
       Tên/Nhóm/ĐVT/Tái sử dụng/Số phần của dòng bị BỎ QUA (sản phẩm là nguồn sự thật, không so nữa). Để trống →
       tìm sản phẩm theo (nhóm GỐC, tên thường) — nhập tồn đầu kỳ chưa có mã, tên là khoá thực tế duy nhất — rồi tạo
       mới nếu chưa có; các dòng cùng sản phẩm phải khai ĐVT/tái sử dụng/số phần/node giống nhau
@@ -2186,6 +2185,76 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       quyền (chính sách BGĐ, xem 10.11 nợ) · giữ chỗ K3 gộp theo sản phẩm · gợi ý tự chia lô theo số cần khi bấm
       "Chọn lô" (hiện OPS tự chọn từng lô) · Order PCC/PLANNING mang vật dụng (chỉ OPE/PRO — hai bộ phận nhận hàng
       vật lý) · nhắc người duyệt qua notification định kỳ khi phiếu treo lâu.
+
+42. **KHO K7 — KHÉP FLOW TRƯỚC TỒN ĐẦU KỲ — 18/08/2026** (KHÔNG migration, KHÔNG mã quyền mới; `migrate diff` rỗng).
+    Chủ dự án yêu cầu "kiểm lại thật kỹ toàn bộ module Inventory"; em rà 2 lượt độc lập (mã lô v3 · từng luồng) rồi
+    tự mở code xác nhận từng điểm. **Kết luận rà:** mã v3 nhất quán ở code chạy (0 chỗ sinh mã kiểu cũ, 4/4
+    `inventoryItem.create` đúng productId + nextLotSeq); 5 loại đề xuất + 9 loại phiếu đủ form → action → guard đầu
+    câu (24/24) → sổ cái; 17 mã quyền mã nào cũng có chỗ chặn. Còn lại 5 lỗi thật + 1 nhóm thiếu — gói K7 làm hết
+    (A1–A5 + B1–B4 + dọn rác), phần để backlog ghi cuối mục.
+    - ⚠ **A1 — CH (chuyển đồ hiện trường A→B) là REGRESSION của K6, đã sửa.** Trước K6 chỉ lô P mới có
+      `boundProjectId` nên "chặn lô ràng dự án khác với bên NHẬN" là đúng; K6 gắn dự án sở hữu cho MỌI lô mua từ chi
+      phí dự án ⇒ **dự án A không chuyển được chính đồ của mình sang site B**. Luật mới (`createHoldingTransfer`): cho
+      đi khi CHỦ HÀNG đứng ở một trong hai đầu — bên GỬI là chủ (chủ tự đưa = đồng ý) hoặc bên NHẬN là chủ — hoặc hàng
+      overhead; **chủ là dự án THỨ BA thì chặn** (`errorBoundThirdProject`, phải trả về kho rồi bên nhận lập DX cho chủ
+      duyệt — CH không có bước duyệt); trạng thái P độc quyền của dự án khác vẫn chặn như DX. Verify: T002→T025 lô của
+      T002 **qua** (CH-2608-001, holding 4→3), lô của T013 (thứ ba) bị chặn đích danh; T002→T013 lô của T013 (bên nhận
+      là chủ) qua.
+    - **A2 — DN từng CHỈ ĐƯỜNG SAI**: hint form "đồ từ hiện trường quay về" (nợ 10.11 #1) đã thay bằng cảnh báo + 2
+      link (→ phiếu TH cho đồ site về · → Danh mục cho hàng mới chưa có lô). `confirmIntakeRequest` GIỮ NGUYÊN không
+      `debitHolding` — đúng thiết kế K5, cái sai là UI.
+    - **A3 — hai bên tính giữ chỗ còn trống lệch nhau** (nợ 10.11 #2): gom về hàm THUẦN `reserveFreeMap` +
+      `reserveKey` + `issueUsage` (`lib/inventory-request.ts`), `requests/load.ts` (form) và `reserveFreeByItem`
+      (server) cùng gọi; form nay cũng trừ phiếu TH. 11/11 assertion (giữ chỗ 50 → xuất 50 → trả 30+20 ⇒ trần nhả đủ
+      50, đúng số đo K5).
+    - **A4 — hạn dùng + kỳ chiến dịch kiểm lại ở DUYỆT và CHỐT** (`expiredCodes` helper): trước chỉ chặn lúc LẬP —
+      lập ngày 28, hết hạn 30, chốt ngày 2 vẫn xuất hàng hết hạn. Nay `approveIssueRequest` / `confirmIssueRequest` /
+      `approveTransferRequest` / `confirmTransferRequest` đều chặn (chỉ xét dòng còn số > 0 — hạ về 0 vẫn là đường thoát);
+      kỳ chiến dịch kiểm thêm ở chốt DX. Verify browser: DX đã lập → set hạn dùng quá khứ → duyệt bị chặn "chỉ được xuất
+      hủy: PO-0001.02"; gỡ hạn → duyệt qua → đặt lại hạn → thủ kho chốt bị chặn. Đường ra của hàng hết hạn vẫn là XH/DH.
+    - **A5 — hai định nghĩa "lô y hệt"**: `resolveTargetLot` (CD/TH) thiếu `clientDocNo` trong `lotWhere` trong khi
+      `findExistingLot` có ⇒ hàng khách gửi (mỗi phiếu khách một lô) trả về khai lại bị gộp vào lô mang số phiếu KHÁC.
+      Đã đủ SÁU thuộc tính ở cả hai. Kèm: `NO_PRODUCT` / `CONVERT_TARGET_PARTS` nay bắt thành `errorConvertTarget` thay
+      vì trang 500.
+    - **B1 — phiếu kho nay CÓ thông báo** (`documents/actions.ts` trước đây 0 lệnh notify): CK nhận (kèm số dòng nhận
+      thiếu) / hủy → thủ kho gửi + người lập DK; **CH gửi → PIC/Leader dự án NHẬN**, CH nhận → bên gửi, CH hủy → bên gửi
+      + PIC bên nhận; BM (mất) và TH (trả về) → PIC/Leader dự án. Helper dùng chung ở **`lib/inventory-notify.ts`**
+      (`notifyByPermission` / `notifyStaff` chuyển từ requests/actions.ts sang + `projectPicIds`). ⚠ **`projectPicIds`
+      rơi về TRƯỞNG TEAM khi dự án chưa gán PIC/Leader** — cùng luật `approverStaffIds` (K6); 21 dự án cũ đang trống PIC,
+      không có bước này thì thông báo bay vào khoảng không (bắt được lúc verify: T013/T025 trống PIC → Trần Thu Hà nhận
+      đúng). Badge "chờ nhận" trên `/inventory` nay đếm cả CH PENDING (trước chỉ CK).
+    - **B2 — hủy đề xuất không còn im lặng**: `cancelRequest` báo đúng người ĐANG CẦM phiếu theo loại + trạng thái
+      (PROPOSED → người duyệt của loại đó / chủ hàng / HR với overhead; APPROVED → thủ kho; DH → `inventory.destroy`), cộng
+      người đã duyệt và người lập nếu bị người khác hủy, trừ chính người bấm. `approveTransferRequest` nay báo cả người
+      lập DK. Verify: hủy DX đã duyệt → thủ kho (Trần Hoài Hận) nhận "Người lập tự rút đề xuất".
+    - **B3 — DN có đường "HÀNG KHÔNG VỀ"**: thủ kho nhập 0 hết → ô lý do hiện + nút đỏ "Xác nhận không có hàng về" →
+      server đóng phiếu **REJECTED** + lý do (không sinh NK, không đụng tồn), báo người báo hàng; 0 hết KHÔNG lý do vẫn
+      bị chặn (`errorNothingReceived` nói rõ đường xử lý). Picker của DN/DK/DH (không có "dự án đang xin") đổi nhãn
+      thành trung tính "Của dự án T002 (team A1)" và ẩn lọc "Của dự án này". Verify browser: DN → 0 + lý do → REJECTED,
+      NK 0, tồn 10 nguyên, người báo nhận đúng lý do; không lý do → chặn và số giữ nguyên.
+    - **B4 — danh sách đề xuất có cột "Chủ hàng"** (overhead / mã dự án chủ (team) / của chính dự án xin — 3 phiếu tách
+      từ một đề xuất trước đây nhìn y hệt); "chờ mình" ghim thêm **DH** (chủ duyệt → thủ kho chốt), **GC**
+      (`reservation.approve`) và phiếu **overhead chỉ ghim cho `approve_overhead`**; `/reminders` liệt kê thêm
+      DK/DH/GC (`getStockRequestReminders`) và hiện loại phiếu, nhãn "Chờ Account duyệt" đổi thành "Chờ duyệt" (DK/GC/HR
+      không phải Account).
+    - **Dọn rác:** 5 comment tả mã 5 khối cũ ở `schema.prisma` + `inventory-csv.ts:6` + `inventory.ts` + trang settings
+      danh mục · gỡ `TCM_OWNER_SEG` (dùng i18n `clientTcm`) · gỡ 3 export chết (`isStockable`, `reserveDrift`,
+      `getPendingTransfers`) · gỡ 6 key i18n chết · `importSuccess` hiện cả số sản phẩm mới (`importedProducts` từng
+      tính rồi vứt) · `errorConvertLegacy` chỉ đường đúng · form DH có `destroyFlowHint` riêng · HANDOVER 10.40 "14 cột"
+      → 15.
+    - **Verify:** tsc · eslint · i18n **0/0 (4264 key)** · `next build` sạch (21 route inventory) · `migrate diff`
+      rỗng · 11/11 test thuần · browser như từng gạch đầu dòng ở trên (act-as admin; act-as vai khác cho phần quyền đã
+      làm ở K6-4). Test data dọn sạch: 0 SP / 0 lô / 0 phiếu / 0 đề xuất / 0 tồn / 0 holding / 0 notification kho, 19 node,
+      36/68/25, grant 1336.
+    - **BACKLOG (rà ra nhưng CỐ Ý chưa làm — hiếm gặp hoặc là chính sách):** kiểm trùng lô ở `createItem` ngoài
+      transaction (bấm đúp = 2 lô y hệt, không có unique DB 6 thuộc tính) · khối "Vật dụng theo Order" cộng cả PHẦN CON
+      bộ tách phần (bộ 3 phần × 2 bộ hiện "6") · lô khách gửi cũ không gắn dự án (khoá `client:`) → PIC dự án XIN duyệt
+      (dữ liệu trước K6, hiện 0 lô) · picker của PHIẾU KHO (NK/DC/XH/BM/CH/TH) chưa có nhãn chủ sở hữu · ô tìm ở Danh
+      mục chỉ tìm mã sản phẩm (quét nhãn `PO-0042.01` không ra), bảng tồn `/inventory` chưa gom theo sản phẩm, bộ tách
+      phần hiện "Tồn: —" ở Danh mục · lô của sản phẩm đã ngưng vẫn bật lại lẻ được · 6 trang `documents/new/*` gác
+      `inventory.view` (action đòi mạnh hơn — điền xong mới bị chặn), nút lập phiếu ở danh sách phiếu chưa gate theo
+      quyền, 3 action CH chỉ gác `request.create` không kiểm thành viên dự án · RESERVE vẫn chặn cứng hàng chủ khác (cố
+      ý, K6).
 
 ---
 

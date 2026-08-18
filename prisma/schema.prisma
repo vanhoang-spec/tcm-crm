@@ -2436,9 +2436,9 @@ model Warehouse {
 }
 
 /// Kho v2 (spec 27/07/2026): cây danh mục ≤3 cấp thay OptionSet "inventory_category" phẳng (deprecated,
-/// giữ dữ liệu cũ). Node GỐC mang code 1 ký tự (P/E/G/C/L/M/O — admin thêm bớt) + cờ isClientOwned
+/// giữ dữ liệu cũ). Node GỐC mang code 2 ký tự (PO/DT/TC/DP/IA/KG/VT — admin thêm bớt) + cờ isClientOwned
 /// (nhóm hàng khách gửi: item bắt buộc gắn khách, có hạn dùng + số phiếu xuất kho của khách).
-/// KHÔNG xóa node (mã item đã sinh theo ký tự gốc) — chỉ isActive. Item gắn vào node bất kỳ.
+/// KHÔNG xóa node (mã SẢN PHẨM đã sinh theo mã nhóm gốc — mã lô v3) — chỉ isActive. Item gắn vào node bất kỳ.
 model InventoryCategory {
   id            String   @id @default(cuid())
   parentId      String?
@@ -2469,7 +2469,7 @@ model InventoryCategory {
 model InventoryProduct {
   id         String   @id @default(cuid())
   code       String   @unique // PO-0042
-  catNodeId  String // node cây danh mục (cấp bất kỳ) — nhóm gốc suy ra ký tự đầu của mã
+  catNodeId  String // node cây danh mục (cấp bất kỳ) — nhóm gốc cho 2 ký tự đầu của mã sản phẩm (PO-0042)
   name       String
   unit       String? // ĐVT free text
   isReusable Boolean  @default(true)
@@ -2507,10 +2507,10 @@ model InventoryItem {
   partNo              Int?
   productId           String? // mã lô v3: sản phẩm chứa lô này (null chỉ với item trước v3 — hiện không có)
   // ── Kho v2 — thuộc tính lô (nullable: item trước v2 không có) ──
-  catNodeId           String? // node cây danh mục v2 (nhóm gốc cho ký tự đầu của mã)
+  catNodeId           String? // node cây danh mục (bản sao từ sản phẩm — mã lô v3, xem InventoryProduct)
   statusCode          String? // R|P|C|W|L|D — xem ITEM_STATUS_CODES lib/inventory.ts; đổi qua phiếu CONVERT
   conditionCode       String? // B|P|S — brand new / mới một phần / second hand; đổi qua phiếu CONVERT
-  ownerClientId       String? // null = hàng TCM (segment mã "TCM"); BẮT BUỘC khi node gốc isClientOwned
+  ownerClientId       String? // null = hàng TCM (không vào mã — mã lô v3); BẮT BUỘC khi node gốc isClientOwned
   boundProjectId      String? // K6 (18/08/2026): DỰ ÁN SỞ HỮU lô — mua từ chi phí dự án đó / khách gửi cho dự án đó; null = hàng chung TCM. Gán lúc tạo lô, quyết định TEAM ACCOUNT nào duyệt việc dùng (xem lib/inventory-request.ts lotOwnerKind). Bắt buộc với hàng khách gửi + trạng thái P/C; trạng thái P thêm nghĩa ĐỘC QUYỀN (dự án khác không xin được).
   expiryDate          DateTime? // hàng khách có date — hết hạn: chặn xuất dùng, chỉ còn phiếu DESTROY
   clientDocNo         String? // số phiếu xuất kho của KHÁCH khi gửi hàng (nhóm isClientOwned)

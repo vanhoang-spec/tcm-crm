@@ -51,7 +51,7 @@ export function ImportForm() {
       {state.error && <p className="text-xs text-danger">{state.error}</p>}
       {state.success && (
         <p className="text-xs text-success">
-          {t("importSuccess", { items: state.importedItems ?? 0, docs: state.importedDocs ?? 0 })}
+          {t("importSuccess", { items: state.importedItems ?? 0, products: state.importedProducts ?? 0, docs: state.importedDocs ?? 0 })}
         </p>
       )}
       {state.rowErrors && state.rowErrors.length > 0 && (

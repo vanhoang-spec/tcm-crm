@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
-import { availableToRequest, effectiveApproved, remainingReserve } from "@/lib/inventory-request";
+import { availableToRequest, effectiveApproved, reserveFreeMap } from "@/lib/inventory-request";
 import { getCategoryTree } from "@/lib/inventory";
 import type { GroupOption, PoOption, ProjectOption, RequestPickerItem, WarehouseOption } from "./request-form";
 
@@ -16,7 +16,7 @@ const RESERVE_EXCLUDED_STATUS = ["LOST", "CANCELED"];
  */
 export async function loadRequestFormData(kind: "ISSUE" | "INTAKE" | "RESERVE" | "TRANSFER" | "DESTROY") {
   const now = new Date();
-  const [warehouses, items, approvedIssueLines, reserveLines, usedLines] = await Promise.all([
+  const [warehouses, items, approvedIssueLines, reserveLines, usedLines, returnedLines] = await Promise.all([
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: [{ isMain: "desc" }, { code: "asc" }] }),
     prisma.inventoryItem.findMany({
       where: {
@@ -60,6 +60,13 @@ export async function loadRequestFormData(kind: "ISSUE" | "INTAKE" | "RESERVE" |
           },
         })
       : Promise.resolve([]),
+    // K7: phiếu TRẢ VỀ KHO nhả lại trần giữ chỗ — cùng phép tính với server (reserveFreeByItem), trước đây form bỏ sót.
+    kind !== "INTAKE"
+      ? prisma.stockDocumentLine.findMany({
+          where: { document: { type: "RETURN", status: "COMPLETED", toWarehouseId: { not: null } } },
+          select: { itemId: true, quantity: true, document: { select: { toWarehouseId: true, projectId: true } } },
+        })
+      : Promise.resolve([]),
   ]);
 
   const approvedNotIssued = new Map<string, number>(); // `${warehouseId}|${itemId}`
@@ -69,23 +76,16 @@ export async function loadRequestFormData(kind: "ISSUE" | "INTAKE" | "RESERVE" |
     approvedNotIssued.set(key, (approvedNotIssued.get(key) ?? 0) + effectiveApproved(l));
   }
 
-  // Giữ chỗ đã duyệt và phần dự án đó đã đòi qua lệnh xuất — cùng khoá (kho|item|dự án).
-  const reservedBy = new Map<string, number>();
-  for (const l of reserveLines) {
-    const key = `${l.request.warehouseId}|${l.itemId}|${l.request.projectId ?? ""}`;
-    reservedBy.set(key, (reservedBy.get(key) ?? 0) + l.quantity);
-  }
-  const usedBy = new Map<string, number>();
-  for (const l of usedLines) {
-    const key = `${l.request.warehouseId}|${l.itemId}|${l.request.projectId ?? ""}`;
-    const q = l.request.status === "DONE" ? (l.confirmedQuantity ?? effectiveApproved(l)) : l.request.status === "APPROVED" ? effectiveApproved(l) : l.quantity;
-    usedBy.set(key, (usedBy.get(key) ?? 0) + q);
-  }
+  // Giữ chỗ còn trống theo (kho|item|dự án) — hàm THUẦN dùng chung với server (K7): đã duyệt − đã đòi + đã trả về kho.
+  const freeMap = reserveFreeMap(
+    reserveLines.map((l) => ({ warehouseId: l.request.warehouseId, itemId: l.itemId, projectId: l.request.projectId, quantity: l.quantity })),
+    usedLines.map((l) => ({ warehouseId: l.request.warehouseId, itemId: l.itemId, projectId: l.request.projectId, quantity: l.quantity, status: l.request.status, approvedQuantity: l.approvedQuantity, confirmedQuantity: l.confirmedQuantity })),
+    returnedLines.map((l) => ({ warehouseId: l.document.toWarehouseId!, itemId: l.itemId, projectId: l.document.projectId, quantity: l.quantity }))
+  );
   // `reservedFree[kho|item|dự án]` = giữ chỗ còn trống; `freeTotal[kho|item]` = tổng mọi dự án.
   const reservedFree: Record<string, number> = {};
   const freeTotal = new Map<string, number>();
-  for (const [key, qty] of reservedBy) {
-    const free = remainingReserve(qty, usedBy.get(key) ?? 0);
+  for (const [key, { free }] of freeMap) {
     if (free <= 0) continue;
     reservedFree[key] = free;
     const whItem = key.split("|").slice(0, 2).join("|");

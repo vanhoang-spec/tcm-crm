@@ -29,11 +29,6 @@ export * from "./inventory-lot";
 export const DOC_STATUSES = ["PENDING", "COMPLETED", "CANCELED"] as const;
 export type DocStatus = (typeof DOC_STATUSES)[number];
 
-/** Chỉ item partCount === 1 mang tồn kho (item thường hoặc phần con của bộ). */
-export function isStockable(item: { partCount: number }): boolean {
-  return item.partCount === 1;
-}
-
 /** Mã phần con của bộ tách phần: BOOTH01 → BOOTH01-1, BOOTH01-2... */
 export function partItemCode(parentCode: string, partNo: number): string {
   return `${parentCode}-${partNo}`;
@@ -179,7 +174,7 @@ export async function closeCampaignIfSettled(tx: Tx, projectId: string): Promise
 
 // ── IO reads ──────────────────────────────────────────────
 
-/** Node gốc (cấp 1) của một node cây danh mục — mang code 1 ký tự + isClientOwned. Cây ≤3 cấp. */
+/** Node gốc (cấp 1) của một node cây danh mục — mang code 2 ký tự (mã lô v3) + isClientOwned. Cây ≤3 cấp. */
 export async function resolveRootCategory(
   catNodeId: string
 ): Promise<{ id: string; code: string | null; isClientOwned: boolean; name: string } | null> {
@@ -205,7 +200,7 @@ export type CategoryTreeNode = {
   sort: number;
   isActive: boolean;
   isClientOwned: boolean; // giá trị của node GỐC (kế thừa xuống con/cháu)
-  rootCode: string | null; // ký tự nhóm của gốc — dùng sinh mã + preview
+  rootCode: string | null; // mã nhóm 2 ký tự của gốc — dùng sinh mã sản phẩm + preview
 };
 
 /** Cây danh mục phẳng hoá theo thứ tự hiển thị (DFS, indent bằng depth). Node cha inactive → ẩn cả nhánh khi lọc. */
@@ -446,19 +441,6 @@ export async function getProjectConsumption(projectId: string): Promise<Consumpt
     r.consumed = r.delivered - r.returned - r.movedOut - r.lost - r.onSite;
   }
   return Array.from(rows.values()).sort((a, b) => a.code.localeCompare(b.code));
-}
-
-/** Phiếu chuyển kho đang chờ nhận (PENDING) — ghim đầu danh sách + badge mobile. */
-export async function getPendingTransfers() {
-  return prisma.stockDocument.findMany({
-    where: { type: "TRANSFER", status: "PENDING" },
-    include: {
-      fromWarehouse: true,
-      toWarehouse: true,
-      lines: { include: { item: true }, orderBy: { sort: "asc" } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
 }
 
 /** Số lượng đang vận chuyển theo item (từ phiếu TRANSFER PENDING — đã trừ nguồn, chưa vào đích). */

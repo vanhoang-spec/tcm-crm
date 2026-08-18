@@ -128,9 +128,12 @@ export function ConfirmForm({ requestId, kind, lines }: { requestId: string; kin
   // K6: trần thực xuất/hủy = số Account ĐÃ DUYỆT (null = phiếu cũ → số đề xuất).
   const capOf = (l: ConfirmLine) => l.approvedQuantity ?? l.quantity;
   const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(lines.map((l) => [l.id, capOf(l)])));
+  // K7: DN nhập 0 hết = "hàng không về" → phiếu từ chối, bắt buộc lý do (server kiểm lại).
+  const intakeNothing = kind === "INTAKE" && lines.every((l) => (qty[l.id] ?? capOf(l)) === 0);
+  const [reason, setReason] = useState("");
 
   return (
-    <form action={formAction} className="space-y-3 rounded-xl border border-border bg-surface p-4">
+    <form action={formAction} onReset={(e) => e.preventDefault()} className="space-y-3 rounded-xl border border-border bg-surface p-4">
       <div>
         <h2 className="text-sm font-semibold text-foreground">{kind === "INTAKE" ? t("confirmIntakeTitle") : kind === "TRANSFER" ? t("confirmTransferTitle") : kind === "DESTROY" ? t("confirmDestroyTitle") : t("confirmIssueTitle")}</h2>
         <p className="text-xs text-muted-foreground">{kind === "INTAKE" ? t("confirmIntakeHint") : kind === "TRANSFER" ? t("confirmTransferHint") : kind === "DESTROY" ? t("confirmDestroyHint") : t("confirmIssueHint")}</p>
@@ -158,13 +161,20 @@ export function ConfirmForm({ requestId, kind, lines }: { requestId: string; kin
           </li>
         ))}
       </ul>
+      {intakeNothing && (
+        <label className="block space-y-1 text-xs text-muted-foreground">
+          {t("intakeNothingReason")}
+          <input name="reason" value={reason} onChange={(e) => setReason(e.target.value)} required className="h-11 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm sm:h-9" />
+          <span className="block text-[11px] leading-snug">{t("intakeNothingHint")}</span>
+        </label>
+      )}
       <div className="flex items-center gap-3">
         <button
           type="submit"
           disabled={pending}
-          className="h-11 rounded-lg bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50 sm:h-9"
+          className={`h-11 rounded-lg px-5 text-sm font-semibold text-white disabled:opacity-50 sm:h-9 ${intakeNothing ? "bg-danger" : "bg-brand-600 hover:bg-brand-700"}`}
         >
-          {pending ? "..." : t("confirmBtn")}
+          {pending ? "..." : intakeNothing ? t("intakeNothingBtn") : t("confirmBtn")}
         </button>
         {state.error && <span className="text-xs text-danger">{state.error}</span>}
       </div>

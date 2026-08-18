@@ -39,8 +39,8 @@ export type HoldingItem = {
   statusCode: string | null;
   conditionCode: string | null;
   isPart: boolean;
-  rootCode: string | null;
-  clientSeg: string;
+  /** Mã sản phẩm của lô (mã lô v3) — form xem trước lô đích "PO-0042.__"; null với item trước v3 (không có) */
+  productCode: string | null;
 };
 
 type Line = { itemId: string; quantity: number; note: string };

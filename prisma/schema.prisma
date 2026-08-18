@@ -2420,7 +2420,7 @@ model Warehouse {
 model InventoryCategory {
   id            String   @id @default(cuid())
   parentId      String?
-  code          String? // CHỈ node gốc: 1 ký tự A-Z, unique giữa các gốc (validate app layer)
+  code          String? // CHỈ node gốc: 2 ký tự A-Z (PO/DT/TC/DP/IA/KG/VT — 18/08/2026, trước là 1 ký tự), unique giữa các gốc (validate app layer)
   name          String
   isClientOwned Boolean  @default(false) // chỉ đặt trên node gốc — con/cháu kế thừa khi kiểm tra
   sort          Int      @default(0)
@@ -2431,17 +2431,47 @@ model InventoryCategory {
   parent   InventoryCategory?  @relation("InventoryCategoryTree", fields: [parentId], references: [id])
   children InventoryCategory[] @relation("InventoryCategoryTree")
   items    InventoryItem[]     @relation("InventoryItemCatNode")
+  products InventoryProduct[]  @relation("InventoryProductCatNode")
 
   @@index([parentId])
   @@map("inventory_category_node")
 }
 
+/// SẢN PHẨM (18/08/2026, mã lô v3): DANH TÍNH của một thứ hàng — "Bàn gỗ 1m2" — khai một lần, giữ mãi.
+/// Mã `{NHÓM 2 ký tự}-{seq 4 số}` (PO-0042), seq đếm RIÊNG theo nhóm gốc. Mọi LÔ của nó (InventoryItem)
+/// treo dưới đây và mang mã `{mã SP}.{seq 2 số}` (PO-0042.01). Sản phẩm KHÔNG tham gia giao dịch nào —
+/// tồn kho / phiếu / holding / giữ chỗ / tiêu hao đều khoá theo LÔ như trước; sản phẩm chỉ là lớp gom.
+/// ⚠ Mã sản phẩm là DANH TÍNH, không phải phân loại: nếu sau này cho đổi nhóm thì mã KHÔNG đổi theo.
+/// name/unit/isReusable/partCount/catNodeId là NGUỒN SỰ THẬT ở đây; lô giữ BẢN SAO (một đường ghi
+/// syncLotsFromProduct, nhiều nơi đọc — cùng khuôn liên hệ NCC ở PUR-2).
+model InventoryProduct {
+  id         String   @id @default(cuid())
+  code       String   @unique // PO-0042
+  catNodeId  String // node cây danh mục (cấp bất kỳ) — nhóm gốc suy ra ký tự đầu của mã
+  name       String
+  unit       String? // ĐVT free text
+  isReusable Boolean  @default(true)
+  partCount  Int      @default(1) // 1 = hàng thường; 2..4 = bộ tách phần — BẤT BIẾN sau khi tạo
+  seq        Int // 0001–9999 trong nhóm gốc (suy lại được từ code — lưu để đọc nhanh)
+  isActive   Boolean  @default(true)
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  catNode InventoryCategory @relation("InventoryProductCatNode", fields: [catNodeId], references: [id])
+  lots    InventoryItem[]   @relation("InventoryItemProduct")
+
+  @@index([catNodeId])
+  @@map("inventory_product")
+}
+
 /// Danh mục vật tư. partCount>=2 = "bộ tách phần" (KHÔNG stockable — chỉ các phần con mang tồn kho).
 /// Quy tắc duy nhất: stockable ⇔ partCount === 1. Phần con: parentItemId set, partNo 1..N,
 /// code = `${cha}-${partNo}`. partCount BẤT BIẾN sau khi tạo (đổi cấu trúc = vô hiệu bộ cũ, tạo bộ mới).
-/// Kho v2: mỗi item = một LÔ đồng nhất, mã 5 khối `{G}.{ST}.{TT}.{KH3}.{seq3}` sinh ở lib/inventory.ts
-/// (buildItemCode; phần con giữ hậu tố `-N`). Trạng thái/tình trạng KHÔNG sửa tay — đổi qua phiếu
-/// CHUYỂN ĐỔI LÔ (CONVERT) chạy số lượng giữa 2 mã. Item cũ (trước v2) để các cột mới null.
+/// Kho v2: mỗi item = một LÔ đồng nhất. Mã lô v3 (18/08/2026) = `{mã sản phẩm}.{seq 2 số}` (PO-0042.01,
+/// phần con giữ hậu tố `-N`) — sinh ở lib/inventory-lot.ts (buildLotCode). Trạng thái/tình trạng/chủ/dự án/
+/// hạn dùng KHÔNG nằm trong mã (đọc ở cột) và KHÔNG sửa tay — đổi qua phiếu CHUYỂN ĐỔI LÔ (CONVERT) chạy
+/// số lượng sang lô khác CÙNG SẢN PHẨM. Item cũ (trước v2/v3) để các cột mới null.
 model InventoryItem {
   id                  String    @id @default(cuid())
   code                String    @unique
@@ -2452,6 +2482,7 @@ model InventoryItem {
   partCount           Int       @default(1) // 1 = item thường/phần con; 2..4 = bộ cha (không stockable)
   parentItemId        String?
   partNo              Int?
+  productId           String? // mã lô v3: sản phẩm chứa lô này (null chỉ với item trước v3 — hiện không có)
   // ── Kho v2 — thuộc tính lô (nullable: item trước v2 không có) ──
   catNodeId           String? // node cây danh mục v2 (nhóm gốc cho ký tự đầu của mã)
   statusCode          String? // R|P|C|W|L|D — xem ITEM_STATUS_CODES lib/inventory.ts; đổi qua phiếu CONVERT
@@ -2464,7 +2495,7 @@ model InventoryItem {
   /// bắn khi mức hiện tại NGHIÊM TRỌNG HƠN mức đã lưu → một lô được nhắc đủ 4 mốc mà không spam.
   /// Gia hạn date thì reset null để nhắc lại từ đầu.
   expiryReminderLevel String?
-  seq                 Int? // số thứ tự 001–999 trong tổ hợp mã (suy lại được từ code — lưu để đọc nhanh)
+  seq                 Int? // số thứ tự LÔ 01–99 trong sản phẩm (2 số cuối của mã; phần con mang cùng seq với lô cha)
   isActive            Boolean   @default(true)
   note                String?
   createdAt           DateTime  @default(now())
@@ -2476,6 +2507,7 @@ model InventoryItem {
   catNode      InventoryCategory? @relation("InventoryItemCatNode", fields: [catNodeId], references: [id], onDelete: SetNull)
   ownerClient  Client?            @relation("InventoryItemOwnerClient", fields: [ownerClientId], references: [id], onDelete: SetNull)
   boundProject Project?           @relation("InventoryItemBoundProject", fields: [boundProjectId], references: [id], onDelete: SetNull)
+  product      InventoryProduct?  @relation("InventoryItemProduct", fields: [productId], references: [id], onDelete: SetNull)
 
   balances       StockBalance[]
   lines          StockDocumentLine[]
@@ -2484,6 +2516,7 @@ model InventoryItem {
   requestLines   StockRequestLine[]
 
   @@index([parentItemId])
+  @@index([productId])
   @@index([categoryId])
   @@index([catNodeId])
   @@index([ownerClientId])

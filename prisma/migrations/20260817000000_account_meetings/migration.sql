@@ -48,7 +48,7 @@ CREATE TABLE "account_meeting_action" (
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "account_meeting_action_meetingId_fkey" FOREIGN KEY ("meetingId") REFERENCES "account_meeting" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "account_meeting_action_rowId_fkey" FOREIGN KEY ("rowId") REFERENCES "account_meeting_row" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "account_meeting_action_assigneeStaffId_fkey" FOREIGN KEY ("assigneeStaffId") REFERENCES "staff" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT "account_meeting_action_assigneeStaffId_fkey" FOREIGN KEY ("assigneeStaffId") REFERENCES "staff" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateIndex

@@ -37,7 +37,7 @@ export function CategoryCreateForm({ parents }: { parents: ParentOption[] }) {
           <>
             <label className="space-y-1 text-xs text-muted-foreground">
               {t("formCode")}
-              <input name="code" maxLength={1} className={input + " w-full font-mono uppercase"} required placeholder="P" />
+              <input name="code" maxLength={2} minLength={2} pattern="[A-Za-z]{2}" className={input + " w-full font-mono uppercase"} required placeholder="PO" />
               <span className="block text-[11px] leading-snug">{t("formCodeHint")}</span>
             </label>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">

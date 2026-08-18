@@ -13,18 +13,16 @@ import {
   InsufficientStockError,
   closeCampaignIfSettled,
   utcMidnightToday,
-  TCM_OWNER_SEG,
-  buildItemCode,
+  buildLotCode,
   creditBalance,
   creditHolding,
   debitBalance,
   debitHolding,
   expiryLevel,
-  itemCodePrefix,
+  lotFieldsFromProduct,
   nextDocCode,
-  nextItemSeq,
+  nextLotSeq,
   partItemCode,
-  resolveRootCategory,
   type DocType,
   type ItemConditionCode,
   type ItemStatusCode,
@@ -286,17 +284,8 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
       const src = srcById.get(l.itemId)!;
       // Phần con của bộ tách phần: khai lại phải chạy cả bộ, không lẻ từng phần (guard giống phiếu CD)
       if (src.parentItemId) return { error: t("errorConvertPart", { item: src.code }) };
-      if (!src.catNodeId || !src.statusCode || !src.conditionCode) return { error: t("errorConvertLegacy", { item: src.code }) };
+      if (!src.productId || !src.statusCode || !src.conditionCode) return { error: t("errorConvertLegacy", { item: src.code }) };
     }
-  }
-  // Ký tự nhóm gốc — đọc ngoài transaction, cây danh mục không đổi trong lúc lập phiếu
-  const rootBySrc = new Map<string, string>();
-  for (const l of redeclared) {
-    const src = srcById.get(l.itemId)!;
-    if (rootBySrc.has(src.id)) continue;
-    const root = await resolveRootCategory(src.catNodeId!);
-    if (!root?.code) return { error: t("errorInvalid") };
-    rootBySrc.set(src.id, root.code);
   }
   const redeclaredSet = new Set(redeclared);
 
@@ -313,7 +302,7 @@ export async function createReturnDoc(_prev: DocFormState, formData: FormData): 
             continue;
           }
           const src = srcById.get(l.itemId)!;
-          const target = await resolveTargetLot(tx, src, l.toStatus!, l.toCond!, rootBySrc.get(src.id)!);
+          const target = await resolveTargetLot(tx, src, l.toStatus!, l.toCond!);
           ledger.push({ itemId: l.itemId, convertToItemId: target.id, quantity: l.quantity, note: l.note });
         }
 
@@ -595,54 +584,52 @@ async function resolveTargetLot(
   tx: Prisma.TransactionClient,
   src: LotSource,
   toStatus: ItemStatusCode,
-  toCond: ItemConditionCode,
-  rootCode: string
+  toCond: ItemConditionCode
 ): Promise<LotTarget> {
+  // Mã lô v3: lô đích là lô CÙNG SẢN PHẨM khớp đúng tổ hợp thuộc tính — khớp theo khoá thật (productId), không
+  // theo TÊN gõ tay như v2 (hai thủ kho gõ "Bàn gỗ 1m2" và "Bàn gỗ 1m2 " là ra hai sản phẩm).
+  if (!src.productId) throw new Error("NO_PRODUCT");
   const lotWhere = {
+    productId: src.productId,
     parentItemId: null,
-    name: src.name,
-    catNodeId: src.catNodeId,
     statusCode: toStatus,
     conditionCode: toCond,
     ownerClientId: src.ownerClientId,
     boundProjectId: src.boundProjectId,
     expiryDate: src.expiryDate,
-    partCount: src.partCount,
     isActive: true,
   };
   const found = await tx.inventoryItem.findFirst({ where: lotWhere, include: { parts: { orderBy: { partNo: "asc" } } } });
   if (found) return found;
 
-  const clientSeg = src.ownerClient?.code ?? TCM_OWNER_SEG;
-  const prefix = itemCodePrefix(rootCode, toStatus, toCond, clientSeg);
-  const seq = await nextItemSeq(tx, prefix);
-  const code = buildItemCode(rootCode, toStatus, toCond, clientSeg, seq);
+  const product = await tx.inventoryProduct.findUnique({
+    where: { id: src.productId },
+    select: { id: true, code: true, name: true, unit: true, isReusable: true, partCount: true, catNodeId: true },
+  });
+  if (!product) throw new Error("NO_PRODUCT");
+  const seq = await nextLotSeq(tx, product.id);
+  const code = buildLotCode(product.code, seq);
   const lotData = {
-    name: src.name,
-    catNodeId: src.catNodeId,
-    unit: src.unit,
-    isReusable: src.isReusable,
+    ...lotFieldsFromProduct(product),
+    productId: product.id,
+    seq,
     statusCode: toStatus,
     conditionCode: toCond,
     ownerClientId: src.ownerClientId,
     boundProjectId: src.boundProjectId,
     expiryDate: src.expiryDate,
     clientDocNo: src.clientDocNo,
-    seq,
   };
-  const created = await tx.inventoryItem.create({
-    data: { code, partCount: src.partCount, ...lotData },
-    include: { parts: true },
-  });
-  if (src.partCount <= 1) return created;
+  const created = await tx.inventoryItem.create({ data: { code, ...lotData }, include: { parts: true } });
+  if (product.partCount <= 1) return created;
 
   for (const p of src.parts) {
     await tx.inventoryItem.create({
       data: {
-        code: partItemCode(code, p.partNo!),
         ...lotData,
-        name: p.name,
-        unit: p.unit,
+        code: partItemCode(code, p.partNo!),
+        name: `${product.name} — Phần ${p.partNo}`,
+        partCount: 1,
         parentItemId: created.id,
         partNo: p.partNo,
       },
@@ -694,17 +681,10 @@ export async function createConvertDoc(_prev: DocFormState, formData: FormData):
     if (!src || !src.isActive) return { error: t("errorInvalid") };
     // Chỉ lô v2 (đủ node + trạng thái + tình trạng); phần con phải chuyển từ item cha (cả bộ)
     if (src.parentItemId) return { error: t("errorConvertPart", { item: src.code }) };
-    if (!src.catNodeId || !src.statusCode || !src.conditionCode) return { error: t("errorConvertLegacy", { item: src.code }) };
+    if (!src.productId || !src.statusCode || !src.conditionCode) return { error: t("errorConvertLegacy", { item: src.code }) };
     if (src.statusCode === input.toStatus && src.conditionCode === input.toCond) {
       return { error: t("errorConvertSame", { item: src.code }) };
     }
-  }
-  // Ký tự nhóm gốc cho từng nguồn (cây ≤3 cấp, ngoài transaction — cây không đổi trong lúc lập phiếu)
-  const rootBySrc = new Map<string, string>();
-  for (const src of sources) {
-    const root = await resolveRootCategory(src.catNodeId!);
-    if (!root?.code) return { error: t("errorInvalid") };
-    rootBySrc.set(src.id, root.code);
   }
 
   const staffId = await getCurrentStaffId();
@@ -715,7 +695,7 @@ export async function createConvertDoc(_prev: DocFormState, formData: FormData):
         const ledger: { itemId: string; convertToItemId: string; quantity: number; note?: string }[] = [];
         for (const input of inputs) {
           const src = srcById.get(input.itemId)!;
-          const target = await resolveTargetLot(tx, src, input.toStatus, input.toCond, rootBySrc.get(src.id)!);
+          const target = await resolveTargetLot(tx, src, input.toStatus, input.toCond);
           if (src.partCount > 1) {
             const tgtByNo = new Map(target.parts.map((p) => [p.partNo, p]));
             for (const p of src.parts) {

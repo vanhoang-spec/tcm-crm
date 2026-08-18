@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
+import { GROUP_CODE_RE } from "@/lib/inventory-lot";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { requirePermission } from "@/lib/permissions";
 
@@ -29,8 +30,8 @@ function revalidate() {
 }
 
 /**
- * Tạo node cây danh mục (≤3 cấp). Node GỐC bắt buộc code 1 ký tự A-Z (đi vào mã lô — spec mục II,
- * "có thể thêm/bớt") + được đặt cờ isClientOwned; node con chỉ có tên.
+ * Tạo node cây danh mục (≤3 cấp). Node GỐC bắt buộc code 2 ký tự A-Z (khối đầu của mã sản phẩm PO-0042 —
+ * mã lô v3 18/08/2026, trước là 1 ký tự; spec "có thể thêm/bớt") + được đặt cờ isClientOwned; node con chỉ có tên.
  */
 export async function createCategory(_prev: CategoryFormState, formData: FormData): Promise<CategoryFormState> {
   await requirePermission("inventory.item.manage");
@@ -44,7 +45,7 @@ export async function createCategory(_prev: CategoryFormState, formData: FormDat
   if (!name || !Number.isInteger(sort)) return { error: t("errorInvalid") };
 
   if (!parentId) {
-    if (!/^[A-Z]$/.test(code)) return { error: t("errorRootCode") };
+    if (!GROUP_CODE_RE.test(code)) return { error: t("errorRootCode") };
     const dup = await prisma.inventoryCategory.findFirst({ where: { parentId: null, code } });
     if (dup) return { error: t("errorRootCodeExists", { code }) };
   } else {

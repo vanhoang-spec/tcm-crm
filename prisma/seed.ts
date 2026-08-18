@@ -1880,6 +1880,25 @@ async function main() {
   // ── Kho v2 (spec 27/07/2026): cây danh mục 7 nhóm — idempotent theo (parentId, name).
   // KHÔNG seed item/phiếu mẫu nữa (gỡ 27/07): mã lô sinh theo tổ hợp thật, dữ liệu thật
   // nhập bằng kiểm kê + CSV lúc go-live; item demo format cũ sẽ thành rác trên scheme mới.
+  // ── Mã lô v3 (18/08/2026): mã nhóm gốc 1 → 2 ký tự. One-shot có marker: đổi ĐÚNG 7 mã cũ đã seed sang
+  // mã mới (khớp theo mã cũ, không theo tên — tên admin sửa được). Chạy lại là no-op; nhóm admin tự thêm
+  // sau này không bị đụng. Không migrate mặt hàng: lúc đổi cả dev lẫn production đều 0 mặt hàng.
+  const GROUP_CODES_KEY = "20260818_inv_group_codes_2char";
+  const groupCodesMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: GROUP_CODES_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!groupCodesMarker) {
+    const RENAME: Record<string, string> = { P: "PO", E: "DT", G: "TC", C: "DP", L: "IA", M: "KG", O: "VT" };
+    let renamed = 0;
+    for (const [oldCode, newCode] of Object.entries(RENAME)) {
+      const r = await prisma.inventoryCategory.updateMany({ where: { parentId: null, code: oldCode }, data: { code: newCode } });
+      renamed += r.count;
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: GROUP_CODES_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ renamed }) },
+    });
+    console.log(`  ↳ mã nhóm kho 2 ký tự: đổi ${renamed} nhóm gốc`);
+  }
   const catRoot = async (code: string, name: string, sort: number, isClientOwned = false) => {
     const found = await prisma.inventoryCategory.findFirst({ where: { parentId: null, code } });
     if (found) return found;
@@ -1890,20 +1909,20 @@ async function main() {
     if (found) return found;
     return prisma.inventoryCategory.create({ data: { parentId, name, sort } });
   };
-  const catP = await catRoot("P", "POSM", 0);
+  const catP = await catRoot("PO", "POSM", 0);
   const catBooth = await catChild(catP.id, "Booth", 0);
   for (const [i, n] of ["Cụm booth", "Sàn", "Backdrop", "Standee"].entries()) await catChild(catBooth.id, n, i);
   await catChild(catP.id, "Kệ trưng bày", 1);
   await catChild(catP.id, "Cổng chào", 2);
-  const catE = await catRoot("E", "Thiết bị điện tử", 1);
+  const catE = await catRoot("DT", "Thiết bị điện tử", 1);
   for (const [i, n] of ["LED, TV", "Âm thanh", "Ánh sáng"].entries()) await catChild(catE.id, n, i);
-  await catRoot("G", "Thiết bị games / trò chơi", 2);
-  await catRoot("C", "Đồng phục", 3);
-  await catRoot("L", "In ấn", 4);
-  const catM = await catRoot("M", "Hàng hóa / quà tặng khách gửi", 5, true);
+  await catRoot("TC", "Thiết bị games / trò chơi", 2);
+  await catRoot("DP", "Đồng phục", 3);
+  await catRoot("IA", "In ấn", 4);
+  const catM = await catRoot("KG", "Hàng hóa / quà tặng khách gửi", 5, true);
   await catChild(catM.id, "Hàng hóa chạy project", 0);
   await catChild(catM.id, "Quà tặng", 1);
-  await catRoot("O", "Vật tư / vật dụng khác", 6);
+  await catRoot("VT", "Vật tư / vật dụng khác", 6);
 
   // ── MODULE ⑤ Chấm công & Ca làm việc — lead bộ phận + danh mục ca + loại nghỉ + tuần mẫu ──
   const deptLeads: Record<string, string> = {

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
-import { utcDayDiff } from "./inventory-lot";
+import { LOT_SEQ_MAX, PRODUCT_SEQ_MAX, productCodePrefix, utcDayDiff } from "./inventory-lot";
 
 // ─────────────────────────────────────────────────────────
 // MODULE ⑧ KHO — hằng số + hàm thuần + transaction helpers + IO reads.
@@ -59,18 +59,52 @@ export class InsufficientStockError extends Error {
 
 type Tx = Prisma.TransactionClient;
 
-/** Seq lô kế tiếp trong tổ hợp mã = max đang có + 1 (đọc từ code; caller retry P2002). Quá 999 → throw SEQ_FULL. */
-export async function nextItemSeq(tx: Tx, prefix: string): Promise<number> {
-  const last = await tx.inventoryItem.findFirst({
-    where: { code: { startsWith: prefix } },
-    orderBy: { code: "desc" },
-    select: { code: true },
+/**
+ * Seq SẢN PHẨM kế tiếp trong một nhóm gốc = max đang có + 1 (đọc cột seq theo tiền tố mã; caller retry P2002
+ * — code @unique là backstop). Quá 9999 → throw SEQ_FULL.
+ */
+export async function nextProductSeq(tx: Tx, groupCode: string): Promise<number> {
+  const last = await tx.inventoryProduct.findFirst({
+    where: { code: { startsWith: productCodePrefix(groupCode) } },
+    orderBy: { seq: "desc" },
+    select: { seq: true },
   });
-  if (!last) return 1;
-  const parsed = parseInt(last.code.slice(prefix.length), 10); // "002-1" (phần con) → 2
-  const seq = (Number.isFinite(parsed) ? parsed : 0) + 1;
-  if (seq > 999) throw new Error("SEQ_FULL");
+  const seq = (last?.seq ?? 0) + 1;
+  if (seq > PRODUCT_SEQ_MAX) throw new Error("SEQ_FULL");
   return seq;
+}
+
+/**
+ * Seq LÔ kế tiếp trong một sản phẩm = max đang có + 1 (chỉ đếm lô CHA — phần con mang cùng seq với cha).
+ * ⚠ Không tái sử dụng số của lô đã về 0 / đã tắt: phiếu kho cũ còn phải tra ngược được. Quá 99 → SEQ_FULL.
+ */
+export async function nextLotSeq(tx: Tx, productId: string): Promise<number> {
+  const last = await tx.inventoryItem.findFirst({
+    where: { productId, parentItemId: null },
+    orderBy: { seq: "desc" },
+    select: { seq: true },
+  });
+  const seq = (last?.seq ?? 0) + 1;
+  if (seq > LOT_SEQ_MAX) throw new Error("SEQ_FULL");
+  return seq;
+}
+
+/**
+ * Trường lô CHÉP TỪ SẢN PHẨM — sản phẩm là NGUỒN SỰ THẬT của name/unit/isReusable/partCount/catNodeId, lô
+ * giữ bản sao để 24 chỗ đọc `item.name` sẵn có không phải đổi (một đường ghi, nhiều nơi đọc — cùng khuôn
+ * liên hệ NCC ở PUR-2). Đổi ở sản phẩm thì `syncLotsFromProduct` lan xuống mọi lô.
+ */
+export function lotFieldsFromProduct(p: { name: string; unit: string | null; isReusable: boolean; partCount: number; catNodeId: string }) {
+  return { name: p.name, unit: p.unit, isReusable: p.isReusable, partCount: p.partCount, catNodeId: p.catNodeId };
+}
+
+/** Lan name/unit/isReusable từ sản phẩm xuống mọi lô + phần con (tên phần giữ hậu tố " — Phần N"). */
+export async function syncLotsFromProduct(tx: Tx, productId: string, p: { name: string; unit: string | null; isReusable: boolean }): Promise<void> {
+  await tx.inventoryItem.updateMany({ where: { productId, parentItemId: null }, data: { name: p.name, unit: p.unit, isReusable: p.isReusable } });
+  const parts = await tx.inventoryItem.findMany({ where: { productId, parentItemId: { not: null } }, select: { id: true, partNo: true } });
+  for (const part of parts) {
+    await tx.inventoryItem.update({ where: { id: part.id }, data: { name: `${p.name} — Phần ${part.partNo}`, unit: p.unit, isReusable: p.isReusable } });
+  }
 }
 
 /** Mã phiếu kế tiếp trong tháng — count-based, caller phải retry P2002 (code @unique là backstop). */

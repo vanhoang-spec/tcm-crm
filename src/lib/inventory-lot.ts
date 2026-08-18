@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────
-// Kho v2 — phần THUẦN của mô hình LÔ (spec + 7 quyết định 27/07/2026):
-// trạng thái / tình trạng / mã 5 khối / mức cảnh báo hạn dùng.
+// Kho v2 — phần THUẦN của mô hình LÔ (spec + 7 quyết định 27/07/2026; mã lô v3 18/08/2026):
+// trạng thái / tình trạng / mã sản phẩm + lô / mức cảnh báo hạn dùng.
 // KHÔNG import gì (test được bằng node trực tiếp); IO nằm ở inventory.ts.
 // ─────────────────────────────────────────────────────────
 
@@ -12,17 +12,48 @@ export type ItemStatusCode = (typeof ITEM_STATUS_CODES)[number];
 export const ITEM_CONDITION_CODES = ["B", "P", "S"] as const;
 export type ItemConditionCode = (typeof ITEM_CONDITION_CODES)[number];
 
-/** Segment khách hàng trong mã khi hàng thuộc TCM (ownerClientId null). */
+/**
+ * Nhãn hiển thị cho chủ sở hữu khi hàng thuộc TCM (ownerClientId null). Từ mã lô v3 KHÔNG còn nằm trong
+ * mã — chỉ dùng để hiện chữ "TCM" ở cột chủ sở hữu.
+ */
 export const TCM_OWNER_SEG = "TCM";
 
-/** Tiền tố tổ hợp mã lô — mọi item cùng tổ hợp chỉ khác 3 số cuối. */
-export function itemCodePrefix(group: string, status: string, condition: string, clientSeg: string): string {
-  return `${group}.${status}.${condition}.${clientSeg}.`;
+// ── Mã lô v3 (18/08/2026) — SẢN PHẨM là danh tính, LÔ là trạng thái ────────────────────────────
+//
+//   PO  -  0042  .  01
+//   ──     ────     ──
+//    │       │       └─ số LÔ, 2 chữ số, đếm riêng trong sản phẩm (không tái sử dụng khi lô về 0)
+//    │       └───────── số SẢN PHẨM, 4 chữ số, đếm riêng trong nhóm gốc
+//    └───────────────── nhóm gốc, 2 ký tự A-Z (PO/DT/TC/DP/IA/KG/VT — admin sửa ở Settings)
+//
+// Trạng thái / tình trạng / chủ sở hữu / dự án / hạn dùng KHÔNG nằm trong mã — chúng là CỘT trên lô và
+// đã lọc được ở mọi màn hình. Nhét vào mã (như v2: P.R.B.TCM.001) thì mã phải đổi mỗi khi trạng thái đổi,
+// nhãn đã dán thành rác. Ở v3, đổi trạng thái = chạy số lượng sang lô khác CÙNG SẢN PHẨM (phiếu CD/TH);
+// số lô đã cấp đứng yên. ⚠ Số lô KHÔNG mang nghĩa: .01 không phải "mới", .02 không phải "cũ" — chỉ là
+// thứ tự tạo. Mã sản phẩm KHÔNG đổi nếu sau này cho đổi nhóm (mã = danh tính, không phải phân loại).
+
+export const PRODUCT_SEQ_MAX = 9999;
+export const LOT_SEQ_MAX = 99;
+export const GROUP_CODE_RE = /^[A-Z]{2}$/;
+
+/** Mã sản phẩm: PO-0042. */
+export function buildProductCode(groupCode: string, seq: number): string {
+  return `${groupCode}-${String(seq).padStart(4, "0")}`;
 }
 
-/** Mã lô 5 khối: P.R.B.DHG.001 (đã chốt: Loại 1 ký tự; phần con bộ tách phần thêm hậu tố -N). */
-export function buildItemCode(group: string, status: string, condition: string, clientSeg: string, seq: number): string {
-  return `${itemCodePrefix(group, status, condition, clientSeg)}${String(seq).padStart(3, "0")}`;
+/** Tiền tố dùng để đếm seq sản phẩm trong nhóm: "PO-". */
+export function productCodePrefix(groupCode: string): string {
+  return `${groupCode}-`;
+}
+
+/** Mã lô: PO-0042.01 (phần con của bộ tách phần thêm hậu tố -N: PO-0042.01-1). */
+export function buildLotCode(productCode: string, lotSeq: number): string {
+  return `${productCode}.${String(lotSeq).padStart(2, "0")}`;
+}
+
+/** Chuỗi xem trước khi chưa biết số lô: PO-0042.__ */
+export function lotCodePreview(productCode: string): string {
+  return `${productCode}.__`;
 }
 
 export type ExpiryLevel = "EXPIRED" | "RED" | "ORANGE" | "YELLOW";

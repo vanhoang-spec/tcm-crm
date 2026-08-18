@@ -114,7 +114,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) + **Tuyển dụng** (`/staff/recruit` — vị trí & JD gắn org chart, nhận CV, AI đọc CV điền hồ sơ, lịch phỏng vấn 3 vòng có xác nhận + file lịch .ics, phiếu chấm điểm, kho hồ sơ; xem mục 10.31) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
-| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, mã lô 5 khối, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 |
+| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 |
 | — | Thu mua (PUR) | `/purchasing` | **XONG (PUR-1a + 1b, 16/08/2026)**: hồ sơ NCC theo 6 nhóm hàng + kho tài liệu HĐ/PO + lịch sử giá · RFQ từ dòng CO → 6 mẫu form → cổng NCC token / PUR nhập hộ / upload file + AI bóc → so sánh (số tính bằng code, AI nhận xét) → PUR chọn + lý do → trình Account → **Account chốt → ghi vào CO** (revision mới, chờ duyệt FIN-B) — xem mục 10.36 · **PUR-2**: hồ sơ NCC mở rộng (mã 3 ký tự, tên pháp nhân, N người liên hệ, trường tuỳ chỉnh khai ở `/settings/vendor-fields`) — mục 10.37 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 123 model Prisma · 71 migration · 85 file `src/lib` · 4174 key i18n × 2 ngôn ngữ · 145 mã quyền.
+**Quy mô:** 124 model Prisma · 72 migration · 85 file `src/lib` · 4188 key i18n × 2 ngôn ngữ · 145 mã quyền.
 
 ---
 
@@ -260,7 +260,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 8. **CO/CE chỉ có CE tổng ở cấp bảng**, chưa có CE theo từng dòng (Phase 2 đã bàn: CE-per-line + gom N dòng CO → 1 dòng CE + make-up theo dòng + AI gợi ý markup — **chưa làm**).
 9. SQLite single-writer: giữ transaction ngắn, fan-out notification **sau** commit.
 10. **Nhắc việc nay có bộ hẹn giờ thật** (`src/instrumentation.ts` + `src/lib/job-runner.ts`) — không còn phụ thuộc "có người mở app". Hạn chế còn lại: tick 5 phút chứ không phải cron theo giờ chính xác; nếu pm2 chạy cluster thì mỗi instance có một timer, nhưng "vé chạy" (bảng `setting`, module `jobs`) bảo đảm mỗi chu kỳ chỉ một lượt chạy thật. Layout render vẫn gọi `runDueJobs()` làm lưới an toàn.
-11. **Kho v2 đang làm theo ĐỢT** (spec + 7 quyết định chủ dự án chốt 27/07/2026 — chi tiết ở PLAN-HISTORY, mục "Kho v2 — K1"). **K1 ĐÃ XONG:** cây danh mục 7 nhóm (`inventory_category_node`, node gốc mang 1 ký tự đi vào mã; admin sửa ở `/settings/inventory-categories`); item = **LÔ đồng nhất** với mã `{Nhóm}.{TrạngThái}.{TìnhTrạng}.{KH 3 ký tự}.{seq 3 số}` sinh tự động (phần thuần ở `lib/inventory-lot.ts`, seq theo tổ hợp qua `nextItemSeq`); trạng thái R/P/C/W/L/D + tình trạng B/P/S **không sửa tay** — đổi bằng phiếu CHUYỂN ĐỔI LÔ (`CONVERT`/CD, chạy số lượng giữa 2 mã, lô đích tự tìm/tạo, bộ tách phần chuyển cả bộ); phiếu XUẤT HỦY (`DESTROY`/XH, bắt buộc lý do) là đường ra duy nhất cho hàng hết hạn — ISSUE chặn hàng quá `expiryDate`; CSV import gom dòng theo lô (1 mã nhiều kho), không còn cột "Mã". **K2 ĐÃ XONG** (migration `20260728010000_kho_v2_k2_stock_requests`): bảng `StockRequest`/`StockRequestLine` = tầng ĐỀ XUẤT đặt TRÊN sổ cái — tồn kho **chỉ đổi khi thủ kho xác nhận**, lúc đó mới sinh StockDocument và gắn `documentId` làm mốc đối chiếu.
+11. **Kho v2 đang làm theo ĐỢT** (spec + 7 quyết định chủ dự án chốt 27/07/2026 — chi tiết ở PLAN-HISTORY, mục "Kho v2 — K1"). **K1 ĐÃ XONG:** cây danh mục 7 nhóm (`inventory_category_node`, node gốc mang 1 ký tự đi vào mã; admin sửa ở `/settings/inventory-categories`); item = **LÔ đồng nhất** — ⚠ mã 5 khối `{Nhóm}.{TrạngThái}.{TìnhTrạng}.{KH}.{seq}` của K1 **ĐÃ THAY bằng mã lô v3 `PO-0042.01` ngày 18/08/2026 (mục 10.40)**; `nextItemSeq`/`buildItemCode`/`itemCodePrefix` không còn; trạng thái R/P/C/W/L/D + tình trạng B/P/S **không sửa tay** — đổi bằng phiếu CHUYỂN ĐỔI LÔ (`CONVERT`/CD, chạy số lượng giữa 2 mã, lô đích tự tìm/tạo, bộ tách phần chuyển cả bộ); phiếu XUẤT HỦY (`DESTROY`/XH, bắt buộc lý do) là đường ra duy nhất cho hàng hết hạn — ISSUE chặn hàng quá `expiryDate`; CSV import gom dòng theo lô (1 mã nhiều kho), không còn cột "Mã". **K2 ĐÃ XONG** (migration `20260728010000_kho_v2_k2_stock_requests`): bảng `StockRequest`/`StockRequestLine` = tầng ĐỀ XUẤT đặt TRÊN sổ cái — tồn kho **chỉ đổi khi thủ kho xác nhận**, lúc đó mới sinh StockDocument và gắn `documentId` làm mốc đối chiếu.
    - **Xuất kho (DX)**: OPE đề xuất → **Account PIC/Leader của ĐÚNG dự án** (hoặc AD/AM có `inventory.request.approve_any`) duyệt → thủ kho chốt số thực xuất (≤ số duyệt) → phiếu XE + trừ tồn + cộng holding. Chặn: hàng hết hạn, lô ràng dự án khác, hàng của khách khác, vượt **khả dụng = tồn − đã duyệt chưa xuất** (giữ chỗ mềm, kiểm lại lần nữa lúc duyệt).
    - **Báo hàng về (DN)**: PUR/OPE/Account báo (gắn PO nếu có) → **không có bước duyệt** (spec workflow c) → thủ kho chốt số thực nhập → phiếu NK. Dùng cho cả 3 nguồn: PO, hàng khách gửi, đồ site quay về (khai lại trạng thái/tình trạng lúc về = tạo lô mới ở tab Danh mục trước).
    - **Role mới `WAREHOUSE_KEEPER`** (nhóm `WAREHOUSE`) + 6 mã quyền (**109 mã**): `inventory.request.create` (mọi role) · `.approve` (Account + BGĐ) · `.approve_any` (AD/AM + BGĐ) · `issue.confirm` + `intake.confirm` + `lot.convert` + `destroy` (Thủ kho; **OPERATIONS_MANAGER giữ tạm** tới khi chủ dự án gán người thật ở `/settings/staff` rồi bỏ tick).
@@ -2001,6 +2001,85 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       xuất biên bản ra Excel/PDF · hai người sửa cùng lúc thì người lưu sau thắng, im lặng · sửa
       trần 6.000 ký tự của `extractTextFromFile` cho các module cũ (MEET-2 truyền trần riêng, 5 chỗ
       gọi cũ không đổi).
+
+40. **KHO — MÃ LÔ v3: TÁCH SẢN PHẨM KHỎI LÔ — 18/08/2026** (migration VIẾT TAY
+    `20260818000000_inventory_product_lot_codes`: bảng MỚI `inventory_product` + cột `inventory_item.productId`
+    bằng `ALTER TABLE ADD COLUMN` — `migrate diff` đòi RedefineTables cho `inventory_item` chỉ vì thêm một cột FK
+    nullable, bảng có 6 cạnh FK trỏ tới; **KHÔNG mã quyền mới; KHÔNG migrate dữ liệu** vì cả dev lẫn production
+    đều **0 mặt hàng** lúc đổi — đây là cửa sổ duy nhất làm rẻ, sau khi nhập tồn đầu kỳ (dự kiến cuối T9/2026) mã
+    đã nằm trên nhãn dán và phiếu đã in).
+    - **Vì sao đổi (đo trước khi sửa):** mã cũ `P.R.B.TCM.001` nhét 4 khối NGHĨA (nhóm · trạng thái · tình trạng ·
+      khách) mà **toàn repo không có một chỗ nào đọc ngược mã ra để lấy nghĩa** — chỗ duy nhất chạm chuỗi mã là
+      `nextItemSeq` cắt lấy số thứ tự; cả 3 nghĩa đều đã có CỘT riêng và đã lọc được trên 3 màn hình. Cái giá của
+      nghĩa-trong-mã: mã phải đổi mỗi khi trạng thái đổi (`P.R.B.TCM.001` hỏng thành hàng cũ → chạy sang
+      `P.R.S.TCM.007`, nhãn cũ thành rác), và **hệ cũ KHÔNG có khái niệm SẢN PHẨM** — "Bàn gỗ 1m2" mới và "Bàn gỗ
+      1m2" cũ là hai bản ghi không quen biết nhau; `resolveTargetLot` tìm lô đích bằng cách so **TÊN gõ tay**.
+    - **Khuôn mã mới** (`lib/inventory-lot.ts`, hằng + hàm thuần, 11/11 test):
+      ```
+      PO  -  0042  .  01
+      ──     ────     ──
+       │       │       └─ số LÔ, 2 chữ số, đếm riêng trong sản phẩm (nextLotSeq — CHỈ đếm lô cha, phần con mang cùng seq)
+       │       └───────── số SẢN PHẨM, 4 chữ số, đếm riêng trong nhóm gốc (nextProductSeq theo tiền tố "PO-")
+       └───────────────── nhóm gốc, 2 ký tự A-Z — admin sửa ở /settings/inventory-categories (GROUP_CODE_RE)
+      ```
+      Bộ tách phần giữ hậu tố: `PO-0042.01-1`. Trần 9999 sản phẩm/nhóm, 99 lô/sản phẩm (`SEQ_FULL`).
+      ⚠ **Số lô KHÔNG mang nghĩa** — `.01` không phải "mới", `.02` không phải "cũ", chỉ là thứ tự tạo. Một sản phẩm
+      sinh nhiều lô vì SÁU thứ (trạng thái · tình trạng · chủ sở hữu · dự án gắn · hạn dùng · số phiếu khách), không
+      chỉ vì tình trạng. ⚠ **Số lô KHÔNG tái sử dụng** khi lô về 0 — phiếu kho cũ còn phải tra ngược được.
+      ⚠ **Mã sản phẩm = DANH TÍNH, không phải phân loại**: nếu sau này cho đổi nhóm thì mã KHÔNG đổi theo (hiện
+      `updateProduct` không cho đổi nhóm/số phần — cả hai bất biến sau khi tạo).
+    - **7 mã nhóm 2 ký tự** (đổi từ 1 ký tự bằng marker seed một lần `20260818_inv_group_codes_2char`, khớp theo
+      MÃ CŨ chứ không theo tên — tên admin sửa được): `PO` POSM · `DT` Thiết bị điện tử · `TC` Games/trò chơi ·
+      `DP` Đồng phục · `IA` In ấn · `KG` Hàng khách gửi (isClientOwned) · `VT` Vật tư khác. Đã đối chiếu: không mã
+      nào trùng 13 tiền tố phiếu/đề xuất (NK DC CK XE TH CD XH CH BM DX DN GC DK). Đo trên dev.db: đổi đúng 7 gốc,
+      19 node giữ nguyên, cờ `KG*` còn nguyên, seed lần 2 no-op.
+    - **Mô hình:** `InventoryProduct` (code, catNodeId, name, unit, isReusable, partCount, seq, isActive, note) là
+      NGUỒN SỰ THẬT của danh tính; `InventoryItem` (= LÔ) thêm `productId`, cột `seq` **tái dùng** làm số lô. Sản
+      phẩm **KHÔNG tham gia giao dịch nào** — tồn kho / phiếu / holding / giữ chỗ K3 / tiêu hao K4 / bất biến K5
+      (`itemId` luôn là lô nguồn) đều khoá theo LÔ y như trước; sản phẩm chỉ là lớp gom. Vì vậy 6 đường link kho ↔
+      dự án (`boundProjectId` trên lô · GC · DX/DK · phiếu XE/TH/BM/CH · holding · kỳ chiến dịch) **giữ nguyên
+      ở lô**; dự án KHÔNG vào mã (cùng lý do bỏ trạng thái: dự án là trạng thái tạm thời của lô).
+    - ⚠ **name/unit/isReusable/partCount/catNodeId nằm ở CẢ HAI bảng — sản phẩm là nguồn, lô là BẢN SAO** (một
+      đường ghi `lotFieldsFromProduct` lúc tạo + `syncLotsFromProduct` lúc sửa; cùng khuôn liên hệ NCC ở PUR-2).
+      Cố ý: 24 file đang đọc `item.name`, đổi hết là diff phình vô ích. Sửa tên/ĐVT/tái sử dụng ở SẢN PHẨM
+      (`updateProduct`, lan xuống lô + phần con, giữ hậu tố " — Phần N"); `updateItem` nay CHỈ sửa trường lô
+      (active, hạn dùng, số phiếu KH, ghi chú). Ngưng dùng sản phẩm = ngưng mọi lô; bật lại KHÔNG bật lại lô.
+    - **Lô = TỔ HỢP THUỘC TÍNH, không phải đợt nhập** (giữ đúng hành vi `resolveTargetLot` sẵn có): form tạo lô vào
+      sản phẩm có sẵn mà trùng y hệt sáu thuộc tính với lô đang hoạt động → chặn `errorLotExists` kèm mã lô sẵn có
+      ("nhập thêm tồn bằng phiếu NK"). Riêng **CSV import thì CỘNG TỒN vào lô y hệt** thay vì chặn — kiểm kê ghi
+      số đếm, không đẻ lô trùng. Hai ý định khác nhau, hai hành vi khác nhau — cố ý.
+    - **`resolveTargetLot` (phiếu CD + TH khai lại) nay khớp theo `productId`** + trạng thái/tình trạng/chủ/dự án/
+      hạn dùng, KHÔNG còn theo tên + catNodeId; bỏ tham số `rootCode` và hai vòng `resolveRootCategory` ở
+      caller. Nguồn thiếu `productId` (item trước v3 — hiện không có) → `errorConvertLegacy`.
+    - **CSV: cột "Mã SP" đứng ĐẦU** (14 cột). Điền mã có sẵn (`PO-0042`) → lô treo vào sản phẩm đó và
+      Tên/Nhóm/ĐVT/Tái sử dụng/Số phần của dòng bị BỎ QUA (sản phẩm là nguồn sự thật, không so nữa). Để trống →
+      tìm sản phẩm theo (nhóm GỐC, tên thường) — nhập tồn đầu kỳ chưa có mã, tên là khoá thực tế duy nhất — rồi tạo
+      mới nếu chưa có; các dòng cùng sản phẩm phải khai ĐVT/tái sử dụng/số phần/node giống nhau
+      (`INCONSISTENT_PRODUCT`, thay `INCONSISTENT_LOT` cũ). `lotKey(productKey, row)` nhận khoá sản phẩm đã
+      giải từ action. File mẫu 5 dòng có ca "hai dòng cùng sản phẩm, khác tình trạng → .01 và .02".
+    - **Form tạo lô có 2 chế độ**: "Thêm lô vào sản phẩm có sẵn" (picker `PO-0042 — Bàn gỗ 1m2 (cái)`, xem trước
+      `PO-0042.03` từ `nextLotSeq` truyền xuống) / "Sản phẩm mới" (tên, nhóm, ĐVT, số phần, tái sử dụng; xem trước
+      `PO-####.01`). Danh sách `/inventory/items` nay **SẢN PHẨM là hàng chính**, lô xếp dưới, đếm lô + tồn theo lô;
+      bộ lọc trạng thái/tình trạng/khách áp lên LÔ, sản phẩm không còn lô khớp thì ẩn.
+    - **Verify:** 11/11 test mã · 9/9 test luồng headless gọi ĐÚNG hàm app (PO-0001 → .01/.02 cùng họ · PO-0002 và
+      DT-0001 đếm riêng · bộ 3 phần `PO-0002.01-1..3` cùng seq, `nextLotSeq` sau đó vẫn = 2 · sync lan xuống phần
+      con giữ hậu tố · tổng tồn gộp qua `productId` = 20) · 6/6 test CSV · tsc · eslint · i18n **0/0 (4188 key)** ·
+      `next build` sạch · `migrate diff` rỗng · seed lần 2 no-op. **Browser (admin, dev.db):** tạo SP mới
+      "Bàn gỗ 1m2" gắn node CON Booth → preview `PO-####.01` lấy đúng ký tự gốc → tạo ra **`PO-0001` / `PO-0001.01`**;
+      chuyển sang chế độ "SP có sẵn" → preview **`PO-0001.02`**; tạo lô TRÙNG y hệt `.01` → server chặn đích danh
+      "đã có lô y hệt: PO-0001.01" và **mọi lựa chọn còn nguyên sau lỗi** (chế độ, SP đã chọn, tình trạng — bẫy
+      requestFormReset không cắn); đổi tình trạng → `.02` tạo được, badge "2 lô"; nhập kho NK-2608-001 20 cái vào
+      `.01`; **phiếu CD-2608-001 chuyển 5 cái [R·B] → [L·S] sinh lô đích `PO-0001.03` CÙNG HỌ**, `.01` giữ nguyên
+      mã và còn 15, Σ tồn qua `productId` = 20 bảo toàn; sửa tên SP → lan xuống cả 3 lô, audit UPDATE; Settings hiện
+      7 mã 2 ký tự, ô nhập bắt `[A-Za-z]{2}`. Dữ liệu test đã dọn: 0 sản phẩm / 0 lô / 0 phiếu / 0 tồn, 19 node.
+    - **Sửa kèm (phát hiện lúc `migrate diff`):** migration `account_meetings` (MEET, chưa deploy) khai FK
+      `assigneeStaffId` là `ON DELETE RESTRICT` trong khi quan hệ tuỳ chọn của Prisma mặc định `SET NULL` — lần đọc
+      `migrate diff` trước em đọc nhầm `tail` là rỗng. Đã sửa tại chỗ + áp lại (3 bảng rỗng, có chốt chặn).
+      ⚠ Bài học: **đọc TOÀN BỘ output của `migrate diff`** — dòng cuối `PRAGMA defer_foreign_keys=OFF;` là dấu
+      hiệu CÓ RedefineTables chứ không phải rỗng; rỗng thật là `-- This is an empty migration.`
+    - **CHƯA LÀM (cố ý):** cho đổi nhóm của sản phẩm (đã chốt luật "mã không đổi theo nhóm" để sau này thêm không
+      phải bàn lại) · picker giữ chỗ K3 / màn hình đề xuất gộp theo sản phẩm (vẫn liệt kê theo lô, chỉ mã đổi) ·
+      báo cáo tồn/tiêu hao gộp theo sản phẩm · gộp hai sản phẩm trùng · lịch sử giá theo sản phẩm.
 
 ---
 

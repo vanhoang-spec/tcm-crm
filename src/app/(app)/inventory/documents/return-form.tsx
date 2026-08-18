@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Minus, Plus, X } from "lucide-react";
 import { NumberField } from "@/components/ui/number-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { ITEM_CONDITION_CODES, ITEM_STATUS_CODES, itemCodePrefix } from "@/lib/inventory-lot";
+import { ITEM_CONDITION_CODES, ITEM_STATUS_CODES, lotCodePreview } from "@/lib/inventory-lot";
 import { createReturnDoc, type DocFormState } from "./actions";
 import type { HoldingItem, ProjectOption, WarehouseOption } from "./doc-form";
 
@@ -126,7 +126,7 @@ export function ReturnForm({
           if (!h) return null;
           const claimed = claimedByItem.get(l.itemId) ?? 0;
           const changed = l.toStatus !== h.statusCode || l.toCond !== h.conditionCode;
-          const canLineRedeclare = canRedeclare && !h.isPart && !!h.rootCode && !!h.statusCode && !!h.conditionCode;
+          const canLineRedeclare = canRedeclare && !h.isPart && !!h.productCode && !!h.statusCode && !!h.conditionCode;
           return (
             <div key={l.key} className="rounded-xl border border-border bg-surface p-3">
               <div className="flex items-start justify-between gap-2">
@@ -200,7 +200,7 @@ export function ReturnForm({
               )}
               {canLineRedeclare && changed && (
                 <p className="mt-1 font-mono text-[11px] text-brand-600">
-                  → {itemCodePrefix(h.rootCode!, l.toStatus, l.toCond, h.clientSeg)}###
+                  → {lotCodePreview(h.productCode!)}
                 </p>
               )}
               {canRedeclare && h.isPart && <p className="mt-1 text-[11px] text-muted-foreground">{t("redeclarePartHint")}</p>}

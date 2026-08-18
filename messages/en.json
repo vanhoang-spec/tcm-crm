@@ -1269,7 +1269,8 @@
       "assignTeamDesc": "This project is awaiting the Board to choose an Account team.",
       "selectTeamToAssign": "— Select team —",
       "assignTeamSubmit": "Confirm team assignment",
-      "mobileFullDetailNote": "Full master timeline/CO-CE details are available on desktop."
+      "mobileFullDetailNote": "Full master timeline/CO-CE details are available on desktop.",
+      "briefLinkMissing": "No brief link yet — add it in the project edit form."
     },
     "gonogo": {
       "title": "Go / No-Go",
@@ -1323,7 +1324,14 @@
       "accountFallback": "the owning Account team",
       "resultLinkPlaceholder": "Google Drive/OneDrive link with the finished result...",
       "submitResult": "Send result",
-      "resultSentBy": "Result sent by {name} · {date}"
+      "resultSentBy": "Result sent by {name} · {date}",
+      "stockLinesLabel": "Stock items needed",
+      "stockLineProduct": "Pick a stock product…",
+      "stockLineQty": "Quantity",
+      "stockLineNote": "Note (size, colour, when needed…)",
+      "stockLineRemove": "Remove line",
+      "stockLineAdd": "Add item",
+      "stockLinesHint": "The receiving department sees available stock by owner right away and files the issue request for exactly these quantities. Products missing from the catalogue must be created under Inventory → Items first."
     },
     "costsheet": {
       "title": "CO/CE (CECO ctract)",
@@ -3354,7 +3362,12 @@
       "ownerProjectApprover": "Owner · approver",
       "noPicApproveAny": "no PIC assigned — approve-any group",
       "confirmDestroyTitle": "Keeper confirms disposal",
-      "confirmDestroyHint": "Actual destroyed ≤ quantity approved by Account per line. Confirming creates a Destroy document and debits stock."
+      "confirmDestroyHint": "Actual destroyed ≤ quantity approved by Account per line. Confirming creates a Destroy document and debits stock.",
+      "orderHintTitle": "Stock items from the Account order",
+      "orderHintDesc": "Click \"Pick lot\" to open the catalogue pre-filtered by product; to take = need − requested − issued.",
+      "orderHintNeed": "need {need}, {remaining} still to take",
+      "orderHintPicked": "picking {n}",
+      "orderHintPick": "Pick lot"
     },
     "consumption": {
       "title": "Project material consumption",
@@ -3368,6 +3381,24 @@
       "colLost": "Lost / damaged",
       "colOnSite": "On site",
       "colConsumed": "Consumed"
+    },
+    "orderStock": {
+      "title": "Stock items per Order",
+      "subtitle": "Account listed products + quantities needed. Available stock is split by owner — other projects' goods and client-owned goods can still be requested; the owning team approves.",
+      "requestFromOrder": "File issue request from order",
+      "colProduct": "Product",
+      "colNeed": "Need",
+      "colRequested": "Requested",
+      "colIssued": "Issued",
+      "colAvailable": "Available by owner",
+      "availTCM": "TCM general: {n}",
+      "availMINE": "This project's: {n}",
+      "availOTHER": "Other projects: {n}",
+      "availCLIENT": "Client-owned: {n}",
+      "availNone": "None in stock",
+      "shortfall": "short by {n} — needs purchase",
+      "ownerHint": "Requesting other projects' or client-owned goods auto-splits the request and routes it to the owning Account team for per-line approval.",
+      "notExecutingYet": "Project is not in execution yet — issue requests open once it is (table shown for preparation)."
     }
   },
   "staff": {

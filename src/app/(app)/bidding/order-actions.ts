@@ -95,6 +95,27 @@ export async function createDepartmentOrder(projectId: string, department: strin
 
   const isCreative = department === "CREATIVE";
   const outputRequest = isCreative ? null : toNullable(String(formData.get("outputRequest") ?? ""));
+  // K6-3: dòng vật dụng kho (chỉ OPE/PRO): sản phẩm phải tồn tại + đang hoạt động, SL nguyên > 0, không trùng sản phẩm.
+  let stockLines: { productId: string; quantity: number; note: string | null }[] = [];
+  if (department === "OPE" || department === "PRO") {
+    let raw: unknown = [];
+    try { raw = JSON.parse(String(formData.get("stockLinesJson") ?? "[]")); } catch { raw = []; }
+    if (Array.isArray(raw)) {
+      const seen = new Set<string>();
+      for (const l of raw) {
+        const productId = typeof l?.productId === "string" ? l.productId : "";
+        const quantity = Number(l?.quantity);
+        if (!productId || seen.has(productId) || !Number.isInteger(quantity) || quantity <= 0) continue;
+        seen.add(productId);
+        stockLines.push({ productId, quantity, note: toNullable(String(l?.note ?? "")) });
+      }
+      if (stockLines.length) {
+        const ok = await prisma.inventoryProduct.findMany({ where: { id: { in: stockLines.map((l) => l.productId) }, isActive: true }, select: { id: true } });
+        const okIds = new Set(ok.map((x) => x.id));
+        stockLines = stockLines.filter((l) => okIds.has(l.productId));
+      }
+    }
+  }
   const creativeItems = isCreative
     ? CREATIVE_OUTPUT_LABELS.filter((label) => formData.get(`creative_item_${label}`) === "on").map((label) => ({
         label,
@@ -122,6 +143,8 @@ export async function createDepartmentOrder(projectId: string, department: strin
     let created;
     if (existing) {
       await tx.projectOrderCreativeItem.deleteMany({ where: { orderId: existing.id } });
+      // Gửi lại order = thay TRỌN danh sách vật dụng (như creativeItems); đề xuất kho đã lập giữ nguyên vì neo dự án, không neo dòng order.
+      await tx.projectOrderStockLine.deleteMany({ where: { orderId: existing.id } });
       created = await tx.projectOrder.update({ where: { id: existing.id }, data: baseData });
     } else {
       created = await tx.projectOrder.create({ data: { projectId, department, ...baseData } });
@@ -129,6 +152,11 @@ export async function createDepartmentOrder(projectId: string, department: strin
     if (creativeItems.length > 0) {
       await tx.projectOrderCreativeItem.createMany({
         data: creativeItems.map((item) => ({ orderId: created.id, label: item.label, detail: item.detail })),
+      });
+    }
+    if (stockLines.length > 0) {
+      await tx.projectOrderStockLine.createMany({
+        data: stockLines.map((l, i) => ({ orderId: created.id, productId: l.productId, quantity: l.quantity, note: l.note, sort: i })),
       });
     }
     return created.id;

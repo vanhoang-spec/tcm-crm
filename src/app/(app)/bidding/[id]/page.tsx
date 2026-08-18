@@ -57,6 +57,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           acceptedBy: true,
           resultSentBy: true,
           creativeItems: true,
+          stockLines: { include: { product: { select: { code: true, name: true, unit: true } } }, orderBy: { sort: "asc" } },
           attendees: { include: { staff: true } },
         },
       },
@@ -262,6 +263,8 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
           : tCostsheet("pendingApproval");
   const lastRound = project.biddingRounds[project.biddingRounds.length - 1] ?? null;
 
+  // K6-3: danh mục sản phẩm kho để Account ghi vật dụng lên order OPE/PRO
+  const stockProducts = await prisma.inventoryProduct.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true, unit: true }, orderBy: { code: "asc" } });
   const orderData: OrderData[] = project.orders.map((o) => ({
     id: o.id,
     department: o.department,
@@ -281,6 +284,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
     resultSentAt: o.resultSentAt,
     resultSentByName: o.resultSentBy?.fullName ?? null,
     creativeItems: o.creativeItems.map((ci) => ({ label: ci.label, detail: ci.detail })),
+    stockLines: o.stockLines.map((sl) => ({ productCode: sl.product.code, productName: sl.product.name, unit: sl.product.unit, quantity: sl.quantity, note: sl.note })),
     attendeeNames: o.attendees.map((a) => a.staff.fullName),
   }));
   const suggestedTimelineDate = new Date(project.createdAt);
@@ -340,6 +344,7 @@ export default async function BiddingDetailPage({ params }: { params: Promise<{ 
         preselectedAttendeeIds={squadLeadIds}
         accountName={accountName}
         suggestedTimeline={suggestedTimeline}
+        products={stockProducts}
       />
 
       {/* Go/No-Go */}

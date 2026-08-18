@@ -34,6 +34,8 @@ export type RequestPickerItem = {
   boundTeamCode: string | null; // team Account của dự án sở hữu — người sẽ duyệt
 };
 export type GroupOption = { code: string; name: string };
+/** K6-3: dòng vật dụng từ Order — để OPS đề xuất đúng sản phẩm/số lượng Account cần */
+export type OrderLineHint = { productCode: string; productName: string; quantity: number; requested: number; issued: number };
 /** Bộ lọc chủ sở hữu trong picker — cùng thang với lotOwnerKind (lib/inventory-request.ts). */
 const OWNER_FILTERS = ["ALL", "TCM", "MINE", "OTHER_PROJECT", "CLIENT"] as const;
 export type WarehouseOption = { id: string; name: string };
@@ -58,6 +60,8 @@ export function RequestForm({
   purchaseOrders,
   reservedFree,
   groups = [],
+  initialProjectId,
+  orderLines = [],
 }: {
   kind: "ISSUE" | "INTAKE" | "RESERVE" | "TRANSFER" | "DESTROY";
   warehouses: WarehouseOption[];
@@ -68,6 +72,10 @@ export function RequestForm({
   reservedFree?: Record<string, number>;
   /** K6 smart search: danh sách nhóm gốc để lọc. */
   groups?: GroupOption[];
+  /** K6-3: dự án chọn sẵn (đến từ tab Vận hành/Sản xuất của dự án) */
+  initialProjectId?: string;
+  /** K6-3: vật dụng theo Order — bảng gợi ý phía trên, mỗi dòng có nút mở picker lọc sẵn theo mã sản phẩm */
+  orderLines?: OrderLineHint[];
 }) {
   const [state, formAction, pending] = useActionState<RequestFormState, FormData>(ACTION_BY_KIND[kind], {});
   const t = useTranslations("inventory.requests");
@@ -75,7 +83,7 @@ export function RequestForm({
 
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
   const [toWarehouseId, setToWarehouseId] = useState(kind === "TRANSFER" ? warehouses[1]?.id ?? "" : "");
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(initialProjectId ?? "");
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -260,6 +268,37 @@ export function RequestForm({
           {t("addLine")}
         </button>
       </div>
+
+      {kind === "ISSUE" && orderLines.length > 0 && (
+        <div className="rounded-xl border border-brand-200 bg-brand-50/40 p-3 text-xs dark:border-brand-900 dark:bg-brand-950/30">
+          <p className="font-semibold text-foreground">{t("orderHintTitle")}</p>
+          <p className="mb-2 text-[11px] text-muted-foreground">{t("orderHintDesc")}</p>
+          <ul className="space-y-1">
+            {orderLines.map((o) => {
+              const remaining = Math.max(0, o.quantity - o.requested - o.issued);
+              const pickedQty = lines.filter((l) => (itemById.get(l.itemId)?.productCode ?? "") === o.productCode).reduce((sum, l) => sum + l.quantity, 0);
+              return (
+                <li key={o.productCode} className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <span className="font-mono font-medium text-foreground">{o.productCode}</span> {o.productName} — {t("orderHintNeed", { need: o.quantity, remaining })}
+                    {pickedQty > 0 && <span className="text-success"> · {t("orderHintPicked", { n: pickedQty })}</span>}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch(o.productCode);
+                      setPickerOpen(true);
+                    }}
+                    className="h-7 rounded-lg border border-border-strong px-2 text-[11px] font-medium text-brand-600 hover:bg-surface-2"
+                  >
+                    {t("orderHintPick")}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {pickerOpen && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center" onClick={() => setPickerOpen(false)}>

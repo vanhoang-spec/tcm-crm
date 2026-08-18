@@ -1181,6 +1181,7 @@ model ProjectOrder {
   creativeItems   ProjectOrderCreativeItem[]
   items           ProjectOrderItem[]
   attendees       ProjectOrderAttendee[]
+  stockLines      ProjectOrderStockLine[] // K6-3: vật dụng kho cần dùng (order OPE/PRO)
   creativeTasks   CreativeTask[]
   departmentTasks DepartmentTask[]
   planningJob     PlanningJob?
@@ -1224,6 +1225,26 @@ model ProjectOrderItem {
 }
 
 /// Người được mời họp Brainstorm.
+/// K6-3 (18/08/2026): DÒNG VẬT DỤNG trên Order OPE/PRO — Account ghi SẢN PHẨM + SỐ LƯỢNG cần cho dự án; bộ phận nhận
+/// order thấy ngay tồn khả dụng theo chủ sở hữu và bấm "Đề xuất xuất kho" đúng số. Neo vào SẢN PHẨM (không phải lô):
+/// lúc order chưa biết sẽ lấy lô nào; lô chọn ở bước đề xuất. Không sinh DepartmentTask từ dòng này (khác ProjectOrderItem).
+model ProjectOrderStockLine {
+  id        String   @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int // số cần (>0)
+  note      String?
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  order   ProjectOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("project_order_stock_line")
+}
+
 model ProjectOrderAttendee {
   id      String @id @default(cuid())
   orderId String
@@ -2461,6 +2482,7 @@ model InventoryProduct {
 
   catNode InventoryCategory @relation("InventoryProductCatNode", fields: [catNodeId], references: [id])
   lots    InventoryItem[]   @relation("InventoryItemProduct")
+  orderLines ProjectOrderStockLine[]
 
   @@index([catNodeId])
   @@map("inventory_product")

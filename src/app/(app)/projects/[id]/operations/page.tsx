@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { toNum } from "@/lib/utils";
 import { getDepartmentTasks, getDepartmentStaffOptions, toDepartmentTaskBoardData } from "@/lib/department-tasks";
 import { DepartmentTaskBoard } from "../department-task-board";
+import { OrderStockLines } from "../order-stock-lines";
 import { OperationsPanel, type CtvBatchData } from "./operations-grid";
 import { requirePermission } from "@/lib/permissions";
 
@@ -103,6 +104,9 @@ export default async function ProjectOperationsPage({ params }: { params: Promis
         </div>
         <DepartmentTaskBoard projectId={id} department="OPE" tasks={deptTaskBoardData} staffOptions={deptStaffOptions} />
       </section>
+
+      {/* K6-3: vật dụng Account ghi trên Order → tồn khả dụng theo chủ sở hữu → đề xuất xuất kho */}
+      <OrderStockLines projectId={id} department="OPE" />
 
       <div>
         <h2 className="text-lg font-semibold text-foreground">{t("title")}</h2>

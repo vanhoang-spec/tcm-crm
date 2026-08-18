@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getDepartmentTasks, getDepartmentStaffOptions, toDepartmentTaskBoardData } from "@/lib/department-tasks";
 import { DepartmentTaskBoard } from "../department-task-board";
+import { OrderStockLines } from "../order-stock-lines";
 import { requirePermission } from "@/lib/permissions";
 
 export default async function ProjectProductionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,6 +27,8 @@ export default async function ProjectProductionPage({ params }: { params: Promis
         <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
       <DepartmentTaskBoard projectId={id} department="PRO" tasks={deptTaskBoardData} staffOptions={deptStaffOptions} />
+      {/* K6-3: vật dụng Account ghi trên Order → tồn khả dụng theo chủ sở hữu → đề xuất xuất kho */}
+      <OrderStockLines projectId={id} department="PRO" />
     </div>
   );
 }

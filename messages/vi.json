@@ -1269,7 +1269,8 @@
       "assignTeamDesc": "Dự án đang chờ BGĐ chọn team Account phụ trách.",
       "selectTeamToAssign": "— Chọn team —",
       "assignTeamSubmit": "Xác nhận giao team",
-      "mobileFullDetailNote": "Chi tiết toàn bộ master timeline/CO/CE có thể xem đầy đủ trên máy tính."
+      "mobileFullDetailNote": "Chi tiết toàn bộ master timeline/CO/CE có thể xem đầy đủ trên máy tính.",
+      "briefLinkMissing": "Chưa có link brief — bổ sung ở form sửa dự án."
     },
     "gonogo": {
       "title": "Go / No-Go",
@@ -1323,7 +1324,14 @@
       "accountFallback": "team Account phụ trách",
       "resultLinkPlaceholder": "Link Google Drive/OneDrive chứa kết quả...",
       "submitResult": "Gửi kết quả",
-      "resultSentBy": "Đã gửi kết quả bởi {name} · {date}"
+      "resultSentBy": "Đã gửi kết quả bởi {name} · {date}",
+      "stockLinesLabel": "Vật dụng cần dùng từ kho",
+      "stockLineProduct": "Chọn sản phẩm kho…",
+      "stockLineQty": "Số lượng",
+      "stockLineNote": "Ghi chú (kích thước, màu, thời điểm cần…)",
+      "stockLineRemove": "Bỏ dòng",
+      "stockLineAdd": "Thêm vật dụng",
+      "stockLinesHint": "Bộ phận nhận order sẽ thấy ngay tồn khả dụng theo chủ sở hữu và bấm đề xuất xuất kho đúng số này. Chưa có sản phẩm trong danh mục kho thì tạo ở Kho → Danh mục trước."
     },
     "costsheet": {
       "title": "CO/CE (CECO ctract)",
@@ -3354,7 +3362,12 @@
       "ownerProjectApprover": "Chủ hàng · người duyệt",
       "noPicApproveAny": "chưa gán PIC — nhóm duyệt mọi dự án",
       "confirmDestroyTitle": "Thủ kho chốt hủy",
-      "confirmDestroyHint": "Số thực hủy ≤ số Account đã duyệt từng dòng. Chốt xong sinh phiếu Xuất hủy và trừ tồn."
+      "confirmDestroyHint": "Số thực hủy ≤ số Account đã duyệt từng dòng. Chốt xong sinh phiếu Xuất hủy và trừ tồn.",
+      "orderHintTitle": "Vật dụng theo Order của Account",
+      "orderHintDesc": "Bấm \"Chọn lô\" để mở danh mục đã lọc sẵn theo sản phẩm; số cần lấy = cần − đã đề xuất − đã xuất.",
+      "orderHintNeed": "cần {need}, còn phải lấy {remaining}",
+      "orderHintPicked": "đang chọn {n}",
+      "orderHintPick": "Chọn lô"
     },
     "consumption": {
       "title": "Tiêu hao vật tư theo dự án",
@@ -3368,6 +3381,24 @@
       "colLost": "Mất / hỏng",
       "colOnSite": "Còn ở hiện trường",
       "colConsumed": "Tiêu hao thật"
+    },
+    "orderStock": {
+      "title": "Vật dụng theo Order",
+      "subtitle": "Account đã ghi sản phẩm + số lượng cần. Tồn khả dụng chia theo chủ sở hữu — hàng của dự án khác / hàng khách gửi vẫn xin được, team chủ duyệt.",
+      "requestFromOrder": "Đề xuất xuất kho theo order",
+      "colProduct": "Sản phẩm",
+      "colNeed": "Cần",
+      "colRequested": "Đã đề xuất",
+      "colIssued": "Đã xuất",
+      "colAvailable": "Tồn khả dụng theo chủ sở hữu",
+      "availTCM": "TCM chung: {n}",
+      "availMINE": "Của dự án này: {n}",
+      "availOTHER": "Dự án khác: {n}",
+      "availCLIENT": "Hàng khách gửi: {n}",
+      "availNone": "Không có tồn",
+      "shortfall": "thiếu {n} — cần mua thêm",
+      "ownerHint": "Đề xuất lấy hàng của dự án khác / hàng khách gửi sẽ tự tách phiếu và chuyển cho team Account chủ hàng duyệt từng dòng.",
+      "notExecutingYet": "Dự án chưa vào giai đoạn thực thi — chưa đề xuất xuất kho được (bảng để chuẩn bị trước)."
     }
   },
   "staff": {

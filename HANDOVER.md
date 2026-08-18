@@ -114,7 +114,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑤ | Nhân sự — chấm công | `/staff` | Xong (lịch tuần, chấm công, phép năm, xuất Excel) + **Tuyển dụng** (`/staff/recruit` — vị trí & JD gắn org chart, nhận CV, AI đọc CV điền hồ sơ, lịch phỏng vấn 3 vòng có xác nhận + file lịch .ics, phiếu chấm điểm, kho hồ sơ; xem mục 10.31) |
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
-| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 |
+| ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 · **K6 (18/08/2026):** dự án sở hữu cho mọi lô, đề xuất tách theo chủ + team Account CHỦ duyệt từng dòng 0..n, phản hồi OPS, cổng hủy hàng khách (DH), Order OPE/PRO mang sản phẩm + SL → tab Vận hành/Sản xuất thấy tồn theo chủ → đề xuất từ order — xem mục 10.41 |
 | — | Thu mua (PUR) | `/purchasing` | **XONG (PUR-1a + 1b, 16/08/2026)**: hồ sơ NCC theo 6 nhóm hàng + kho tài liệu HĐ/PO + lịch sử giá · RFQ từ dòng CO → 6 mẫu form → cổng NCC token / PUR nhập hộ / upload file + AI bóc → so sánh (số tính bằng code, AI nhận xét) → PUR chọn + lý do → trình Account → **Account chốt → ghi vào CO** (revision mới, chờ duyệt FIN-B) — xem mục 10.36 · **PUR-2**: hồ sơ NCC mở rộng (mã 3 ký tự, tên pháp nhân, N người liên hệ, trường tuỳ chỉnh khai ở `/settings/vendor-fields`) — mục 10.37 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 124 model Prisma · 72 migration · 85 file `src/lib` · 4188 key i18n × 2 ngôn ngữ · 145 mã quyền.
+**Quy mô:** 125 model Prisma · 74 migration · 86 file `src/lib` · 4255 key i18n × 2 ngôn ngữ · 145 mã quyền.
 
 ---
 
@@ -2080,6 +2080,82 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý):** cho đổi nhóm của sản phẩm (đã chốt luật "mã không đổi theo nhóm" để sau này thêm không
       phải bàn lại) · picker giữ chỗ K3 / màn hình đề xuất gộp theo sản phẩm (vẫn liệt kê theo lô, chỉ mã đổi) ·
       báo cáo tồn/tiêu hao gộp theo sản phẩm · gộp hai sản phẩm trùng · lịch sử giá theo sản phẩm.
+
+41. **KHO K6 — LIÊN KẾT ACCOUNT ↔ OPS: DUYỆT THEO CHỦ SỞ HỮU, DUYỆT TỪNG DÒNG, ORDER MANG SỐ LƯỢNG — 18/08/2026**
+    (2 migration VIẾT TAY additive: `20260818010000_k6_owner_approval` — cột FK `stock_request.ownerProjectId` +
+    `stock_request_line.approvedQuantity`; `20260818020000_order_stock_lines` — bảng MỚI `project_order_stock_line`;
+    **KHÔNG mã quyền mới**). Yêu cầu chủ dự án 18/08/2026 rà lại flow chart kho ở góc nhìn Account/OPS; 4 quyết
+    định chốt cùng ngày: (1) lúc mua/nhập phải gắn DỰ ÁN sở hữu (→ khách, → team Account); (2) team Account
+    SỞ HỮU item duyệt việc dùng; (3) đề xuất gom hàng nhiều chủ thì TỰ TÁCH; (4) Order mang số lượng — làm ngay.
+    - **Đo trước khi sửa (K2 đang chạy):** câu "ai được dùng hàng của người khác" trả lời bằng cách **CẤM**
+      (`errorBoundOtherProject` / `wrongClient` ở `createIssueRequest`), người duyệt luôn là PIC dự án **ĐANG XIN**,
+      duyệt cả phiếu hoặc không, duyệt xong **chỉ báo thủ kho không báo OPS**, hủy hàng khách chỉ cần quyền thủ kho,
+      OPS không thấy lô nào của ai trong picker, Order OPE/PRO là dòng việc chữ tự do (không có sản phẩm/SL).
+    - **`boundProjectId` nay = DỰ ÁN SỞ HỮU cho MỌI lô** (mua từ chi phí dự án đó / khách gửi cho dự án đó); trạng thái
+      P thêm nghĩa ĐỘC QUYỀN như cũ. Đây là widen ngữ nghĩa cột có sẵn, KHÔNG thêm cột: một lô chỉ có một dự án
+      sở hữu, và cột này đã nằm trong 6 thuộc tính định nghĩa lô (`resolveTargetLot` khớp theo nó) nên "bàn của
+      KUN" và "bàn chung" tự thành hai lô khác nhau. Form tạo lô: ô "Dự án sở hữu" LUÔN hiện, bắt buộc với hàng
+      khách gửi + P/C, **"Hàng chung TCM (chi phí công ty)" là lựa chọn tường minh** (giả định em nói trước với chủ
+      dự án: điểm 3 của anh nói "item nào mua từ chi phí dự án nào" ⇒ vẫn có item không mua từ dự án). Hàng khách gửi:
+      chọn dự án là ra khách (khách = khách của dự án), khai lệch bị chặn `errorProjectClientMismatch`. CSV thêm cột
+      **"Mã dự án"** sau "Mã KH" (15 cột), bỏ `STATUS_P_NOT_SUPPORTED` (P nay nhập được qua CSV vì có dự án).
+    - ⚠ **`lotOwnerKind` / `lotOwnerKey` (`lib/inventory-request.ts`) là MỘT nguồn sự thật cho cả NHÃN trong picker
+      lẫn ĐỊNH TUYẾN duyệt** — hai bên lệch nhau là OPS thấy một đằng, phiếu chạy một nẻo. Bốn loại: `TCM` (chung)
+      · `MINE` (của chính dự án xin) · `OTHER_PROJECT` (mua từ chi phí dự án khác — team chủ duyệt, "ưu tiên") ·
+      `CLIENT` (khách gửi — team chủ **quyết định cuối**, kể cả hủy). Picker đề xuất (`RequestPickerItem` +14 trường)
+      hiện nhãn `[TCM chung]` / `[Của dự án T013 · team A3 duyệt]` / `[Khách LO2 gửi · dự án T013 · team A3 quyết
+      định]` và 4 bộ lọc nhóm / trạng thái / tình trạng / chủ sở hữu ("smart search"); trang chi tiết đề xuất hiện
+      chủ sở hữu từng dòng + dòng "Chủ hàng · người duyệt: T013 (A3) — TRẦN THU HÀ".
+    - **Lập đề xuất TÁCH theo chủ ngay lúc lập** (`createIssueRequest`): khoá `""` = TCM chung + của chính dự án
+      xin (gộp chung — cùng người duyệt = PIC/Leader dự án xin, K2); khoá khác = id dự án chủ → phiếu riêng với
+      `ownerProjectId`, note `[Tách i/n theo chủ sở hữu]`, mã DX liên tiếp. Chặn cứng chỉ còn cho trạng thái P độc
+      quyền. Báo đúng người duyệt: PIC + Leader dự án chủ → không có thì TRƯỞNG TEAM (`Team.leadStaffId`, PLN-1 —
+      `approverStaffIds`) → không có nữa thì `approve_any`. `canApproveIssue` nhận thêm `ownerTeam.leadStaffId`.
+      ⚠ RESERVE (K3, Account giữ chỗ cho dự án mình) VẪN chặn hàng của chủ khác — cho giữ chỗ chéo mà người duyệt
+      là Kế toán/HR (không phải chủ) là đi vòng qua chủ hàng.
+    - **Duyệt TỪNG DÒNG 0..n** (`StockRequestLine.approvedQuantity`; null = phiếu trước K6 → `effectiveApproved` =
+      số đề xuất): form duyệt có ô số từng dòng, hạ dưới đề xuất là ô lý do hiện ra + nút đổi "Duyệt theo số đã
+      nhập", 0 hết là nút đỏ "Xác nhận từ chối"; server (`parseApprovedQuantities` + `approvalOutcome`) chặn dưới
+      đề xuất không lý do, 0 hết → `REJECTED`. ⚠ **Mọi phép tính khả dụng dùng SỐ ĐÃ DUYỆT**: `approvedNotIssuedByItem`,
+      `reserveFreeByItem`, `load.ts` — duyệt 3/5 chỉ giữ 3, không phải 5. Thủ kho chốt ≤ số duyệt (`confirmIssueRequest`
+      cap = `effectiveApproved`). Trang chi tiết hiện badge "Duyệt 3/5" / "Duyệt đủ" / "Từ chối" từng dòng.
+    - **Phản hồi về OPS** sau duyệt: title "được duyệt đủ / được duyệt MỘT PHẦN (chủ hàng: T013) / bị từ chối" + body
+      liệt kê `mã: duyệt/đề xuất` từng dòng + lý do; thủ kho chỉ được báo khi còn gì để xuất và body mang đúng số duyệt.
+    - **Cổng hủy hàng khách gửi — loại đề xuất mới `DESTROY` (mã DH)**: thủ kho lập (`inventory.destroy`, picker CHỈ
+      hàng khách, KHÔNG lọc hết hạn vì hủy là đường ra của hàng hết hạn, lý do bắt buộc) → team Account chủ duyệt
+      từng dòng → thủ kho chốt ≤ số duyệt → phiếu XH + trừ tồn. `createDestroyDoc` (hủy thẳng) **chặn** lô có
+      `ownerClientId` (`errorClientLotNeedsRequest`). Hàng TCM (kể cả mua từ chi phí dự án) thủ kho vẫn hủy thẳng.
+    - **K6-3 Order mang số lượng:** `ProjectOrderStockLine` (orderId, productId, quantity, note, sort) — neo vào SẢN
+      PHẨM chứ không phải lô (lúc order chưa biết lấy lô nào; lô chọn ở bước đề xuất). Form order OPE/PRO ở `/bidding/[id]`
+      thêm khối "Vật dụng cần dùng từ kho" (SearchableSelect sản phẩm + SL + ghi chú → `stockLinesJson`; gửi lại order
+      = thay trọn danh sách như creativeItems; đề xuất đã lập giữ nguyên vì neo dự án). Card order hiện danh sách.
+      Tab **Vận hành (OPE)** / **Sản xuất (PRO)** của dự án thêm khối `OrderStockLines`: từng dòng → Cần · Đã đề xuất ·
+      Đã xuất · **Tồn khả dụng theo chủ** (`getOrderStockLines` ở `lib/inventory-order.ts` dùng CHÍNH
+      `loadRequestFormData("ISSUE")` — cùng nguồn với picker, để số bộ phận nhìn ở đây bằng đúng số họ thấy khi bấm
+      đề xuất) · cảnh "thiếu N — cần mua thêm". Nút **"Đề xuất xuất kho theo order"** → `/inventory/requests/new/issue?
+      projectId&orderId`: form chọn sẵn dự án + bảng "Vật dụng theo Order" (cần / còn phải lấy / đang chọn realtime),
+      mỗi dòng nút "Chọn lô" mở picker với ô tìm điền sẵn mã sản phẩm. ⚠ Dự án chưa THỰC THI thì bảng vẫn hiện
+      (chuẩn bị trước) nhưng nút ẩn, thay bằng câu "chưa vào giai đoạn thực thi" — luật K2 ở `createIssueRequest`.
+    - **Verify (browser + DB, dev.db):** picker 3 loại nhãn + lọc đúng từng loại · 1 đề xuất 3 lô 3 chủ (T002 xin) →
+      **tách 2 phiếu**: DX-001 bàn TCM chung → PIC/Leader T002 (Phước + Yến); DX-002 ghế (của T013) **+** sữa KUN (khách
+      của T013) đi CHUNG vì cùng chủ T013 → báo đúng **TRẦN THU HÀ (A3)** · trang chi tiết "Chủ hàng · người duyệt:
+      T013 (A3) — TRẦN THU HÀ" · hạ ghế 5→3: ô lý do hiện, gửi không lý do bị server chặn và **số còn nguyên**; có
+      lý do → APPROVED, ghế 3/5 sữa 20/20, OPS nhận "duyệt MỘT PHẦN (chủ hàng: T013) — PO-0002.01: 3/5 · KG-0001.01:
+      20/20 — lý do", thủ kho nhận "chờ soạn hàng" đúng số · khả dụng ghế **8 − 3 = 5** (không phải 8 − 5) · thủ kho
+      nhét 4 > 3 bị chặn; chốt 3/20 → XE-2608-001, tồn 5/30, holding T002 3/20 · DX-001 nhập 0 → nút "Xác nhận từ
+      chối", REJECTED + lý do về OPS · hủy thẳng KG-0001.01 ở phiếu XH bị chặn đích danh → DH-2608-001 định tuyến
+      T013/A3 → duyệt 10 → thủ kho chốt → XH-2608-001, tồn 30 − 10 = 20 · Order OPE T005 ghi "PO-0001 × 12 — Bàn
+      cho khu check-in" → tab Vận hành: Cần 12 · TCM chung 10 · Dự án khác 12 (4 T002 + 8 T013) · dự án đấu thầu →
+      nút ẩn đúng · T002 (thực thi) → form prefill T002, "cần 9, còn phải lấy 9", bấm "Chọn lô" → picker điền `PO-0001`,
+      3 lô đúng 3 nhãn theo vai T002, chọn .02 ×4 → "đang chọn 4". tsc · eslint · build · i18n **0/0 (4255 key)** ·
+      `migrate diff` rỗng · seed lần 2 no-op. Dữ liệu test dọn sạch (0 SP / 0 lô / 0 đề xuất / 0 dòng order kho, 19 node).
+    - **Sửa kèm (lỗi CÓ SẴN từ commit gốc 25/07):** `bidding.detail.briefLinkMissing` thiếu key i18n — trang bidding
+      của dự án chưa có brief link ném MISSING_MESSAGE. Đã thêm vi/en.
+    - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** duyệt hủy cho hàng TCM mua từ chi phí dự án (chỉ hàng khách
+      qua cổng DH — đúng câu chốt) · siết `inventory.item.manage` / `import_csv` / `transfer.*` đang mở 21/21 nhóm
+      quyền (chính sách BGĐ, xem 10.11 nợ) · giữ chỗ K3 gộp theo sản phẩm · gợi ý tự chia lô theo số cần khi bấm
+      "Chọn lô" (hiện OPS tự chọn từng lô) · Order PCC/PLANNING mang vật dụng (chỉ OPE/PRO — hai bộ phận nhận hàng
+      vật lý) · nhắc người duyệt qua notification định kỳ khi phiếu treo lâu.
 
 ---
 

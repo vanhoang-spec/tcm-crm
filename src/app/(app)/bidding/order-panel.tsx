@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { DateField } from "@/components/ui/date-field";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatDateTime } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { acceptOrder, createBrainstormOrder, createDepartmentOrder, submitOrderResult } from "./order-actions";
@@ -37,6 +38,8 @@ export type OrderData = {
   resultSentByName: string | null;
   creativeItems: { label: string; detail: string | null }[];
   attendeeNames: string[];
+  /** K6-3: vật dụng kho cần dùng (order OPE/PRO) — sản phẩm + số lượng */
+  stockLines: { productCode: string; productName: string; unit: string | null; quantity: number; note: string | null }[];
 };
 
 export function OrderPanel({
@@ -47,6 +50,7 @@ export function OrderPanel({
   preselectedAttendeeIds,
   accountName,
   suggestedTimeline,
+  products = [],
 }: {
   projectId: string;
   briefLinkUrl: string;
@@ -56,6 +60,8 @@ export function OrderPanel({
   preselectedAttendeeIds?: string[];
   accountName: string;
   suggestedTimeline: string; // yyyy-mm-dd
+  /** K6-3: danh mục SẢN PHẨM kho để Account ghi vật dụng cần dùng lên order OPE/PRO */
+  products?: { id: string; code: string; name: string; unit: string | null }[];
 }) {
   const t = useTranslations("bidding.order");
   const locale = useLocale() as Locale;
@@ -108,6 +114,7 @@ export function OrderPanel({
                     isCreative={d.code === "CREATIVE"}
                     briefLinkUrl={briefLinkUrl}
                     suggestedTimeline={suggestedTimeline}
+                    products={products}
                     t={t}
                   />
                 )
@@ -170,6 +177,7 @@ function DepartmentForm({
   isCreative,
   briefLinkUrl,
   suggestedTimeline,
+  products,
   t,
 }: {
   projectId: string;
@@ -177,10 +185,16 @@ function DepartmentForm({
   isCreative: boolean;
   briefLinkUrl: string;
   suggestedTimeline: string;
+  products: { id: string; code: string; name: string; unit: string | null }[];
   t: (key: string) => string;
 }) {
   const bound = createDepartmentOrder.bind(null, projectId, department);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  // K6-3: vật dụng kho cần dùng — chỉ order OPE/PRO (bộ phận nhận hàng vật lý). Sản phẩm + SL + ghi chú → stockLinesJson.
+  const canStock = department === "OPE" || department === "PRO";
+  const [stockLines, setStockLines] = useState<{ productId: string; quantity: number; note: string }[]>([]);
+  const patchLine = (i: number, patch: Partial<{ productId: string; quantity: number; note: string }>) =>
+    setStockLines((prev) => prev.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
   return (
     <form action={bound} className="mt-3 space-y-2">
@@ -226,6 +240,33 @@ function DepartmentForm({
       <Field label={t("desiredTimeline")}>
         <DateField name="desiredTimeline" defaultValue={suggestedTimeline} className={inputClass} />
       </Field>
+      {canStock && (
+        <Field label={t("stockLinesLabel")}>
+          <input type="hidden" name="stockLinesJson" value={JSON.stringify(stockLines.filter((l) => l.productId && l.quantity > 0))} />
+          <div className="space-y-1.5">
+            {stockLines.map((l, i) => (
+              <div key={i} className="grid grid-cols-1 gap-1.5 sm:grid-cols-[1fr_88px_1fr_28px]">
+                <SearchableSelect
+                  value={l.productId}
+                  onChange={(v) => patchLine(i, { productId: v })}
+                  options={products.map((pr) => ({ value: pr.id, label: `${pr.code} — ${pr.name}${pr.unit ? ` (${pr.unit})` : ""}` }))}
+                  placeholder={t("stockLineProduct")}
+                  className="text-xs"
+                />
+                <input type="number" min={1} value={l.quantity} onChange={(e) => patchLine(i, { quantity: Number(e.target.value) })} aria-label={t("stockLineQty")} className={inputClass} />
+                <input value={l.note} onChange={(e) => patchLine(i, { note: e.target.value })} placeholder={t("stockLineNote")} className={inputClass} />
+                <button type="button" onClick={() => setStockLines((prev) => prev.filter((_, j) => j !== i))} aria-label={t("stockLineRemove")} className="h-9 rounded-lg border border-border-strong text-xs text-muted-foreground hover:bg-surface-2">
+                  ×
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setStockLines((prev) => [...prev, { productId: "", quantity: 1, note: "" }])} className="h-8 rounded-lg border border-dashed border-border-strong px-3 text-xs font-medium text-brand-600 hover:bg-surface-2">
+              + {t("stockLineAdd")}
+            </button>
+            <p className="text-[11px] text-muted-foreground">{t("stockLinesHint")}</p>
+          </div>
+        </Field>
+      )}
       <button type="submit" className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-medium text-white hover:bg-brand-600">
         {t("submit")}
       </button>
@@ -292,6 +333,18 @@ function DepartmentCard({
             </li>
           ))}
         </ul>
+      )}
+      {order.stockLines.length > 0 && (
+        <div>
+          <p className="font-medium text-foreground">{t("stockLinesLabel")}</p>
+          <ul className="list-inside list-disc text-muted-foreground">
+            {order.stockLines.map((sl, i) => (
+              <li key={i}>
+                <span className="font-mono">{sl.productCode}</span> {sl.productName} × {sl.quantity}{sl.unit ? ` ${sl.unit}` : ""}{sl.note ? ` — ${sl.note}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {order.desiredTimeline && <p className="text-muted-foreground">{t("desiredTimeline")}: {formatDateTime(order.desiredTimeline, locale)}</p>}
       <p className="text-muted-foreground">{t("sentBy", { name: order.sentByName ?? "—", date: formatDateTime(order.sentAt, locale) })}</p>

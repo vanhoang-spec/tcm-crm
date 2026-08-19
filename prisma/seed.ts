@@ -892,10 +892,11 @@ async function main() {
   );
   const projSeed = [
     { code: "T001DHG26A1", name: "Roadshow DHG Q3", clientCode: "DHG", teamId: a1.id as string | null, ownerId: thao.id, status: "BIDDING", complexity: "COMPLEX", type: "CAMPAIGN", goNogo: "GO" as string | null },
-    // ⚠ MÃ dự án giữ nguyên "…26A2" dù team nay là A3: mã là KHOÁ TRA CỨU (findUnique theo code, dùng
-    // lại ~20 chỗ phía dưới). Đổi mã là seed không thấy dự án cũ trên production → tạo thêm một dự án
-    // mẫu TRÙNG. Team đổi sang A3 vì A2 đã trống sau đợt nghỉ việc 8/2026.
-    { code: "T002DIA26A2", name: "Activation Diageo Tết", clientCode: "DIA", teamId: a3.id as string | null, ownerId: yen.id, status: "PROCESSING", complexity: "SIMPLE", type: "CAMPAIGN", goNogo: null },
+    // ⚠ T002DIA26A2 "Activation Diageo Tết" ĐÃ GỠ (quyết định chủ dự án 19/08/2026): đó là dự án MẪU, đã xoá
+    // khỏi production. Seed tạo dự án theo code với "chưa có thì tạo", nên để lại dòng khai báo là mỗi lần
+    // deploy nó SỐNG LẠI cùng ~70 bản ghi con. Các khối demo phía dưới (Project Team + timeline + order +
+    // task + tài chính + CTV) đều đã gác bằng `if (projT002)` / `if (pmProject)` nên tự bỏ qua — giữ nguyên
+    // để sau này muốn dựng lại bộ dữ liệu demo thì chỉ cần thêm lại đúng MỘT dòng ở mảng này.
     { code: "T003LOF26A3", name: "Hội nghị khách hàng LOF", clientCode: "LOF", teamId: a3.id as string | null, ownerId: ha.id, status: "BIDDING", complexity: "COMPLEX", type: "EVENT", goNogo: "PENDING" },
     { code: "T004CTL26A1", name: "Ra mắt sản phẩm Castrol", clientCode: "CTL", teamId: null as string | null, ownerId: thao.id, status: "BIDDING", complexity: "SIMPLE", type: "EVENT", goNogo: null },
   ];

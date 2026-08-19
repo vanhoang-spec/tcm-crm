@@ -1678,6 +1678,8 @@
       "backToList": "Quay lại danh sách",
       "clientLabel": "Khách hàng",
       "ownerLabel": "Project Owner",
+      "missingLegalDoc": "Chưa có hợp đồng / PO / confirm email — cần bổ sung GẤP. Dự án đang chạy trên cơ sở khách đã xác nhận miệng.",
+      "missingLegalDocAction": "Bổ sung chứng từ",
       "leaderLabel": "Project Leader",
       "rolesTitle": "Phân vai dự án",
       "rolesDesc": "Owner (Account cấp trên) duyệt · Leader (Account) chạy timeline hằng ngày.",

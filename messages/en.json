@@ -1678,6 +1678,8 @@
       "backToList": "Back to list",
       "clientLabel": "Client",
       "ownerLabel": "Project Owner",
+      "missingLegalDoc": "No contract / PO / email confirmation yet — add one URGENTLY. This project is running on a verbal client go-ahead.",
+      "missingLegalDocAction": "Add documents",
       "leaderLabel": "Project Leader",
       "rolesTitle": "Project roles",
       "rolesDesc": "Owner (senior Account) approves · Leader (Account) runs the daily timeline.",

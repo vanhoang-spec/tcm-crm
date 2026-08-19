@@ -147,7 +147,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 1. Margin gate 31% + override có lý do.
 2. Chi hộ ngoài margin.
 3. Mọi thứ mới phải cộng vào `coTotal` hoặc chỉ tác động lúc suy ra `ceTotal` — **không tạo hệ thống tổng tiền song song**.
-4. Chặn Finished nếu **chưa phát hành hóa đơn nào** (`ClientInvoice`) — đã thực thi trong `markFinished`. Chỉ đòi ĐÃ PHÁT HÀNH, không đòi thu đủ (khoản giữ lại bảo hành 5–10% là bình thường). Phần "CECO Liquid" (`CostSheet.version="LIQUID"`) vẫn **chưa lập trình** — hiện dùng con trỏ `sentToLiquidationRevisionId` làm mốc đối chiếu. Chặn chuyển Processing nếu thiếu confirm email/PO/HĐ.
+4. Chặn Finished nếu **chưa phát hành hóa đơn nào** (`ClientInvoice`) — đã thực thi trong `markFinished`. Chỉ đòi ĐÃ PHÁT HÀNH, không đòi thu đủ (khoản giữ lại bảo hành 5–10% là bình thường). Phần "CECO Liquid" (`CostSheet.version="LIQUID"`) vẫn **chưa lập trình** — hiện dùng con trỏ `sentToLiquidationRevisionId` làm mốc đối chiếu. ⚠ **KHÔNG còn chặn chuyển Processing khi thiếu confirm email/PO/HĐ** (đổi 19/08/2026, quyết định chủ dự án — xem mục 10.43): khách confirm để chạy song song trong lúc giấy tờ đang làm là ca có thật, chặn cứng thì cả dự án nằm ngoài app. Nay CHO chuyển, đổi lại dự án mang băng cảnh báo vàng ở đầu trang cho tới khi bổ sung. Cổng **hồ sơ khách chưa đủ** (MST/địa chỉ/TK NH/ngành/phân loại) thì GIỮ NGUYÊN chặn.
    - Hóa đơn có MỘT nguồn sự thật là `ClientInvoice`, phát hành ở tab Nghiệm thu (`createLiquidationInvoice`) với trần = CE + Chi hộ của bản đã chuyển nghiệm thu. Cặp ô `Contract.invoiceNo/invoiceDate` cũ đã bỏ khỏi UI (cột còn trong DB, không ai đọc/ghi).
 
 ### Từ vựng
@@ -2255,6 +2255,59 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       `inventory.view` (action đòi mạnh hơn — điền xong mới bị chặn), nút lập phiếu ở danh sách phiếu chưa gate theo
       quyền, 3 action CH chỉ gác `request.create` không kiểm thành viên dự án · RESERVE vẫn chặn cứng hàng chủ khác (cố
       ý, K6).
+
+43. **KHÁCH HÀNG + DỰ ÁN — 3 việc nhập liệu hằng ngày (19/08/2026)** (KHÔNG migration, KHÔNG mã quyền mới).
+    - **Xoá người liên hệ phía khách** (`removeContact`, nút thùng rác trên trang chi tiết khách): xoá CỨNG
+      theo đúng yêu cầu chủ dự án — Contact là danh bạ đầu mối ĐANG DÙNG, để người đã nghỉ nằm lại là gửi
+      nhầm thư / gọi nhầm số. Lịch sử giữ bằng **ảnh chụp trong AuditLog** (tên, chức danh, ĐT, email,
+      isPrimary, số link cổng khách) — cùng cách đã làm khi xoá nhân sự nghỉ việc (mục 10.18).
+      ⚠ Kiểm liên hệ **thuộc đúng khách đang mở** rồi mới xoá; đã verify bằng payload giả mạo (nhét id
+      liên hệ của khách AHP vào form khách DHG → server từ chối, liên hệ AHP còn nguyên).
+      ⚠ Xoá người đang là **đầu mối chính** thì tự đẩy người còn lại (cũ nhất) lên làm chính — không để
+      khách có liên hệ mà không ai là đầu mối. `GuestInvite.contactId` là quan hệ TUỲ CHỌN nên Prisma
+      SET NULL: link cổng khách đã phát vẫn còn nguyên token + lịch sử, chỉ mất con trỏ tới người.
+    - **Form TẠO MỚI không mất dữ liệu khi thiếu ô**: `ProjectFormState` trước đây chỉ có
+      `error`/`fieldErrors` — không có vòng trả ngược `values` như `ClientFormState` — nên **mỗi lần
+      validate trượt là mất sạch 13 ô**. Nay đã có `values` + `keep()` (khuôn form khách).
+      ⚠ Kèm hai bẫy riêng của repo: chặn `form.reset()` của React 19 bằng `onReset preventDefault`
+      (không thì `<select>`/radio bị xoá dù ô chữ còn — mục 10.37) và ép `DateField` dựng lại bằng
+      `key` (nó giữ giá trị ở state NỘI BỘ — mục 10.31).
+    - **NHÁP TỰ LƯU** cho `/clients/new` + `/bidding/new` (`components/ui/form-draft.tsx`): gõ tới đâu
+      lưu tới đó (gộp 600ms), mở lại thấy băng "có bản nháp lúc HH:MM" → Khôi phục / Bỏ. Khôi phục ép
+      remount form bằng `key` (input không kiểm soát chỉ nhận `defaultValue` mới khi remount) và dựng
+      lại **đúng số dòng người liên hệ** (nháp 3 người thì hiện 3 dòng). Validate trượt cũng lưu nháp
+      ngay từ `state.values` — đóng tab luôn vẫn còn. Nháp tự hết hạn sau 7 ngày.
+      ⚠ Đọc localStorage qua `useSyncExternalStore` (khuôn `notification-poller.tsx`) để server luôn
+      snapshot "không có nháp" → không lệch hydration. ⚠ Băng **tự tắt khi người dùng bắt đầu gõ**: không
+      có bước đó thì chính nháp mình vừa lưu bật băng lên giữa lúc đang nhập (bắt được lúc verify).
+      ⚠ **ĐÁNH ĐỔI: nháp theo MÁY + TRÌNH DUYỆT.** Đổi máy / đổi trình duyệt / xoá dữ liệu duyệt web là
+      mất nháp. Chọn localStorage để không phải thêm bảng + migration cho dữ liệu dở dang chưa qua
+      validate. Muốn nháp đi theo tài khoản thì phải làm ở server — việc riêng, chưa làm.
+    - **Verify** (browser thật, dev.db): xoá đầu mối chính → người còn lại tự lên chính, audit đủ trường,
+      giả mạo id khách khác bị chặn · form dự án submit thiếu khách + brief ⇒ **0/7 trường bị mất** (kể cả
+      3 select + radio) · form khách submit thiếu MST ⇒ 0 trường bị mất, giữ nguyên **2 dòng liên hệ** ·
+      khôi phục nháp đúng cả select/radio và 2 dòng liên hệ 8 ô. tsc · eslint · i18n 0/0 · build sạch.
+
+44. **DỰ ÁN — BỎ CHẶN "THIẾU HỢP ĐỒNG/PO" KHI VÀO THỰC THI, THAY BẰNG BĂNG CẢNH BÁO (19/08/2026)**
+    (KHÔNG migration, KHÔNG mã quyền mới). **ĐỔI BẤT BIẾN ở mục 6** — quyết định chủ dự án: có khách
+    confirm (miệng/họp) để chạy song song trong lúc hợp đồng và PO còn đang làm; chặn cứng khiến cả dự án
+    nằm ngoài app cho tới khi có giấy, nên OPS/PUR/kho không dùng được gì.
+    - `moveToProcessing` **bỏ** guard `hasLegalDoc` (confirm email ‖ PO ‖ HĐ đã ký). Thay vào đó ghi
+      **AuditLog** đích danh: `"move to processing — CHƯA có confirm email/PO/HĐ, cần bổ sung"` — vẫn
+      truy được dự án nào đã vào thực thi bằng đường này.
+    - ⚠ **Cổng HỒ SƠ KHÁCH giữ nguyên chặn** (MST/địa chỉ/TK NH/ngành/phân loại — `lib/client-profile.ts`):
+      đó là điều kiện để XUẤT HOÁ ĐƠN được, khác hẳn chuyện đã có hợp đồng hay chưa. Đừng gộp hai cổng.
+    - **Băng cảnh báo vàng** ở `projects/[id]/layout.tsx` nên hiện trên **mọi tab** của dự án, kèm link
+      sang `/bidding/[id]` để bổ sung. Hàm thuần `hasLegalDoc()` ở `lib/bidding.ts` là MỘT nguồn sự
+      thật cho cả action lẫn băng.
+    - ⚠ **Điều kiện hiện băng xét theo TRẠNG THÁI, KHÔNG theo `processingAt`**: dự án nhập liệu thẳng vào
+      Đang triển khai (T013, T025) có `processingAt = null` mà vẫn cần nhắc. Hiện với mọi trạng thái
+      ngoài BIDDING / PENDING / FAILED / CANCELED (thua thầu hay khách huỷ thì chẳng còn gì để bổ sung).
+    - **Verify** (browser, dev.db): T010 (khách DHG hồ sơ đủ, KHÔNG hợp đồng) bấm "Chuyển Đang triển khai"
+      ⇒ **qua**, status PROCESSING, audit ghi đúng lý do · băng vàng hiện ở tab Tổng quan LẪN tab Timeline ·
+      thêm PO cho dự án ⇒ băng **tự tắt** · dự án còn đấu thầu ⇒ **không** hiện băng. Dữ liệu test đã hoàn tác.
+    - **CHƯA LÀM (cố ý):** đưa dự án thiếu chứng từ vào `/reminders` hoặc bắn notification định kỳ (mới có
+      băng trên trang dự án — chủ dự án chỉ yêu cầu dòng nhắc) · chặn phát hành hoá đơn khi chưa có HĐ/PO.
 
 ---
 

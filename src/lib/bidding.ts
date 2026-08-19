@@ -597,6 +597,18 @@ export type BiddingFunnel = {
  * cộng WON nếu có; KHÔNG tính BIDDING/PENDING (chưa có kết quả) và CANCELED (khách huỷ, không
  * phải thua thầu — gộp vào là tỷ lệ thua bị thổi lên).
  */
+/**
+ * Chứng từ pháp lý tối thiểu của một dự án: confirm email HOẶC số PO HOẶC hợp đồng đã ký.
+ *
+ * ⚠ ĐỔI LUẬT 19/08/2026 (quyết định chủ dự án): trước đây thiếu cả ba thì CHẶN chuyển sang Đang triển
+ * khai (FR-04, HANDOVER §6). Thực tế có khách confirm miệng/họp để chạy song song trong lúc hợp đồng
+ * và PO còn đang làm — chặn cứng khiến cả dự án nằm ngoài app cho tới khi có giấy. Nay CHO chuyển,
+ * đổi lại dự án mang BĂNG CẢNH BÁO vàng ở đầu trang cho tới khi bổ sung đủ.
+ */
+export function hasLegalDoc(contract: { confirmEmailAt: Date | null; poNo: string | null; signed: boolean } | null): boolean {
+  return !!(contract?.confirmEmailAt || contract?.poNo?.trim() || contract?.signed);
+}
+
 export function computeBiddingFunnel(rows: PitchOutcomeInput[]): BiddingFunnel {
   const WON_CODES = new Set(["WON", "PROCESSING", "LIQUIDATION", "HANDOVER", "FINISHED"]);
   let won = 0;

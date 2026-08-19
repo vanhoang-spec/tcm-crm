@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit, toNum } from "@/lib/utils";
 import { getNumberSetting } from "@/lib/settings";
-import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, isRevisionKind, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH, computeCeAggregates, sheetHasLineCe, type CeSectionInput } from "@/lib/bidding";
+import { computeMarginPct, computeCostSheetTotals, computeLineAmount, flattenSectionTree, generateProjectCode, assignItemCodes, hasLegalDoc, isRevisionKind, DEFAULT_COST_PREFIX, MAX_SECTION_DEPTH, computeCeAggregates, sheetHasLineCe, type CeSectionInput } from "@/lib/bidding";
 import { getStatusId } from "@/lib/project-status";
 import { syncFinanceCostLines, syncIfApproved } from "@/lib/finance";
 import { lockCreativeTasksForProject } from "@/lib/creative";
@@ -1023,8 +1023,10 @@ export async function moveToProcessing(
   // Chỉ chuyển Processing từ trạng thái bid-phase — không "hồi sinh" dự án đã THUA/HỦY/kết thúc dù có chứng từ.
   if (!["BIDDING", "PENDING"].includes(project.status.code)) return { error: "invalid status" };
 
-  const hasLegalDoc = !!(contract?.confirmEmailAt || contract?.poNo || contract?.signed);
-  if (!hasLegalDoc) return { error: t("blockedFr04") };
+  // ⚠ 19/08/2026: KHÔNG còn chặn khi thiếu confirm email/PO/HĐ (quyết định chủ dự án — khách confirm
+  // để chạy song song trong lúc giấy tờ đang làm). Ghi vào audit để còn truy được dự án nào vào thực
+  // thi bằng đường này; băng cảnh báo vàng ở đầu dự án nhắc bổ sung (projects/[id]/layout.tsx).
+  const missingLegalDoc = !hasLegalDoc(contract);
 
   // Chặn ký hợp đồng thật khi hồ sơ khách hàng còn thiếu (MST/địa chỉ/TK NH/ngành hàng/phân loại) —
   // thường gặp với khách import từ danh sách cũ chưa được Account bổ sung đầy đủ (xem lib/client-profile.ts).
@@ -1034,7 +1036,14 @@ export async function moveToProcessing(
   }
 
   await prisma.project.update({ where: { id: projectId }, data: { statusId: processingId, processingAt: new Date() } });
-  await audit(projectId, "status", project.status.code, "PROCESSING", staffId, "move to processing");
+  await audit(
+    projectId,
+    "status",
+    project.status.code,
+    "PROCESSING",
+    staffId,
+    missingLegalDoc ? "move to processing — CHƯA có confirm email/PO/HĐ, cần bổ sung" : "move to processing",
+  );
 
   // Dựng dòng chi phí khi vào thực thi — NHƯNG từ FIN-B chỉ khi bảng CO đã DUYỆT và bản duyệt là
   // bản sống (syncIfApproved). Bảng chưa duyệt thì dự án vào thực thi với 0 trần chi là ĐÚNG THIẾT

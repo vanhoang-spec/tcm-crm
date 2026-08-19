@@ -4,6 +4,9 @@
     "description": "CRM + Project + Cost Control for TCM Targeted Marketing"
   },
   "common": {
+    "draftFound": "An unfinished draft from {time} is saved on this device.",
+    "draftRestore": "Restore draft",
+    "draftDiscard": "Discard draft",
     "save": "Save",
     "saving": "Saving...",
     "cancel": "Cancel",
@@ -218,6 +221,9 @@
       "saveContact": "Save contact",
       "maxContactsReached": "Maximum of {max} contacts reached.",
       "noContacts": "No contacts yet.",
+      "removeContact": "Remove contact",
+      "removeContactConfirm": "Remove {name} from this client's contact list? This cannot be undone (the change log keeps a snapshot).",
+      "removeContactNotFound": "That contact does not belong to the client you have open.",
       "projectHistoryTitle": "Project history",
       "projectHistoryPending": "Will appear once module ③ Project Management is complete.",
       "financeTitle": "Receivables & margin by client",

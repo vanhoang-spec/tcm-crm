@@ -46,6 +46,7 @@ export default async function NewClientPage() {
         <ClientForm
           action={createClient}
           mode="create"
+        draftKey="client-new"
           teams={teams.map((tm) => ({ id: tm.id, label: `${tm.code} — ${tm.name}` }))}
           industries={(industrySet?.items ?? []).map((i) => ({ id: i.id, label: pickLabel(i, locale) }))}
           statuses={(statusSet?.items ?? []).map((i) => ({ id: i.id, label: pickLabel(i, locale) }))}

@@ -10,6 +10,7 @@ import type { Locale } from "@/i18n/locales";
 import { addCareNote, addContact, assignClientGroup, setClientQuoteTemplate, transferClientAction } from "../actions";
 import { QUOTE_TEMPLATES } from "@/lib/quote-templates";
 import { MAX_CONTACTS } from "@/lib/validators/client";
+import { RemoveContactButton } from "./remove-contact-button";
 import { getMissingClientProfileFields } from "@/lib/client-profile";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 
@@ -203,6 +204,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       )}
                     </div>
                   </div>
+                  <RemoveContactButton clientId={client.id} contactId={c.id} name={c.name} />
                 </li>
               ))}
               {client.contacts.length === 0 && (

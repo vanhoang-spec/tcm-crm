@@ -4,6 +4,9 @@
     "description": "CRM + Project + Cost Control cho TCM Targeted Marketing"
   },
   "common": {
+    "draftFound": "Có bản nháp bạn nhập dở lúc {time} trên máy này.",
+    "draftRestore": "Khôi phục bản nháp",
+    "draftDiscard": "Bỏ nháp",
     "save": "Lưu",
     "saving": "Đang lưu...",
     "cancel": "Hủy",
@@ -218,6 +221,9 @@
       "saveContact": "Lưu liên hệ",
       "maxContactsReached": "Đã đạt tối đa {max} người liên hệ.",
       "noContacts": "Chưa có người liên hệ nào.",
+      "removeContact": "Xoá người liên hệ",
+      "removeContactConfirm": "Xoá {name} khỏi danh sách người liên hệ của khách này? Thao tác không khôi phục được (lịch sử vẫn lưu trong nhật ký thay đổi).",
+      "removeContactNotFound": "Không tìm thấy người liên hệ này ở khách đang mở.",
       "projectHistoryTitle": "Lịch sử dự án",
       "projectHistoryPending": "Sẽ hiển thị khi module ③ Quản lý dự án hoàn thành.",
       "financeTitle": "Công nợ & Margin theo khách",

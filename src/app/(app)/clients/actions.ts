@@ -331,6 +331,55 @@ export async function addContact(clientId: string, formData: FormData) {
 }
 
 /**
+ * Xoá một người liên hệ phía khách (người đã nghỉ / dừng làm đầu mối).
+ *
+ * XOÁ CỨNG chứ không đánh dấu "đã nghỉ": Contact là danh bạ đầu mối đang dùng, để lại người đã nghỉ
+ * trong danh sách là gửi nhầm thư mời / gọi nhầm số. Lịch sử giữ bằng ẢNH CHỤP trong AuditLog (tên,
+ * chức danh, ĐT, email) — cùng cách đã làm khi xoá nhân sự nghỉ việc (HANDOVER 10.18).
+ *
+ * ⚠ `GuestInvite.contactId` là quan hệ TUỲ CHỌN nên Prisma tự SET NULL: link cổng khách đã phát vẫn
+ * còn nguyên (token, lịch sử truy cập), chỉ mất con trỏ tới người. KHÔNG chặn xoá vì chuyện đó.
+ *
+ * Người đang là ĐẦU MỐI CHÍNH mà bị xoá thì tự đẩy người còn lại (cũ nhất) lên làm chính — không để
+ * khách rơi vào cảnh có liên hệ nhưng không ai là đầu mối.
+ */
+export async function removeContact(clientId: string, contactId: string): Promise<{ error?: string }> {
+  await requirePermission("clients.manage");
+  const t = await getTranslations("clients.detail");
+  const contact = await prisma.contact.findUnique({
+    where: { id: contactId },
+    select: { id: true, clientId: true, name: true, title: true, phone: true, email: true, isPrimary: true },
+  });
+  // Kiểm THUỘC VỀ đúng khách đang mở — không cho đoán id để xoá liên hệ của khách khác.
+  if (!contact || contact.clientId !== clientId) return { error: t("removeContactNotFound") };
+
+  const staffId = await getCurrentStaffId();
+  const invites = await prisma.guestInvite.count({ where: { contactId } });
+  await prisma.$transaction(async (tx) => {
+    await tx.auditLog.create({
+      data: {
+        entityType: "contact",
+        entityId: contactId,
+        field: "*",
+        action: "DELETE",
+        oldValue: JSON.stringify({ name: contact.name, title: contact.title, phone: contact.phone, email: contact.email, isPrimary: contact.isPrimary, guestInvites: invites }),
+        changedBy: staffId,
+        reason: `Xoá người liên hệ của khách ${clientId}`,
+      },
+    });
+    await tx.contact.delete({ where: { id: contactId } });
+    if (contact.isPrimary) {
+      const next = await tx.contact.findFirst({ where: { clientId }, orderBy: { createdAt: "asc" }, select: { id: true } });
+      if (next) await tx.contact.update({ where: { id: next.id }, data: { isPrimary: true } });
+    }
+  });
+
+  revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/clients");
+  return {};
+}
+
+/**
  * Gán / gỡ NHÓM cho một khách — action riêng, KHÔNG đi qua form sửa khách.
  *
  * Lý do tách (giống hệt tiền lệ transferClient): form sửa khách bắt buộc hồ sơ đầy đủ (MST, địa

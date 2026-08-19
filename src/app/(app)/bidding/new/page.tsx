@@ -34,6 +34,7 @@ export default async function NewProjectPage() {
       <div className="rounded-xl border border-border bg-surface p-6">
         <ProjectForm
           action={createProject}
+          draftKey="project-new"
           clients={clients.map((c) => ({ id: c.id, label: `${c.code} — ${c.name}` }))}
           teams={teams.map((tm) => ({ id: tm.id, label: `${tm.code} — ${tm.name}` }))}
           staff={staff.map((s) => ({ id: s.id, label: s.fullName }))}

@@ -19,7 +19,27 @@ import { getProjectIntakeSchema, PENDING_TEAM_ASSIGNMENT } from "@/lib/validator
 import { costSheetPayloadSchema } from "@/lib/validators/costsheet";
 import { requirePermission, hasPermission } from "@/lib/permissions";
 
-export type ProjectFormState = { error?: string; fieldErrors?: Record<string, string> };
+export type ProjectFormState = {
+  error?: string;
+  fieldErrors?: Record<string, string>;
+  /**
+   * Giá trị vừa gửi lên, trả ngược để form dựng lại đúng những gì người dùng đã gõ.
+   *
+   * BẮT BUỘC (đúng khuôn ClientFormState): sau mỗi form action React reset input KHÔNG kiểm soát về
+   * `defaultValue` — thiếu vòng trả ngược này thì mỗi lần validate trượt là người dùng mất sạch phần
+   * đã nhập và phải gõ lại từ đầu.
+   */
+  values?: Record<string, string>;
+};
+
+/** Bê nguyên các ô người dùng đã gõ (bỏ field nội bộ của Server Action) để trả ngược cho form. */
+function formValues(formData: FormData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === "string" && !key.startsWith("$")) out[key] = value;
+  }
+  return out;
+}
 
 function toNullable(v: string) {
   return v.trim() === "" ? null : v.trim();
@@ -82,7 +102,7 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
   if (!parsed.success) {
     const fe: Record<string, string> = {};
     for (const i of parsed.error.issues) fe[String(i.path[0] ?? "form")] ??= i.message;
-    return { fieldErrors: fe };
+    return { fieldErrors: fe, values: formValues(formData) };
   }
   const d = parsed.data;
   const ownerTeamId = resolveOwnerTeamId(d.ownerTeamId);
@@ -92,7 +112,7 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
     ownerTeamId ? prisma.team.findUnique({ where: { id: ownerTeamId } }) : null,
     prisma.optionItem.findUnique({ where: { id: d.complexityId } }),
   ]);
-  if (!client || !complexity || (ownerTeamId && !team)) return { error: t("notFound") };
+  if (!client || !complexity || (ownerTeamId && !team)) return { error: t("notFound"), values: formValues(formData) };
 
   const fiscalYear = new Date().getFullYear();
   const code = await generateProjectCode(prisma, client.code, team?.code ?? "XX", fiscalYear);
@@ -166,7 +186,7 @@ export async function updateProject(
   if (!parsed.success) {
     const fe: Record<string, string> = {};
     for (const i of parsed.error.issues) fe[String(i.path[0] ?? "form")] ??= i.message;
-    return { fieldErrors: fe };
+    return { fieldErrors: fe, values: formValues(formData) };
   }
   const d = parsed.data;
   const staffId = await getCurrentStaffId();

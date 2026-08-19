@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { NumberField } from "@/components/ui/number-field";
 import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { DraftBanner, useFormDraft, writeDraft } from "@/components/ui/form-draft";
 import { cn } from "@/lib/utils";
 import { MAX_CONTACTS, OTHER_INTRODUCER } from "@/lib/validators/client";
 import type { ClientFormState } from "./actions";
@@ -26,6 +27,7 @@ export function ClientForm({
   brands,
   defaultValues,
   submitLabel,
+  draftKey,
 }: {
   action: (state: ClientFormState, formData: FormData) => Promise<ClientFormState>;
   mode: "create" | "edit";
@@ -59,6 +61,8 @@ export function ClientForm({
     note?: string;
   };
   submitLabel: string;
+  /** Bật NHÁP TỰ LƯU — chỉ truyền ở form TẠO MỚI. */
+  draftKey?: string;
 }) {
   const [state, formAction, pending] = useActionState<ClientFormState, FormData>(action, {});
   const t = useTranslations("clients.form");
@@ -69,10 +73,29 @@ export function ClientForm({
    * React reset input không kiểm soát về `defaultValue` sau mỗi form action — thiếu bước này thì
    * mỗi lần báo lỗi là người dùng phải gõ lại toàn bộ form.
    */
-  const keep = (name: string, fallback?: string) => state.values?.[name] ?? fallback;
+  const draft = useFormDraft(draftKey ?? "", !!draftKey);
+  const keep = (name: string, fallback?: string) => state.values?.[name] ?? draft.restored?.[name] ?? fallback;
+
+  /**
+   * Validate trượt thì lưu lại NHÁP ngay từ những gì server trả về: người dùng có thể đóng tab luôn
+   * sau khi thấy báo lỗi, lúc đó onChange không còn cơ hội chạy nữa.
+   */
+  useEffect(() => {
+    if (draftKey && state.values) writeDraft(draftKey, state.values);
+  }, [draftKey, state.values]);
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form
+      key={draft.formKey}
+      action={formAction}
+      onChange={(e) => draft.scheduleSave(e.currentTarget)}
+      /* Gửi đi rồi thì bỏ nháp; nếu validate trượt thì effect phía trên lưu lại ngay từ state.values. */
+      onSubmit={() => draft.clear()}
+      className="space-y-6"
+    >
+      {draft.pending && (
+        <DraftBanner savedAt={draft.pending.savedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      )}
       {state.error && (
         <div className="rounded-lg border border-danger/30 bg-danger-bg px-3 py-2 text-sm text-danger">
           {state.error}
@@ -261,7 +284,9 @@ export function ClientForm({
         </label>
       </fieldset>
 
-      {mode === "create" && <ContactsFieldset error={state.fieldErrors?.contacts} values={state.values} />}
+      {mode === "create" && (
+        <ContactsFieldset error={state.fieldErrors?.contacts} values={state.values ?? draft.restored ?? undefined} />
+      )}
 
       <div className="flex items-center gap-3 border-t border-border pt-4">
         <Button type="submit" disabled={pending}>
@@ -274,9 +299,15 @@ export function ClientForm({
 
 function ContactsFieldset({ error, values }: { error?: string; values?: Record<string, string> }) {
   const t = useTranslations("clients.form");
-  const nextKey = useRef(1);
+  // Số dòng ban đầu suy từ `values` (giá trị server trả về khi validate trượt, hoặc nháp vừa khôi
+  // phục) — nháp có 3 người liên hệ mà form chỉ hiện 1 dòng thì coi như mất dữ liệu.
+  const initialRows = Math.max(
+    1,
+    Math.min(Object.keys(values ?? {}).filter((k) => k.startsWith("contact_name_")).length, MAX_CONTACTS),
+  );
+  const nextKey = useRef(initialRows);
   // Số dòng do state React giữ nên sống qua form action; chỉ NỘI DUNG ô bị reset → dựng lại từ `values`.
-  const [rows, setRows] = useState<{ key: number }[]>([{ key: 0 }]);
+  const [rows, setRows] = useState<{ key: number }[]>(() => Array.from({ length: initialRows }, (_, i) => ({ key: i })));
 
   return (
     <fieldset className="space-y-3 border-t border-border pt-6">

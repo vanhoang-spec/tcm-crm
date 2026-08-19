@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { NumberField } from "@/components/ui/number-field";
 import { useTranslations } from "next-intl";
 import { DateField } from "@/components/ui/date-field";
+import { DraftBanner, useFormDraft, writeDraft } from "@/components/ui/form-draft";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export function ProjectForm({
   channels,
   defaultValues,
   submitLabel,
+  draftKey,
 }: {
   action: (state: ProjectFormState, formData: FormData) => Promise<ProjectFormState>;
   clients: Option[];
@@ -48,27 +50,63 @@ export function ProjectForm({
     eventEndDate?: string;
   };
   submitLabel: string;
+  /** Bật NHÁP TỰ LƯU (chỉ dùng cho form TẠO MỚI — sửa dự án đã có thì không cần nháp). */
+  draftKey?: string;
 }) {
   const [state, formAction, pending] = useActionState<ProjectFormState, FormData>(action, {});
   const t = useTranslations("bidding.new");
   const tComplex = useTranslations("bidding.complexity");
   const tCommon = useTranslations("common");
 
+  /**
+   * Giá trị vừa gõ (server trả về khi validate trượt) được ưu tiên hơn giá trị gốc — đúng khuôn
+   * ClientForm. Không có bước này thì mỗi lần thiếu một ô là người dùng mất sạch phần đã nhập.
+   */
+  const draft = useFormDraft(draftKey ?? "", !!draftKey);
+  /**
+   * Thứ tự ưu tiên: giá trị server vừa trả về (validate trượt) → nháp vừa khôi phục → giá trị gốc.
+   */
+  const keep = (name: string, fallback?: string) => state.values?.[name] ?? draft.restored?.[name] ?? fallback;
+
+  /**
+   * Validate trượt thì lưu lại NHÁP ngay từ những gì server trả về: người dùng có thể đóng tab luôn
+   * sau khi thấy báo lỗi, lúc đó onChange không còn cơ hội chạy nữa.
+   */
+  useEffect(() => {
+    if (draftKey && state.values) writeDraft(draftKey, state.values);
+  }, [draftKey, state.values]);
+
   return (
-    <form action={formAction} className="space-y-6">
+    /**
+     * ⚠ onReset chặn form.reset(): React 19 gọi requestFormReset sau MỌI lần chạy action, kể cả khi
+     * action TRẢ LỖI — và nó reset cả <select>, radio, checkbox (HANDOVER 10.37) chứ không riêng ô chữ.
+     * Ô chữ đã được dựng lại bằng keep(); chặn reset là để select/radio/DateField giữ nguyên lựa chọn.
+     */
+    <form
+      key={draft.formKey}
+      action={formAction}
+      onReset={(e) => e.preventDefault()}
+      onChange={(e) => draft.scheduleSave(e.currentTarget)}
+      /* Gửi đi rồi thì bỏ nháp; nếu validate trượt thì khối ghi phía trên lưu lại ngay từ state.values. */
+      onSubmit={() => draft.clear()}
+      className="space-y-6"
+    >
+      {draft.pending && (
+        <DraftBanner savedAt={draft.pending.savedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      )}
       {state.error && (
         <div className="rounded-lg border border-danger/30 bg-danger-bg px-3 py-2 text-sm text-danger">{state.error}</div>
       )}
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label={t("name")} error={state.fieldErrors?.name} required className="sm:col-span-2">
-          <input name="name" defaultValue={defaultValues?.name} placeholder={t("namePlaceholder")} className={inputClass(!!state.fieldErrors?.name)} />
+          <input name="name" defaultValue={keep("name", defaultValues?.name)} placeholder={t("namePlaceholder")} className={inputClass(!!state.fieldErrors?.name)} />
         </Field>
 
         <Field label={t("client")} error={state.fieldErrors?.clientId} required>
           <SearchableSelect
             name="clientId"
-            defaultValue={defaultValues?.clientId}
+            defaultValue={keep("clientId", defaultValues?.clientId)}
             placeholder={t("selectClient")}
             hasError={!!state.fieldErrors?.clientId}
             options={clients.map((c) => ({ value: c.id, label: c.label }))}
@@ -76,7 +114,7 @@ export function ProjectForm({
         </Field>
 
         <Field label={t("ownerTeam")} error={state.fieldErrors?.ownerTeamId} required>
-          <select name="ownerTeamId" defaultValue={defaultValues?.ownerTeamId} className={inputClass(!!state.fieldErrors?.ownerTeamId)}>
+          <select name="ownerTeamId" defaultValue={keep("ownerTeamId", defaultValues?.ownerTeamId)} className={inputClass(!!state.fieldErrors?.ownerTeamId)}>
             <option value="">{t("selectTeam")}</option>
             {teams.map((tm) => (
               <option key={tm.id} value={tm.id}>{tm.label}</option>
@@ -88,7 +126,7 @@ export function ProjectForm({
         <Field label={t("owner")} error={state.fieldErrors?.ownerId}>
           <SearchableSelect
             name="ownerId"
-            defaultValue={defaultValues?.ownerId ?? ""}
+            defaultValue={keep("ownerId", defaultValues?.ownerId) ?? ""}
             placeholder={t("selectOwner")}
             options={staff.map((s) => ({ value: s.id, label: s.label }))}
           />
@@ -98,14 +136,14 @@ export function ProjectForm({
           <input
             name="briefLinkUrl"
             type="url"
-            defaultValue={defaultValues?.briefLinkUrl}
+            defaultValue={keep("briefLinkUrl", defaultValues?.briefLinkUrl)}
             placeholder={t("briefLinkPlaceholder")}
             className={inputClass(!!state.fieldErrors?.briefLinkUrl)}
           />
         </Field>
 
         <Field label={t("projectType")} error={state.fieldErrors?.projectTypeId} required>
-          <select name="projectTypeId" defaultValue={defaultValues?.projectTypeId} className={inputClass(!!state.fieldErrors?.projectTypeId)}>
+          <select name="projectTypeId" defaultValue={keep("projectTypeId", defaultValues?.projectTypeId)} className={inputClass(!!state.fieldErrors?.projectTypeId)}>
             <option value="">{t("selectType")}</option>
             {projectTypes.map((p) => (
               <option key={p.id} value={p.id}>{p.label}</option>
@@ -127,7 +165,9 @@ export function ProjectForm({
                     name="complexityId"
                     value={c.id}
                     defaultChecked={
-                      defaultValues?.complexityId ? defaultValues.complexityId === c.id : c.code === "SIMPLE"
+                      keep("complexityId", defaultValues?.complexityId)
+                        ? keep("complexityId", defaultValues?.complexityId) === c.id
+                        : c.code === "SIMPLE"
                     }
                     className="mt-0.5"
                   />
@@ -142,11 +182,11 @@ export function ProjectForm({
         </Field>
 
         <Field label={t("budget")} error={state.fieldErrors?.budget} hint={t("budgetHint")}>
-          <NumberField name="budget" defaultValue={defaultValues?.budget} className={inputClass(false)} />
+          <NumberField name="budget" defaultValue={state.values?.budget ? Number(state.values.budget) : defaultValues?.budget} className={inputClass(false)} />
         </Field>
 
         <Field label={t("channel")} error={state.fieldErrors?.channelId}>
-          <select name="channelId" defaultValue={defaultValues?.channelId ?? ""} className={inputClass(false)}>
+          <select name="channelId" defaultValue={keep("channelId", defaultValues?.channelId) ?? ""} className={inputClass(false)}>
             <option value="">{t("selectChannel")}</option>
             {channels.map((c) => (
               <option key={c.id} value={c.id}>{c.label}</option>
@@ -155,20 +195,20 @@ export function ProjectForm({
         </Field>
 
         <Field label={t("scope")} error={state.fieldErrors?.scope}>
-          <input name="scope" defaultValue={defaultValues?.scope} className={inputClass(false)} />
+          <input name="scope" defaultValue={keep("scope", defaultValues?.scope)} className={inputClass(false)} />
         </Field>
 
         <Field label={t("venue")} error={state.fieldErrors?.venue}>
-          <input name="venue" defaultValue={defaultValues?.venue} className={inputClass(false)} />
+          <input name="venue" defaultValue={keep("venue", defaultValues?.venue)} className={inputClass(false)} />
         </Field>
 
         {/* Ngày sự kiện — 1 ngày chỉ nhập ngày bắt đầu; nhiều ngày nhập cả hai. Lên báo giá BM02. */}
         <Field label={t("eventStartDate")} error={state.fieldErrors?.eventStartDate}>
-          <DateField name="eventStartDate" defaultValue={defaultValues?.eventStartDate} className={inputClass(false)} />
+          <DateField key={`start-${state.values?.eventStartDate ?? ""}`} name="eventStartDate" defaultValue={keep("eventStartDate", defaultValues?.eventStartDate)} className={inputClass(false)} />
         </Field>
 
         <Field label={t("eventEndDate")} error={state.fieldErrors?.eventEndDate}>
-          <DateField name="eventEndDate" defaultValue={defaultValues?.eventEndDate} className={inputClass(false)} />
+          <DateField key={`end-${state.values?.eventEndDate ?? ""}`} name="eventEndDate" defaultValue={keep("eventEndDate", defaultValues?.eventEndDate)} className={inputClass(false)} />
         </Field>
       </fieldset>
 

@@ -2260,7 +2260,50 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `1240a87`** (17/08/2026 16:31) — **Nhân sự: ngày sinh / ngày đi làm đầu tiên tuỳ chọn +
+**Production đang chạy `afa18f1`** (19/08/2026 13:18) — gói 6 commit: **Họp Account tuần (/meetings, MEET-1+2)** ·
+**mã lô v3** (SẢN PHẨM `PO-0042` tách khỏi LÔ `PO-0042.01`, nhóm 2 ký tự) · **Kho K6 + K6-3 + K6-4** (duyệt theo CHỦ
+SỞ HỮU, duyệt từng dòng 0..n, Order OPE/PRO mang vật dụng, hàng overhead → Senior HR Manager duyệt) · **Kho K7** (khép
+flow trước tồn đầu kỳ) — mục 10.39 → 10.42. Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint
+khớp. **4 migration mới** áp sạch (`account_meetings`, `inventory_product_lot_codes`, `k6_owner_approval`,
+`order_stock_lines` — tất cả additive, 70 → 74), **4 mã quyền mới** (142 → 146: 3 mã `meetings.*` + 1 mã
+`inventory.request.approve_overhead`). Không có file mồ côi, lockfile không đổi. Backup TRƯỚC deploy:
+`~/backup/*-20260819-131826*` trên server + `D:/TCM/backup-prod-20260819-131826/` máy dev.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 68 / 25 | **36 / 68 / 25** |
+| coTotal + ceTotal 5 bảng CO/CE | (10 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO/CE / NCC | 483 / 20 | **483 / 20** |
+| dòng grant quyền | 1329 | **1336** (+7 = meetings view 1 · manage 1 · ai_import 3 · K6-4 cấp `approve` + `approve_overhead` cho HR_MANAGER 2) |
+| 7 nhóm gốc kho | mã 1 ký tự | **PO · DT · TC · DP · IA · KG · VT** (marker `{"renamed":7}`, khớp theo MÃ CŨ nên tên do admin sửa vẫn giữ) |
+| bảng mới (SP / lô / đề xuất / phiếu / họp / dòng order kho) | — | **0 / 0 / 0 / 0 / 0 / 0** (chưa ai nhập, đúng như mong đợi) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Đủ 4 marker seed: `20260817_meetings_view_manage` · `20260817_meetings_ai` · `20260818_inv_group_codes_2char` ·
+`20260818_kho_k6_approve_overhead`. Health check: `/login` 200 · `/meetings`, `/inventory`, `/inventory/requests`,
+`/inventory/requests/new/{issue,destroy}`, `/inventory/items`, `/inventory/documents/new/holding`,
+`/settings/inventory-categories` đều **307** về login · `/api/notifications/poll` **401** · pm2 `online`, **restart 0** ·
+`[jobs] scheduler bật` · **error log không thêm dòng nào** (lần ghi cuối 18/08 14:12, trước deploy). Ghi nhận: tiến
+trình pm2 `tcm-crm-test` cũ (§ deploy 30/07) **không còn chạy**.
+
+⚠ **VIỆC PHẢI LÀM TRƯỚC KHI KHO DÙNG THẬT (dự kiến nhập tồn đầu kỳ cuối T9/2026):** production hiện **0 sản phẩm /
+0 lô** — đúng thiết kế, mã lô v3 đổi đúng lúc kho còn rỗng. Trình tự khi bắt đầu: (1) rà lại 7 nhóm gốc + cây danh mục
+ở `/settings/inventory-categories`; (2) gán người thật cho role `WAREHOUSE_KEEPER` ở `/settings/staff` rồi bỏ tick 4 mã
+xác nhận kho khỏi OPE Manager (đang giữ tạm từ K2); (3) nhập tồn đầu kỳ bằng CSV 15 cột (cột "Mã dự án" = DỰ ÁN SỞ HỮU,
+để trống = hàng overhead công ty). ⚠ **Hàng overhead do Senior HR Manager duyệt việc dùng** — BGĐ muốn duyệt được thì
+tick `inventory.request.approve_overhead` ở `/settings/roles`, không cần sửa code.
+
+⚠ **MODULE HỌP ACCOUNT (`/meetings`) chỉ BGĐ + trưởng team vào được** — trưởng team không cần mã quyền (kiểm theo bản
+ghi `Team.leadStaffId`): A1 = HỒ HỒNG PHƯỚC, A3 = TRẦN THU HÀ. Biên bản đầu tiên nhập bằng cách dán/tải file
+Dashboard từ Claude Project rồi bấm "AI đọc biên bản" (DeepSeek, ≤40.000 ký tự).
+
+---
+
+### Deploy trước đó — 17/08/2026 lúc 16:31
+
+**Production khi đó chạy `1240a87`** (17/08/2026 16:31) — **Nhân sự: ngày sinh / ngày đi làm đầu tiên tuỳ chọn +
 tự bổ sung ở Hồ sơ cá nhân** (mục 10.38). Chạy `bash scripts/deploy.sh` đường LAN, fingerprint khớp. **KHÔNG migration
 mới** (70, "No pending migrations"), **không mã quyền mới**. Backup TRƯỚC deploy: `~/backup/*-20260817-163101*` trên
 server + `D:/TCM/backup-prod-20260817-163101/` máy dev. Đối chiếu sau deploy — **không đổi một dòng dữ liệu nào**:

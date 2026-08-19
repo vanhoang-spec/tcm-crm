@@ -1,22 +1,29 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { checkPasswordAge } from "@/lib/password";
 import { StaffCreateForm } from "./staff-create-form";
 import { StaffRow } from "./staff-row";
 import { requirePermission } from "@/lib/permissions";
+import { matchesStaffQuery } from "@/lib/staff-search";
 
-export default async function SettingsStaffPage() {
+export default async function SettingsStaffPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; dept?: string; team?: string; status?: string }>;
+}) {
   await requirePermission("settings.staff.manage");
+  const { q = "", dept = "", team = "", status = "" } = await searchParams;
   const tAuth = await getTranslations("auth.admin");
   const [staff, departments, teams, roles, activeStaff, t] = await Promise.all([
     prisma.staff.findMany({
       orderBy: { fullName: "asc" },
       include: {
         department: { select: { name: true } },
-        team: { select: { name: true } },
+        team: { select: { name: true, code: true } },
         manager: { select: { fullName: true } },
+        role: { select: { name: true } },
       },
     }),
     prisma.department.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
@@ -27,6 +34,34 @@ export default async function SettingsStaffPage() {
     prisma.staff.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true } }),
     getTranslations("settings.staff"),
   ]);
+
+  /**
+   * Lọc trong BỘ NHỚ (~40 nhân sự) chứ không đẩy xuống SQL: yêu cầu là gõ KHÔNG DẤU vẫn ra, mà LIKE
+   * của SQLite không bỏ được dấu tiếng Việt — muốn làm ở SQL phải thêm cột chuẩn hoá + migration.
+   * Ba ô chọn lọc theo khoá; ô tìm là tự do (tên · email · điện thoại · mã NV · chức danh · phòng ban ·
+   * team · nhóm quyền · tên quản lý), nhiều từ khoá = AND.
+   */
+  const filtered = staff.filter((s) => {
+    if (dept && s.departmentId !== dept) return false;
+    if (team && s.teamId !== team) return false;
+    if (status === "active" && !s.isActive) return false;
+    if (status === "inactive" && s.isActive) return false;
+    return matchesStaffQuery(
+      {
+        fullName: s.fullName,
+        email: s.email,
+        phone: s.phone,
+        code: s.code,
+        title: s.title,
+        departmentName: s.department?.name ?? null,
+        teamName: s.team?.name ?? null,
+        teamCode: s.team?.code ?? null,
+        roleName: s.role?.name ?? null,
+      },
+      q,
+    );
+  });
+  const hasFilter = !!(q || dept || team || status);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -40,6 +75,50 @@ export default async function SettingsStaffPage() {
       </div>
 
       <StaffCreateForm departments={departments} teams={teams} roles={roles} />
+
+      {/* Tìm nhanh — GET nên link chia sẻ được và F5 không mất bộ lọc */}
+      <form className="flex flex-wrap items-center gap-2" action="/settings/staff" method="get">
+        <div className="relative min-w-[220px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder={t("searchPlaceholder")}
+            className="h-9 w-full rounded-lg border border-border-strong bg-surface pl-9 pr-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+          />
+        </div>
+        <select name="dept" defaultValue={dept} aria-label={t("colDepartment")} className="h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-sm">
+          <option value="">{t("filterAllDepartments")}</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <select name="team" defaultValue={team} aria-label={t("colTeam")} className="h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-sm">
+          <option value="">{t("filterAllTeams")}</option>
+          {teams.map((tm) => (
+            <option key={tm.id} value={tm.id}>
+              {tm.name}
+            </option>
+          ))}
+        </select>
+        <select name="status" defaultValue={status} aria-label={t("colStatus")} className="h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-sm">
+          <option value="">{t("filterAllStatuses")}</option>
+          <option value="active">{t("filterActive")}</option>
+          <option value="inactive">{t("filterInactive")}</option>
+        </select>
+        <button type="submit" className="h-9 rounded-lg border border-border-strong px-4 text-sm font-medium hover:bg-surface-2">
+          {t("filterSubmit")}
+        </button>
+        {hasFilter && (
+          <Link href="/settings/staff" className="h-9 rounded-lg px-3 text-sm font-medium leading-9 text-muted-foreground underline hover:text-foreground">
+            {t("filterClear")}
+          </Link>
+        )}
+        <span className="text-xs text-muted-foreground">{t("resultCount", { shown: filtered.length, total: staff.length })}</span>
+      </form>
 
       <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-xl border border-border">
         <table className="w-full text-sm">
@@ -61,7 +140,7 @@ export default async function SettingsStaffPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {staff.map((s) => (
+            {filtered.map((s) => (
               <StaffRow
                 key={s.id}
                 departments={departments}
@@ -96,6 +175,13 @@ export default async function SettingsStaffPage() {
                 }}
               />
             ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={13} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  {t("noResult")}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -2309,6 +2309,29 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý):** đưa dự án thiếu chứng từ vào `/reminders` hoặc bắn notification định kỳ (mới có
       băng trên trang dự án — chủ dự án chỉ yêu cầu dòng nhắc) · chặn phát hành hoá đơn khi chưa có HĐ/PO.
 
+45. **NHÂN SỰ — TÌM THÔNG MINH Ở /settings/staff (19/08/2026)** (KHÔNG migration, KHÔNG mã quyền mới).
+    Trang quản lý tài khoản trước đó liệt kê thẳng 36 dòng, **không có ô tìm nào**. Nay có ô tìm tự do +
+    3 bộ lọc (phòng ban · team · đang làm/đã nghỉ) + đếm kết quả, đi bằng GET nên F5 và chia sẻ link giữ
+    nguyên bộ lọc.
+    - **Phạm vi tìm**: tên · email · điện thoại · mã NV · chức danh · phòng ban · tên team · MÃ team ·
+      nhóm quyền. Nhiều từ khoá = **AND, ghép được nhiều trường** ("hoang ceo" ra đúng 1 người).
+    - ⚠ **Lọc trong BỘ NHỚ, không đẩy xuống SQL** (`lib/staff-search.ts`, hàm thuần): yêu cầu là gõ
+      KHÔNG DẤU vẫn ra, mà `LIKE` của SQLite không bỏ được dấu tiếng Việt — muốn làm ở SQL phải thêm cột
+      chuẩn hoá + migration + đường ghi. Bảng chỉ ~40 dòng nên lọc bộ nhớ rẻ hơn nhiều. **Bảng phình lên
+      vài nghìn dòng thì mới cần tính lại.**
+    - ⚠ **Khớp theo ĐẦU TỪ, không phải bất kỳ vị trí nào** — bắt được lúc verify: khớp-mọi-vị-trí làm
+      "yen" ra **18/36 người** vì nằm trong chữ "NGUYỄN". Sau khi đổi: đúng 2 người tên Yến. Đánh đổi đã
+      biết: gõ khúc giữa của email (`hkyen`) thì không ra, phải gõ từ đầu từ.
+    - ⚠ **CỐ Ý không tìm theo tên QUẢN LÝ TRỰC TIẾP**: 8/36 người chung một quản lý nên gõ tên sếp là ra
+      nguyên cấp dưới (cũng đo được 15/36 ở bản đầu). Muốn xem theo sếp thì đó phải là bộ lọc riêng.
+    - Số điện thoại so thêm bản **đã bỏ ký tự phân cách**: dữ liệu "0901 234 567" mà gõ liền "0901234567"
+      vẫn ra (và ngược lại).
+    - **Verify**: 27/27 assertion thuần + browser thật trên dev.db — "hoang" 3 người · "yen" 2 · "ke toan"
+      3 · "dieu hanh" 2 · "A3" 6 · "0983" và "983114803" đều ra đúng 1 · "hoang ceo" 1 · lọc trạng thái +
+      ô tìm cộng dồn đúng. tsc · eslint · i18n 0/0 · build sạch.
+    - **CHƯA LÀM (cố ý):** ô tìm ở /orgchart và bảng chấm công /staff (hai chỗ đó không hiện email/điện
+      thoại nên chưa có nhu cầu) · gợi ý autocomplete khi gõ · tìm theo ngày sinh / ngày vào làm.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

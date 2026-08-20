@@ -22,6 +22,10 @@ import { extractTextFromFile } from "@/lib/ai/extract-text";
 import { AI_FILE_MIME_TYPES, MAX_AI_FILE_BYTES } from "@/lib/ai-file-storage";
 import { getStringSetting } from "@/lib/settings";
 import { documentDraftPrompt } from "@/lib/ai/document-prompts";
+import { bankReconPrompt } from "@/lib/ai/bank-recon-prompts";
+import { buildReconBlocks, reconSummaryForAi, reconcile } from "@/lib/bank-recon";
+import { parsePlanWorkbook, parseStatementWorkbook } from "@/lib/bank-recon-parse";
+import { docSchema } from "@/lib/doc-blocks";
 import { MAX_DOCUMENT_BRIEF, MAX_DOCUMENT_REF_CHARS, resolveDocumentType } from "@/lib/ai/document-types";
 import { buildIndustryQuery, isWebSearchConfigured, searchWeb } from "@/lib/ai/websearch";
 import { requirePermission } from "@/lib/permissions";
@@ -331,6 +335,70 @@ export async function draftDocument(_prev: AiState, formData: FormData): Promise
     );
     if (!doc) return { error: t("BAD_FORMAT") };
     return { doc };
+  } catch (e) {
+    return { error: await toMessage(e) };
+  }
+}
+
+// ───────────────────────── 8. Đối chiếu chi ngân hàng (kế toán) ────────────────────────────────
+
+/**
+ * So kế hoạch chi (file Excel, mỗi sheet là một ngày duyệt lệnh) với sao kê ngân hàng, chỉ ra khoản
+ * nào chưa đi được để kế toán lập lại lệnh.
+ *
+ * ⚠ PHẦN KHỚP DO CODE LÀM (`reconcile`), AI CHỈ NHẬN XÉT. Lý do đầy đủ ở đầu `lib/bank-recon.ts`:
+ * báo nhầm 'rớt' là kế toán chi trùng, báo nhầm 'đã chi' là NCC không nhận được tiền. Bảng kết quả
+ * dựng xong TRƯỚC khi gọi AI — AI lỗi thì vẫn trả về bảng đúng, chỉ thiếu phần nhận xét.
+ *
+ * ⚠ KHÔNG LƯU GÌ: hai file đọc trong bộ nhớ rồi bỏ (cùng quyết định với công cụ soạn thảo, mục
+ * 10.50). Sao kê mang số dư và toàn bộ dòng tiền công ty — không có lý do gì để nó nằm lại trên đĩa.
+ */
+export async function reconcileBankPayments(_prev: AiState, formData: FormData): Promise<AiState> {
+  await requirePermission("ai.bank_recon");
+  const blocked = await guard();
+  if (blocked) return { error: blocked };
+
+  const t = await getTranslations("ai.errors");
+  const planFile = formData.get("planFile");
+  const stFile = formData.get("statementFile");
+  if (!(planFile instanceof File) || !(stFile instanceof File) || planFile.size === 0 || stFile.size === 0) {
+    return { error: t("MISSING_INPUT") };
+  }
+  for (const file of [planFile, stFile]) {
+    if (file.size > MAX_AI_FILE_BYTES) return { error: t("TOO_BIG") };
+    if (file.type !== "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return { error: t("BAD_XLSX") };
+  }
+
+  try {
+    const plan = await parsePlanWorkbook(Buffer.from(await planFile.arrayBuffer()));
+    const st = await parseStatementWorkbook(Buffer.from(await stFile.arrayBuffer()));
+    if (!plan.rows.length) return { error: t("PLAN_EMPTY") };
+    if (!st || !st.rows.length) return { error: t("STATEMENT_EMPTY") };
+
+    const result = reconcile(plan.rows, st.rows);
+    const blocks = buildReconBlocks(result, {
+      planFile: planFile.name || "kế hoạch chi",
+      statementFile: stFile.name || "sao kê",
+      dates: [...new Set(plan.rows.map((r) => r.approvedDate))],
+    });
+
+    // Bảng đã xong. AI chỉ nối thêm nhận xét — hỏng thì bỏ qua, KHÔNG để mất kết quả đối chiếu.
+    let commentary: typeof blocks = [];
+    try {
+      const raw = await aiChatJson(withDocFormat(bankReconPrompt(reconSummaryForAi(result))), { temperature: 0.2, maxTokens: 4000 });
+      const parsed = docSchema.safeParse(raw);
+      if (parsed.success) commentary = parsed.data.blocks;
+    } catch (e) {
+      console.error("[AI] đối chiếu ngân hàng: phần nhận xét lỗi, vẫn trả bảng:", e);
+    }
+
+    const title = `Đối chiếu chi ngân hàng${result.missing.length ? ` — ${result.missing.length} khoản chưa đi được` : " — khớp đủ"}`;
+    return {
+      doc: {
+        title,
+        blocks: commentary.length ? [...blocks, { type: "heading" as const, level: 1 as const, text: "Nhận xét của trợ lý" }, ...commentary] : blocks,
+      },
+    };
   } catch (e) {
     return { error: await toMessage(e) };
   }

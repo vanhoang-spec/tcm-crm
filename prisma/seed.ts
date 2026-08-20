@@ -2445,6 +2445,12 @@ async function main() {
    * người soạn thông báo/quyết định nhiều nhất.
    */
   const AI_DOCUMENT_ROLES = ["HR_MANAGER", "HR_STAFF", "ADMIN_STAFF", "CFO", "ACCOUNTANT_STAFF", "BOARD_OF_MANAGEMENT"];
+  /**
+   * Đối chiếu chi ngân hàng — CHỈ phòng kế toán (quyết định chủ dự án 20/08/2026). Dữ liệu vào là
+   * sao kê ngân hàng của công ty; BGĐ muốn xem thì tick thêm ở /settings/roles, không sửa code.
+   * ⚠ KHÔNG thêm mã này vào AI_LEGACY_ALL — xem cảnh báo ở hằng đó.
+   */
+  const AI_BANK_RECON_ROLES = ["CFO", "ACCOUNTANT_STAFF"];
   /** Kho v2 K2 — quyền của THỦ KHO: người duy nhất chốt số thực xuất/thực nhập, chuyển lô, xuất hủy. */
   const WAREHOUSE_EXTRA = ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"];
   /**
@@ -2503,7 +2509,7 @@ async function main() {
     OPERATIONS: ["bidding.costsheet.view_paycap"],
     PRODUCTION: ["bidding.costsheet.view_paycap"],
     HR: ["ai.brainstorm", "ai.content", "ai.document"],
-    FINANCE: ["ai.costsheet", "ai.document", "inventory.reservation.approve", "bidding.costsheet.view_cost", "bidding.costsheet.view_paycap"],
+    FINANCE: ["ai.costsheet", "ai.document", "ai.bank_recon", "inventory.reservation.approve", "bidding.costsheet.view_cost", "bidding.costsheet.view_paycap"],
     PURCHASING: ["purchasing.po.manage", "purchasing.po.receive", "bidding.costsheet.view_paycap"],
     // ⚠ CỐ Ý KHÔNG có `WAREHOUSE: WAREHOUSE_EXTRA` ở đây. Nhóm WAREHOUSE chứa CẢ `SECURITY_GUARD`
     // (bảo vệ điểm kho) — cấp 4 mã xác nhận thực xuất/thực nhập + chuyển lô + XUẤT HỦY theo NHÓM
@@ -2891,6 +2897,11 @@ async function main() {
       key: "20260820_ai_document",
       codes: ["ai.document"],
       roleFilter: (r) => AI_DOCUMENT_ROLES.includes(r.code),
+    },
+    {
+      key: "20260820_ai_bank_recon",
+      codes: ["ai.bank_recon"],
+      roleFilter: (r) => AI_BANK_RECON_ROLES.includes(r.code),
     },
 
     // 17/08/2026 HỌP ACCOUNT TEAM (MEET-1) — 3 mã mới, dịch từ MEETING_POLICY sang đường backfill.

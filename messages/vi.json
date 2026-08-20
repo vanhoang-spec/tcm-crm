@@ -3748,6 +3748,15 @@
       "desc": "Tổng hợp tình hình dự án, cảnh báo rủi ro và phân tích chăm sóc khách hàng từ dữ liệu vận hành hiện tại.",
       "hint": "Số liệu lấy trực tiếp từ CRM tại thời điểm bấm chạy — khớp với trang Nhắc việc và Tài chính."
     },
+    "bankRecon": {
+      "title": "Đối chiếu chi ngân hàng",
+      "desc": "So bảng kế hoạch chi với sao kê ngân hàng sau khi đi lệnh, chỉ ra khoản nào chưa đi được để lập lại lệnh.",
+      "privacyWarning": "Phần khớp số do hệ thống tính, AI chỉ nhận xét. App KHÔNG lưu hai file bạn tải lên và KHÔNG lưu kết quả — hãy tải Word/PDF về máy. Chỉ phần chưa khớp (đã che số tài khoản) được gửi sang DeepSeek để xin nhận xét.",
+      "planLabel": "File kế hoạch chi (.xlsx)",
+      "planHint": "Mỗi sheet là một ngày duyệt lệnh, tên sheet theo ngày. Đọc được nhiều sheet cùng lúc.",
+      "statementLabel": "File sao kê ngân hàng (.xlsx)",
+      "statementHint": "Tải từ ngân hàng, một ngày hoặc một giai đoạn. Chỉ các dòng tiền RA được đối chiếu."
+    },
     "document": {
       "title": "Soạn thảo văn bản",
       "desc": "Quyết định, thông báo, công văn, tờ trình, biên bản, quy chế, văn bản nhân sự và kế toán — AI soạn theo đúng bố cục hành chính, tải về Word hoặc PDF.",
@@ -3785,7 +3794,11 @@
       "MISSING_INPUT": "Vui lòng nhập đủ thông tin.",
       "EXEC_ONLY": "Chỉ Ban Giám đốc và CFO xem được báo cáo này.",
       "NOT_ALLOWED": "Công cụ này không dành cho phòng ban của bạn.",
-      "BAD_FORMAT": "Trợ lý trả về nội dung sai khuôn (có thể do bài quá dài nên bị cắt giữa chừng). Thử lại, hoặc rút gọn phần thông tin đầu vào."
+      "BAD_FORMAT": "Trợ lý trả về nội dung sai khuôn (có thể do bài quá dài nên bị cắt giữa chừng). Thử lại, hoặc rút gọn phần thông tin đầu vào.",
+      "TOO_BIG": "File quá lớn (tối đa 15MB).",
+      "BAD_XLSX": "Chỉ nhận file Excel .xlsx. File .xls cũ cần mở bằng Excel rồi Lưu thành .xlsx.",
+      "PLAN_EMPTY": "Không đọc được khoản chi nào trong file kế hoạch. Bảng phải có dòng tiêu đề với cột Đối tượng chi và Số tiền.",
+      "STATEMENT_EMPTY": "Không đọc được giao dịch nào trong file sao kê. Bảng phải có cột Nội dung giao dịch và Số tiền rút ra."
     }
   },
   "dock": {

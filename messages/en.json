@@ -3748,6 +3748,15 @@
       "desc": "Summarises project status, flags risks, and analyses client care from current operational data.",
       "hint": "Figures are pulled live from the CRM when you run it — they match the Reminders and Finance pages."
     },
+    "bankRecon": {
+      "title": "Bank payment reconciliation",
+      "desc": "Compare the payment plan against the bank statement after the transfers were submitted, and list what did not go through.",
+      "privacyWarning": "The matching is computed by the system; AI only comments. The app does NOT keep either uploaded file and does NOT store the result — download Word/PDF. Only the unmatched items (account numbers removed) are sent to DeepSeek for commentary.",
+      "planLabel": "Payment plan file (.xlsx)",
+      "planHint": "One sheet per approval date, sheet named by date. Multiple sheets are read at once.",
+      "statementLabel": "Bank statement file (.xlsx)",
+      "statementHint": "Downloaded from the bank, one day or a date range. Only debit rows are reconciled."
+    },
     "document": {
       "title": "Document drafting",
       "desc": "Decisions, announcements, official letters, proposals, minutes, policies, HR and accounting documents — drafted to the standard Vietnamese administrative layout, downloadable as Word or PDF.",
@@ -3785,7 +3794,11 @@
       "MISSING_INPUT": "Fill in all required fields.",
       "EXEC_ONLY": "Only the board and CFO can view this report.",
       "NOT_ALLOWED": "This tool isn't available for your department.",
-      "BAD_FORMAT": "The assistant returned malformed content (it may have been cut off if the document was too long). Try again, or shorten the input."
+      "BAD_FORMAT": "The assistant returned malformed content (it may have been cut off if the document was too long). Try again, or shorten the input.",
+      "TOO_BIG": "File too large (15MB max).",
+      "BAD_XLSX": "Only .xlsx files are accepted. Open a legacy .xls in Excel and save it as .xlsx.",
+      "PLAN_EMPTY": "No payment rows found in the plan file. The sheet needs a header row with beneficiary and amount columns.",
+      "STATEMENT_EMPTY": "No transactions found in the statement file. The sheet needs transaction content and debit amount columns."
     }
   },
   "dock": {

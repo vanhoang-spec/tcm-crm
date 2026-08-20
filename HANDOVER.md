@@ -119,7 +119,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
-| — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) · **Đợt 1 (20/08/2026)**: output là TÀI LIỆU CÓ CẤU TRÚC (heading/bảng/danh sách) thay vì text thuần, **xuất Word (.docx) và PDF** — mục 10.48 · **Đợt 2 (20/08/2026)**: công cụ **Soạn thảo văn bản** — 9 loại (quyết định, thông báo, công văn, tờ trình, biên bản, quy chế, nhân sự, kế toán), KHÔNG lưu file mẫu và KHÔNG lưu bản soạn — mục 10.50 · **Review hợp đồng (đợt 3)**: chưa làm, ràng buộc ở mục 10.49 |
+| — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) · **Đợt 1 (20/08/2026)**: output là TÀI LIỆU CÓ CẤU TRÚC (heading/bảng/danh sách) thay vì text thuần, **xuất Word (.docx) và PDF** — mục 10.48 · **Đợt 2 (20/08/2026)**: công cụ **Soạn thảo văn bản** — 9 loại (quyết định, thông báo, công văn, tờ trình, biên bản, quy chế, nhân sự, kế toán), KHÔNG lưu file mẫu và KHÔNG lưu bản soạn — mục 10.50 · **Đối chiếu chi ngân hàng (20/08/2026)**: nạp kế hoạch chi + sao kê → chỉ ra khoản chưa đi được; **khớp số bằng CODE, AI chỉ nhận xét**; chỉ CFO + kế toán — mục 10.51 · **Review hợp đồng (đợt 3)**: chưa làm, ràng buộc ở mục 10.49 |
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Hồ sơ ISO | `/iso` | Xong (sổ đăng ký 25 loại hồ sơ / dự án, 8 loại app tự chấm, tab `/projects/[id]/iso`, xuất Excel 33 cột — xem mục 10.20) |
 | — | Bài đăng MKT | `/mkt` | Xong (bài LinkedIn/Fanpage: Account nộp ý chính + ảnh → AI DeepSeek viết riêng từng kênh → HR duyệt, copy đăng tay; banner nhịp tuần; phân tích insights quý — xem mục 10.23) |
@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 125 model Prisma · 74 migration · 90 file `src/lib` · 4304 key i18n × 2 ngôn ngữ · 147 mã quyền.
+**Quy mô:** 125 model Prisma · 74 migration · 90 file `src/lib` · 4315 key i18n × 2 ngôn ngữ · 148 mã quyền.
 
 ---
 
@@ -2639,6 +2639,62 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       chưa lưu lịch sử bản soạn (đúng quyết định "không lưu") · chưa nhập được nhiều file mẫu cùng lúc
       · chưa có bước duyệt nội bộ trước khi phát hành · **Review hợp đồng (đợt 3) vẫn chưa làm** — bốn
       ràng buộc ở mục 10.49 còn nguyên.
+
+51. **AI — ĐỐI CHIẾU CHI NGÂN HÀNG (kế toán, 20/08/2026)** (KHÔNG migration; **1 mã quyền mới:
+    `ai.bank_recon`, 147 → 148**). Công cụ thứ 8 ở `/ai`: nạp file KẾ HOẠCH CHI (mỗi sheet một ngày
+    duyệt lệnh) + file SAO KÊ ngân hàng → chỉ ra khoản nào **chưa đi được** để kế toán lập lại lệnh.
+    - ⚠ **PHẦN KHỚP SỐ DO CODE LÀM, AI CHỈ NHẬN XÉT** — đây là quyết định thiết kế quan trọng nhất của
+      mục này. Lý do: sai một chiều nào cũng mất tiền thật — báo nhầm "rớt" thì kế toán lập lại lệnh và
+      **TRẢ TRÙNG**; báo nhầm "đã chi" thì NCC không nhận được tiền. Thêm nữa sao kê một ngày có thể vài
+      trăm dòng, quá trần ký tự gửi sang AI (`extractTextFromFile` mặc định 6.000). Đúng tiền lệ bảng so
+      sánh báo giá NCC (mục 10.36): *số tính bằng code, AI nhận xét*.
+    - ⚠ **BẢNG KẾT QUẢ DỰNG XONG TRƯỚC KHI GỌI AI** (`buildReconBlocks`). AI lỗi/hết hạn mức/timeout thì
+      action **vẫn trả về bảng đúng**, chỉ thiếu phần nhận xét. Đã verify: chạy headless không có API key
+      ⇒ `AI lỗi: NOT_CONFIGURED → nhưng bảng đối chiếu vẫn còn 7 khối`.
+    - **BA CA CÓ THẬT trong file mẫu 17.08.2026 — thuật toán phải xử lý được, nếu không là báo sai:**
+      1. ⚠ **GỘP LỆNH**: hai dòng kế hoạch 22.900.000 (T041ACA26A1) + 8.450.000 (T042ACA26A1) đi thành
+         **MỘT giao dịch 31.350.000**, nội dung ghi đủ cả hai mã. Khớp theo số tiền đơn thuần sẽ báo hai
+         khoản này "rớt" ⇒ chi trùng 31.350.000. Đây là ca nguy hiểm nhất và nó nằm ngay trong file mẫu
+         đầu tiên.
+      2. **MÃ LỆCH**: kế hoạch ghi `T039JLB26A3`, nội dung chuyển khoản ghi `T036JLB26A3` (7.000.000).
+         Vẫn khớp theo số tiền nhưng phải NÊU RA — có thể gõ sai nội dung chuyển khoản.
+      3. **TIỀN VÀO**: sao kê có dòng khách chuyển vào (Colgate 48.988.800) — chỉ đối chiếu cột RÚT RA.
+    - **Thuật toán 5 bước, đi từ chắc chắn nhất tới suy đoán nhiều nhất** (`lib/bank-recon.ts`, THUẦN):
+      (1) số tiền DUY NHẤT ở cả hai bên → khớp 1-1 · (2) giao dịch mang NHIỀU mã dự án → gom đúng các dòng
+      có mã đó, tổng khớp ⇒ gộp lệnh (**bằng chứng nằm trong nội dung giao dịch, không phải đoán**) ·
+      (3) số tiền TRÙNG NHAU → ghép 1-1 theo thứ tự, ưu tiên khớp mã · (4) cùng SỐ TÀI KHOẢN → thử tập
+      con có tổng khớp · (5) tách lệnh 1→N. Còn lại: kế hoạch chưa khớp = **RỚT**, giao dịch chưa khớp =
+      ngoài kế hoạch.
+      ⚠ **Bước (3) bắt buộc phải có**: danh sách chi thật hay có nhiều khoản cùng số tiền (hai bạn part
+      time cùng 800.000). Bản đầu thiếu bước này, test bắt được: 2 khoản cùng 1.000.000 mà sao kê chỉ có
+      1 giao dịch ⇒ báo **rớt cả hai** thay vì 1. Bước này luôn kèm cảnh báo vì ghép cặp là suy đoán.
+    - ⚠ **Ngày duyệt lệnh lấy từ TÊN SHEET / tiêu đề bảng, KHÔNG phải cột "Ngày nhận hồ sơ"** — cột đó là
+      ngày nhận chứng từ, lệch cả tháng (file mẫu: nhận 02/07, duyệt chi 17/08).
+    - ⚠ **DÒ DÒNG TIÊU ĐỀ, không khoá cứng vị trí**: file kế hoạch có 4 dòng tiêu đề + ô gộp phía trên
+      bảng và số dòng đó đổi theo tháng. Khoá "bảng bắt đầu ở dòng 6" là hỏng ngay tháng sau.
+    - **Dữ liệu gửi sang DeepSeek đã rút gọn** (`reconSummaryForAi`): KHÔNG số tài khoản, KHÔNG số dư,
+      KHÔNG gửi cả sao kê — chỉ phần chưa khớp + phần cần xác nhận. Đã verify bằng regex: 0 chuỗi ≥8 chữ
+      số lọt ra. Sao kê đầy đủ mang toàn bộ dòng tiền công ty, không có lý do gì để nó rời khỏi app.
+    - **KHÔNG LƯU GÌ** — cùng quyết định với công cụ soạn thảo (mục 10.50): hai file đọc trong bộ nhớ rồi
+      bỏ, kết quả không ghi DB. Đo sau khi chạy: `ProjectFile` 0 · `storage/ai` 0 file · AuditLog không đổi.
+    - **Quyền `ai.bank_recon` — đúng 2 vai: CFO + ACCOUNTANT_STAFF** (yêu cầu chủ dự án: "chỉ phòng kế
+      toán hay CFO"). BGĐ muốn xem thì tick ở `/settings/roles`, không sửa code. `AI_BANK_RECON_ROLES`
+      trong seed + backfill `20260820_ai_bank_recon` lọc theo MÃ ROLE. ⚠ **KHÔNG thêm vào
+      `AI_LEGACY_ALL`** — xem bẫy ở mục 10.50. Đo cả hai đường (DB dựng-từ-đầu và dev.db): **2 vai, cùng
+      danh sách**.
+    - **Verify:** 30/30 assertion thuần chạy trên **chính 2 file thật** — đọc đúng 13 khoản / 385.043.407đ
+      và 12 giao dịch rút ra (bỏ 1 dòng tiền vào), đối chiếu ra **0 rớt · 0 ngoài kế hoạch**, bắt đúng gộp
+      lệnh (nhận diện bằng MÃ, `kind=CODE_GROUP`) và mã lệch; ca dựng: bỏ 2 giao dịch ⇒ đúng 2 khoản rớt
+      52.035.000đ; gộp lệnh KHÔNG ghi mã vẫn khớp nhờ cùng số tài khoản; sao kê rỗng ⇒ 13 khoản rớt.
+      **Browser thật với 2 file đó + gọi AI thật**: tiêu đề "khớp đủ", bảng 13 dòng đã thanh toán, mục "đã
+      khớp nhưng cần xác nhận" nêu đúng 2 ca, AI viết thêm bảng "Đối tượng · Vấn đề · Cách kiểm chứng
+      nhanh" không mâu thuẫn với kết luận của code · act-as ACCOUNT_STAFF: **không thấy công cụ**.
+      tsc · eslint · i18n **0/0 (4315 key)** · `next build` sạch · grant dev.db 1342 → **1344**.
+    - **CHƯA LÀM (cố ý):** chỉ đọc `.xlsx` (file `.xls` cũ báo lỗi kèm hướng dẫn Lưu thành .xlsx) · chưa
+      đối chiếu ngược với `VendorPayment` trong app (công cụ này làm việc trên 2 file rời, không đụng DB) ·
+      chưa nhớ lần đối chiếu trước để so tiến độ · tập con khi gộp lệnh giới hạn 4 khoản (đủ cho thực tế,
+      mở rộng là nổ tổ hợp) · chưa xử lý phí chuyển tiền trừ vào số tiền (chưa gặp trong file mẫu — nếu
+      ngân hàng trừ phí thì khoản đó sẽ rơi vào "rớt", kế toán sẽ thấy ngay và báo lại).
 
 ---
 

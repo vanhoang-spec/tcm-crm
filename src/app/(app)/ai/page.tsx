@@ -4,7 +4,7 @@ import { isAiConfigured } from "@/lib/ai/deepseek";
 import { isWebSearchConfigured } from "@/lib/ai/websearch";
 import { getAiVisibility } from "@/lib/permissions";
 import { NotConfiguredBanner } from "./ai-shared";
-import { BoardReportTool, BrainstormTool, CanvaBriefTool, ContentWriterTool, CostSheetTool, DocumentTool, TrendTool } from "./ai-tools";
+import { BankReconTool, BoardReportTool, BrainstormTool, CanvaBriefTool, ContentWriterTool, CostSheetTool, DocumentTool, TrendTool } from "./ai-tools";
 
 export default async function AiPage() {
   const [t, vis, projects] = await Promise.all([
@@ -20,7 +20,7 @@ export default async function AiPage() {
   ]);
 
   const options = projects.map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` }));
-  const anyTool = vis.canBrainstorm || vis.canContent || vis.canCanva || vis.canCostSheet || vis.canBoardReport || vis.canTrend || vis.canDocument;
+  const anyTool = vis.canBrainstorm || vis.canContent || vis.canCanva || vis.canCostSheet || vis.canBoardReport || vis.canTrend || vis.canDocument || vis.canBankRecon;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -40,6 +40,7 @@ export default async function AiPage() {
       {vis.canBoardReport && <BoardReportTool />}
       {vis.canTrend && <TrendTool webSearchOn={isWebSearchConfigured()} />}
       {vis.canDocument && <DocumentTool />}
+      {vis.canBankRecon && <BankReconTool />}
 
       {!anyTool && (
         <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">

@@ -236,6 +236,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "ai.board_report", module: "ai", labelVi: "AI báo cáo BGĐ", labelEn: "AI board report", sensitive: true },
   { code: "ai.trend", module: "ai", labelVi: "AI xu hướng ngành", labelEn: "AI industry trends" },
   { code: "ai.document", module: "ai", labelVi: "AI soạn thảo văn bản", labelEn: "AI document drafting" },
+  { code: "ai.bank_recon", module: "ai", labelVi: "AI đối chiếu chi ngân hàng", labelEn: "AI bank payment reconciliation", sensitive: true },
 
   // ── Cơ sở tri thức ──
   { code: "kb.view", module: "kb", labelVi: "Xem tài liệu", labelEn: "View knowledge base" },

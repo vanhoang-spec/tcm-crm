@@ -5,12 +5,16 @@ import { useLocale, useTranslations } from "next-intl";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AiResult, RunButton, ToolCard, aiInput, aiTextarea } from "./ai-shared";
 import { DOCUMENT_TYPES } from "@/lib/ai/document-types";
+
+const fileInput =
+  "block w-full text-xs text-muted-foreground file:mr-3 file:h-8 file:rounded-lg file:border file:border-border-strong file:bg-surface file:px-3 file:text-xs file:text-foreground";
 import {
   analyzeCostSheet,
   askIndustryTrend,
   brainstormIdeas,
   draftDocument,
   generateBoardReport,
+  reconcileBankPayments,
   generateCanvaBrief,
   writeContent,
   type AiState,
@@ -281,8 +285,39 @@ export function DocumentTool() {
         </div>
         <div>
           <label htmlFor="doc-ref" className="mb-1 block text-xs font-medium text-foreground">{t("referenceLabel")}</label>
-          <input id="doc-ref" type="file" name="reference" accept=".pdf,.docx,.txt,.md,.csv" className="block w-full text-xs text-muted-foreground file:mr-3 file:h-8 file:rounded-lg file:border file:border-border-strong file:bg-surface file:px-3 file:text-xs file:text-foreground" />
+          <input id="doc-ref" type="file" name="reference" accept=".pdf,.docx,.txt,.md,.csv" className={fileInput} />
           <p className="mt-1 text-[11px] text-muted-foreground">{t("referenceHint")}</p>
+        </div>
+        <RunButton pending={pending} hasResult={!!state.doc} />
+      </form>
+      <AiResult doc={state.doc} error={state.error} />
+    </ToolCard>
+  );
+}
+
+// ───────────────────────── Đối chiếu chi ngân hàng (chỉ kế toán / CFO) ─────────────────────────
+
+/**
+ * ⚠ Phần khớp số do CODE làm, AI chỉ nhận xét — xem `lib/bank-recon.ts`. Hai file đọc xong là bỏ,
+ * app không lưu (cùng quyết định với công cụ soạn thảo).
+ */
+export function BankReconTool() {
+  const t = useTranslations("ai.bankRecon");
+  const [state, action, pending] = useActionState<AiState, FormData>(reconcileBankPayments, {});
+
+  return (
+    <ToolCard title={t("title")} desc={t("desc")}>
+      <p className="mb-3 rounded-lg border border-warning/40 bg-warning-bg px-3 py-2 text-xs text-warning">{t("privacyWarning")}</p>
+      <form action={action} className="space-y-3">
+        <div>
+          <label htmlFor="br-plan" className="mb-1 block text-xs font-medium text-foreground">{t("planLabel")}</label>
+          <input id="br-plan" type="file" name="planFile" accept=".xlsx" required className={fileInput} />
+          <p className="mt-1 text-[11px] text-muted-foreground">{t("planHint")}</p>
+        </div>
+        <div>
+          <label htmlFor="br-st" className="mb-1 block text-xs font-medium text-foreground">{t("statementLabel")}</label>
+          <input id="br-st" type="file" name="statementFile" accept=".xlsx" required className={fileInput} />
+          <p className="mt-1 text-[11px] text-muted-foreground">{t("statementHint")}</p>
         </div>
         <RunButton pending={pending} hasResult={!!state.doc} />
       </form>

@@ -5,6 +5,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions } from "@/lib/permissions";
+import { getPurchasingScope, canSeeVendor } from "@/lib/purchasing-scope";
 import { RFQ_TEMPLATES } from "@/lib/rfq-templates";
 import { formatDate, formatNumber, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
@@ -20,7 +21,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
   if (!perms.has("purchasing.view") && !canManage) redirect("/no-access");
   const { id } = await params;
 
-  const [t, locale, vendor, projects, priceHistory, fieldDefsAll] = await Promise.all([
+  const [t, locale, vendor, projects, priceHistory, fieldDefsAll, scope] = await Promise.all([
     getTranslations("purchasing.vendors"),
     getLocale() as Promise<Locale>,
     prisma.vendor.findUnique({
@@ -44,8 +45,11 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
     }),
     loadVendorPriceHistory(id),
     prisma.vendorFieldDef.findMany({ orderBy: { sort: "asc" } }),
+    getPurchasingScope(),
   ]);
   if (!vendor) notFound();
+  // Ngoài phạm vi được chia sẻ ⇒ coi như không tồn tại. Đoán id không mở được hồ sơ NCC khác.
+  if (!canSeeVendor(scope, vendor.id)) notFound();
   const defs: VendorFieldDefLite[] = fieldDefsAll.filter((x) => x.isActive).map((x) => ({ key: x.key, labelVi: x.labelVi, labelEn: x.labelEn, type: x.type, options: parseOptions(x.optionsJson), hint: x.hint, required: x.required }));
   const custom = readCustomJson(vendor.customJson);
   // NCC tạo trước PUR-2 chỉ có 3 cột liên hệ cũ (contact/phone/email) — hiện thành người liên hệ chính

@@ -36,6 +36,7 @@ import {
   ShieldCheck,
   Award,
   Megaphone,
+  Share2,
 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { requirePermission } from "@/lib/permissions";
@@ -49,6 +50,7 @@ export default async function SettingsPage() {
     { href: "/settings/departments", icon: Building2, title: t("departmentsTitle"), desc: t("departmentsDesc") },
     { href: "/settings/vendors", icon: Truck, title: t("vendorsTitle"), desc: t("vendorsDesc") },
     { href: "/settings/vendor-fields", icon: ListChecks, title: t("vendorFieldsTitle"), desc: t("vendorFieldsDesc") },
+    { href: "/settings/production-sharing", icon: Share2, title: t("productionSharingTitle"), desc: t("productionSharingDesc") },
     { href: "/settings/staff", icon: UserPlus, title: t("staffTitle"), desc: t("staffDesc") },
     { href: "/settings/roles", icon: ShieldCheck, title: t("rolesTitle"), desc: t("rolesDesc") },
     { href: "/settings/options/industry", icon: Tags, title: t("industryTitle"), desc: t("industryDesc") },

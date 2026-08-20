@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions } from "@/lib/permissions";
+import { getPurchasingScope, vendorWhereForScope } from "@/lib/purchasing-scope";
 import { RFQ_TEMPLATES, isRfqTemplateCode } from "@/lib/rfq-templates";
 import { pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
@@ -21,12 +22,16 @@ export default async function PurchasingVendorsPage({ searchParams }: { searchPa
 
   const { group: groupParam, q } = await searchParams;
   const group = groupParam && isRfqTemplateCode(groupParam) ? groupParam : null;
+  const scope = await getPurchasingScope();
   const [t, locale, vendors, fieldDefs] = await Promise.all([
     getTranslations("purchasing.vendors"),
     getLocale() as Promise<Locale>,
     prisma.vendor.findMany({
       where: {
         ...(group ? { groups: { some: { groupCode: group } } } : {}),
+        // ⚠ Phạm vi phòng Sản xuất — MỘT nguồn sự thật ở lib/purchasing-scope.ts. Sót chỗ này là PRO
+        // nhìn thấy toàn bộ hồ sơ NCC gồm cả số tài khoản ngân hàng.
+        ...vendorWhereForScope(scope),
         ...(q ? { OR: [{ name: { contains: q } }, { code: { contains: q.toUpperCase() } }] } : {}),
       },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -36,6 +41,9 @@ export default async function PurchasingVendorsPage({ searchParams }: { searchPa
   ]);
   const defs: VendorFieldDefLite[] = fieldDefs.map((d) => ({ key: d.key, labelVi: d.labelVi, labelEn: d.labelEn, type: d.type, options: parseOptions(d.optionsJson), hint: d.hint, required: d.required }));
   const tpl = (code: string) => RFQ_TEMPLATES.find((x) => x.code === code);
+  // Vai được chia sẻ một phần chỉ thấy nhóm của mình: để nguyên 8 nhóm thì nhóm chưa chia sẻ hiện
+  // "0 NCC" — đọc thành "Thu mua không có NCC nhóm này", sai sự thật.
+  const groupTabs = scope.full ? RFQ_TEMPLATES : RFQ_TEMPLATES.filter((x) => scope.groupCodes.includes(x.code));
   const gLabel = (code: string) => {
     const x = tpl(code);
     return x ? pickLabel({ labelVi: x.labelVi, labelEn: x.labelEn }, locale) : code;
@@ -51,7 +59,7 @@ export default async function PurchasingVendorsPage({ searchParams }: { searchPa
         <form method="get" className="flex items-end gap-2">
           <select name="group" defaultValue={group ?? ""} className="h-9 rounded-lg border border-border-strong bg-surface px-2.5 text-sm">
             <option value="">{t("allGroups")}</option>
-            {RFQ_TEMPLATES.map((x) => (
+            {groupTabs.map((x) => (
               <option key={x.code} value={x.code}>
                 {gLabel(x.code)}
               </option>
@@ -66,7 +74,7 @@ export default async function PurchasingVendorsPage({ searchParams }: { searchPa
 
       {/* Bộ đếm theo nhóm — mỗi nhóm kèm form của nhóm đó */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {RFQ_TEMPLATES.map((x) => {
+        {groupTabs.map((x) => {
           const n = vendors.filter((v) => v.groups.some((g) => g.groupCode === x.code)).length;
           return (
             <Link

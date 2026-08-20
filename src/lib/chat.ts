@@ -1,5 +1,4 @@
 import { prisma } from "./prisma";
-import { sendPushToStaff, markNotificationsPushed } from "./push";
 import { getStringSetting } from "./settings";
 import { saveChatAttachment } from "./chat-storage";
 import { buildWelcomeSvg } from "./welcome-card";
@@ -220,6 +219,13 @@ export async function notifyNewMessage(opts: {
    * ⚠ Bọc try/catch: push hỏng KHÔNG được làm hỏng việc gửi tin nhắn.
    */
   try {
+    /**
+     * ⚠ NẠP ĐỘNG, ĐỪNG ĐỔI THÀNH IMPORT TĨNH: lib/push.ts khai "server-only", mà file chat.ts này
+     * được prisma/seed.ts import (lấy hằng TCM_FAMILY_GROUP_NAME). Import tĩnh làm "npm run db:seed"
+     * NỔ NGAY khi nạp module — và seed là bước BẮT BUỘC sau migrate deploy (HANDOVER 10.1), tức
+     * deploy sẽ hỏng ở đúng bước cấp quyền. tsc/eslint/next build đều KHÔNG bắt được lỗi này.
+     */
+    const { sendPushToStaff, markNotificationsPushed } = await import("./push");
     const ids = rows.map((r) => r.recipientStaffId);
     await sendPushToStaff(ids, {
       title,

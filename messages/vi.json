@@ -510,6 +510,22 @@
     }
   },
   "settings": {
+    "productionSharing": {
+      "title": "Sản xuất dùng chung Thu mua",
+      "subtitle": "Chọn nhóm hàng và nhà cung cấp mà phòng Sản xuất được dùng. Không tick thì Sản xuất không thấy gì.",
+      "back": "Về Thiết lập",
+      "groupsTitle": "Nhóm hàng chia sẻ",
+      "groupsHint": "Mỗi nhóm đi kèm luôn mẫu form báo giá của nhóm đó — tick nhóm là Sản xuất lập được RFQ theo form ấy.",
+      "vendorsTitle": "Nhà cung cấp chia sẻ",
+      "vendorsHint": "Chỉ những NCC được tick mới hiện ra cho phòng Sản xuất. Danh sách lọc theo nhóm đang tick ở trên.",
+      "noVendorForGroups": "Chưa tick nhóm nào, hoặc chưa có NCC nào thuộc các nhóm đã tick.",
+      "pickedOutsideGroups": "Đã chọn nhưng không thuộc nhóm nào đang tick:",
+      "save": "Lưu cấu hình",
+      "saved": "Đã lưu",
+      "summary": "Đang chọn {groups} nhóm · {vendors} NCC",
+      "limitedBanner": "Bạn đang xem phần Thu mua được chia sẻ cho phòng Sản xuất: {groups} nhóm hàng · {vendors} nhà cung cấp.",
+      "noAccess": "Phòng Sản xuất chưa được chia sẻ nhóm hàng hay nhà cung cấp nào. Liên hệ Thu mua hoặc BGĐ để được mở."
+    },
     "index": {
       "title": "Thiết lập hệ thống",
       "subtitle": "Cấu hình dùng chung — chỉ Admin/CEO nên có quyền sửa.",
@@ -588,6 +604,8 @@
       "creativeSquadsTitle": "Team nhỏ Creative",
       "creativeSquadsDesc": "Ba team nhỏ trong phòng Creative, trưởng team và phân người.",
       "vendorFieldsTitle": "Trường thông tin NCC",
+      "productionSharingTitle": "Sản xuất dùng chung Thu mua",
+      "productionSharingDesc": "Tick nhóm hàng và NCC mà phòng Sản xuất được dùng chung.",
       "vendorFieldsDesc": "Khai thêm trường tuỳ chỉnh cho hồ sơ nhà cung cấp"
     },
     "bidding": {
@@ -4423,6 +4441,8 @@
       "errNoLines": "Chưa chọn dòng CO nào.",
       "errNoTemplate": "Chưa chọn mẫu form.",
       "errNoVendors": "Chưa chọn NCC nào.",
+      "errGroupNotShared": "Nhóm hàng này chưa được chia sẻ cho phòng bạn. Báo quản trị mở ở Thiết lập → Sản xuất dùng chung Thu mua.",
+      "errVendorNotShared": "Có nhà cung cấp không nằm trong danh sách được chia sẻ cho phòng bạn.",
       "errNoTitle": "Thiếu tiêu đề.",
       "errNotFound": "Không tìm thấy.",
       "errBadStatus": "Trạng thái RFQ không cho phép thao tác này.",

@@ -510,6 +510,22 @@
     }
   },
   "settings": {
+    "productionSharing": {
+      "title": "Production sharing from Purchasing",
+      "subtitle": "Choose which product groups and vendors the Production team may use. Nothing ticked means Production sees nothing.",
+      "back": "Back to Settings",
+      "groupsTitle": "Shared product groups",
+      "groupsHint": "Each group carries its own quote form — ticking a group lets Production raise RFQs with that form.",
+      "vendorsTitle": "Shared vendors",
+      "vendorsHint": "Only ticked vendors appear for the Production team. The list is filtered by the groups ticked above.",
+      "noVendorForGroups": "No group ticked yet, or no vendor belongs to the ticked groups.",
+      "pickedOutsideGroups": "Selected but outside the ticked groups:",
+      "save": "Save",
+      "saved": "Saved",
+      "summary": "{groups} groups · {vendors} vendors selected",
+      "limitedBanner": "You are seeing the Purchasing data shared with Production: {groups} groups · {vendors} vendors.",
+      "noAccess": "Production has not been given access to any product group or vendor yet. Ask Purchasing or the board to enable it."
+    },
     "index": {
       "title": "System Settings",
       "subtitle": "Shared configuration — only Admin/CEO should have edit access.",
@@ -588,6 +604,8 @@
       "creativeSquadsTitle": "Creative squads",
       "creativeSquadsDesc": "The three squads inside Creative, their leads and membership.",
       "vendorFieldsTitle": "Vendor fields",
+      "productionSharingTitle": "Production sharing from Purchasing",
+      "productionSharingDesc": "Tick which product groups and vendors the Production team may use.",
       "vendorFieldsDesc": "Define custom fields for vendor profiles"
     },
     "bidding": {
@@ -4423,6 +4441,8 @@
       "errNoLines": "No CO lines selected.",
       "errNoTemplate": "No template selected.",
       "errNoVendors": "No vendors selected.",
+      "errGroupNotShared": "This product group has not been shared with your department. Ask an admin to enable it in Settings → Production shares Purchasing.",
+      "errVendorNotShared": "Some vendors are not on the list shared with your department.",
       "errNoTitle": "Title missing.",
       "errNotFound": "Not found.",
       "errBadStatus": "RFQ status does not allow this action.",

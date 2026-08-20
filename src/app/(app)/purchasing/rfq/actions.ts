@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { hasPermission, requirePermission } from "@/lib/permissions";
+import { getPurchasingScope, canUseGroup, canSeeVendor } from "@/lib/purchasing-scope";
 import { stringifyAudit, toNum } from "@/lib/utils";
 import { hashGuestToken } from "@/lib/guest-session";
 import { resolveRfqTemplate, isRfqTemplateCode } from "@/lib/rfq-templates";
@@ -57,11 +58,18 @@ export async function createRfq(_prev: RfqFormState, formData: FormData): Promis
   if (!projectId) return { error: "NO_PROJECT" };
   const groupCode = str(formData.get("groupCode"));
   if (!isRfqTemplateCode(groupCode)) return { error: "NO_TEMPLATE" };
+  /**
+   * ⚠ Chốt chặn THẬT của phạm vi chia sẻ. Lọc ở trang chỉ là trang trí — người dùng sửa được payload,
+   * nên nhóm hàng và từng NCC đều phải kiểm LẠI ở đây.
+   */
+  const scope = await getPurchasingScope();
+  if (!canUseGroup(scope, groupCode)) return { error: "GROUP_NOT_SHARED" };
   const title = str(formData.get("title")).slice(0, 200);
   if (!title) return { error: "NO_TITLE" };
   const stableKeys = formData.getAll("lineKey").map((v) => String(v)).filter(Boolean);
   if (stableKeys.length === 0) return { error: "NO_LINES" };
   const vendorIds = [...new Set(formData.getAll("vendorId").map((v) => String(v)).filter(Boolean))];
+  if (vendorIds.some((id) => !canSeeVendor(scope, id))) return { error: "VENDOR_NOT_SHARED" };
   if (vendorIds.length === 0) return { error: "NO_VENDORS" };
   const departmentTaskId = nullable(formData.get("departmentTaskId"));
 

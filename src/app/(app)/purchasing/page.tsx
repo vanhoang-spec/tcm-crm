@@ -4,6 +4,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions, requirePermission } from "@/lib/permissions";
+import { getPurchasingScope } from "@/lib/purchasing-scope";
 import { RFQ_TEMPLATES } from "@/lib/rfq-templates";
 import { RFQ_STATUSES } from "@/lib/rfq";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
@@ -25,6 +26,7 @@ const STATUS_TONE: Record<string, "neutral" | "warning" | "brand" | "success" | 
  */
 export default async function PurchasingHomePage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   await requirePermission("purchasing.view");
+  const scope = await getPurchasingScope();
   const perms = await getMyPermissions();
   const canManage = perms.has("purchasing.rfq.manage");
   const { status: statusParam } = await searchParams;
@@ -33,7 +35,7 @@ export default async function PurchasingHomePage({ searchParams }: { searchParam
   const [t, locale, pendingTasks, rfqs] = await Promise.all([
     getTranslations("purchasing.rfq"),
     getLocale() as Promise<Locale>,
-    prisma.departmentTask.findMany({
+    scope.limited ? [] : prisma.departmentTask.findMany({
       where: {
         department: "PCC",
         status: { in: ["UNASSIGNED", "ASSIGNED", "REVISION"] },
@@ -44,7 +46,13 @@ export default async function PurchasingHomePage({ searchParams }: { searchParam
       include: { project: { select: { id: true, code: true, name: true } }, assignee: { select: { fullName: true } }, rfqs: { select: { id: true, code: true } } },
     }),
     prisma.rfq.findMany({
-      where: status ? { status } : {},
+      // ⚠ Gộp vào MỘT khoá `where`: hai khoá `where` trong cùng object thì khoá sau ĐÈ khoá trước,
+      // tức bộ lọc phạm vi biến mất trong im lặng khi có tham số trạng thái.
+      where: {
+        ...(status ? { status } : {}),
+        // Chỉ RFQ thuộc nhóm hàng được chia sẻ — phòng Sản xuất không đọc RFQ của nhóm khác.
+        ...(scope.full ? {} : { groupCode: { in: scope.groupCodes } }),
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
@@ -72,7 +80,9 @@ export default async function PurchasingHomePage({ searchParams }: { searchParam
         )}
       </div>
 
-      {/* Order PCC đang chờ */}
+      {/* Order PCC đang chờ — hàng việc của phòng THU MUA. Vai được chia sẻ một phần (phòng Sản
+          xuất) không thấy khối này: họ lập RFQ cho việc của chính mình, không nhận order PCC. */}
+      {!scope.limited && (
       <section className="rounded-xl border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-foreground">{t("pendingOrdersTitle")}</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">{t("pendingOrdersHint")}</p>
@@ -107,6 +117,7 @@ export default async function PurchasingHomePage({ searchParams }: { searchParam
           </ul>
         )}
       </section>
+      )}
 
       {/* Danh sách RFQ */}
       <section className="rounded-xl border border-border bg-surface p-4">

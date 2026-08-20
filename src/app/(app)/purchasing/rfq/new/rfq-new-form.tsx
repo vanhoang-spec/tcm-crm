@@ -28,6 +28,10 @@ const ERR_KEY: Record<string, string> = {
   NO_LINES: "errNoLines",
   NO_TEMPLATE: "errNoTemplate",
   NO_VENDORS: "errNoVendors",
+  // Phạm vi chia sẻ Thu mua ↔ Sản xuất (lib/purchasing-scope.ts) — nói rõ đường xử lý, đừng để rơi
+  // vào câu lỗi chung "Có lỗi, thử lại" (người dùng sẽ bấm lại mãi mà không hiểu vì sao).
+  GROUP_NOT_SHARED: "errGroupNotShared",
+  VENDOR_NOT_SHARED: "errVendorNotShared",
   NO_TITLE: "errNoTitle",
   NOT_FOUND: "errNotFound",
 };
@@ -39,6 +43,7 @@ export function RfqNewForm({
   lines,
   vendors,
   suggestedTemplate,
+  allowedGroups,
   locale,
 }: {
   projectId: string;
@@ -47,12 +52,18 @@ export function RfqNewForm({
   lines: NewRfqLine[];
   vendors: NewRfqVendor[];
   suggestedTemplate: RfqTemplateCode | null;
+  /** null = mọi nhóm. Mảng = CHỈ những nhóm được chia sẻ cho vai này (phòng Sản xuất). */
+  allowedGroups: string[] | null;
   locale: Locale;
 }) {
   const t = useTranslations("purchasing.rfq");
   const [state, formAction, pending] = useActionState<RfqFormState, FormData>(createRfq, {});
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [template, setTemplate] = useState<RfqTemplateCode | "">(suggestedTemplate ?? "");
+  const templates = allowedGroups ? RFQ_TEMPLATES.filter((x) => allowedGroups.includes(x.code)) : RFQ_TEMPLATES;
+  // Gợi ý nằm ngoài nhóm được chia sẻ thì bỏ — không chọn sẵn thứ mà server sẽ từ chối.
+  const [template, setTemplate] = useState<RfqTemplateCode | "">(
+    suggestedTemplate && templates.some((x) => x.code === suggestedTemplate) ? suggestedTemplate : "",
+  );
   const [showAll, setShowAll] = useState(false);
   const [title, setTitle] = useState(taskTitle ?? "");
   const [note, setNote] = useState("");
@@ -73,8 +84,9 @@ export function RfqNewForm({
     });
   const liveSuggest = useMemo(() => {
     const names = lines.filter((l) => selected.has(l.stableKey)).map((l) => l.itemName);
-    return names.length ? suggestRfqTemplate(names) : null;
-  }, [selected, lines]);
+    const s = names.length ? suggestRfqTemplate(names) : null;
+    return s && (!allowedGroups || allowedGroups.includes(s)) ? s : null;
+  }, [selected, lines, allowedGroups]);
   const tpl = RFQ_TEMPLATES.find((x) => x.code === template) ?? null;
   const visibleVendors = showAll || !template ? vendors : vendors.filter((v) => v.groupCodes.includes(template));
   const gLabel = (code: string) => {
@@ -141,7 +153,7 @@ export function RfqNewForm({
         </p>
         <input type="hidden" name="groupCode" value={template} />
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {RFQ_TEMPLATES.map((x) => (
+          {templates.map((x) => (
             <button
               key={x.code}
               type="button"

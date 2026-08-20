@@ -5,6 +5,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions, requirePermission } from "@/lib/permissions";
+import { getPurchasingScope, canUseGroup } from "@/lib/purchasing-scope";
 import { resolveRfqTemplate, parseExtraJson } from "@/lib/rfq-templates";
 import { formatDate, formatNumber, toNum } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
@@ -46,6 +47,8 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
     }),
   ]);
   if (!rfq) notFound();
+  // RFQ thuộc nhóm chưa chia sẻ ⇒ coi như không tồn tại.
+  if (!canUseGroup(await getPurchasingScope(), rfq.groupCode)) notFound();
   const template = resolveRfqTemplate(rfq.groupCode);
   if (!template) notFound();
 

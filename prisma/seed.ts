@@ -2343,9 +2343,21 @@ async function main() {
    * ⚠ Lọc theo MÃ ROLE, không theo nhóm — bài học SECURITY_GUARD-trong-nhóm-WAREHOUSE (10.15).
    */
   const PUR_ROLES = ["PURCHASING_MANAGER", "PURCHASING_STAFF", "BOARD_OF_MANAGEMENT"];
+  /**
+   * PRO-SHARE (20/08/2026) — phòng SẢN XUẤT dùng chung cấu trúc NCC + nhóm/form của Thu mua, nhưng
+   * CHỈ trong phạm vi admin tick ở /settings/production-sharing (lib/purchasing-scope.ts).
+   *
+   * ⚠ Danh sách này phải KHỚP hằng SHARED_ROLE_CODES trong lib/purchasing-scope.ts. Thêm role ở một
+   *   bên mà quên bên kia: hoặc role đó có quyền mà không thấy gì, hoặc THẤY TOÀN BỘ hồ sơ NCC.
+   * ⚠ CỐ Ý KHÔNG cấp purchasing.vendor.manage — chính mã đó là thứ getPurchasingScope() dùng để kết
+   *   luận "toàn quyền", cấp cho PRO là vô hiệu hoá toàn bộ phạm vi vừa dựng.
+   * ⚠ CỐ Ý KHÔNG cấp purchasing.rfq.ai — AI tính tiền theo LƯỢT (mirror mkt.generate). BGĐ muốn mở
+   *   thì tick ở /settings/roles, không cần deploy.
+   */
+  const PRO_SHARED_ROLES = ["PRODUCTION_MANAGER", "PRODUCTION_STAFF"];
   const PUR_POLICY: Record<string, string[]> = {
-    "purchasing.view": [...PUR_ROLES, "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER", "ACCOUNT_STAFF", "CFO", "ACCOUNTANT_STAFF"],
-    "purchasing.rfq.manage": PUR_ROLES,
+    "purchasing.view": [...PUR_ROLES, "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER", "ACCOUNT_STAFF", "CFO", "ACCOUNTANT_STAFF", ...PRO_SHARED_ROLES],
+    "purchasing.rfq.manage": [...PUR_ROLES, ...PRO_SHARED_ROLES],
     "purchasing.rfq.ai": PUR_ROLES,
     "purchasing.vendor.manage": PUR_ROLES,
   };
@@ -2890,6 +2902,14 @@ async function main() {
       key: "20260816_pur_manage",
       codes: ["purchasing.rfq.manage", "purchasing.rfq.ai", "purchasing.vendor.manage"],
       roleFilter: (r) => PUR_ROLES.includes(r.code),
+    },
+
+    // 20/08/2026 PRO-SHARE — phòng Sản xuất được lập RFQ trong phạm vi nhóm/NCC admin tick.
+    // Dịch phần PRO của PUR_POLICY sang đường backfill; sửa PUR_POLICY thì sửa cả đây.
+    {
+      key: "20260820_pur_share_production",
+      codes: ["purchasing.view", "purchasing.rfq.manage"],
+      roleFilter: (r) => PRO_SHARED_ROLES.includes(r.code),
     },
 
     // 20/08/2026 AI SOẠN THẢO VĂN BẢN (đợt 2) — 1 mã mới. Lọc theo MÃ ROLE, khớp AI_DOCUMENT_ROLES.

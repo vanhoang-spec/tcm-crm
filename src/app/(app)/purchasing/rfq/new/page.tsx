@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions";
+import { getPurchasingScope, vendorWhereForScope } from "@/lib/purchasing-scope";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import { toNum } from "@/lib/utils";
@@ -17,6 +18,7 @@ import { RfqNewForm, type NewRfqLine, type NewRfqVendor } from "./rfq-new-form";
  */
 export default async function RfqNewPage({ searchParams }: { searchParams: Promise<{ project?: string; task?: string }> }) {
   await requirePermission("purchasing.rfq.manage");
+  const scope = await getPurchasingScope();
   const { project: projectParam, task: taskParam } = await searchParams;
   const [t, locale, projects, vendors] = await Promise.all([
     getTranslations("purchasing.rfq"),
@@ -26,7 +28,7 @@ export default async function RfqNewPage({ searchParams }: { searchParams: Promi
       select: { id: true, code: true, name: true },
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.vendor.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, code: true, groups: { select: { groupCode: true } } } }),
+    prisma.vendor.findMany({ where: { isActive: true, ...vendorWhereForScope(scope) }, orderBy: { name: "asc" }, select: { id: true, name: true, code: true, groups: { select: { groupCode: true } } } }),
   ]);
   const projectId = projectParam && projects.some((p) => p.id === projectParam) ? projectParam : null;
 
@@ -87,7 +89,7 @@ export default async function RfqNewPage({ searchParams }: { searchParams: Promi
       ) : lines.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border-strong p-4 text-sm text-muted-foreground">{t("noCostLines")}</p>
       ) : (
-        <RfqNewForm projectId={projectId} taskId={taskId} taskTitle={taskTitle} lines={lines} vendors={vendorOpts} suggestedTemplate={suggested} locale={locale} />
+        <RfqNewForm projectId={projectId} taskId={taskId} taskTitle={taskTitle} lines={lines} vendors={vendorOpts} suggestedTemplate={suggested} allowedGroups={scope.full ? null : scope.groupCodes} locale={locale} />
       )}
     </div>
   );

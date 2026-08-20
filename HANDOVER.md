@@ -2836,6 +2836,84 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       bật · chưa gom nhiều thông báo cùng lúc thành một (mỗi thông báo một push) · chưa có nút tắt
       push theo LOẠI thông báo.
 
+55. **THU MUA — PHÒNG SẢN XUẤT DÙNG CHUNG CẤU TRÚC NCC/NHÓM/FORM, CÓ GIỚI HẠN (20/08/2026)** (KHÔNG
+    migration — cấu hình nằm trong bảng `setting` sẵn có; **KHÔNG mã quyền mới** — cấp lại 2 mã `purchasing.*`
+    đã có cho 2 role Sản xuất). Yêu cầu chủ dự án: *"phần của PRO cho phép share chung cấu trúc NCC và nhóm/form
+    của PUR: nhưng không fully hoàn toàn mà cho phép tick dùng nhóm nào NCC nào và form nào đi theo; setting này
+    nằm ở app tùy chỉnh được và không cần code sau này"* — chốt phương án **1a** (PRO dùng đầy đủ luồng RFQ trong
+    phạm vi được tick) + **2a** (mỗi nhóm mang luôn form của nhóm đó, không tách rời).
+    - ⚠ **`lib/purchasing-scope.ts` là MỘT NGUỒN SỰ THẬT cho MỌI chỗ chặn.** Rải phép kiểm ra từng trang là
+      đúng loại bug im lặng: sót MỘT chỗ thì PRO nhìn thấy toàn bộ hồ sơ NCC của công ty — gồm **số tài khoản
+      ngân hàng** và **lịch sử giá**. Sáu chỗ đang gọi: danh sách NCC · hồ sơ 1 NCC · trang lập RFQ (bộ chọn
+      nhóm + bộ chọn NCC) · `createRfq` (server) · danh sách RFQ · chi tiết RFQ.
+    - **Cấu hình ở `/settings/production-sharing`** (gác `settings.vendors.manage` = BGĐ + PUR Manager; thẻ mới
+      ở trang Thiết lập): tick nhóm hàng + tick NCC, ghi vào bảng `setting` module `production` (2 khoá
+      `shared_group_codes` / `shared_vendor_ids`, JSON). **Không tick gì = PRO không thấy gì.** Sửa bằng tick
+      trong app, đúng yêu cầu "không cần code sau này". Audit ghi cũ→mới.
+    - ⚠ **Danh sách NCC trong form cấu hình lọc theo nhóm ĐANG TICK**, nhưng NCC đã tick mà nhóm vừa bị bỏ tick
+      thì VẪN HIỆN ở mục "đã chọn nhưng ngoài nhóm" — không có mục đó thì bỏ tick một nhóm là mất luôn danh
+      sách NCC đã chọn mà người dùng không biết.
+    - ⚠ **CỐ Ý KHÔNG cấp `purchasing.vendor.manage` cho PRO**: chính mã đó là thứ `getPurchasingScope()` dùng
+      để kết luận "toàn quyền" — cấp cho PRO là **vô hiệu hoá toàn bộ phạm vi vừa dựng**, im lặng.
+    - ⚠ **CỐ Ý KHÔNG cấp `purchasing.rfq.ai`**: AI tính tiền theo LƯỢT (mirror `mkt.generate`, `clients.kb.generate`).
+      PRO vẫn nhập hộ báo giá tay và NCC vẫn tự điền qua cổng token. BGĐ muốn mở thì tick ở `/settings/roles`,
+      không cần deploy.
+    - ⚠ **Hai danh sách role phải KHỚP NHAU**: `SHARED_ROLE_CODES` (lib/purchasing-scope.ts) và `PRO_SHARED_ROLES`
+      (prisma/seed.ts). Thêm role ở một bên mà quên bên kia thì hoặc role đó có quyền mà **không thấy gì**, hoặc
+      **thấy toàn bộ** hồ sơ NCC. Cả hai đều lọc theo **MÃ ROLE**, không theo nhóm — bài học
+      SECURITY_GUARD-trong-nhóm-WAREHOUSE (mục 10.15).
+    - **Vai KHÔNG thuộc danh sách chia sẻ giữ nguyên hành vi cũ** (`full: true`): đợt này thuần MỞ THÊM cho PRO,
+      **không siết ai đang có quyền**. Account/kế toán/CFO vẫn xem RFQ như trước.
+    - **Ba chỗ giấu cho khỏi nói dối** (không phải bảo mật, là trung thực dữ liệu): tab/ô chọn nhóm ở danh sách
+      NCC chỉ liệt kê nhóm được chia sẻ (để nguyên 8 nhóm thì nhóm chưa chia sẻ hiện "0 NCC", đọc thành "Thu mua
+      không có NCC nhóm này") · bộ chọn mẫu ở trang lập RFQ chỉ hiện nhóm được chia sẻ, và **gợi ý mẫu tự động
+      rơi ra ngoài phạm vi thì bỏ** (không chọn sẵn thứ server sẽ từ chối) · khối "Order PCC đang chờ" ẩn với vai
+      chia sẻ một phần — đó là hàng việc của phòng Thu mua, PRO lập RFQ cho việc của chính mình.
+    - ⚠ **BUG ĐÃ VÁ NGAY LÚC VIẾT — HAI KHOÁ `where` TRONG CÙNG MỘT OBJECT**: bản đầu thêm bộ lọc phạm vi bằng
+      `...(scope.full ? {} : { where: {...} })` đặt NGAY TRÊN `where: status ? ... : {}` sẵn có ⇒ khoá sau **đè**
+      khoá trước, bộ lọc phạm vi biến mất trong im lặng. tsc/eslint/build đều sạch. Nay gộp vào MỘT `where`.
+    - ⚠ **LỖI CÓ SẴN TỪ ĐỢT WEB PUSH, VÁ CÙNG ĐỢT — `npm run db:seed` ĐANG NỔ.** `lib/chat.ts` import tĩnh
+      `./push` (file khai `server-only`), mà `prisma/seed.ts` import `lib/chat.ts` để lấy hằng
+      `TCM_FAMILY_GROUP_NAME` ⇒ seed chết ngay lúc NẠP MODULE. Seed là bước **BẮT BUỘC** sau `migrate deploy`
+      (mục 10.1), tức **deploy sẽ hỏng ở đúng bước cấp quyền**. Nay `chat.ts` nạp `./push` bằng **dynamic import**
+      bên trong hàm. ⚠ tsc · eslint · `next build` **đều SẠCH** khi lỗi này còn — chỉ chạy `npm run db:seed` mới
+      thấy. **Chạy seed trước khi commit bất cứ thứ gì đụng `lib/chat.ts` hoặc `lib/push.ts`.**
+    - **Quyền: cấp lại 2 mã CŨ cho 2 role** (`purchasing.view` + `purchasing.rfq.manage` → `PRODUCTION_MANAGER`,
+      `PRODUCTION_STAFF`). Nguồn sự thật là `PUR_POLICY` nuôi cả `isRestricted` + `purCodesFor` (DB dựng-từ-đầu)
+      + backfill `20260820_pur_share_production` (DB đang chạy). Đo **GIỐNG HỆT NHAU** trên cả hai đường:
+      view **10 vai** · rfq.manage **5 vai** · rfq.ai **3** · vendor.manage **3**. dev.db 1344 → **1348** (+4 = 2
+      role × 2 mã); seed lần hai **no-op**.
+    - **Verify (browser thật, act-as HỒ SĨ BẢO — Production Manager; dev.db):** tick 2 nhóm (Sản xuất/in ấn +
+      Vận chuyển) và 3 NCC (MHG · NQL · TDA) → lưu, audit ghi `nhóm: — | NCC: 0` → `nhóm: PRODUCTION_PRINT,LOGISTICS
+      | NCC: 3` · danh sách NCC hiện **đúng 3 NCC** và **đúng 2 tab nhóm** · hồ sơ Sông Lam (ngoài phạm vi) trả
+      **404** và HTML **không chứa tên NCC đó**, hồ sơ Minh Hoàng trả 200 · trang lập RFQ hiện **đúng 2 nút mẫu**
+      và **3 NCC** · **giả mạo payload 2 lần**: đổi `groupCode` thành `EVENT_EQUIPMENT` ⇒ server trả
+      `GROUP_NOT_SHARED`; nhét thêm `vendorId` của Sông Lam ⇒ `VENDOR_NOT_SHARED` — không RFQ nào được tạo ·
+      luồng hợp lệ vẫn chạy: PRO tạo được `T002DIA26A2-RFQ1` (nhóm Sản xuất/in ấn, NCC Minh Hoàng) · đổi RFQ đó
+      sang nhóm chưa chia sẻ ⇒ **biến khỏi danh sách** và chi tiết trả **404**, đổi lại ⇒ hiện lại 200 · khối
+      "Order PCC đang chờ" **không hiện** với PRO · **act-as admin**: thấy đủ 30 NCC, Sông Lam 200 — không ai bị
+      siết. tsc · eslint · i18n **0/0 (4346 key)** · `next build` sạch có route `/settings/production-sharing` ·
+      `migrate diff` rỗng. Dữ liệu test đã dọn sạch (RFQ + audit + 2 dòng setting), dev.db về 36/68/25 · 30 NCC ·
+      483 dòng CO · 88 AuditLog.
+    - **Hai mã lỗi mới có câu i18n riêng** (`errGroupNotShared` / `errVendorNotShared`) chỉ đúng đường xử lý —
+      để rơi vào câu chung "Có lỗi, thử lại" thì người dùng bấm lại mãi mà không hiểu vì sao.
+    - **THÊM NHÓM HÀNG MỚI NGOÀI APP: HIỆN CHƯA ĐƯỢC, và đây là lý do** (chủ dự án hỏi 20/08/2026). Danh mục 8
+      nhóm nằm ở CODE (`lib/rfq-templates.ts`, khuôn `quote-templates.ts`/`iso-catalog.ts`) vì mỗi nhóm mang
+      **BA thứ**: (a) danh sách CỘT của form báo giá · (b) khối điều khoản riêng · (c) **CÔNG THỨC THÀNH TIỀN**.
+      (a) và (b) chuyển xuống DB được ngay bằng đúng khuôn `VendorFieldDef` của PUR-2. **(c) thì không**:
+      `computeQuoteLineAmount` có nhánh viết tay cho nhóm nhân sự thuê ngoài (ngày × người × giờ × đơn giá/GIỜ
+      **+ cơm × người × ngày**) và nhóm mô hình đặc biệt (Σ 4 khối) — không có ngôn ngữ công thức trong app thì
+      nhóm mới chỉ dùng được công thức mặc định (SL × Π hệ số × đơn giá). ⚠ Và mã nhóm đang là **khoá dữ liệu**:
+      `VendorGroup.groupCode`, `Rfq.groupCode`, `shared_group_codes` đều lưu chuỗi mã — cho tự tạo mã thì phải
+      chặn xoá/đổi mã nhóm đã có NCC hoặc RFQ trỏ vào. **Đề xuất nếu làm: một đợt riêng** ("nhóm hàng khai trong
+      app") = bảng `rfq_group` + `rfq_group_field` (khuôn `vendor_field_def`, key sinh một lần, chỉ tắt không
+      xoá) + giữ 8 nhóm hiện tại làm nhóm hệ thống không sửa công thức. Chưa làm — cần chủ dự án duyệt phạm vi.
+    - **CHƯA LÀM (cố ý):** PRO chưa có bước "trình Account chốt vào CO" riêng (dùng chung luồng PUR-1b — Account
+      của dự án vẫn là người chốt, `canConfirmRfq` không đổi) · chưa giới hạn PRO theo DỰ ÁN (thấy mọi dự án
+      đang chạy như PUR) · chưa có phạm vi tương tự cho phòng khác (OPE/Creative) — cùng hàm là mở được, chỉ cần
+      thêm mã role vào 2 danh sách · chưa ghi phạm vi vào từng RFQ (kiểm lúc ĐỌC, nên đổi cấu hình là RFQ cũ ẩn
+      đi theo — cố ý: cấu hình là chính sách hiện hành, không phải ảnh chụp).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

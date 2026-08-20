@@ -485,13 +485,14 @@ export function ChatConversation({
                     </a>
                   ) : editingMessageId === m.id ? (
                     <div className="space-y-1">
+                      {/* text-base trên mobile — cùng lý do iOS auto-zoom như ô soạn tin */}
                       <textarea
                         value={editDraft}
                         onChange={(e) => setEditDraft(e.target.value)}
                         rows={2}
                         autoFocus
                         className={cn(
-                          "w-full resize-none rounded-lg border px-2 py-1 text-sm outline-none",
+                          "w-full resize-none rounded-lg border px-2 py-1 text-base outline-none sm:text-sm",
                           mine ? "border-white/40 bg-white/10 text-white placeholder:text-white/60" : "border-border bg-surface",
                         )}
                       />
@@ -1298,6 +1299,8 @@ function Composer({
 
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** Số dòng tối đa của ô soạn tin trước khi bắt đầu cuộn trong ô. */
+  const MAX_COMPOSER_LINES = 5;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -1306,6 +1309,37 @@ function Composer({
   const recordStartRef = useRef(0);
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const okRef = useRef<number | undefined>(undefined);
+
+  /**
+   * Ô soạn tin tự cao theo nội dung, tối đa MAX_COMPOSER_LINES dòng rồi mới cuộn trong ô.
+   * Đo lineHeight/padding thật bằng getComputedStyle chứ không đặt max-height cứng: cỡ chữ đổi theo
+   * breakpoint (16px mobile / 14px desktop) nên một con số px cố định sẽ sai ở một trong hai bên.
+   */
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const cs = window.getComputedStyle(el);
+    const line = parseFloat(cs.lineHeight) || 20;
+    const extra =
+      parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    const max = line * MAX_COMPOSER_LINES + extra;
+    el.style.height = Math.min(el.scrollHeight, max) + "px";
+    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+  }, [bodyText, mode]);
+
+  /**
+   * Bấm "Trả lời" ở một tin nhắn → đưa con trỏ thẳng vào ô gõ, khỏi phải bấm thêm một nhát.
+   * Đặt con trỏ ở CUỐI nội dung đang gõ dở (không xoá) — người dùng có thể đang viết dở thì bấm trả lời.
+   */
+  useEffect(() => {
+    if (!replyTarget) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [replyTarget]);
 
   // Đóng menu "+" khi click ra ngoài
   useEffect(() => {
@@ -1724,9 +1758,13 @@ function Composer({
             onChange={handleTextChange}
             onKeyDown={handleTextKeyDown}
             onPaste={handleComposerPaste}
-            rows={2}
+            rows={1}
             placeholder={t("composerPlaceholder")}
-            className="mb-2 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-400"
+            /* ⚠ text-base (16px) trên mobile là BẮT BUỘC, không phải chuyện thẩm mỹ: iOS Safari TỰ
+               PHÓNG TO trang khi focus ô nhập có cỡ chữ dưới 16px. Phóng to xong thì layout rộng hơn
+               màn hình ⇒ nút Gửi trôi khỏi mép phải và mũi tên quay lại trôi khỏi mép trái, người
+               dùng phải kéo ngang mới bấm được. Từ sm trở lên vẫn 14px như cũ. */
+            className="mb-2 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-base outline-none focus:border-brand-400 sm:text-sm"
           />
           {hasSuggestions && (
             <div className="absolute bottom-full left-0 z-20 mb-1 max-h-56 w-64 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
@@ -1820,9 +1858,10 @@ function Composer({
             </div>
           )}
         </div>
-        <div className="flex-1" />
+        <div className="min-w-0 flex-1" />
         {mode !== "voice-recording" && (
-          <button type="submit" disabled={pending || !canSubmit} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+          /* flex-none: nút Gửi không bao giờ bị co lại hay đẩy khỏi khung dù hàng bên trái dài ra */
+          <button type="submit" disabled={pending || !canSubmit} className="inline-flex flex-none items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
             <Send className="h-4 w-4" />
             {t("send")}
           </button>

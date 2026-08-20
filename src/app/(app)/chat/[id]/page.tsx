@@ -27,8 +27,16 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     <div className="flex h-full min-h-0 flex-col">
       {/* Header hội thoại */}
       <div className="flex items-center gap-2 border-b border-border p-3">
-        <Link href="/chat" className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-2 lg:hidden" aria-label={t("close")}>
+        {/* ⚠ Có CHỮ chứ không chỉ mũi tên: trên điện thoại, mở lại trình duyệt là rơi thẳng vào hội
+            thoại cũ (trình duyệt khôi phục URL), lúc đó một icon nhỏ rất dễ bị bỏ qua và người dùng
+            không biết đường về danh sách. flex-none để không bị co lại khi tên hội thoại dài. */}
+        <Link
+          href="/chat"
+          className="flex flex-none items-center gap-1 rounded-lg p-1.5 text-muted-foreground hover:bg-surface-2 lg:hidden"
+          aria-label={t("backToList")}
+        >
           <ArrowLeft className="h-5 w-5" />
+          <span className="text-xs font-medium">{t("backToList")}</span>
         </Link>
         {view.isGroup && view.avatarKey ? (
           // eslint-disable-next-line @next/next/no-img-element -- path tĩnh public HOẶC ảnh upload qua route có auth (xem groupAvatarUrl)

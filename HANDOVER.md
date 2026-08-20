@@ -2696,6 +2696,35 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       mở rộng là nổ tổ hợp) · chưa xử lý phí chuyển tiền trừ vào số tiền (chưa gặp trong file mẫu — nếu
       ngân hàng trừ phí thì khoản đó sẽ rơi vào "rớt", kế toán sẽ thấy ngay và báo lại).
 
+52. **CHAT — 4 VIỆC UX TRÊN ĐIỆN THOẠI (20/08/2026)** (KHÔNG migration, KHÔNG mã quyền mới).
+    - ⚠ **GỐC RỄ CỦA HAI TRIỆU CHỨNG "nút GỬI khuất bên phải" VÀ "không thấy nút back" LÀ MỘT: iOS
+      Safari TỰ PHÓNG TO trang khi focus ô nhập có cỡ chữ DƯỚI 16px.** App khai
+      `width=device-width, initial-scale=1` (không có `maximum-scale`) còn ô soạn tin là `text-sm`
+      = 14px ⇒ chạm vào ô là trang phóng to, layout rộng hơn màn hình, nút Gửi trôi khỏi mép phải và
+      mũi tên quay lại trôi khỏi mép trái. Khớp cả chi tiết "sau khi gõ text xong mới bị".
+      Đo trên khung 375px: **không hề có phần tử nào tràn ngang** (`scrollWidth == clientWidth`), nút
+      back vẫn 32×32 đúng vị trí — tức KHÔNG phải lỗi layout, đừng đi sửa flex/overflow.
+      Vá: ô soạn tin và ô sửa tin nhắn đổi sang `text-base sm:text-sm` (16px mobile, 14px từ sm trở
+      lên). ⚠ **Đừng "dọn" về text-sm cho gọn** — là tái hiện đúng lỗi này.
+      ⚠ Cố ý KHÔNG dùng `maximum-scale=1` để chặn zoom: chặn zoom là chặn luôn người cần phóng to để
+      đọc, hỏng khả năng tiếp cận.
+    - **Ô soạn tin tự cao tối đa 5 dòng** rồi mới cuộn trong ô (`rows={1}` + effect đo `scrollHeight`).
+      ⚠ Đo `lineHeight`/padding thật bằng `getComputedStyle` chứ KHÔNG đặt `max-height` cứng: cỡ chữ
+      đổi theo breakpoint (16px mobile / 14px desktop) nên một con số px cố định sẽ sai ở một bên.
+      Effect chạy theo `bodyText` nên bao luôn các đường ghi CHƯƠNG TRÌNH (chèn @mention, nối tiếp
+      danh sách bằng Shift+Enter, xoá sau khi gửi) chứ không chỉ lúc gõ tay.
+      Verify: mobile 1 dòng 40px → 5 dòng 136px → dòng 6 dừng ở 138px + cuộn trong ô; desktop 36px →
+      118px; xoá hết thì về lại 1 dòng.
+    - **Bấm "Trả lời" → con trỏ nhảy thẳng vào ô gõ** (effect theo `replyTarget`). Con trỏ đặt ở CUỐI
+      nội dung đang gõ dở, không xoá — người dùng có thể đang viết dở thì bấm trả lời.
+    - **Nút quay lại danh sách nay có CHỮ "Danh sách"** (`lg:hidden`, 95×32 thay vì icon 32×32). Trên
+      điện thoại, mở lại trình duyệt là rơi thẳng vào hội thoại cũ (trình duyệt khôi phục URL), lúc đó
+      một icon mũi tên nhỏ rất dễ bị bỏ qua.
+      ⚠ **CỐ Ý không tự đá về `/chat` khi mở hội thoại trên mobile**: làm vậy là phá deep-link và phá
+      nút Back của trình duyệt. Đường về là nút có chữ, không phải redirect.
+    - Verify: tsc · eslint · i18n **0/0** · `next build` sạch · đo trên khung 375px và 1280px, desktop
+      giữ nguyên (nút back `display:none`, chữ 14px, danh sách vẫn hiện song song).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

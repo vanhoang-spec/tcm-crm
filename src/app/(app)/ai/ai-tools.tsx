@@ -61,7 +61,7 @@ export function BrainstormTool({ projects }: { projects: ProjectOption[] }) {
         </div>
         <RunButton pending={pending} hasResult={!!state.text} />
       </form>
-      <AiResult text={state.text} error={state.error} />
+      <AiResult doc={state.doc} error={state.error} />
       <AttachSummary state={state} t={t} />
     </ToolCard>
   );
@@ -96,7 +96,7 @@ export function ContentWriterTool({ projects }: { projects: ProjectOption[] }) {
         </div>
         <RunButton pending={pending} hasResult={!!state.text} />
       </form>
-      <AiResult text={state.text} error={state.error} />
+      <AiResult doc={state.doc} error={state.error} />
       <AttachSummary state={state} t={t} />
     </ToolCard>
   );
@@ -135,7 +135,7 @@ export function CanvaBriefTool({ projects }: { projects: ProjectOption[] }) {
         </div>
         <RunButton pending={pending} hasResult={!!state.text} />
       </form>
-      <AiResult text={state.text} error={state.error} />
+      <AiResult doc={state.doc} error={state.error} />
       <AttachSummary state={state} t={t} />
     </ToolCard>
   );
@@ -180,7 +180,7 @@ function CostSheetForm({ projectId }: { projectId: string }) {
       <form action={action}>
         <RunButton pending={pending} hasResult={!!state.text} />
       </form>
-      <AiResult text={state.text} error={state.error} />
+      <AiResult doc={state.doc} error={state.error} />
     </>
   );
 }
@@ -197,7 +197,7 @@ export function BoardReportTool() {
         <p className="mb-3 text-[11px] text-muted-foreground">{t("hint")}</p>
         <RunButton pending={pending} hasResult={!!state.text} />
       </form>
-      <AiResult text={state.text} error={state.error} />
+      <AiResult doc={state.doc} error={state.error} />
     </ToolCard>
   );
 }
@@ -234,7 +234,7 @@ export function TrendTool({ webSearchOn }: { webSearchOn: boolean }) {
           {state.grounded ? t("resultGrounded", { count: state.sourceCount ?? 0 }) : t("resultUngrounded")}
         </p>
       )}
-      <AiResult text={state.text} error={state.error} />
+      <AiResult doc={state.doc} error={state.error} />
     </ToolCard>
   );
 }

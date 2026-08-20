@@ -164,8 +164,9 @@ body {
   border-color: var(--border);
 }
 
-/* In sơ đồ tổ chức (/orgchart) + bản in báo giá CO/CE (/projects/[id]/co-ce/print) — ẩn toàn bộ
-   app chrome (sidebar/header/dock), chỉ giữ lại vùng in. */
+/* In sơ đồ tổ chức (/orgchart) + bản in báo giá CO/CE (/projects/[id]/co-ce/print) + tài liệu AI
+   (/ai — lớp .ai-print-target gắn/gỡ lúc bấm nút, xem AiResult) — ẩn toàn bộ app chrome
+   (sidebar/header/dock), chỉ giữ lại vùng in. */
 @media print {
   body * {
     visibility: hidden;
@@ -175,17 +176,34 @@ body {
   #costsheet-print-area,
   #costsheet-print-area *,
   #cashflow-print-area,
-  #cashflow-print-area * {
+  #cashflow-print-area *,
+  .ai-print-target,
+  .ai-print-target * {
     visibility: visible;
   }
   #org-chart-print-area,
   #costsheet-print-area,
-  #cashflow-print-area {
+  #cashflow-print-area,
+  .ai-print-target {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
     border: none !important;
     padding: 0 !important;
+  }
+  /* ⚠ Khối kết quả AI trên màn hình bị giới hạn chiều cao + cuộn (max-h-[60vh] overflow-y-auto).
+     Không gỡ hai thứ đó khi in thì bản PDF CHỈ CÓ phần đang nhìn thấy, phần cuộn xuống mất sạch —
+     im lặng, vì trên màn hình vẫn thấy đủ. */
+  .ai-print-target {
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .ai-print-target table {
+    page-break-inside: auto;
+  }
+  .ai-print-target tr {
+    page-break-inside: avoid;
   }
 }

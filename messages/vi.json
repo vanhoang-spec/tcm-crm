@@ -3694,6 +3694,9 @@
     "copied": "Đã sao chép",
     "emptyResult": "Kết quả sẽ hiện ở đây sau khi bạn bấm chạy.",
     "notConfiguredBanner": "Chưa cấu hình khoá API DeepSeek. Thêm DEEPSEEK_API_KEY vào file .env trên máy chủ rồi khởi động lại CRM.",
+    "exportWord": "Tải Word",
+    "exportPdf": "Tải PDF",
+    "aiNote": "Nội dung do AI soạn — người đọc phải kiểm lại trước khi dùng.",
     "disclaimer": "Nội dung do AI tạo ra — luôn đọc lại trước khi gửi khách hàng hoặc dùng để ra quyết định.",
     "noToolsForRole": "Chưa có công cụ AI nào khả dụng cho phòng ban của bạn.",
     "brainstorm": {
@@ -3768,7 +3771,8 @@
       "NO_PROJECT": "Vui lòng chọn dự án.",
       "MISSING_INPUT": "Vui lòng nhập đủ thông tin.",
       "EXEC_ONLY": "Chỉ Ban Giám đốc và CFO xem được báo cáo này.",
-      "NOT_ALLOWED": "Công cụ này không dành cho phòng ban của bạn."
+      "NOT_ALLOWED": "Công cụ này không dành cho phòng ban của bạn.",
+      "BAD_FORMAT": "Trợ lý trả về nội dung sai khuôn (có thể do bài quá dài nên bị cắt giữa chừng). Thử lại, hoặc rút gọn phần thông tin đầu vào."
     }
   },
   "dock": {

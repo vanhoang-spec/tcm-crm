@@ -3694,6 +3694,9 @@
     "copied": "Copied",
     "emptyResult": "Results appear here once you run the assistant.",
     "notConfiguredBanner": "DeepSeek API key isn't configured. Add DEEPSEEK_API_KEY to the .env file on the server and restart the CRM.",
+    "exportWord": "Download Word",
+    "exportPdf": "Download PDF",
+    "aiNote": "Drafted by AI — the reader must verify before use.",
     "disclaimer": "AI-generated content — always review before sending to clients or acting on it.",
     "noToolsForRole": "No AI tools are available for your department yet.",
     "brainstorm": {
@@ -3768,7 +3771,8 @@
       "NO_PROJECT": "Select a project first.",
       "MISSING_INPUT": "Fill in all required fields.",
       "EXEC_ONLY": "Only the board and CFO can view this report.",
-      "NOT_ALLOWED": "This tool isn't available for your department."
+      "NOT_ALLOWED": "This tool isn't available for your department.",
+      "BAD_FORMAT": "The assistant returned malformed content (it may have been cut off if the document was too long). Try again, or shorten the input."
     }
   },
   "dock": {

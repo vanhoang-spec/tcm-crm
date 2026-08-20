@@ -119,7 +119,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
-| — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) |
+| — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) · **Đợt 1 (20/08/2026)**: output là TÀI LIỆU CÓ CẤU TRÚC (heading/bảng/danh sách) thay vì text thuần, **xuất Word (.docx) và PDF** — mục 10.48 · **Review hợp đồng + soạn thảo văn bản HR/kế toán/hành chính**: chưa làm, ràng buộc ở mục 10.49 |
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Hồ sơ ISO | `/iso` | Xong (sổ đăng ký 25 loại hồ sơ / dự án, 8 loại app tự chấm, tab `/projects/[id]/iso`, xuất Excel 33 cột — xem mục 10.20) |
 | — | Bài đăng MKT | `/mkt` | Xong (bài LinkedIn/Fanpage: Account nộp ý chính + ảnh → AI DeepSeek viết riêng từng kênh → HR duyệt, copy đăng tay; banner nhịp tuần; phân tích insights quý — xem mục 10.23) |
@@ -2488,6 +2488,95 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       `VendorContact` (hiện chỉ có `isPrimary` + `title`); (d) model hợp đồng NCC + số hợp đồng —
       `Contract` hiện tại là hợp đồng với **KHÁCH**, 1 dự án 1 bản, KHÔNG dùng lại được; (e) 2 mã quyền
       mới `purchasing.contract.create` (PUR) + `purchasing.contract.approve` (Kế toán).
+
+48. **AI — ĐỢT 1: OUTPUT CÓ CẤU TRÚC + XUẤT WORD/PDF (20/08/2026)** (KHÔNG migration, KHÔNG mã quyền
+    mới, KHÔNG thêm dependency). Trả lời câu hỏi của chủ dự án "output AI toàn text chưa có format,
+    xuất Word/PDF được không".
+    - **Gốc rễ, không phải lỗi DeepSeek:** 6 công cụ ở `/ai` gọi `aiChat` trả **text thuần**, màn hình
+      render `whitespace-pre-wrap` và **cố ý không dựng markdown** (chú thích cũ ở `ai-shared.tsx`:
+      repo không có thư viện markdown, và render HTML từ nội dung model là bề mặt tấn công thừa).
+      Không có cấu trúc thì không có gì để format, nên không xuất file ra hồn được.
+    - **Cách sửa — bắt AI trả JSON có cấu trúc**, đúng khuôn module Kho kiến thức H3 đã chạy thật:
+      `src/lib/doc-blocks.ts` (THUẦN) định nghĩa 6 loại khối `heading(level 1-3) · paragraph ·
+      bullets · numbered · table · terms` + Zod. Một nguồn dữ liệu ra **ba đích**: màn hình
+      (`components/ui/doc-blocks-view.tsx`, server component, render bằng JSX text node — React tự
+      escape, KHÔNG `dangerouslySetInnerHTML`) · **PDF** (CSS in, không thêm route) · **Word**.
+    - ⚠ **Khác `LessonBlock` của KB ở hai chỗ và CỐ Ý không gộp**: doc-blocks có thêm `table` +
+      `numbered` (báo cáo tiền mà không có bảng thì phải nhét số vào câu văn) và `heading` có CẤP;
+      KB không cần hai thứ đó. Gộp là bắt mỗi bên gánh nhu cầu của bên kia.
+    - **Word: `src/lib/docx-builder.ts` dựng thẳng OOXML rồi nén bằng `pizzip`.**
+      ⚠ **KHÔNG dùng `docxtemplater`** dù nó đã là dependency và đang chạy ở `lib/ctv.ts`: thư viện đó
+      ĐIỀN giá trị vào một mẫu .docx cố định (hợp với BM06/BM09 có sẵn ô trống), còn tài liệu AI thì
+      SỐ KHỐI và LOẠI KHỐI đổi từng lần — không mẫu cố định nào khớp. Dựng OOXML cho ra Word thật:
+      style Heading1-3, danh sách có bullet/số (`numbering.xml`), bảng có viền, A4 lề 2cm, Times New
+      Roman 13pt (chuẩn văn bản hành chính VN).
+      ⚠ **Verify bằng cách ĐỌC NGƯỢC bằng `mammoth`** (thư viện đọc .docx thật, đã có sẵn) — nếu OOXML
+      sai khuôn thì mammoth ném lỗi hoặc trả thiếu chữ. 25/25 assertion, gồm cả ca ký tự `& < >` và ký
+      tự điều khiển.
+      ⚠ **BẪY ĐÃ CẮN HAI LẦN**: gõ regex ký tự điều khiển TRỰC TIẾP vào source làm **ký tự điều khiển
+      THẬT lọt vào file .ts** (file thành binary, `grep` báo "Binary file matches", và regex mất tác
+      dụng — BEL vẫn lọt vào file Word). Nay dùng `new RegExp("[\\u0000-...]", "g")` để mã nguồn chỉ
+      còn ASCII. **Đừng viết lại thành regex literal.**
+    - **PDF = trang in, không thêm thư viện** (đúng tiền lệ BM02 / cashflow / orgchart): lớp
+      `.ai-print-target` gắn vào ĐÚNG khối kết quả lúc bấm nút rồi gỡ ở `afterprint` — trang `/ai` có
+      6 thẻ công cụ mở cùng lúc nên không in cả trang được.
+      ⚠ **CSS in PHẢI gỡ `max-height` + `overflow`** của khối kết quả: không gỡ thì bản PDF chỉ có
+      phần đang nhìn thấy, phần cuộn xuống mất sạch — im lặng, vì trên màn hình vẫn thấy đủ.
+    - **`withDocFormat()` ở `lib/ai/prompts.ts`** chèn khuôn JSON vào message system của prompt sẵn có
+      — MỘT chỗ định nghĩa cho cả 6 công cụ, thay vì sửa 6 hàm prompt.
+      ⚠ Trong đó có luật **"TUYỆT ĐỐI không dùng ký tự markdown (`**`, `##`, `-`) bên trong text"**:
+      model quen trả markdown, mà repo không có bộ render nào — người dùng sẽ thấy nguyên mấy dấu sao
+      trong file Word. Đã đo trên bài thật: **0 ký tự markdown**.
+    - **`maxTokens` 2200–2800 → 6000** cho cả 6 công cụ: JSON dài hơn văn xuôi cùng nội dung. Trần của
+      `deepseek-chat` là 8000, để 6000 chừa chỗ **và** prompt nói rõ "tối đa 120 khối" — bài học MEET-2:
+      chỉ nâng token mà không giới hạn nội dung thì vẫn tràn, JSON bị cắt là hỏng cả tài liệu.
+      Mã lỗi mới `ai.errors.BAD_FORMAT` nói đúng nguyên nhân (có thể do dài quá bị cắt) thay vì lỗi chung.
+    - ⚠ **`AiResult` giữ HAI CHẾ ĐỘ, nhận biết bằng dữ liệu**: `doc` (mọi công cụ `/ai` từ nay) và
+      `text` (chỉ còn báo cáo insights MKT đọc chuỗi ĐÃ LƯU từ DB — `mkt/insights/insight-panels.tsx`).
+      Giữ nhánh `text` để không phải chuyển đổi dữ liệu cũ; **đừng thêm caller mới vào nhánh đó**.
+    - **Route `/api/ai-doc/docx`** nhận JSON tài liệu từ chính form đang hiển thị (kết quả AI không
+      lưu ở đâu cả nên không có id để tra). ⚠ **Vẫn chạy `parseAiDoc` chứ không tin payload**: hidden
+      input sửa được, mà `buildDocx` ghép chuỗi vào XML — payload rác đẻ ra file Word không mở được.
+      Đã verify: chưa đăng nhập **401**; thiếu trường / không phải JSON / sai khuôn / 0 khối đều **400**.
+    - **Verify trên browser thật với một lượt gọi AI THẬT** (câu hỏi so sánh activation siêu thị vs
+      trường học, có bật tìm kiếm web): AI trả tài liệu có **1 bảng 3 cột × 5 dòng** ("Hạng mục · Siêu
+      thị · Trường học"), 5 tiêu đề cấp 1, 3 cấp 2, 7 đoạn, 2 danh sách, **0 ký tự markdown** · nút Tải
+      Word trả **200**, đúng MIME, tên file bỏ dấu + bản UTF-8, **5.016 byte, chữ ký ZIP hợp lệ** ·
+      giải nén `word/document.xml` thấy **đúng bảng đó** (6 `<w:tr>`), style `Heading1`, `numId` của
+      danh sách, và dòng "Nội dung do AI soạn — người đọc phải kiểm lại" · CSS in đã nạp ·
+      `/mkt/insights` (nhánh `text` cũ) vẫn chạy bình thường. tsc · eslint · i18n **0/0 (4293 key)** ·
+      `next build` sạch, có route `/api/ai-doc/docx`.
+    - **CHƯA LÀM — đợt 2 và 3 (đã chốt hướng với chủ dự án 20/08/2026):**
+      · **Đợt 2 — soạn thảo văn bản kế toán/nhân sự/hành chính**: chọn loại văn bản (quyết định, thông
+        báo, công văn, tờ trình, biên bản), upload mẫu tham chiếu, AI soạn theo blocks, xuất Word/PDF.
+      · **Đợt 3 — Review hợp đồng** (đầu ra / đầu vào / lao động / nhân sự thuê ngoài / khác). ⚠ Bốn
+        thứ phải xử lý trước, xem mục 10.49.
+      · Nội dung AI **vẫn không được lưu** — bấm lại là gọi lại, F5 là mất. Muốn giữ lịch sử phải thêm
+        bảng (chưa làm, chưa ai yêu cầu).
+      · Chưa có mẫu Word mang letterhead/logo TCM — file xuất ra hiện là văn bản trơn.
+
+49. **AI — REVIEW HỢP ĐỒNG: BỐN RÀNG BUỘC PHẢI XỬ LÝ TRƯỚC KHI CODE (20/08/2026).** Ghi lại để người
+    sau không phải dò lại; chưa làm dòng code nào.
+    - ⚠ **(a) File upload ở panel AI HIỆN ĐANG LƯU VĨNH VIỄN.** `saveProjectFilesFromFormData`
+      (`lib/ai/attachments.ts`) ghi file vào `ProjectFile` của dự án và ai xem được dự án thì tải về
+      được qua `/api/project-file/[id]`. **Bê nguyên đường này cho Review hợp đồng là hợp đồng lao động
+      HR tải lên nằm trong kho file dự án** — đúng thứ chủ dự án KHÔNG muốn (hỏi rõ 20/08/2026).
+      Phải dựng đường RIÊNG: đọc file → bóc text → gọi AI → **huỷ, không ghi đĩa**; kết quả chỉ trả về
+      phiên của người tải lên. Hệ quả phải chấp nhận: không có vết kiểm tra nội dung (ghi audit
+      *metadata* thôi — ai, lúc nào, tên file, dung lượng), và người dùng **phải xuất Word/PDF ngay**
+      vì F5 là mất.
+    - ⚠ **(b) "Không lưu trong app" ≠ "không rời công ty".** Nội dung vẫn đi sang DeepSeek (API nước
+      ngoài). Hợp đồng lao động chứa lương + CCCD + địa chỉ của NGƯỜI TRONG CÔNG TY — nặng hơn hẳn thứ
+      app đang gửi hôm nay (CV ứng viên, biên bản họp, brief khách). **Chưa chốt**: loại hợp đồng nào
+      được phép đẩy lên AI · có che lương/CCCD trước khi gửi không.
+    - ⚠ **(c) AI review KHÔNG phải tư vấn pháp lý.** Output phải đóng khung là danh mục rà soát cho
+      người đọc tự kiểm; nếu không, một điều khoản AI bỏ sót sẽ bị hiểu là "app đã duyệt rồi".
+    - ⚠ **(d) Hai trần kỹ thuật chặn ngay**: `extractTextFromFile` mặc định cắt **6.000 ký tự** (trần
+      24.000) trong khi hợp đồng 5–15 trang ≈ 15.000–40.000 ký tự; và soạn một hợp đồng hoàn chỉnh
+      **không lọt một lượt gọi** (trần output 8.000 token) — phải chia theo điều/khoản rồi ghép.
+      `.doc` cũ và PDF scan vẫn không đọc được (mammoth chỉ `.docx`, pdf-parse cần PDF có text).
+    - **Quyền**: nên có mã riêng cho việc gọi AI (tính tiền theo LƯỢT), mirror `mkt.generate` /
+      `clients.kb.generate` — kiểm bằng `hasPermission` BÊN TRONG action đã có `requirePermission` khác.
 
 ---
 

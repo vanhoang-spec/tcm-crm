@@ -4,7 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { getAiVisibility } from "@/lib/permissions";
-import { AiError, aiChat, isAiConfigured } from "@/lib/ai/deepseek";
+import { AiError, aiChatJson, isAiConfigured } from "@/lib/ai/deepseek";
+import { parseAiDoc, type AiDoc } from "@/lib/doc-blocks";
 import {
   boardReportPrompt,
   brainstormPrompt,
@@ -13,6 +14,7 @@ import {
   costSheetAnalysisPrompt,
   industryTrendGroundedPrompt,
   industryTrendPrompt,
+  withDocFormat,
 } from "@/lib/ai/prompts";
 import { buildBoardReportInput, buildBrainstormInput, buildCanvaBriefInput, buildContentWriterInput, buildCostSheetSnapshot } from "@/lib/ai/context";
 import { saveProjectFilesFromFormData } from "@/lib/ai/attachments";
@@ -29,6 +31,12 @@ import { requirePermission } from "@/lib/permissions";
  */
 
 export type AiState = {
+  /**
+   * Kết quả AI dưới dạng TÀI LIỆU CÓ CẤU TRÚC — nhờ vậy cùng một dữ liệu ra được 3 đích: màn hình,
+   * trang in (PDF) và file Word. Trước đây là text thuần nên không format được gì (xem doc-blocks.ts).
+   */
+  doc?: AiDoc;
+  /** Chỉ còn cho chỗ hiển thị text ĐÃ LƯU từ trước (báo cáo insights MKT) — công cụ mới dùng `doc`. */
   text?: string;
   error?: string;
   /** true = câu trả lời dựa trên nguồn web thật (có link kiểm chứng); false/undefined = kiến thức chung. */
@@ -76,8 +84,9 @@ export async function analyzeCostSheet(projectId: string, _prev: AiState, _formD
     if (!snap) return { error: t("NO_COSTSHEET") };
 
     // temperature thấp: đây là bài toán số liệu, cần bám dữ liệu chứ không cần sáng tạo.
-    const { text } = await aiChat(costSheetAnalysisPrompt(snap), { temperature: 0.2, maxTokens: 2600 });
-    return { text };
+    const doc = parseAiDoc(await aiChatJson(withDocFormat(costSheetAnalysisPrompt(snap)), { temperature: 0.2, maxTokens: 6000 }));
+    if (!doc) return { error: t("BAD_FORMAT") };
+    return { doc };
   } catch (e) {
     return { error: await toMessage(e) };
   }
@@ -106,8 +115,9 @@ export async function brainstormIdeas(_prev: AiState, formData: FormData): Promi
     if (!input) return { error: t("NO_PROJECT") };
 
     // temperature cao: brainstorm cần đa dạng ý tưởng.
-    const { text } = await aiChat(brainstormPrompt(input), { temperature: 0.9, maxTokens: 2600 });
-    return { text, savedFiles: savedCount, rejectedFiles: rejected.length ? rejected : undefined };
+    const doc = parseAiDoc(await aiChatJson(withDocFormat(brainstormPrompt(input)), { temperature: 0.9, maxTokens: 6000 }));
+    if (!doc) return { error: t("BAD_FORMAT") };
+    return { doc, savedFiles: savedCount, rejectedFiles: rejected.length ? rejected : undefined };
   } catch (e) {
     return { error: await toMessage(e) };
   }
@@ -135,8 +145,9 @@ export async function writeContent(_prev: AiState, formData: FormData): Promise<
     const input = await buildContentWriterInput(projectId, note);
     if (!input) return { error: t("NO_PROJECT") };
 
-    const { text } = await aiChat(contentWriterPrompt(input), { temperature: 0.7, maxTokens: 2400 });
-    return { text, savedFiles: savedCount, rejectedFiles: rejected.length ? rejected : undefined };
+    const doc = parseAiDoc(await aiChatJson(withDocFormat(contentWriterPrompt(input)), { temperature: 0.7, maxTokens: 6000 }));
+    if (!doc) return { error: t("BAD_FORMAT") };
+    return { doc, savedFiles: savedCount, rejectedFiles: rejected.length ? rejected : undefined };
   } catch (e) {
     return { error: await toMessage(e) };
   }
@@ -166,8 +177,9 @@ export async function generateCanvaBrief(_prev: AiState, formData: FormData): Pr
     const input = await buildCanvaBriefInput(projectId, deliverable, note);
     if (!input) return { error: t("NO_PROJECT") };
 
-    const { text } = await aiChat(canvaBriefPrompt(input), { temperature: 0.6, maxTokens: 2600 });
-    return { text, savedFiles: savedCount, rejectedFiles: rejected.length ? rejected : undefined };
+    const doc = parseAiDoc(await aiChatJson(withDocFormat(canvaBriefPrompt(input)), { temperature: 0.6, maxTokens: 6000 }));
+    if (!doc) return { error: t("BAD_FORMAT") };
+    return { doc, savedFiles: savedCount, rejectedFiles: rejected.length ? rejected : undefined };
   } catch (e) {
     return { error: await toMessage(e) };
   }
@@ -187,8 +199,9 @@ export async function generateBoardReport(_prev: AiState, _formData: FormData): 
 
   try {
     const input = await buildBoardReportInput();
-    const { text } = await aiChat(boardReportPrompt(input), { temperature: 0.25, maxTokens: 2400 });
-    return { text };
+    const doc = parseAiDoc(await aiChatJson(withDocFormat(boardReportPrompt(input)), { temperature: 0.25, maxTokens: 6000 }));
+    if (!doc) return { error: t("BAD_FORMAT") };
+    return { doc };
   } catch (e) {
     return { error: await toMessage(e) };
   }
@@ -214,15 +227,19 @@ export async function askIndustryTrend(_prev: AiState, formData: FormData): Prom
     const sources = isWebSearchConfigured() ? await searchWeb(buildIndustryQuery(question)) : [];
 
     if (sources.length > 0) {
-      const { text } = await aiChat(industryTrendGroundedPrompt(question, sources), {
-        temperature: 0.3, // thấp: nhiệm vụ là tổng hợp nguồn, không phải sáng tạo
-        maxTokens: 2800,
-      });
-      return { text, grounded: true, sourceCount: sources.length };
+      const doc = parseAiDoc(
+        await aiChatJson(withDocFormat(industryTrendGroundedPrompt(question, sources)), {
+          temperature: 0.3, // thấp: nhiệm vụ là tổng hợp nguồn, không phải sáng tạo
+          maxTokens: 6000,
+        }),
+      );
+      if (!doc) return { error: t("BAD_FORMAT") };
+      return { doc, grounded: true, sourceCount: sources.length };
     }
 
-    const { text } = await aiChat(industryTrendPrompt(question), { temperature: 0.7, maxTokens: 2200 });
-    return { text, grounded: false };
+    const doc = parseAiDoc(await aiChatJson(withDocFormat(industryTrendPrompt(question)), { temperature: 0.7, maxTokens: 6000 }));
+    if (!doc) return { error: t("BAD_FORMAT") };
+    return { doc, grounded: false };
   } catch (e) {
     return { error: await toMessage(e) };
   }

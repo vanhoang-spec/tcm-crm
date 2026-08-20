@@ -600,6 +600,93 @@ async function main() {
     console.log(`[seed] PUR-1: ${created} NCC mới từ bảng tổng hợp báo giá (marker ${PUR_VENDORS_KEY})`);
   }
 
+  // ── PUR-3a: gắn thêm nhóm hàng cho NCC theo BẰNG CHỨNG, không theo phỏng đoán ────────────────
+  // Nguồn: cột "NCC" của 18 bảng báo giá tổng hợp (BBG) thật — đối chiếu từng hạng mục NCC đã báo.
+  // ⚠ CHỈ THÊM nhóm, KHÔNG gỡ nhóm cũ: nhóm cũ có thể do PUR/BGĐ tick tay ở /purchasing/vendors.
+  const PUR_GROUPS_KEY = "20260820_pur_vendor_groups";
+  const purGroupsMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: PUR_GROUPS_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!purGroupsMarker) {
+    const add: { code: string; groups: string[]; why: string }[] = [
+      // thảm đen · găng tay lao động · bóng da · bơm bóng ⇒ MUA hàng hoá, không phải in ấn
+      { code: "TDA", groups: ["GOODS_PURCHASE"], why: "bóng da, thảm, găng tay — mua đứt" },
+      // laptop · bộ đàm ⇒ mua/thuê thiết bị
+      { code: "TTH", groups: ["GOODS_PURCHASE"], why: "laptop, bộ đàm" },
+    ];
+    let added = 0;
+    for (const r of add) {
+      const v = await prisma.vendor.findUnique({ where: { code: r.code }, select: { id: true } });
+      if (!v) continue;
+      for (const g of r.groups) {
+        const existed = await prisma.vendorGroup.findUnique({ where: { vendorId_groupCode: { vendorId: v.id, groupCode: g } }, select: { id: true } });
+        if (existed) continue;
+        await prisma.vendorGroup.create({ data: { vendorId: v.id, groupCode: g } });
+        added++;
+      }
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: PUR_GROUPS_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ added, listed: add.length }) },
+    });
+    // ⚠ Nhóm LOGISTICS CỐ Ý chưa gắn cho ai: đọc hết 18 file thì hai NCC vận chuyển thuần là
+    // "Nguyễn Quý Logistics" và "EVEND" — CẢ HAI đều chưa có trong app. Dòng "chi phí vận chuyển"
+    // của Sông Lam/Nam Thái Dương là vận chuyển kèm hàng của chính họ, gắn LOGISTICS cho họ là
+    // mời nhầm người khi cần một cuốc xe thuần.
+    console.log(`[seed] PUR-3a: +${added} dòng nhóm hàng cho NCC (marker ${PUR_GROUPS_KEY})`);
+  }
+
+  // ── PUR-3a: 10 NCC MỚI cho 2 nhóm mới + tắt 3 NCC mẫu (quyết định chủ dự án 20/08/2026) ───────
+  // Tên và nhóm lấy từ cột "NCC" của các bảng báo giá tổng hợp thật — mỗi bên là một báo giá cạnh
+  // tranh cho MỘT hạng mục cụ thể, không phải chỗ hỏi giá một lần.
+  // ⚠ CỐ Ý không nhập hết 75 tên đọc được: nhiều bên chỉ hỏi giá một lần (Bách Hoá Xanh, "Ms Dung",
+  // "Rượu sỉ giá tốt"…) và có tên sai chính tả trùng nhau ("SỰ KIỆN TUẤN VIỆT" / "SỤ KIỆN TUẤN VIỆT"
+  // / "SỰ KIỆN TUẦN VIỆT" là MỘT bên) — nhập hết là rác hồ sơ NCC.
+  const PUR_VENDORS2_KEY = "20260820_pur_vendors_new";
+  const purVendors2Marker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: PUR_VENDORS2_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!purVendors2Marker) {
+    const rows: { code: string; name: string; groups: string[] }[] = [
+      // vận chuyển thuần — hai bên DUY NHẤT trong toàn bộ file làm dịch vụ này
+      { code: "NQL", name: "Nguyễn Quý Logistics", groups: ["LOGISTICS"] },
+      { code: "EVD", name: "EVEND", groups: ["LOGISTICS", "EVENT_EQUIPMENT"] }, // chở máy 2 chiều + máy phát sample
+      // ghế phòng chờ (mua) — 3 bên báo cùng một hạng mục
+      { code: "NGF", name: "Nội Thất Nogifu", groups: ["GOODS_PURCHASE"] },
+      { code: "PTP", name: "Nội thất Phúc Thịnh Phát", groups: ["GOODS_PURCHASE"] },
+      { code: "THN", name: "Thảo Nguyên", groups: ["GOODS_PURCHASE"] },
+      // thẻ nhớ — 3 bên báo cùng một hạng mục
+      { code: "MTM", name: "Minh Tuấn Mobile", groups: ["GOODS_PURCHASE"] },
+      { code: "HLT", name: "Hoàng Long Telecom", groups: ["GOODS_PURCHASE"] },
+      { code: "CPS", name: "Cellphone", groups: ["GOODS_PURCHASE"] },
+      // bao da — 2 bên báo cùng một hạng mục
+      { code: "BGO", name: "Bengo", groups: ["GOODS_PURCHASE"] },
+      { code: "DGK", name: "Dienthoaigiakho.vn", groups: ["GOODS_PURCHASE"] },
+    ];
+    let created2 = 0;
+    for (const r of rows) {
+      const exists = await prisma.vendor.findFirst({ where: { OR: [{ code: r.code }, { name: r.name }] }, select: { id: true } });
+      const vendorId = exists?.id ?? (await prisma.vendor.create({ data: { code: r.code, name: r.name, category: "PCC" }, select: { id: true } })).id;
+      if (!exists) created2++;
+      for (const g of r.groups) {
+        await prisma.vendorGroup.upsert({
+          where: { vendorId_groupCode: { vendorId, groupCode: g } },
+          update: {},
+          create: { vendorId, groupCode: g },
+        });
+      }
+    }
+    // 3 NCC mẫu từ seed demo cũ — TẮT chứ không xoá (mirror ClientGroup: tắt là ẩn khỏi ô chọn khi
+    // mời mới, hồ sơ/lịch sử cũ giữ nguyên). Gắn nhóm cho NCC ma là đưa họ vào danh sách mời báo giá.
+    const demo = await prisma.vendor.updateMany({
+      where: { code: { in: ["V-OPE-01", "V-PCC-01", "V-PRO-01"] }, isActive: true },
+      data: { isActive: false },
+    });
+    await prisma.setting.create({
+      data: { module: "seed", key: PUR_VENDORS2_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ created: created2, listed: rows.length, demoDisabled: demo.count }) },
+    });
+    console.log(`[seed] PUR-3a: ${created2} NCC mới (vận chuyển + mua sắm), tắt ${demo.count} NCC mẫu (marker ${PUR_VENDORS2_KEY})`);
+  }
+
   // ── CO/CE template mẫu — section-based, mỗi Nhóm dự án 1 mẫu chuẩn, có hạng mục Chi hộ ──
   async function seedCostsheetTemplate(
     name: string,

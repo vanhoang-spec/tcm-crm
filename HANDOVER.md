@@ -2405,6 +2405,31 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       thức thật**: `U7 = T7*IF(R7="",$B$18,R7)/100` và ô `A18` đúng là "Thuế suất mặc định (%)" · **cổng
       NCC**: không lộ giá CO, không lộ tên NCC khác, không lỗi khoá i18n. Dữ liệu test đã xoá sạch,
       dev.db về nguyên trạng (25 dự án · 36 nhân sự · 68 khách · 20 NCC · 483 dòng CO).
+    - **GẮN NHÓM CHO NCC — THEO BẰNG CHỨNG, 2 marker seed one-shot (20/08/2026).** Nguồn duy nhất
+      dùng được là **cột "NCC" của 18 bảng báo giá tổng hợp (BBG)** — các file BBG khác KHÔNG ghi tên
+      NCC ở sheet đang dùng (tên nằm ngoài file, trong mail/Zalo), nên đừng mất công đọc lại chúng.
+      Đọc ra **75 tên NCC**, nhưng chỉ **7/17 NCC đang có trong app** xuất hiện ở đó.
+      · `20260820_pur_vendor_groups`: **CHỈ THÊM** nhóm, không gỡ — TDA "Thể Thao Đông Á" (bóng da ·
+        thảm đen · găng tay · bơm bóng) và TTH "Tất Thành" (laptop · bộ đàm) **+ GOODS_PURCHASE**.
+        ⚠ Ghi nhận nhưng KHÔNG tự sửa: nhãn "Sản xuất/in ấn" của TDA và "POSM cho thuê" của PLM
+        (hạng mục thật là *hoa tươi*) **không có bằng chứng nào** trong file — seed chỉ được thêm,
+        gỡ nhãn là việc của PUR ở `/purchasing/vendors`.
+      · `20260820_pur_vendors_new`: tạo **10 NCC mới** (quyết định chủ dự án) — `NQL` Nguyễn Quý
+        Logistics + `EVD` EVEND cho **LOGISTICS**; `NGF`/`PTP`/`THN` (ghế phòng chờ), `MTM`/`HLT`/
+        `CPS` (thẻ nhớ), `BGO`/`DGK` (bao da) cho **GOODS_PURCHASE**. Mỗi bộ là các bên báo giá
+        CẠNH TRANH cho cùng một hạng mục. **Tắt** (`isActive=false`, không xoá) 3 NCC mẫu demo cũ
+        `V-OPE-01`/`V-PCC-01`/`V-PRO-01` — ô chọn NCC đã lọc `isActive` nên chúng tự biến khỏi
+        danh sách mời, hồ sơ cũ giữ nguyên.
+      ⚠ **CỐ Ý không nhập hết 75 tên**: nhiều bên chỉ là chỗ hỏi giá một lần (Bách Hoá Xanh, "Ms
+      Dung", "Rượu sỉ giá tốt", VPP Lê…) và có tên sai chính tả trùng nhau — "SỰ KIỆN TUẤN VIỆT" /
+      "SỤ KIỆN TUẤN VIỆT" / "SỰ KIỆN TUẦN VIỆT" là MỘT bên. Nhập hết là rác hồ sơ NCC.
+      ⚠ **KHÔNG gắn LOGISTICS cho Sông Lam / Nam Thái Dương** dù báo giá của họ có dòng "chi phí vận
+      chuyển": đó là chở HÀNG CỦA CHÍNH HỌ kèm theo, không phải dịch vụ vận chuyển. Cần một cuốc xe
+      thuần mà mời họ là mời nhầm người.
+      · Kết quả đo trên dev.db sau seed (NCC đang hoạt động / nhóm): thiết bị 4 · AV 7 · POSM 4 ·
+        sản xuất 4 · nhân sự 2 · **vận chuyển 2** · **mua sắm 10** · Khác 0. Nhóm **Khác vốn không có
+        NCC nào là ĐÚNG** — đó là mẫu hứng ca chưa thuộc nhóm, lập RFQ nhóm đó thì bật "Hiện mọi NCC".
+        30 NCC tổng, 27 đang hoạt động. Seed chạy lần hai: no-op cả 2 marker.
     - ⚠ **TNCN: ĐÃ CHỐT 20/08/2026 — theo file NCC, tức CỘNG THÊM % lên thành tiền** (cán cờ gỗ 300.000
       → TNCN 10% = 30.000 → **330.000**), KHÔNG dùng gross-up ÷0,9 (→ 333.333) của CO/CE. Chênh ~1,1%.
       · Phạm vi quyết định: **phía BÁO GIÁ và SO SÁNH**. `TAX_GROSSUP` trong `lib/bidding.ts` (mục 6)

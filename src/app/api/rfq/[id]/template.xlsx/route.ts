@@ -46,42 +46,65 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   ws.addRow([]);
 
   const extraCols = template.lineColumns.map((c) => c.labelVi);
-  const isSpecial = template.code === "SPECIAL_STRUCTURE";
-  const header = ["STT", "Hạng mục", "Mô tả", "ĐVT", "SL", ...extraCols, ...(isSpecial ? [] : [template.unitPriceLabelVi]), "Thành tiền", "Ghi chú", "__line"];
+  const header = ["STT", "Hạng mục", "Mô tả", "ĐVT", "SL", ...extraCols, template.unitPriceLabelVi, "Thành tiền", "Tiền thuế", "Ghi chú", "__line"];
   const hRow = ws.addRow(header);
   hRow.font = { bold: true };
   hRow.eachCell((c) => {
     c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
     c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
   });
+  const amountColIdx = 6 + template.lineColumns.length + 1;
+  const taxColIdx = amountColIdx + 1;
+  const amountLetter = ws.getColumn(amountColIdx).letter;
+  const taxLetter = ws.getColumn(taxColIdx).letter;
+  const taxPctLetter = ws.getColumn(6 + template.lineColumns.findIndex((c) => c.key === "taxPct")).letter;
+  const firstDataRow = hRow.number + 1;
+  // Vị trí ô "Thuế suất mặc định (%)" trong khối điều khoản, tính TRƯỚC vì công thức từng dòng trỏ
+  // tới nó: sau bảng là 4 dòng tổng + 1 dòng trống + 1 dòng tiêu đề, rồi tới danh sách điều khoản.
+  const vatTermIdx = template.terms.findIndex((t) => t.key === "vatPct");
+  const defaultPctRow = hRow.number + rfq.lines.length + 6 + vatTermIdx + 1;
+  const defaultPctRef = `$B$${defaultPctRow}`; // khoá CẢ cột lẫn dòng — NCC chèn thêm dòng thì tham chiếu không trôi
+
   rfq.lines.forEach((l, i) => {
-    const row = ws.addRow([i + 1, l.itemName, l.specs ?? "", l.unit ?? "", l.quantity, ...template.lineColumns.map((c) => (c.defaultValue ?? "")), ...(isSpecial ? [] : [""]), "", "", l.id]);
+    const row = ws.addRow([i + 1, l.itemName, l.specs ?? "", l.unit ?? "", l.quantity, ...template.lineColumns.map((c) => (c.defaultValue ?? "")), "", "", "", "", l.id]);
     row.eachCell({ includeEmpty: true }, (c, col) => {
       if (col <= header.length - 1) c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
     });
     // Thành tiền: SL × Π(cột hệ số) × Đơn giá — công thức Excel để NCC thấy số ngay khi gõ.
-    if (!isSpecial) {
-      const rowNo = row.number;
-      const qtyCol = "E";
-      const factorCols = template.amountFactors.map((f) => {
-        const idx = template.lineColumns.findIndex((c) => c.key === f);
+    const rowNo = row.number;
+    const qtyCol = "E";
+    const factorCols = template.amountFactors
+      .map((fk) => {
+        const idx = template.lineColumns.findIndex((c) => c.key === fk);
         return idx >= 0 ? ws.getColumn(6 + idx).letter : null;
-      }).filter((x): x is string => !!x);
-      const priceCol = ws.getColumn(6 + template.lineColumns.length).letter;
-      const amountCell = row.getCell(6 + template.lineColumns.length + 1);
-      amountCell.value = { formula: `${qtyCol}${rowNo}*${factorCols.map((c) => `IF(${c}${rowNo}="",1,${c}${rowNo})`).map((x) => x + "*").join("")}${priceCol}${rowNo}` };
-    }
+      })
+      .filter((x): x is string => !!x);
+    const priceCol = ws.getColumn(6 + template.lineColumns.length).letter;
+    const amountCell = row.getCell(6 + template.lineColumns.length + 1);
+    amountCell.value = { formula: `${qtyCol}${rowNo}*${factorCols.map((c) => `IF(${c}${rowNo}="",1,${c}${rowNo})`).map((x) => x + "*").join("")}${priceCol}${rowNo}` };
+    // Tiền thuế = Thành tiền × (% của dòng, để trống thì lấy mức mặc định ở khối điều khoản).
+    // Cùng phép tính với `computeQuoteTotals` phía app — NCC mở file ra thấy đúng số app sẽ tính.
+    row.getCell(taxColIdx).value = { formula: `${amountLetter}${rowNo}*IF(${taxPctLetter}${rowNo}="",${defaultPctRef},${taxPctLetter}${rowNo})/100` };
   });
-  const totalRow = ws.addRow(["", "TỔNG CỘNG (chưa VAT)"]);
-  totalRow.font = { bold: true };
-  const amountColIdx = 6 + template.lineColumns.length + (isSpecial ? 0 : 1);
-  const amountLetter = ws.getColumn(amountColIdx).letter;
-  const firstDataRow = hRow.number + 1;
-  totalRow.getCell(amountColIdx).value = { formula: `SUM(${amountLetter}${firstDataRow}:${amountLetter}${hRow.number + rfq.lines.length})` };
+
+  // Chuỗi tổng theo đúng cách 23 file báo giá thật trình bày: Cộng → tiền thuế → tổng thanh toán → bằng chữ.
+  const lastDataRow = hRow.number + rfq.lines.length;
+  const sumRow = ws.addRow(["", "CỘNG (chưa thuế)"]);
+  sumRow.font = { bold: true };
+  sumRow.getCell(amountColIdx).value = { formula: `SUM(${amountLetter}${firstDataRow}:${amountLetter}${lastDataRow})` };
+  const taxRow = ws.addRow(["", "TIỀN THUẾ"]);
+  taxRow.getCell(amountColIdx).value = { formula: `SUM(${taxLetter}${firstDataRow}:${taxLetter}${lastDataRow})` };
+  const grandRow = ws.addRow(["", "TỔNG THANH TOÁN"]);
+  grandRow.font = { bold: true };
+  grandRow.getCell(amountColIdx).value = { formula: `${amountLetter}${sumRow.number}+${amountLetter}${taxRow.number}` };
+  ws.addRow(["", "Bằng chữ:"]).getCell(2).font = { italic: true };
 
   ws.addRow([]);
   ws.addRow(["ĐIỀU KHOẢN CHUNG (NCC điền)"]).font = { bold: true };
-  for (const tf of template.terms) ws.addRow([tf.labelVi, ""]);
+  const termRows = template.terms.map((tf) => ws.addRow([tf.labelVi, ""]).number);
+  // Ô mức thuế mặc định phải nằm ĐÚNG chỗ công thức từng dòng đang trỏ tới — nếu lệch thì cả cột
+  // Tiền thuế trong file gửi NCC sẽ nhân với ô trống và ra 0, im lặng.
+  if (termRows[vatTermIdx] !== defaultPctRow) throw new Error(`RFQ template: ô thuế mặc định lệch (${termRows[vatTermIdx]} ≠ ${defaultPctRow})`);
 
   // Độ rộng + ẩn cột khoá
   ws.getColumn(1).width = 5;
@@ -90,9 +113,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   ws.getColumn(4).width = 8;
   ws.getColumn(5).width = 8;
   for (let i = 0; i < template.lineColumns.length; i++) ws.getColumn(6 + i).width = 14;
-  ws.getColumn(amountColIdx - (isSpecial ? 0 : 1)).width = 16;
+  ws.getColumn(amountColIdx - 1).width = 16;
   ws.getColumn(amountColIdx).width = 16;
-  ws.getColumn(amountColIdx + 1).width = 24;
+  ws.getColumn(taxColIdx).width = 14;
+  ws.getColumn(taxColIdx + 1).width = 24;
   ws.getColumn(header.length).hidden = true;
   ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 

@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Link2, Copy, Check, Ban, Upload, Sparkles, FileSpreadsheet, Send, XCircle, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/utils";
-import { resolveRfqTemplate } from "@/lib/rfq-templates";
+import { quoteTotalsOf, resolveRfqTemplate } from "@/lib/rfq-templates";
 import { RFQ_FILE_MIME_TYPES, MAX_RFQ_FILE_BYTES } from "@/lib/rfq";
 import { QuoteForm, type QuoteFormInitial } from "@/components/rfq/quote-form";
 import type { Locale } from "@/i18n/locales";
@@ -133,7 +133,9 @@ function VendorCard({
   const [mode, setMode] = useState<"view" | "manual" | "upload">("view");
   const [tokenState, tokenAction, tokenPending] = useActionState<RfqFormState, FormData>(issueVendorToken.bind(null, rv.id), {});
   const [copied, setCopied] = useState(false);
-  const total = rv.quoteLines.reduce((s, q) => s + q.amount, 0);
+  // Hai con số KHÁC NHAU, phải hiện cả hai: PUR so sánh trên giá TRƯỚC thuế (VAT khấu trừ), còn
+  // số NCC đòi thanh toán là số ĐÃ gồm thuế. Chỉ hiện một số là người đọc hiểu nhầm ngay.
+  const totals = quoteTotalsOf(rv.quoteLines, rv.terms);
   const tone = rv.status === "SUBMITTED" ? "success" : rv.status === "DECLINED" ? "danger" : "warning";
   const link = tokenState.token && typeof window !== "undefined" ? `${window.location.origin}/rfq/${tokenState.token}` : null;
 
@@ -149,8 +151,14 @@ function VendorCard({
           </span>
         )}
         {rv.status === "SUBMITTED" && (
-          <span className="ml-auto text-sm font-bold tabular-nums text-foreground">
-            {t("quotedTotal")}: {formatNumber(total, locale)}
+          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+            {t("quotedSubtotal")}: <span className="font-semibold text-foreground">{formatNumber(totals.subtotal, locale)}</span>
+            {totals.taxTotal > 0 && (
+              <>
+                {" · "}
+                {t("quotedTotal")}: <span className="text-sm font-bold text-foreground">{formatNumber(totals.total, locale)}</span>
+              </>
+            )}
           </span>
         )}
       </div>
@@ -308,7 +316,9 @@ function ManualPanel({
           qtyQuoted: t("qtyQuoted"),
           lineNote: t("lineNote"),
           termsTitle: t("termsTitle"),
+          subtotalLabel: t("quotedSubtotal"),
           totalLabel: t("quotedTotal"),
+          inWordsLabel: t("quotedInWords"),
           lineHeader: t("colLine"),
           qtyHeader: t("colQty"),
           unitHeader: t("colUnit"),

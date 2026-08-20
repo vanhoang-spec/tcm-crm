@@ -275,9 +275,12 @@ async function runAiParse(
   if (!template) return { error: "NO_TEMPLATE" };
   let text: string;
   try {
-    const extracted = await extractTextFromFile(buffer, mime);
+    // ⚠ PHẢI truyền maxChars: mặc định của helper dùng chung là 6.000 ký tự, nên bản trước cắt file
+    // ở 6.000 rồi mới .slice(24.000) — tức hằng MAX_RFQ_TEXT_CHARS không có tác dụng gì và báo giá
+    // Excel nhiều sheet (Sông Lam 900 dòng) chỉ được AI đọc phần đầu, im lặng.
+    const extracted = await extractTextFromFile(buffer, mime, { maxChars: MAX_RFQ_TEXT_CHARS });
     if (!extracted || !extracted.text.trim()) return { error: "UNREADABLE" };
-    text = extracted.text.slice(0, MAX_RFQ_TEXT_CHARS);
+    text = extracted.text;
   } catch (e) {
     console.error("[RFQ] lỗi bóc text file báo giá:", e);
     return { error: "UNREADABLE" };

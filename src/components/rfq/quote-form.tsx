@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { NumberField } from "@/components/ui/number-field";
 import { formatNumber } from "@/lib/utils";
-import { computeQuoteLineAmount, type RfqTemplate } from "@/lib/rfq-templates";
+import { computeQuoteLineAmount, quoteTotalsOf, type RfqTemplate } from "@/lib/rfq-templates";
+import { amountInWordsVi } from "@/lib/number-words";
 import type { Locale } from "@/i18n/locales";
 
 export type QuoteFormLine = { id: string; itemName: string; specs: string | null; unit: string | null; quantity: number };
@@ -18,7 +19,10 @@ export type QuoteFormLabels = {
   qtyQuoted: string;
   lineNote: string;
   termsTitle: string;
+  subtotalLabel: string;
+  /** Tổng THANH TOÁN (đã gồm thuế). */
   totalLabel: string;
+  inWordsLabel: string;
   lineHeader: string;
   qtyHeader: string;
   unitHeader: string;
@@ -71,7 +75,6 @@ export function QuoteForm({
     return out;
   });
   const [vendorNote, setVendorNote] = useState(initial?.vendorNote ?? "");
-  const isSpecial = template.code === "SPECIAL_STRUCTURE";
 
   const amounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -81,7 +84,12 @@ export function QuoteForm({
     }
     return m;
   }, [rows, lines, template]);
-  const total = lines.reduce((s, l) => s + (amounts[l.id] || 0), 0);
+  // Σ → tiền thuế theo từng mức → tổng thanh toán. Dùng ĐÚNG hàm server dùng, nên NCC nhìn thấy
+  // số y hệt số sẽ lưu; mức thuế lấy từ điều khoản, dòng nào khai riêng thì dòng đó thắng.
+  const totals = useMemo(
+    () => quoteTotalsOf(lines.map((l) => ({ amount: amounts[l.id] || 0, extra: rows[l.id]?.extra })), terms),
+    [lines, amounts, rows, terms],
+  );
   const cl = (c: { labelVi: string; labelEn: string }) => (locale === "en" ? c.labelEn : c.labelVi);
   const hint = (c: { hintVi?: string; hintEn?: string }) => (locale === "en" ? c.hintEn : c.hintVi);
   const setRow = (id: string, patch: Partial<RowState>) => setRows((s) => ({ ...s, [id]: { ...s[id], ...patch } }));
@@ -102,7 +110,7 @@ export function QuoteForm({
                   {cl(c)}
                 </th>
               ))}
-              {!isSpecial && <th className="py-1.5 pr-2 text-right">{locale === "en" ? template.unitPriceLabelEn : template.unitPriceLabelVi}</th>}
+              <th className="py-1.5 pr-2 text-right">{locale === "en" ? template.unitPriceLabelEn : template.unitPriceLabelVi}</th>
               <th className="py-1.5 pr-2 text-right">{labels.qtyQuoted}</th>
               <th className="py-1.5 pr-2 text-right">{labels.amount}</th>
               <th className="py-1.5 pr-2">{labels.lineNote}</th>
@@ -154,11 +162,9 @@ export function QuoteForm({
                       )}
                     </td>
                   ))}
-                  {!isSpecial && (
-                    <td className="py-1.5 pr-2">
-                      <NumberField name={`${l.id}_unitPrice`} value={r.unitPrice} onChange={(v) => setRow(l.id, { unitPrice: v })} className={cell + " min-w-[110px] text-right"} disabled={readOnly} />
-                    </td>
-                  )}
+                  <td className="py-1.5 pr-2">
+                    <NumberField name={`${l.id}_unitPrice`} value={r.unitPrice} onChange={(v) => setRow(l.id, { unitPrice: v })} className={cell + " min-w-[110px] text-right"} disabled={readOnly} />
+                  </td>
                   <td className="py-1.5 pr-2">
                     <NumberField
                       name={`${l.id}_qty`}
@@ -180,12 +186,35 @@ export function QuoteForm({
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-border">
-              <td colSpan={4 + template.lineColumns.length + (isSpecial ? 1 : 2)} className="py-2 pr-2 text-right text-xs font-semibold text-foreground">
-                {labels.totalLabel}
+              <td colSpan={4 + template.lineColumns.length + 2} className="py-2 pr-2 text-right text-xs text-muted-foreground">
+                {labels.subtotalLabel}
               </td>
-              <td className="py-2 pr-2 text-right text-sm font-bold tabular-nums text-foreground">{formatNumber(total, locale)}</td>
+              <td className="py-2 pr-2 text-right text-sm tabular-nums text-foreground">{formatNumber(totals.subtotal, locale)}</td>
               <td />
             </tr>
+            {totals.taxBreakdown.map((b) => (
+              <tr key={b.label}>
+                <td colSpan={4 + template.lineColumns.length + 2} className="py-1 pr-2 text-right text-xs text-muted-foreground">
+                  {b.label}
+                </td>
+                <td className="py-1 pr-2 text-right text-sm tabular-nums text-foreground">{formatNumber(b.amount, locale)}</td>
+                <td />
+              </tr>
+            ))}
+            <tr className="border-t border-border">
+              <td colSpan={4 + template.lineColumns.length + 2} className="py-2 pr-2 text-right text-xs font-semibold text-foreground">
+                {labels.totalLabel}
+              </td>
+              <td className="py-2 pr-2 text-right text-sm font-bold tabular-nums text-foreground">{formatNumber(totals.total, locale)}</td>
+              <td />
+            </tr>
+            {totals.total > 0 && (
+              <tr>
+                <td colSpan={4 + template.lineColumns.length + 4} className="py-1 pr-2 text-right text-[11px] italic text-muted-foreground">
+                  {labels.inWordsLabel}: {amountInWordsVi(totals.total)}
+                </td>
+              </tr>
+            )}
           </tfoot>
         </table>
       </div>

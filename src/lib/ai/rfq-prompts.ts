@@ -92,7 +92,8 @@ const RULES = `QUY TẮC BẮT BUỘC:
 4. Số tiền là VND, trả dạng số nguyên (không dấu chấm/phẩy). "1.500.000" → 1500000.
 5. Cột mở rộng ("extra") chỉ điền khi file có thông tin tương ứng (vd số show, số ngày, số người, giờ/người); không có thì bỏ trống.
 6. "terms": chỉ điền điều khoản mà file nói rõ (VAT %, thanh toán, hiệu lực…). Không có thì bỏ trống.
-7. Trả về JSON đúng khuôn, không thêm chữ ngoài JSON.`;
+7. THUẾ: file thường ghi SỐ TIỀN thuế ("VAT 8%: 176.000") — hãy trả về TỶ LỆ % vào "terms.vatPct" (8), KHÔNG trả số tiền. Dòng nào file ghi mức KHÁC mức chung (có thật: cùng một báo giá có dòng VAT 10%, dòng VAT 8%) thì mới điền "extra.taxPct" cho riêng dòng đó; dòng theo mức chung thì để trống. "extra.taxType" chỉ nhận VAT | TNCN | TNDN | NONE.
+8. Trả về JSON đúng khuôn, không thêm chữ ngoài JSON.`;
 
 export function rfqParseMessages(opts: {
   template: RfqTemplate;

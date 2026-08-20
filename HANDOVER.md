@@ -115,7 +115,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑥ | KPI 75/25 | `/kpi` | Xong (quỹ performance, matrix chấm điểm, chốt kỳ, xuất Excel) |
 | ⑦ | Lương | `/payroll` | **Chưa làm** (nav đang `status: "soon"`) |
 | ⑧ | Kho | `/inventory` | Nền v1 xong (ledger, trả đồ) + **Kho v2 K1** (cây danh mục 7 nhóm, chuyển đổi lô, xuất hủy, chặn hàng hết hạn, CSV theo lô) + **K2** (role Thủ kho, đề xuất xuất kho có duyệt, báo hàng về chờ thủ kho — tab `/inventory/requests`) + **K3** (giữ chỗ tồn kho → dòng CO giá 0, trần xuất OPE, gộp dòng báo giá) + **K4** (kỳ chiến dịch ≤15 ngày, phiếu báo mất, chuyển đồ hiện trường A→B, điều chuyển kho có duyệt, thang cảnh báo hạn dùng, bảng tiêu hao) + **K5** (trả về kho khai lại trạng thái/tình trạng → lô mới) — **XONG TOÀN BỘ**, xem mục 10.11 · **Mã lô v3 (18/08/2026):** tách SẢN PHẨM `PO-0042` khỏi LÔ `PO-0042.01`, nhóm 2 ký tự, trạng thái/tình trạng/khách ra khỏi mã — xem mục 10.40 · **K6 (18/08/2026):** dự án sở hữu cho mọi lô, đề xuất tách theo chủ + team Account CHỦ duyệt từng dòng 0..n, phản hồi OPS, cổng hủy hàng khách (DH), Order OPE/PRO mang sản phẩm + SL → tab Vận hành/Sản xuất thấy tồn theo chủ → đề xuất từ order, hàng OVERHEAD công ty tách riêng — Senior HR Manager duyệt (K6-4) — xem mục 10.41 · **K7 (18/08/2026):** rà toàn module trước tồn đầu kỳ — sửa 5 lỗi thật (CH chủ sở hữu regression K6, hint DN, giữ chỗ 2 bên lệch, hết hạn kiểm ở duyệt/chốt, clientDocNo lô đích) + thông báo phiếu kho/hủy đề xuất, DN "không có hàng về", cột chủ hàng, reminders DK/DH/GC — xem mục 10.42 |
-| — | Thu mua (PUR) | `/purchasing` | **XONG (PUR-1a + 1b, 16/08/2026)**: hồ sơ NCC theo 6 nhóm hàng + kho tài liệu HĐ/PO + lịch sử giá · RFQ từ dòng CO → 6 mẫu form → cổng NCC token / PUR nhập hộ / upload file + AI bóc → so sánh (số tính bằng code, AI nhận xét) → PUR chọn + lý do → trình Account → **Account chốt → ghi vào CO** (revision mới, chờ duyệt FIN-B) — xem mục 10.36 · **PUR-2**: hồ sơ NCC mở rộng (mã 3 ký tự, tên pháp nhân, N người liên hệ, trường tuỳ chỉnh khai ở `/settings/vendor-fields`) — mục 10.37 |
+| — | Thu mua (PUR) | `/purchasing` | **XONG (PUR-1a + 1b, 16/08/2026)**: hồ sơ NCC theo 6 nhóm hàng + kho tài liệu HĐ/PO + lịch sử giá · RFQ từ dòng CO → 6 mẫu form → cổng NCC token / PUR nhập hộ / upload file + AI bóc → so sánh (số tính bằng code, AI nhận xét) → PUR chọn + lý do → trình Account → **Account chốt → ghi vào CO** (revision mới, chờ duyệt FIN-B) — xem mục 10.36 · **PUR-2**: hồ sơ NCC mở rộng (mã 3 ký tự, tên pháp nhân, N người liên hệ, trường tuỳ chỉnh khai ở `/settings/vendor-fields`) — mục 10.37 · **PUR-3a (20/08/2026)**: đọc 23 file báo giá thật → **8 nhóm hàng** (thêm Vận chuyển & logistics · Mua sắm thiết bị · Khác; gỡ Mô hình đặc biệt), thuế khai theo % ở form (mặc định cả bảng, sửa được theo dòng), tổng có "bằng chữ", file Excel mẫu có cột Tiền thuế — mục 10.46 · **Hợp đồng NCC**: quyết định đã chốt, chưa làm code — mục 10.47 |
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
@@ -2331,6 +2331,138 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       ô tìm cộng dồn đúng. tsc · eslint · i18n 0/0 · build sạch.
     - **CHƯA LÀM (cố ý):** ô tìm ở /orgchart và bảng chấm công /staff (hai chỗ đó không hiện email/điện
       thoại nên chưa có nhu cầu) · gợi ý autocomplete khi gõ · tìm theo ngày sinh / ngày vào làm.
+
+46. **THU MUA — PUR-3a: 8 NHÓM HÀNG + THUẾ THEO FORM + BẰNG CHỮ (20/08/2026)** (KHÔNG migration —
+    `migrate diff` rỗng; KHÔNG mã quyền mới). Đọc **23 file báo giá NCC thật** chủ dự án gửi làm 3 lô
+    (ACC1 8 file · ACC2 13 · ACC3 6) rồi dựng lại danh mục mẫu RFQ theo đúng thứ các file đang có.
+    - **Danh mục 6 → 8 nhóm** (`lib/rfq-templates.ts`, vẫn để ở CODE theo khuôn `quote-templates.ts`):
+      thêm **`LOGISTICS`** (3/23 file là vận chuyển thuần: 50 xe điện × 110k, bốc xếp HN 3tr, "1 máy đi
+      HN 2 chiều" 20tr) · thêm **`GOODS_PURCHASE`** (3/23 file mua đứt: thẻ nhớ SanDisk, bao da tablet,
+      100 ghế — cần hãng/model, bảo hành, mới hay cũ; khác hẳn "sản xuất theo yêu cầu") · thêm
+      **`OTHER`** LUÔN ĐỨNG CUỐI, **không có từ khoá nên không bao giờ tự gợi ý** (quyết định chủ dự
+      án 20/08/2026).
+    - ⚠ **GỠ `SPECIAL_STRUCTURE`** (mascot bay/cổng hơi): 0/23 file thuộc loại này, và đo trên CẢ dev.db
+      lẫn production đều **0 NCC gắn nhóm đó + 0 RFQ** ⇒ gỡ không mất dữ liệu. Hai nhánh `isSpecial`
+      (form NCC + file Excel mẫu) đã dọn theo. Có báo giá thật thì tách lại thành nhóm riêng; tạm để
+      vào `OTHER`.
+    - **THUẾ = FORM** (quyết định chủ dự án 19/08/2026 "điền tỷ lệ % bao nhiêu thì tính ra số tiền bấy
+      nhiêu"): khai mức MỘT LẦN ở điều khoản → mọi dòng kế thừa → dòng nào khác thì sửa ở chính dòng đó.
+      Bắt buộc phải cho sửa theo dòng vì có ca thật: **Huỳnh Minh báo bảng vinh danh VAT 10% và cúp VAT
+      8% trong CÙNG một báo giá**. `computeQuoteTotals` tách tổng theo từng mức ("VAT 8%", "VAT 10%",
+      "TNCN 10%") đúng cách các file trình bày.
+    - ⚠ **KHÔNG CẦN MIGRATION và đừng thêm cột**: thuế theo dòng nằm trong `RfqQuoteLine.extraJson`
+      (cột `taxType`/`taxPct` của mẫu), mức mặc định nằm trong `RfqVendor.termsJson` (`taxType`/`vatPct`),
+      tổng **tính lúc đọc** — y hệt cách `amount` đang làm. `quoteTotalsOf(lines, terms)` là MỘT nguồn
+      sự thật cho form NCC · cổng NCC · trang chi tiết RFQ · file Excel mẫu.
+    - ⚠ **BẪY ĐÃ CẮN, ĐỌC TRƯỚC KHI VIẾT HÀM ĐỌC SỐ: `Number(null)` ra `0`, KHÔNG phải NaN.** Bản đầu
+      của `normPct` vì thế đọc dòng để trống thuế thành **0%** thay vì "kế thừa mức mặc định" ⇒ ăn mất
+      tiền thuế của dòng đó, IM LẶNG. Bắt được lúc chạy test bằng số (2 dòng × 1tr ở mức 10% ra 100.000
+      thay vì 200.000). Nay loại null/undefined/chuỗi rỗng TRƯỚC khi gọi `Number`.
+    - **Trường mới rút từ file thật** — dùng chung MỌI nhóm (`COMMON_LEAD` + `COMMON_TAIL`, ghép bằng
+      `cols()` để khỏi lặp 6 cột ở 8 mẫu): Thuê/Mua/Sản xuất/Dịch vụ (6/23 file viết thẳng chữ này vào
+      đầu ô mô tả) · **Phương án** (5/23 file chào nhiều mức cho CÙNG một hạng mục: gian hàng 2,8tr vs
+      2,1tr; pin cài áo 5 phương án 32k–82k; bảo vệ OPT1 80k/giờ vs OPT2 75k/giờ) · Khu vực (file nhà
+      bạt tách subtotal HCM và Hà Nội) · Link ảnh (6/23 file có cột ảnh) · loại thuế + % theo dòng.
+      Riêng từng nhóm: **chi phí lên mẫu + mẫu có trừ vào đơn + thời gian mẫu → thời gian SX** (sản
+      xuất) · **ngày làm việc + vị trí/nhiệm vụ** (nhân sự — 4 báo giá bảo vệ KUN 2026 đều có) · **4 mốc
+      load-in / rehearsal / show / load-out** (AV, theo file Bioderma) · **tình trạng % còn mới** (thiết
+      bị thuê — file nhà bạt ghi "đã qua sử dụng còn mới 80-85%") · tuyến/loại xe/số chuyến/lưu qua đêm
+      (logistics) · hãng-model/bảo hành/mới-cũ (mua sắm).
+    - **`lib/number-words.ts` — `amountInWordsVi`** (THUẦN, mới; repo chưa từng có, đã grep): 23/23 file
+      thật đều có dòng "Bằng chữ" dưới tổng, và **hợp đồng NCC sắp làm bắt buộc phải có** nên tách
+      riêng một file để cả hai dùng chung. 16/16 test (0 · 15 "mười lăm" · 21 "hai mươi mốt" · 105 "một
+      trăm lẻ năm" · 1.024 "một nghìn không trăm hai mươi bốn" · 16.248.791.769 = ngân sách overhead
+      2026 thật).
+    - **File Excel mẫu gửi NCC nay có cột "Tiền thuế" + chuỗi tổng** (CỘNG → TIỀN THUẾ → TỔNG THANH
+      TOÁN → Bằng chữ), công thức Excel thật nên NCC mở file ra thấy số ngay khi gõ.
+      ⚠ Công thức từng dòng trỏ tới Ô MỨC THUẾ MẶC ĐỊNH ở khối điều khoản **phía dưới**, địa chỉ tính
+      bằng số học (`hRow + số dòng + 6 + vatTermIdx + 1`). Vì lệch một dòng là cả cột thuế nhân với ô
+      trống và ra 0 trong im lặng, route **ném lỗi ngay** nếu vị trí không khớp (`throw` sau khi ghi
+      khối điều khoản). Đổi thứ tự các dòng tổng thì phải sửa cùng lúc phép tính đó.
+      ⚠ Tham chiếu phải là **`$B$18` (khoá cả cột lẫn dòng)**, không phải `$B18` — NCC chèn thêm dòng là
+      tham chiếu trôi. Đã vấp: **`String.replace` coi `$$` là ký tự thoát nên nuốt mất một `$`** khi vá
+      bằng script; phải truyền hàm `() => b` thay vì chuỗi.
+    - **Hai lỗi CÓ SẴN của module, vá cùng đợt** (đều lộ ra lúc verify trên browser):
+      · `parseQuoteFileWithAi` gọi `extractTextFromFile(buffer, mime)` **không truyền maxChars** nên
+        dùng mặc định **6.000** ký tự của helper dùng chung, rồi mới `.slice(24.000)` — tức hằng
+        `MAX_RFQ_TEXT_CHARS` từ trước tới nay **không có tác dụng gì** và báo giá Excel nhiều sheet
+        (Sông Lam 900 dòng, Nam Thái Dương 3 tỉnh) AI chỉ đọc được phần đầu.
+      · 3 key `rvStatusINVITED/SUBMITTED/DECLINED` nằm ở namespace `purchasing.vendors` trong khi trang
+        `/purchasing/rfq/[id]` đọc từ `purchasing.rfq` ⇒ **mỗi hàng NCC hiện nguyên chuỗi
+        `purchasing.rfq.rvStatusINVITED`**. Đúng lớp "key ghép lúc chạy" mà script parity mù (mục 10.19).
+    - ⚠ **Dòng tóm tắt cạnh mỗi NCC nay hiện HAI số**: "Cộng (chưa thuế)" và "Tổng thanh toán". Chỉ hiện
+      một số là đọc nhầm ngay — PUR so sánh trên giá TRƯỚC thuế (VAT khấu trừ), còn số NCC đòi thanh
+      toán là số ĐÃ gồm thuế. (Lỗi này do chính đợt này tạo ra khi đổi nhãn `quotedTotal`, đã sửa.)
+    - **Prompt AI thêm quy tắc 7**: file thường ghi SỐ TIỀN thuế ("VAT 8%: 176.000") nhưng phải trả về
+      **TỶ LỆ %** vào `terms.vatPct`; chỉ dòng nào khác mức chung mới điền `extra.taxPct`.
+    - **Verify:** 34 assertion mẫu/công thức/thuế + 16 assertion đọc số thành chữ · tsc · eslint · i18n
+      **0/0 (4289 key)** · `next build` sạch · `migrate diff` **rỗng**. **Browser thật (admin, dev.db):**
+      8 nhóm hiện đúng thứ tự, "Khác" cuối · gợi ý mẫu chạy · tạo RFQ 2 dòng CO / 2 NCC bảo vệ, lọc NCC
+      theo nhóm đúng · **nhập hộ với số thật Hoàng Anh Đạt** (5 ngày × 2 người × 12 giờ × 75.000 =
+      9.000.000, kế thừa VAT 8%) + 1 dòng 4.200.000 khai riêng **VAT 10%** ⇒ màn hình ra **Cộng
+      13.200.000 · VAT 10% 420.000 · VAT 8% 720.000 · Tổng 14.340.000 · "Mười bốn triệu ba trăm bốn mươi
+      nghìn đồng"**, **lưu xuống DB rồi tính lại khớp từng đồng** · **giải nén file Excel mẫu đọc công
+      thức thật**: `U7 = T7*IF(R7="",$B$18,R7)/100` và ô `A18` đúng là "Thuế suất mặc định (%)" · **cổng
+      NCC**: không lộ giá CO, không lộ tên NCC khác, không lỗi khoá i18n. Dữ liệu test đã xoá sạch,
+      dev.db về nguyên trạng (25 dự án · 36 nhân sự · 68 khách · 20 NCC · 483 dòng CO).
+    - ⚠ **TNCN: ĐÃ CHỐT 20/08/2026 — theo file NCC, tức CỘNG THÊM % lên thành tiền** (cán cờ gỗ 300.000
+      → TNCN 10% = 30.000 → **330.000**), KHÔNG dùng gross-up ÷0,9 (→ 333.333) của CO/CE. Chênh ~1,1%.
+      · Phạm vi quyết định: **phía BÁO GIÁ và SO SÁNH**. `TAX_GROSSUP` trong `lib/bidding.ts` (mục 6)
+        **GIỮ NGUYÊN, KHÔNG được sửa** — đổi hằng đó là làm lệch coTotal của 483 dòng CO đang chạy.
+      · ⚠ **Hệ quả CHƯA làm, phải xử lý khi động vào bước Account chốt NCC vào CO**: ghi thẳng đơn giá
+        NCC vào một dòng CO `taxType="TNCN"` sẽ cho ra **333.333** chứ không phải **330.000** như đã chốt
+        với NCC. Cách đúng là ghi dòng đó bằng `taxType="OTHER"` + `customTaxAmount` = đúng số tiền thuế
+        trên báo giá (đường này đã có sẵn trong CO/CE, xem mục 6) — khi đó `amount` = net + thuế, khớp
+        từng đồng với số NCC đòi. Chưa nối vào `confirmRfqIntoCO`.
+    - **CHƯA LÀM (cố ý):** bảng so sánh tính theo **chi phí thật của TCM** (cộng TNCN/TNDN không khấu
+      trừ vì chúng vào giá vốn, bỏ VAT vì được khấu trừ — nay đã đủ căn cứ sau quyết định TNCN ở trên,
+      chỉ là chưa code) · so sánh TRỌN GÓI theo phương
+      án (`option`) thay vì từng dòng · đọc file `.xls` cũ (exceljs không đọc được; hiện vẫn lưu file để
+      làm hồ sơ và báo "không đọc được", thông báo đã chỉ đúng đường xử lý) · nút ẩn cột phụ trên cổng
+      NCC (mẫu sản xuất 23 cột, nhân sự 22 cột — bảng có cuộn ngang và file thật cũng rộng cỡ đó).
+
+47. **THU MUA — HỢP ĐỒNG NCC: QUYẾT ĐỊNH ĐÃ CHỐT, CHƯA LÀM CODE (20/08/2026).** Ghi lại để người sau
+    không phải hỏi lại; phần code là đợt riêng.
+    - **Luồng chốt với chủ dự án:** RFQ → PUR chốt phương án → **Account duyệt phương án** → **PUR bấm
+      "Sinh hợp đồng"** (app điền sẵn 2 bên + hạng mục + số/đơn giá/thuế/tổng + điều khoản theo nhóm) →
+      **KẾ TOÁN duyệt hợp đồng** (cổng mới, từ chối thì trả về PUR kèm lý do bắt buộc) → in bản ký → ký
+      tay → tải bản đã ký lên → gắn dự án + NCC.
+    - ⚠ **Số liệu phải KHOÁ tại thời điểm sinh** (ảnh chụp): PUR sửa báo giá sau đó không được đổi hợp
+      đồng đã sinh, muốn đổi thì sinh bản mới. Không thì kế toán duyệt một đằng, in ra một nẻo.
+    - **Xuất Word HOẶC PDF, cho chọn từng lần** (quyết định 20/08/2026) — repo chưa có thư viện .docx,
+      sẽ phải thêm; PDF đi đường trang in như BM02/cashflow.
+    - **Từ 5.000.000đ trở lên bắt buộc có hợp đồng**, dưới ngưỡng dùng PO (`PurchaseOrder` đã có).
+    - **Một khung chung + khối điều khoản riêng theo nhóm** (đọc 23 file thấy ~85% điều khoản trùng
+      nhau): nhân sự thuê ngoài cần danh sách nhân sự + bảng chấm công làm căn cứ quyết toán (file Việt
+      Á: hợp đồng 368 giờ + phát sinh 92 giờ) · sản xuất cần duyệt mẫu + dung sai + sở hữu file thiết kế
+      · AV cần 4 mốc + điện nguồn + trách nhiệm hư hỏng · logistics cần bảo hiểm hàng + thời gian chờ ·
+      mua sắm cần bảo hành + đổi trả.
+    - **Dữ liệu đã sẵn:** Bên B (NCC) đủ trường từ PUR-2 — tên pháp nhân, MST, địa chỉ, 3 cột ngân hàng,
+      điều khoản TT, N người liên hệ có chức danh. Nội dung lấy thẳng từ báo giá đã chốt.
+    - **THÔNG TIN PHÁP NHÂN TCM (Bên A) — chủ dự án cung cấp 20/08/2026:**
+      · Tên: **CÔNG TY CỔ PHẦN TIẾP THỊ TÂN CƯỜNG MINH**
+      · MST: **0302082954** · Địa chỉ: **6F Phan Kế Bính, Phường Tân Định, TP. Hồ Chí Minh**
+      · Đại diện: **Ông NGUYỄN VĂN HOÀNG** — chức vụ **Giám đốc Điều hành**, ký **theo Giấy uỷ quyền số
+        03-2026/TCM-GUQ ngày 29/07/2026**.
+      ⚠ **Chỗ chứa đã có sẵn: module setting `company`** — `lib/costsheet-export.ts:32-34` đang đọc 3 khoá
+      `legal_name_vi` / `signer_name` / `signer_title` cho báo giá BM02. **Bảng `setting` hiện KHÔNG có
+      dòng nào module=company**, nên BM02 đang chạy bằng giá trị mặc định cứng trong code — trong đó
+      `signer_title` = **"CEO"**, KHÁC với chức vụ trên. Khi làm hợp đồng thì thêm 3 khoá mới
+      (`tax_code`, `address`, `signer_authority` = số giấy uỷ quyền) và **ghi `signer_title` = "Giám đốc
+      Điều hành"** — nhưng phải biết rằng khoá đó **DÙNG CHUNG với BM02**, tức chữ ký trên báo giá gửi
+      khách cũng đổi từ "CEO" sang "Giám đốc Điều hành". Cố ý CHƯA seed ở đợt PUR-3a: seed sớm là đổi
+      một chứng từ gửi khách trong khi bên hưởng lợi (hợp đồng) chưa tồn tại.
+      ⚠ **KHÔNG cần TK ngân hàng của TCM** cho hợp đồng NCC — TCM là bên TRẢ tiền, TK cần in là của NCC
+      (đã có đủ từ PUR-2). TK của TCM chỉ cần cho chứng từ thu tiền KHÁCH; letterhead PNG của BM02 đã
+      mang sẵn tên tiếng Anh + MST + địa chỉ (xem chú thích ở `costsheet-export.ts:30`).
+      ⚠ **Giấy uỷ quyền có số và ngày ⇒ sẽ hết hiệu lực / được thay.** Vì vậy phải để ở SETTING sửa được,
+      đừng hằng hoá trong code, và nên làm màn hình `/settings/company` cùng lúc (hiện KHÔNG có).
+    - ⚠ **CÒN THIẾU, phải có trước khi code:** (a) **mẫu hợp đồng thật của TCM** — chủ dự án sẽ gửi;
+      trợ lý **KHÔNG tự soạn câu chữ pháp lý**; (b) màn hình `/settings/company` để sửa 6 khoá trên;
+      (c) cờ "người đại diện ký" trên
+      `VendorContact` (hiện chỉ có `isPrimary` + `title`); (d) model hợp đồng NCC + số hợp đồng —
+      `Contract` hiện tại là hợp đồng với **KHÁCH**, 1 dự án 1 bản, KHÔNG dùng lại được; (e) 2 mã quyền
+      mới `purchasing.contract.create` (PUR) + `purchasing.contract.approve` (Kế toán).
 
 ---
 

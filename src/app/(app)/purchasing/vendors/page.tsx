@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions } from "@/lib/permissions";
 import { getPurchasingScope, vendorWhereForScope } from "@/lib/purchasing-scope";
-import { RFQ_TEMPLATES, isRfqTemplateCode } from "@/lib/rfq-templates";
+import { groupOptions, isKnownGroupCode } from "@/lib/rfq-templates";
+import { loadRfqTemplates } from "@/lib/rfq-groups";
 import { pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { redirect } from "next/navigation";
@@ -21,8 +22,11 @@ export default async function PurchasingVendorsPage({ searchParams }: { searchPa
   if (!perms.has("purchasing.view") && !canManage) redirect("/no-access");
 
   const { group: groupParam, q } = await searchParams;
-  const group = groupParam && isRfqTemplateCode(groupParam) ? groupParam : null;
   const scope = await getPurchasingScope();
+  // Danh mục nhóm nay ở DB (PUR-3b). Ô LỌC dùng danh mục ĐANG BẬT; nhóm đã tắt không lọc được nữa
+  // nhưng NCC thuộc nhóm đó vẫn nằm nguyên trong danh sách chung.
+  const templates = await loadRfqTemplates({ activeOnly: true });
+  const group = groupParam && isKnownGroupCode(templates, groupParam) ? groupParam : null;
   const [t, locale, vendors, fieldDefs] = await Promise.all([
     getTranslations("purchasing.vendors"),
     getLocale() as Promise<Locale>,
@@ -40,10 +44,10 @@ export default async function PurchasingVendorsPage({ searchParams }: { searchPa
     prisma.vendorFieldDef.findMany({ where: { isActive: true }, orderBy: { sort: "asc" } }),
   ]);
   const defs: VendorFieldDefLite[] = fieldDefs.map((d) => ({ key: d.key, labelVi: d.labelVi, labelEn: d.labelEn, type: d.type, options: parseOptions(d.optionsJson), hint: d.hint, required: d.required }));
-  const tpl = (code: string) => RFQ_TEMPLATES.find((x) => x.code === code);
+  const tpl = (code: string) => templates.find((x) => x.code === code);
   // Vai được chia sẻ một phần chỉ thấy nhóm của mình: để nguyên 8 nhóm thì nhóm chưa chia sẻ hiện
   // "0 NCC" — đọc thành "Thu mua không có NCC nhóm này", sai sự thật.
-  const groupTabs = scope.full ? RFQ_TEMPLATES : RFQ_TEMPLATES.filter((x) => scope.groupCodes.includes(x.code));
+  const groupTabs = scope.full ? templates : templates.filter((x) => scope.groupCodes.includes(x.code));
   const gLabel = (code: string) => {
     const x = tpl(code);
     return x ? pickLabel({ labelVi: x.labelVi, labelEn: x.labelEn }, locale) : code;
@@ -91,7 +95,7 @@ export default async function PurchasingVendorsPage({ searchParams }: { searchPa
         })}
       </div>
 
-      {canManage && <VendorCreateForm defs={defs} />}
+      {canManage && <VendorCreateForm defs={defs} groups={groupOptions(groupTabs)} />}
 
       <section className="rounded-xl border border-border bg-surface p-4">
         <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">

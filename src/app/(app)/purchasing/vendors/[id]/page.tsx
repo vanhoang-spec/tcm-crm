@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions } from "@/lib/permissions";
 import { getPurchasingScope, canSeeVendor } from "@/lib/purchasing-scope";
-import { RFQ_TEMPLATES } from "@/lib/rfq-templates";
+import { groupOptions } from "@/lib/rfq-templates";
+import { loadRfqTemplates } from "@/lib/rfq-groups";
 import { formatDate, formatNumber, toNum } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import type { Locale } from "@/i18n/locales";
@@ -21,7 +22,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
   if (!perms.has("purchasing.view") && !canManage) redirect("/no-access");
   const { id } = await params;
 
-  const [t, locale, vendor, projects, priceHistory, fieldDefsAll, scope] = await Promise.all([
+  const [t, locale, vendor, projects, priceHistory, fieldDefsAll, scope, templates] = await Promise.all([
     getTranslations("purchasing.vendors"),
     getLocale() as Promise<Locale>,
     prisma.vendor.findUnique({
@@ -46,6 +47,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
     loadVendorPriceHistory(id),
     prisma.vendorFieldDef.findMany({ orderBy: { sort: "asc" } }),
     getPurchasingScope(),
+    loadRfqTemplates(),
   ]);
   if (!vendor) notFound();
   // Ngoài phạm vi được chia sẻ ⇒ coi như không tồn tại. Đoán id không mở được hồ sơ NCC khác.
@@ -61,7 +63,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
       : [];
 
   const gLabel = (code: string) => {
-    const x = RFQ_TEMPLATES.find((tp) => tp.code === code);
+    const x = templates.find((tp) => tp.code === code);
     return x ? (locale === "en" ? x.labelEn : x.labelVi) : code;
   };
   const docs: VendorDocRow[] = vendor.documents.map((d) => ({
@@ -100,6 +102,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
 
       {canManage ? (
         <VendorEditForm
+          groups={groupOptions(templates.filter((x) => scope.full || scope.groupCodes.includes(x.code)))}
           defs={defs}
           vendor={{
             id: vendor.id,

@@ -8,6 +8,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import { toNum } from "@/lib/utils";
 import { suggestRfqTemplate } from "@/lib/rfq-templates";
+import { loadRfqTemplates } from "@/lib/rfq-groups";
 import type { Locale } from "@/i18n/locales";
 import { RfqNewForm, type NewRfqLine, type NewRfqVendor } from "./rfq-new-form";
 
@@ -63,7 +64,10 @@ export default async function RfqNewPage({ searchParams }: { searchParams: Promi
       }
     }
   }
-  const suggested = lines.length ? suggestRfqTemplate(lines.map((l) => l.itemName)) : null;
+  // Ô CHỌN mẫu chỉ liệt kê nhóm ĐANG BẬT (PUR-3b); RFQ cũ thuộc nhóm đã tắt vẫn mở được vì đường
+  // ĐỌC dùng loadRfqTemplate theo mã, không lọc isActive.
+  const allTemplates = await loadRfqTemplates({ activeOnly: true });
+  const suggested = lines.length ? suggestRfqTemplate(allTemplates, lines.map((l) => l.itemName)) : null;
   const vendorOpts: NewRfqVendor[] = vendors.map((v) => ({ id: v.id, name: v.name, code: v.code, groupCodes: v.groups.map((g) => g.groupCode) }));
 
   return (
@@ -89,7 +93,7 @@ export default async function RfqNewPage({ searchParams }: { searchParams: Promi
       ) : lines.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border-strong p-4 text-sm text-muted-foreground">{t("noCostLines")}</p>
       ) : (
-        <RfqNewForm projectId={projectId} taskId={taskId} taskTitle={taskTitle} lines={lines} vendors={vendorOpts} suggestedTemplate={suggested} allowedGroups={scope.full ? null : scope.groupCodes} locale={locale} />
+        <RfqNewForm projectId={projectId} taskId={taskId} taskTitle={taskTitle} lines={lines} vendors={vendorOpts} suggestedTemplate={suggested} allTemplates={allTemplates} allowedGroups={scope.full ? null : scope.groupCodes} locale={locale} />
       )}
     </div>
   );

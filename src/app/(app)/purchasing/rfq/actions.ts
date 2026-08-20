@@ -9,7 +9,8 @@ import { hasPermission, requirePermission } from "@/lib/permissions";
 import { getPurchasingScope, canUseGroup, canSeeVendor } from "@/lib/purchasing-scope";
 import { stringifyAudit, toNum } from "@/lib/utils";
 import { hashGuestToken } from "@/lib/guest-session";
-import { resolveRfqTemplate, isRfqTemplateCode } from "@/lib/rfq-templates";
+import { isKnownGroupCode } from "@/lib/rfq-templates";
+import { loadRfqTemplate, loadRfqTemplates } from "@/lib/rfq-groups";
 import { RFQ_FILE_MIME_TYPES, MAX_RFQ_FILE_BYTES, MAX_RFQ_TEXT_CHARS, RFQ_OPEN_FOR_QUOTES, makeRfqCode, tokenExpiryFor } from "@/lib/rfq";
 import { parseQuoteFormData, writeVendorQuote } from "@/lib/rfq-server";
 import { saveRfqFile, readRfqFile } from "@/lib/rfq-storage";
@@ -57,7 +58,10 @@ export async function createRfq(_prev: RfqFormState, formData: FormData): Promis
   const projectId = str(formData.get("projectId"));
   if (!projectId) return { error: "NO_PROJECT" };
   const groupCode = str(formData.get("groupCode"));
-  if (!isRfqTemplateCode(groupCode)) return { error: "NO_TEMPLATE" };
+  // PUR-3b: danh mục nhóm nay nằm ở DB (+ 8 nhóm hệ thống trong code) — nạp rồi mới kiểm, đừng
+  // đối chiếu với hằng 8 mã cũ, sẽ từ chối đúng những nhóm admin vừa khai trong app.
+  const allTemplates = await loadRfqTemplates();
+  if (!isKnownGroupCode(allTemplates, groupCode)) return { error: "NO_TEMPLATE" };
   /**
    * ⚠ Chốt chặn THẬT của phạm vi chia sẻ. Lọc ở trang chỉ là trang trí — người dùng sửa được payload,
    * nên nhóm hàng và từng NCC đều phải kiểm LẠI ở đây.
@@ -177,7 +181,7 @@ export async function saveVendorQuoteManual(rfqVendorId: string, _prev: RfqFormS
   await requirePermission("purchasing.rfq.manage");
   const rv = await prisma.rfqVendor.findUnique({ where: { id: rfqVendorId }, select: { fileKey: true, rfq: { select: { id: true, groupCode: true, lines: { select: { id: true } } } } } });
   if (!rv) return { error: "NOT_FOUND" };
-  const template = resolveRfqTemplate(rv.rfq.groupCode);
+  const template = await loadRfqTemplate(rv.rfq.groupCode);
   if (!template) return { error: "NO_TEMPLATE" };
   const { lines, terms } = parseQuoteFormData(formData, rv.rfq.lines.map((l) => l.id), template);
   const viaRaw = str(formData.get("via"));
@@ -279,7 +283,7 @@ async function runAiParse(
   buffer: Buffer,
   mime: string,
 ): Promise<RfqFormState> {
-  const template = resolveRfqTemplate(rv.rfq.groupCode);
+  const template = await loadRfqTemplate(rv.rfq.groupCode);
   if (!template) return { error: "NO_TEMPLATE" };
   let text: string;
   try {

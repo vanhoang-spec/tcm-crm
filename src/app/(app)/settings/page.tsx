@@ -50,6 +50,7 @@ export default async function SettingsPage() {
     { href: "/settings/departments", icon: Building2, title: t("departmentsTitle"), desc: t("departmentsDesc") },
     { href: "/settings/vendors", icon: Truck, title: t("vendorsTitle"), desc: t("vendorsDesc") },
     { href: "/settings/vendor-fields", icon: ListChecks, title: t("vendorFieldsTitle"), desc: t("vendorFieldsDesc") },
+    { href: "/settings/rfq-groups", icon: Boxes, title: t("rfqGroupsTitle"), desc: t("rfqGroupsDesc") },
     { href: "/settings/production-sharing", icon: Share2, title: t("productionSharingTitle"), desc: t("productionSharingDesc") },
     { href: "/settings/staff", icon: UserPlus, title: t("staffTitle"), desc: t("staffDesc") },
     { href: "/settings/roles", icon: ShieldCheck, title: t("rolesTitle"), desc: t("rolesDesc") },

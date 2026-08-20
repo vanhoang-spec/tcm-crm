@@ -71,7 +71,12 @@ export type RfqTermField = {
 };
 
 export type RfqTemplate = {
-  code: RfqTemplateCode;
+  /**
+   * ⚠ CHUỖI, không phải union 8 mã: từ PUR-3b admin tạo được nhóm mới trong app nên mã là dữ liệu,
+   * không phải hằng. Union RfqTemplateCode chỉ còn mô tả 8 NHÓM HỆ THỐNG (chỗ duy nhất còn cần nó là
+   * nhánh công thức riêng của OUTSOURCED_STAFF trong computeQuoteLineAmount).
+   */
+  code: string;
   labelVi: string;
   labelEn: string;
   descVi: string;
@@ -194,7 +199,15 @@ function cols(specific: RfqLineColumn[]): RfqLineColumn[] {
   return [...COMMON_LEAD, ...specific, ...COMMON_TAIL];
 }
 
-export const RFQ_TEMPLATES: RfqTemplate[] = [
+/**
+ * 8 NHÓM HỆ THỐNG — cột dòng, điều khoản và CÔNG THỨC THÀNH TIỀN nằm ở đây, không khai được trong app.
+ *
+ * ⚠ Đây KHÔNG còn là toàn bộ danh mục nhóm hàng (PUR-3b, 21/08/2026): admin tạo thêm nhóm ở
+ * /settings/rfq-groups và chúng nằm trong bảng rfq_group. Muốn danh sách ĐẦY ĐỦ thì gọi
+ * loadRfqTemplates() ở lib/rfq-groups.ts (server) — đừng đọc thẳng hằng này rồi tưởng là đủ.
+ * Hằng này chỉ dùng cho: seed dựng dòng DB tương ứng, và ghép lại cột/công thức cho nhóm hệ thống.
+ */
+export const SYSTEM_RFQ_TEMPLATES: RfqTemplate[] = [
   {
     code: "EVENT_EQUIPMENT",
     labelVi: "Thiết bị & thi công sự kiện",
@@ -416,12 +429,49 @@ export const RFQ_TEMPLATES: RfqTemplate[] = [
   },
 ];
 
-export function resolveRfqTemplate(code: string | null | undefined): RfqTemplate | null {
-  return RFQ_TEMPLATES.find((t) => t.code === code) ?? null;
+/**
+ * Tìm mẫu trong MỘT DANH SÁCH cho trước (danh sách này do lib/rfq-groups.ts nạp từ DB + code).
+ *
+ * ⚠ Danh sách truyền vào phải gồm cả nhóm ĐÃ TẮT: RFQ cũ vẫn phải mở và tính tiền được sau khi
+ * admin tắt nhóm. Chỉ các ô CHỌN mới lọc theo isActive.
+ */
+export function resolveRfqTemplate(templates: RfqTemplate[], code: string | null | undefined): RfqTemplate | null {
+  return templates.find((t) => t.code === code) ?? null;
 }
 
-export function isRfqTemplateCode(code: string): code is RfqTemplateCode {
-  return (RFQ_TEMPLATE_CODES as readonly string[]).includes(code);
+/** Mã có nằm trong danh sách không (thay cho type-guard cũ theo union 8 mã hệ thống). */
+export function isKnownGroupCode(templates: RfqTemplate[], code: string): boolean {
+  return templates.some((t) => t.code === code);
+}
+
+/**
+ * Nhãn nhóm cho các Ô CHỌN. Client component nhận qua PROP chứ không đọc danh mục — từ PUR-3b danh
+ * mục nằm ở DB, mà client thì không gọi DB được.
+ */
+export type RfqGroupOption = { code: string; labelVi: string; labelEn: string; descVi: string; descEn: string };
+
+export function groupOptions(templates: RfqTemplate[]): RfqGroupOption[] {
+  return templates.map((t) => ({ code: t.code, labelVi: t.labelVi, labelEn: t.labelEn, descVi: t.descVi, descEn: t.descEn }));
+}
+
+/** Mã nhóm hợp lệ: 2–24 ký tự A-Z 0-9 _ . Bất biến sau khi tạo (là khoá dữ liệu — xem schema). */
+export const RFQ_GROUP_CODE_RE = /^[A-Z][A-Z0-9_]{1,23}$/;
+
+/**
+ * Sinh mã gợi ý từ nhãn tiếng Việt (bỏ dấu, hoa, gạch dưới). Admin sửa được trước khi tạo.
+ * Trả rỗng khi không rút ra được gì hợp lệ — người dùng tự gõ.
+ */
+export function suggestGroupCode(labelVi: string): string {
+  const c = fold(labelVi).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase().slice(0, 24);
+  return RFQ_GROUP_CODE_RE.test(c) ? c : "";
+}
+
+/** Sinh khoá cột/điều khoản từ nhãn — MỘT LẦN, không đổi (khoá trong extraJson/termsJson đã lưu). */
+export function fieldKeyFromLabel(labelVi: string, taken: string[] = []): string {
+  const base = fold(labelVi).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32) || "field";
+  if (!taken.includes(base)) return base;
+  for (let i = 2; i < 100; i++) if (!taken.includes(base + "_" + i)) return base + "_" + i;
+  return base + "_" + Date.now();
 }
 
 /** Bỏ dấu tiếng Việt để so từ khoá không phân biệt dấu. */
@@ -440,14 +490,166 @@ function fold(s: string): string {
  * "bao ve"), mẫu nhiều nhất thắng; hoà thì mẫu đứng trước trong danh mục. CHỈ GỢI Ý — PUR chọn lại
  * được. Trả null khi không trúng gì (kể cả `OTHER`, mẫu này không có từ khoá).
  */
-export function suggestRfqTemplate(lineNames: string[]): RfqTemplateCode | null {
+export function suggestRfqTemplate(templates: RfqTemplate[], lineNames: string[]): string | null {
   const hay = ` ${lineNames.map(fold).join(" ")} `;
-  let best: { code: RfqTemplateCode; hits: number } | null = null;
-  for (const t of RFQ_TEMPLATES) {
+  let best: { code: string; hits: number } | null = null;
+  for (const t of templates) {
     const hits = t.keywords.reduce((n, kw) => (hay.includes(` ${fold(kw)} `) ? n + 1 : n), 0);
     if (hits > 0 && (!best || hits > best.hits)) best = { code: t.code, hits };
   }
   return best?.code ?? null;
+}
+
+// ── PUR-3b: DỰNG MẪU CHO NHÓM KHAI TRONG APP ────────────────────────────────────────────────────
+
+/** Một dòng rfq_group đã đọc từ DB (chỉ phần bộ dựng cần — tránh kéo kiểu Prisma vào file thuần). */
+export type RfqGroupRow = {
+  code: string;
+  labelVi: string;
+  labelEn: string;
+  descVi: string;
+  descEn: string;
+  keywords: string;
+  unitPriceLabelVi: string;
+  unitPriceLabelEn: string;
+  isSystem: boolean;
+};
+
+/** Một dòng rfq_group_field đã đọc từ DB. */
+export type RfqGroupFieldRow = {
+  kind: string;
+  key: string;
+  labelVi: string;
+  labelEn: string;
+  type: string;
+  optionsJson: string | null;
+  hintVi: string | null;
+  hintEn: string | null;
+  defaultValue: string | null;
+  isAmountFactor: boolean;
+  isActive: boolean;
+  sort: number;
+};
+
+const LINE_TYPES = ["number", "text", "select", "bool"] as const;
+const TERM_TYPES = ["number", "text", "textarea"] as const;
+
+function parseFieldOptions(raw: string | null): { value: string; labelVi: string; labelEn: string }[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const v = JSON.parse(raw);
+    if (!Array.isArray(v)) return undefined;
+    const out = v
+      .filter((x) => x && typeof x === "object")
+      .map((x) => ({ value: String(x.value ?? ""), labelVi: String(x.labelVi ?? x.value ?? ""), labelEn: String(x.labelEn ?? x.labelVi ?? x.value ?? "") }))
+      .filter((x) => x.value !== "" || x.labelVi !== "");
+    return out.length ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Giá trị mặc định lưu dạng CHUỖI trong DB → ép về đúng kiểu của cột. Chuỗi rỗng = không có mặc định
+ * (khác với 0 hay false, hai giá trị đó là mặc định THẬT mà admin có thể muốn).
+ */
+function parseDefaultValue(raw: string | null, type: string): number | string | boolean | undefined {
+  if (raw === null || raw.trim() === "") return undefined;
+  if (type === "number") {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  if (type === "bool") return raw === "true" || raw === "1";
+  return raw;
+}
+
+/**
+ * Dựng RfqTemplate từ dòng DB.
+ *
+ * - Nhóm HỆ THỐNG: cột / điều khoản / công thức / nhãn đơn giá lấy từ SYSTEM_RFQ_TEMPLATES theo mã;
+ *   DB chỉ đè nhãn, mô tả, từ khoá. Mã hệ thống không có trong code (bị gỡ khỏi danh mục) thì rơi
+ *   xuống nhánh tự tạo thay vì biến mất — RFQ cũ vẫn mở được.
+ * - Nhóm TỰ TẠO: cột riêng bọc trong cols() nên tự có Thuê/Mua · Phương án · Khu vực · Link ảnh ·
+ *   THUẾ THEO DÒNG; điều khoản riêng + COMMON_TERMS. Nhờ vậy toàn bộ phần thuế chạy y hệt nhóm hệ
+ *   thống mà không cần một dòng đặc biệt nào.
+ */
+export function buildRfqTemplate(row: RfqGroupRow, fields: RfqGroupFieldRow[]): RfqTemplate {
+  const sys = row.isSystem ? SYSTEM_RFQ_TEMPLATES.find((t) => t.code === row.code) : undefined;
+  const keywords = row.keywords
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  if (sys) {
+    return {
+      ...sys,
+      labelVi: row.labelVi || sys.labelVi,
+      labelEn: row.labelEn || sys.labelEn,
+      descVi: row.descVi || sys.descVi,
+      descEn: row.descEn || sys.descEn,
+      keywords: keywords.length ? keywords : sys.keywords,
+    };
+  }
+
+  const live = fields.filter((f) => f.isActive).sort((a, b) => a.sort - b.sort || a.key.localeCompare(b.key));
+  const lineFields = live.filter((f) => f.kind !== "TERM");
+  const termFields = live.filter((f) => f.kind === "TERM");
+
+  const specific: RfqLineColumn[] = lineFields.map((f) => {
+    const type = (LINE_TYPES as readonly string[]).includes(f.type) ? (f.type as RfqLineColumn["type"]) : "text";
+    return {
+      key: f.key,
+      labelVi: f.labelVi,
+      labelEn: f.labelEn || f.labelVi,
+      type,
+      options: type === "select" ? parseFieldOptions(f.optionsJson) : undefined,
+      defaultValue: parseDefaultValue(f.defaultValue, type),
+      hintVi: f.hintVi ?? undefined,
+      hintEn: f.hintEn ?? undefined,
+    };
+  });
+
+  return {
+    code: row.code,
+    labelVi: row.labelVi,
+    labelEn: row.labelEn || row.labelVi,
+    descVi: row.descVi,
+    descEn: row.descEn || row.descVi,
+    lineColumns: cols(specific),
+    // Chỉ cột SỐ mới làm hệ số được — cột chữ/bool nhân vào thành tiền là vô nghĩa và sẽ ra 1 (xem factorOf).
+    amountFactors: lineFields.filter((f) => f.isAmountFactor && f.type === "number").map((f) => f.key),
+    unitPriceLabelVi: row.unitPriceLabelVi || "Đơn giá / đơn vị",
+    unitPriceLabelEn: row.unitPriceLabelEn || "Unit price / unit",
+    terms: [
+      ...termFields.map((f) => ({
+        key: f.key,
+        labelVi: f.labelVi,
+        labelEn: f.labelEn || f.labelVi,
+        type: ((TERM_TYPES as readonly string[]).includes(f.type) ? f.type : "text") as RfqTermField["type"],
+        hintVi: f.hintVi ?? undefined,
+        hintEn: f.hintEn ?? undefined,
+      })),
+      ...COMMON_TERMS,
+    ],
+    keywords,
+  };
+}
+
+/** Dòng DB tương ứng của 8 nhóm hệ thống — seed dùng để tạo bản ghi lần đầu (không đè sửa tay). */
+export function systemGroupRows(): (RfqGroupRow & { sort: number })[] {
+  return SYSTEM_RFQ_TEMPLATES.map((t, i) => ({
+    code: t.code,
+    labelVi: t.labelVi,
+    labelEn: t.labelEn,
+    descVi: t.descVi,
+    descEn: t.descEn,
+    keywords: t.keywords.join(", "),
+    unitPriceLabelVi: t.unitPriceLabelVi,
+    unitPriceLabelEn: t.unitPriceLabelEn,
+    isSystem: true,
+    // OTHER luôn đứng cuối (quyết định chủ dự án 20/08/2026) — chừa khoảng để nhóm tự tạo chen vào giữa.
+    sort: t.code === "OTHER" ? 9000 : (i + 1) * 10,
+  }));
 }
 
 export type QuoteLineInput = {

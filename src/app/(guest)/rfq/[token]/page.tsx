@@ -1,6 +1,7 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import { loadRfqByToken } from "@/lib/rfq-server";
-import { resolveRfqTemplate, parseExtraJson } from "@/lib/rfq-templates";
+import { parseExtraJson } from "@/lib/rfq-templates";
+import { loadRfqTemplate } from "@/lib/rfq-groups";
 import { RFQ_OPEN_FOR_QUOTES } from "@/lib/rfq";
 import { formatDate, formatDateTime, toNum } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
@@ -24,7 +25,7 @@ export default async function GuestRfqPage({ params }: { params: Promise<{ token
       </div>
     );
   }
-  const template = resolveRfqTemplate(rv.rfq.groupCode);
+  const template = await loadRfqTemplate(rv.rfq.groupCode);
   const open = (RFQ_OPEN_FOR_QUOTES as readonly string[]).includes(rv.rfq.status);
   if (!template || !open) {
     return (

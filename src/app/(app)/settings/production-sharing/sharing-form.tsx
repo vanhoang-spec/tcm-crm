@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { Check, Loader2 } from "lucide-react";
-import { RFQ_TEMPLATES } from "@/lib/rfq-templates";
+import type { RfqGroupOption } from "@/lib/rfq-templates";
 import { saveProductionSharing, type SharingFormState } from "./actions";
 
 export type SharingVendor = { id: string; code: string; name: string; groupCodes: string[] };
@@ -20,10 +20,13 @@ export type SharingVendor = { id: string; code: string; name: string; groupCodes
  */
 export function SharingForm({
   vendors,
+  groups: allGroups,
   initialGroups,
   initialVendors,
 }: {
   vendors: SharingVendor[];
+  /** Danh mục nhóm ĐANG BẬT — nạp từ DB ở trang (PUR-3b). */
+  groups: RfqGroupOption[];
   initialGroups: string[];
   initialVendors: string[];
 }) {
@@ -49,7 +52,7 @@ export function SharingForm({
         <h2 className="text-sm font-semibold text-foreground">{t("groupsTitle")}</h2>
         <p className="mt-1 text-xs text-muted-foreground">{t("groupsHint")}</p>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {RFQ_TEMPLATES.map((tpl) => (
+          {allGroups.map((tpl) => (
             <label key={tpl.code} className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-3 hover:bg-surface-2">
               <input
                 type="checkbox"

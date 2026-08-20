@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { DateField } from "@/components/ui/date-field";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/utils";
-import { RFQ_TEMPLATES, suggestRfqTemplate, type RfqTemplateCode } from "@/lib/rfq-templates";
+import { suggestRfqTemplate, type RfqTemplate } from "@/lib/rfq-templates";
 import type { Locale } from "@/i18n/locales";
 import { createRfq, type RfqFormState } from "../actions";
 
@@ -43,6 +43,7 @@ export function RfqNewForm({
   lines,
   vendors,
   suggestedTemplate,
+  allTemplates,
   allowedGroups,
   locale,
 }: {
@@ -51,7 +52,9 @@ export function RfqNewForm({
   taskTitle: string | null;
   lines: NewRfqLine[];
   vendors: NewRfqVendor[];
-  suggestedTemplate: RfqTemplateCode | null;
+  suggestedTemplate: string | null;
+  /** Danh mục nhóm ĐANG BẬT, nạp từ DB ở trang (PUR-3b) — client không tự đọc được. */
+  allTemplates: RfqTemplate[];
   /** null = mọi nhóm. Mảng = CHỈ những nhóm được chia sẻ cho vai này (phòng Sản xuất). */
   allowedGroups: string[] | null;
   locale: Locale;
@@ -59,9 +62,9 @@ export function RfqNewForm({
   const t = useTranslations("purchasing.rfq");
   const [state, formAction, pending] = useActionState<RfqFormState, FormData>(createRfq, {});
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const templates = allowedGroups ? RFQ_TEMPLATES.filter((x) => allowedGroups.includes(x.code)) : RFQ_TEMPLATES;
+  const templates = allowedGroups ? allTemplates.filter((x) => allowedGroups.includes(x.code)) : allTemplates;
   // Gợi ý nằm ngoài nhóm được chia sẻ thì bỏ — không chọn sẵn thứ mà server sẽ từ chối.
-  const [template, setTemplate] = useState<RfqTemplateCode | "">(
+  const [template, setTemplate] = useState<string>(
     suggestedTemplate && templates.some((x) => x.code === suggestedTemplate) ? suggestedTemplate : "",
   );
   const [showAll, setShowAll] = useState(false);
@@ -84,13 +87,13 @@ export function RfqNewForm({
     });
   const liveSuggest = useMemo(() => {
     const names = lines.filter((l) => selected.has(l.stableKey)).map((l) => l.itemName);
-    const s = names.length ? suggestRfqTemplate(names) : null;
+    const s = names.length ? suggestRfqTemplate(templates, names) : null;
     return s && (!allowedGroups || allowedGroups.includes(s)) ? s : null;
-  }, [selected, lines, allowedGroups]);
-  const tpl = RFQ_TEMPLATES.find((x) => x.code === template) ?? null;
+  }, [selected, lines, allowedGroups, templates]);
+  const tpl = templates.find((x) => x.code === template) ?? null;
   const visibleVendors = showAll || !template ? vendors : vendors.filter((v) => v.groupCodes.includes(template));
   const gLabel = (code: string) => {
-    const x = RFQ_TEMPLATES.find((tp) => tp.code === code);
+    const x = allTemplates.find((tp) => tp.code === code);
     return x ? (locale === "en" ? x.labelEn : x.labelVi) : code;
   };
 

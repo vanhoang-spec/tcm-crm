@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { hasPermission } from "@/lib/permissions";
-import { resolveRfqTemplate } from "@/lib/rfq-templates";
+import { loadRfqTemplate } from "@/lib/rfq-groups";
 import { formatDate } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     include: { project: { select: { code: true, name: true, client: { select: { name: true } } } }, lines: { orderBy: { sort: "asc" } } },
   });
   if (!rfq) return new NextResponse("Not found", { status: 404 });
-  const template = resolveRfqTemplate(rfq.groupCode);
+  const template = await loadRfqTemplate(rfq.groupCode);
   if (!template) return new NextResponse("Not found", { status: 404 });
 
   const wb = new ExcelJS.Workbook();

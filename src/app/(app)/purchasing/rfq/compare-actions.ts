@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 import { stringifyAudit, toNum } from "@/lib/utils";
-import { resolveRfqTemplate } from "@/lib/rfq-templates";
+import { loadRfqTemplate } from "@/lib/rfq-groups";
 import { loadCompareMatrix, matrixToText, canConfirmRfq } from "@/lib/rfq-server";
 import { parseSelection, type RfqSelection } from "@/lib/rfq-compare";
 import { aiChatJson, AiError } from "@/lib/ai/deepseek";
@@ -43,7 +43,7 @@ export async function runRfqCompareAi(rfqId: string, _prev: CompareState, _fd: F
   if (!["COMPARING", "SENT"].includes(rfq.status)) return { error: "BAD_STATUS" };
   const matrix = await loadCompareMatrix(rfqId);
   if (!matrix || matrix.vendors.filter((v) => v.status === "SUBMITTED").length === 0) return { error: "NO_QUOTES" };
-  const template = resolveRfqTemplate(rfq.groupCode);
+  const template = await loadRfqTemplate(rfq.groupCode);
   let raw: unknown;
   try {
     // KHÔNG bọc transaction quanh call AI.

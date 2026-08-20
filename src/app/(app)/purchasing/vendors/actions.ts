@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { stringifyAudit } from "@/lib/utils";
 import { getMyPermissions } from "@/lib/permissions";
-import { RFQ_TEMPLATE_CODES, isRfqTemplateCode } from "@/lib/rfq-templates";
+import { loadRfqTemplates } from "@/lib/rfq-groups";
 import { VENDOR_DOC_KINDS, RFQ_FILE_MIME_TYPES, MAX_RFQ_FILE_BYTES, type VendorDocKind } from "@/lib/rfq";
 import { VENDOR_CODE_RE, VENDOR_CODE_LEGACY_RE, MAX_VENDOR_CONTACTS, collectCustomValues, readCustomJson, parseOptions } from "@/lib/vendor-fields";
 import { saveRfqFile, deleteRfqFile } from "@/lib/rfq-storage";
@@ -41,15 +41,28 @@ async function audit(entityId: string, action: string, payload: unknown) {
   });
 }
 
-function readGroups(formData: FormData): string[] {
-  return RFQ_TEMPLATE_CODES.filter((code) => formData.get(`group_${code}`) === "on");
+/**
+ * Nhóm được tick trên form NCC. Danh mục nay ở DB (PUR-3b) nên phải nạp — nhưng chỉ nhận nhóm ĐANG
+ * BẬT: gán NCC vào nhóm đã tắt là dựng lại dữ liệu mà admin vừa cố ý ngưng dùng.
+ */
+async function readGroups(formData: FormData): Promise<string[]> {
+  const templates = await loadRfqTemplates({ activeOnly: true });
+  return templates.map((t) => t.code).filter((code) => formData.get(`group_${code}`) === "on");
 }
 
-/** Đồng bộ bảng nối nhóm hàng về đúng tập được tick (thêm thiếu, xoá thừa). */
+/**
+ * Đồng bộ bảng nối nhóm hàng về đúng tập được tick (thêm thiếu, xoá thừa).
+ *
+ * ⚠ CHỈ động vào những nhóm ĐANG BẬT — tức đúng những ô có trên form. Nhóm đã tắt mà NCC còn thuộc
+ * về thì GIỮ NGUYÊN: form không hiện ô đó, nên coi "không tick" là "bỏ ra khỏi nhóm" sẽ xoá dữ liệu
+ * trong im lặng ngay lần sửa hồ sơ kế tiếp. Tắt nhóm là ngưng dùng, không phải xoá lịch sử.
+ */
 async function syncGroups(vendorId: string, groups: string[]) {
-  const wanted = new Set<string>(groups.filter(isRfqTemplateCode));
+  // groups đã lọc theo danh mục đang bật ở readGroups — chỉ khử trùng ở đây.
+  const wanted = new Set<string>(groups);
+  const manageable = new Set((await loadRfqTemplates({ activeOnly: true })).map((t) => t.code));
   const current = await prisma.vendorGroup.findMany({ where: { vendorId }, select: { id: true, groupCode: true } });
-  const toDelete = current.filter((g) => !wanted.has(g.groupCode)).map((g) => g.id);
+  const toDelete = current.filter((g) => manageable.has(g.groupCode) && !wanted.has(g.groupCode)).map((g) => g.id);
   const have = new Set(current.map((g) => g.groupCode));
   const toCreate = [...wanted].filter((g) => !have.has(g));
   await prisma.$transaction([
@@ -128,9 +141,10 @@ export async function createVendor(_prev: VendorFormState, formData: FormData): 
   const created = await prisma.vendor.create({
     data: { code, name, category, ...profileData(formData), customJson: Object.keys(custom.values).length ? JSON.stringify(custom.values) : null },
   });
-  await syncGroups(created.id, readGroups(formData));
+  const newGroups = await readGroups(formData);
+  await syncGroups(created.id, newGroups);
   await writeContacts(created.id, contacts);
-  await audit(created.id, "CREATE", { code, name, category, groups: readGroups(formData), contacts: contacts.length });
+  await audit(created.id, "CREATE", { code, name, category, groups: newGroups, contacts: contacts.length });
   revalidatePath("/purchasing/vendors");
   redirect(`/purchasing/vendors/${created.id}`);
 }
@@ -152,7 +166,7 @@ export async function updateVendor(vendorId: string, _prev: VendorFormState, for
   const defs = await activeFieldDefs();
   const custom = collectCustomValues(formData, defs, readCustomJson(existing.customJson));
   if (custom.missing.length) return { error: "CUSTOM_REQUIRED", errorDetail: defs.filter((d) => custom.missing.includes(d.key)).map((d) => d.labelVi).join(", ") };
-  const groups = readGroups(formData);
+  const groups = await readGroups(formData);
   const contacts = readContacts(formData);
 
   await prisma.vendor.update({

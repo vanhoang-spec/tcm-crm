@@ -4,6 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions";
 import { readProductionSharing } from "@/lib/purchasing-scope";
+import { groupOptions } from "@/lib/rfq-templates";
+import { loadRfqTemplates } from "@/lib/rfq-groups";
 import { SharingForm, type SharingVendor } from "./sharing-form";
 
 /**
@@ -38,7 +40,7 @@ export default async function ProductionSharingPage() {
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-5">
-        <SharingForm vendors={vendors} initialGroups={shared.groupCodes} initialVendors={shared.vendorIds} />
+        <SharingForm groups={groupOptions(await loadRfqTemplates({ activeOnly: true }))} vendors={vendors} initialGroups={shared.groupCodes} initialVendors={shared.vendorIds} />
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions, requirePermission } from "@/lib/permissions";
 import { getPurchasingScope } from "@/lib/purchasing-scope";
-import { RFQ_TEMPLATES } from "@/lib/rfq-templates";
+import { loadRfqTemplates } from "@/lib/rfq-groups";
 import { RFQ_STATUSES } from "@/lib/rfq";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
 import { formatDate } from "@/lib/utils";
@@ -27,6 +27,7 @@ const STATUS_TONE: Record<string, "neutral" | "warning" | "brand" | "success" | 
 export default async function PurchasingHomePage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   await requirePermission("purchasing.view");
   const scope = await getPurchasingScope();
+  const templates = await loadRfqTemplates();
   const perms = await getMyPermissions();
   const canManage = perms.has("purchasing.rfq.manage");
   const { status: statusParam } = await searchParams;
@@ -62,7 +63,7 @@ export default async function PurchasingHomePage({ searchParams }: { searchParam
     }),
   ]);
   const gLabel = (code: string) => {
-    const x = RFQ_TEMPLATES.find((tp) => tp.code === code);
+    const x = templates.find((tp) => tp.code === code);
     return x ? (locale === "en" ? x.labelEn : x.labelVi) : code;
   };
 

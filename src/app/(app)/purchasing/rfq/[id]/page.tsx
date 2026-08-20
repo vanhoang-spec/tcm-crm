@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { getMyPermissions, requirePermission } from "@/lib/permissions";
 import { getPurchasingScope, canUseGroup } from "@/lib/purchasing-scope";
-import { resolveRfqTemplate, parseExtraJson } from "@/lib/rfq-templates";
+import { parseExtraJson } from "@/lib/rfq-templates";
+import { loadRfqTemplate } from "@/lib/rfq-groups";
 import { formatDate, formatNumber, toNum } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
 import { RfqDetail, type RfqDetailData } from "./rfq-detail";
@@ -49,7 +50,7 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
   if (!rfq) notFound();
   // RFQ thuộc nhóm chưa chia sẻ ⇒ coi như không tồn tại.
   if (!canUseGroup(await getPurchasingScope(), rfq.groupCode)) notFound();
-  const template = resolveRfqTemplate(rfq.groupCode);
+  const template = await loadRfqTemplate(rfq.groupCode);
   if (!template) notFound();
 
   const data: RfqDetailData = {
@@ -147,7 +148,7 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </section>
 
-      <RfqDetail data={data} canManage={canManage} canAi={canAi} locale={locale} />
+      <RfqDetail data={data} template={template} canManage={canManage} canAi={canAi} locale={locale} />
 
       {matrix && (
         <CompareBlock

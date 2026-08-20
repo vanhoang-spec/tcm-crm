@@ -7,7 +7,7 @@ import { DateField } from "@/components/ui/date-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatNumber } from "@/lib/utils";
-import { RFQ_TEMPLATES } from "@/lib/rfq-templates";
+import type { RfqGroupOption } from "@/lib/rfq-templates";
 import { VENDOR_DOC_KINDS, RFQ_FILE_MIME_TYPES, MAX_RFQ_FILE_BYTES } from "@/lib/rfq";
 import { MAX_VENDOR_CONTACTS, type VendorFieldDefLite } from "@/lib/vendor-fields";
 import { suggestVendorCode } from "@/lib/rfq";
@@ -57,7 +57,7 @@ const EMPTY_CONTACT: VendorContactRow = { name: "", title: null, phone: null, em
  * — để defaultValue là gõ xong bị chặn vì thiếu một trường khác là mất hết (bài học KB-H2/OVH-1).
  * PUR-2: mã 3 ký tự sửa được · tên pháp nhân · người liên hệ 1..N (radio người chính) · trường tuỳ chỉnh.
  */
-function ProfileFields({ v, defs, t, locale, isNew }: { v: Partial<VendorProfile>; defs: VendorFieldDefLite[]; t: (k: string, x?: Record<string, string | number>) => string; locale: Locale; isNew: boolean }) {
+function ProfileFields({ v, defs, groups, t, locale, isNew }: { v: Partial<VendorProfile>; defs: VendorFieldDefLite[]; groups: RfqGroupOption[]; t: (k: string, x?: Record<string, string | number>) => string; locale: Locale; isNew: boolean }) {
   const codeTouched = useRef(false);
   const [f, setF] = useState({
     code: v.code ?? "",
@@ -155,7 +155,7 @@ function ProfileFields({ v, defs, t, locale, isNew }: { v: Partial<VendorProfile
       <div>
         {L("groups")}
         <div className="flex flex-wrap gap-2">
-          {RFQ_TEMPLATES.map((tp) => (
+          {groups.map((tp) => (
             <label key={tp.code} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border-strong px-2.5 py-1.5 text-xs has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50">
               <input type="checkbox" name={`group_${tp.code}`} defaultChecked={(v.groupCodes ?? []).includes(tp.code)} className="h-3.5 w-3.5" />
               {locale === "en" ? tp.labelEn : tp.labelVi}
@@ -271,7 +271,7 @@ function ProfileFields({ v, defs, t, locale, isNew }: { v: Partial<VendorProfile
 // tạo xong thì redirect / remount theo key, sửa xong thì giá trị trên form chính là giá trị đã lưu.
 const keepValuesOnReset = (e: React.FormEvent<HTMLFormElement>) => e.preventDefault();
 
-export function VendorCreateForm({ defs }: { defs: VendorFieldDefLite[] }) {
+export function VendorCreateForm({ defs, groups }: { defs: VendorFieldDefLite[]; groups: RfqGroupOption[] }) {
   const t = useTranslations("purchasing.vendors");
   const locale = useLocale() as Locale;
   const [open, setOpen] = useState(false);
@@ -287,7 +287,7 @@ export function VendorCreateForm({ defs }: { defs: VendorFieldDefLite[] }) {
   return (
     <form action={formAction} onReset={keepValuesOnReset} className="space-y-3 rounded-xl border border-dashed border-border-strong bg-surface p-4">
       <h2 className="text-sm font-semibold text-foreground">{t("createTitle")}</h2>
-      <ProfileFields v={{}} defs={defs} t={t} locale={locale} isNew />
+      <ProfileFields v={{}} defs={defs} groups={groups} t={t} locale={locale} isNew />
       <div className="flex items-center gap-2">
         <button type="submit" disabled={pending} className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
           {pending ? "..." : t("saveBtn")}
@@ -301,7 +301,7 @@ export function VendorCreateForm({ defs }: { defs: VendorFieldDefLite[] }) {
   );
 }
 
-export function VendorEditForm({ vendor, defs }: { vendor: VendorProfile; defs: VendorFieldDefLite[] }) {
+export function VendorEditForm({ vendor, defs, groups }: { vendor: VendorProfile; defs: VendorFieldDefLite[]; groups: RfqGroupOption[] }) {
   const t = useTranslations("purchasing.vendors");
   const locale = useLocale() as Locale;
   const [state, formAction, pending] = useActionState<VendorFormState, FormData>(updateVendor.bind(null, vendor.id), {});
@@ -314,7 +314,7 @@ export function VendorEditForm({ vendor, defs }: { vendor: VendorProfile; defs: 
           {t("isActive")}
         </label>
       </div>
-      <ProfileFields v={vendor} defs={defs} t={t} locale={locale} isNew={false} />
+      <ProfileFields v={vendor} defs={defs} groups={groups} t={t} locale={locale} isNew={false} />
       <div className="flex items-center gap-2">
         <button type="submit" disabled={pending} className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
           {pending ? "..." : t("saveBtn")}

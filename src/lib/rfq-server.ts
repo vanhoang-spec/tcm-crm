@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { resolveRfqTemplate, computeQuoteLineAmount, type RfqTemplate } from "./rfq-templates";
+import { computeQuoteLineAmount, type RfqTemplate } from "./rfq-templates";
+import { loadRfqTemplate } from "./rfq-groups";
 import { RFQ_OPEN_FOR_QUOTES } from "./rfq";
 import { hashGuestToken } from "./guest-session";
 
@@ -81,7 +82,7 @@ export async function writeVendorQuote(opts: {
   });
   if (!rv) return { ok: false, error: "NOT_FOUND" };
   if (!(RFQ_OPEN_FOR_QUOTES as readonly string[]).includes(rv.rfq.status)) return { ok: false, error: "BAD_STATUS" };
-  const template = resolveRfqTemplate(rv.rfq.groupCode);
+  const template = await loadRfqTemplate(rv.rfq.groupCode);
   if (!template) return { ok: false, error: "NO_TEMPLATE" };
   const lineById = new Map(rv.rfq.lines.map((l) => [l.id, l]));
 

@@ -4,6 +4,7 @@ import { TCM_FAMILY_GROUP_NAME } from "../src/lib/chat";
 import { PERMISSION_CODES } from "../src/lib/permission-catalog";
 import { currentPeriodCode } from "../src/lib/creative-cost";
 import { DEFAULT_RECRUIT_CRITERIA } from "../src/lib/recruit";
+import { systemGroupRows } from "../src/lib/rfq-templates";
 
 const prisma = new PrismaClient();
 
@@ -555,6 +556,29 @@ async function main() {
   // 2026 + KUN 2025/2026), gán sẵn NHÓM HÀNG = mã mẫu form RFQ (lib/rfq-templates.ts). Chỉ tên +
   // nhóm; liên hệ/MST/tài khoản PUR bổ sung sau ở /purchasing/vendors. One-shot có marker; chỉ tạo
   // khi CHƯA có NCC trùng tên (không đè NCC admin đã sửa tay). Chạy lại là no-op.
+  /**
+   * PUR-3b (21/08/2026) — DÒNG DB CHO 8 NHÓM HỆ THỐNG. Danh mục nhóm hàng nay nằm ở bảng rfq_group
+   * (admin thêm nhóm mới ở /settings/rfq-groups); 8 nhóm gốc vẫn lấy CỘT / ĐIỀU KHOẢN / CÔNG THỨC
+   * từ lib/rfq-templates.ts, DB chỉ giữ nhãn / mô tả / từ khoá / thứ tự / bật-tắt.
+   *
+   * ⚠ CHỈ TẠO KHI CHƯA CÓ, KHÔNG BAO GIỜ ĐÈ: nhãn và thứ tự là thứ admin sửa được trong app, seed đè
+   * lại là xoá sửa tay trong im lặng (bài học khối "Tái cơ cấu team Account" mục 10.18). Vì vậy
+   * KHÔNG cần marker one-shot — "chỉ tạo khi thiếu" đã idempotent, và còn tự nhận nhóm hệ thống MỚI
+   * thêm vào code sau này.
+   * ⚠ ĐỪNG import lib/rfq-groups.ts ở đây: file đó khai "server-only" và sẽ làm db:seed nổ ngay lúc
+   * nạp module — đúng lỗi đã trả giá ở đợt Web Push (mục 10.55).
+   */
+  {
+    const existing = new Set((await prisma.rfqGroup.findMany({ select: { code: true } })).map((r) => r.code));
+    let created = 0;
+    for (const row of systemGroupRows()) {
+      if (existing.has(row.code)) continue;
+      await prisma.rfqGroup.create({ data: row });
+      created++;
+    }
+    if (created) console.log(`   • rfq_group: tạo ${created} nhóm hệ thống`);
+  }
+
   const PUR_VENDORS_KEY = "20260816_pur_vendors";
   const purVendorsMarker = await prisma.setting.findUnique({
     where: { module_key_scope_scopeRef: { module: "seed", key: PUR_VENDORS_KEY, scope: "GLOBAL", scopeRef: "" } },

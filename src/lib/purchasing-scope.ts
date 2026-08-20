@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getMyPermissions } from "@/lib/permissions";
 import { getCurrentStaffId } from "@/lib/current-staff";
-import { RFQ_TEMPLATE_CODES } from "@/lib/rfq-templates";
+import { loadRfqTemplates } from "@/lib/rfq-groups";
 
 /**
  * PHẠM VI THU MUA — ai được dùng nhóm hàng nào và NCC nào.
@@ -55,15 +55,21 @@ async function readList(key: string): Promise<string[]> {
 }
 
 export async function readProductionSharing(): Promise<{ groupCodes: string[]; vendorIds: string[] }> {
-  const [groupCodes, vendorIds] = await Promise.all([readList(KEY_GROUPS), readList(KEY_VENDORS)]);
+  const [groupCodes, vendorIds, known] = await Promise.all([readList(KEY_GROUPS), readList(KEY_VENDORS), knownGroupCodes()]);
   // Lọc lại mã nhóm không còn trong danh mục — nhóm bị gỡ khỏi code (như SPECIAL_STRUCTURE) không
   // được phép làm vỡ trang cấu hình.
-  return { groupCodes: groupCodes.filter((c) => (RFQ_TEMPLATE_CODES as readonly string[]).includes(c)), vendorIds };
+  return { groupCodes: groupCodes.filter((c) => known.has(c)), vendorIds };
+}
+
+/** Mã nhóm hiện có (gồm cả nhóm đã tắt — cấu hình cũ trỏ vào nhóm tắt vẫn là cấu hình hợp lệ). */
+async function knownGroupCodes(): Promise<Set<string>> {
+  return new Set((await loadRfqTemplates()).map((t) => t.code));
 }
 
 export async function writeProductionSharing(input: { groupCodes: string[]; vendorIds: string[] }): Promise<void> {
+  const known = await knownGroupCodes();
   const rows: [string, string[]][] = [
-    [KEY_GROUPS, input.groupCodes.filter((c) => (RFQ_TEMPLATE_CODES as readonly string[]).includes(c))],
+    [KEY_GROUPS, input.groupCodes.filter((c) => known.has(c))],
     [KEY_VENDORS, input.vendorIds],
   ];
   for (const [key, value] of rows) {
@@ -83,7 +89,10 @@ export async function writeProductionSharing(input: { groupCodes: string[]; vend
 export async function getPurchasingScope(): Promise<PurchasingScope> {
   const staffId = await getCurrentStaffId();
   const perms = await getMyPermissions();
-  const all = [...RFQ_TEMPLATE_CODES];
+  // Một truy vấn nhỏ (bảng ~10 dòng) để "toàn quyền" nghĩa là toàn bộ danh mục THẬT, kể cả nhóm
+  // admin vừa tạo. Trả mảng rỗng cho nhánh full sẽ đúng hôm nay (canUseGroup short-circuit theo
+  // scope.full) nhưng là mìn cho người sau đọc scope.groupCodes.
+  const all = (await loadRfqTemplates()).map((t) => t.code);
 
   // Người quản trị thu mua và BGĐ: toàn quyền. `vendor.manage` là mã chỉ PUR + BGĐ giữ.
   if (perms.has("purchasing.vendor.manage")) return { full: true, groupCodes: all, vendorIds: null, limited: false };

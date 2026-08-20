@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 125 model Prisma · 74 migration · 90 file `src/lib` · 4315 key i18n × 2 ngôn ngữ · 148 mã quyền.
+**Quy mô:** 128 model Prisma · 76 migration · 96 file `src/lib` · 4412 key i18n × 2 ngôn ngữ · 148 mã quyền.
 
 ---
 
@@ -2897,7 +2897,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       483 dòng CO · 88 AuditLog.
     - **Hai mã lỗi mới có câu i18n riêng** (`errGroupNotShared` / `errVendorNotShared`) chỉ đúng đường xử lý —
       để rơi vào câu chung "Có lỗi, thử lại" thì người dùng bấm lại mãi mà không hiểu vì sao.
-    - **THÊM NHÓM HÀNG MỚI NGOÀI APP: HIỆN CHƯA ĐƯỢC, và đây là lý do** (chủ dự án hỏi 20/08/2026). Danh mục 8
+    - **THÊM NHÓM HÀNG MỚI NGOÀI APP — ĐÃ LÀM Ở PUR-3b (mục 10.56), phần dưới đây là phân tích lúc CHƯA làm** (chủ dự án hỏi 20/08/2026). Danh mục 8
       nhóm nằm ở CODE (`lib/rfq-templates.ts`, khuôn `quote-templates.ts`/`iso-catalog.ts`) vì mỗi nhóm mang
       **BA thứ**: (a) danh sách CỘT của form báo giá · (b) khối điều khoản riêng · (c) **CÔNG THỨC THÀNH TIỀN**.
       (a) và (b) chuyển xuống DB được ngay bằng đúng khuôn `VendorFieldDef` của PUR-2. **(c) thì không**:
@@ -2913,6 +2913,77 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       đang chạy như PUR) · chưa có phạm vi tương tự cho phòng khác (OPE/Creative) — cùng hàm là mở được, chỉ cần
       thêm mã role vào 2 danh sách · chưa ghi phạm vi vào từng RFQ (kiểm lúc ĐỌC, nên đổi cấu hình là RFQ cũ ẩn
       đi theo — cố ý: cấu hình là chính sách hiện hành, không phải ảnh chụp).
+
+56. **THU MUA — PUR-3b: NHÓM HÀNG & FORM BÁO GIÁ KHAI TRONG APP (21/08/2026)** (migration VIẾT TAY
+    `20260821000000_rfq_group_in_app` — 2 bảng MỚI `rfq_group` + `rfq_group_field`, 0 lệnh DROP /
+    RedefineTables; **KHÔNG mã quyền mới** — dùng lại `settings.vendors.manage` = BGĐ + Trưởng phòng
+    Thu mua). Trả lời câu hỏi ở mục 10.55: nay THÊM NHÓM HÀNG MỚI ĐƯỢC TRONG APP, không cần deploy.
+    - ⚠ **CHIA ĐÔI TRÁCH NHIỆM — đây là quyết định thiết kế quan trọng nhất, đừng gộp lại.**
+      · **8 nhóm HỆ THỐNG** (`isSystem`) vẫn lấy **CỘT / ĐIỀU KHOẢN / CÔNG THỨC THÀNH TIỀN từ CODE**
+        (`SYSTEM_RFQ_TEMPLATES` trong `lib/rfq-templates.ts`). Lý do vẫn nguyên như đã phân tích:
+        `computeQuoteLineAmount` có nhánh viết tay cho nhóm nhân sự thuê ngoài (**+ cơm × người ×
+        ngày**) mà không khuôn dữ liệu nào diễn đạt được. DB chỉ giữ phần khai được: nhãn, mô tả, từ
+        khoá gợi ý, thứ tự, bật/tắt.
+      · **Nhóm TỰ TẠO** khai cột + điều khoản ngay trong app; công thức là **SL × Π(cột được tick "hệ
+        số") × đơn giá**. Không có ngôn ngữ công thức — admin TICK cột số nào nhân vào thành tiền.
+        Đủ cho mọi ca thật đã gặp (số ngày × số show × số người…).
+    - ⚠ **Cột riêng của nhóm tự tạo được BỌC trong `cols()`** nên tự có Thuê/Mua · Phương án · Khu vực
+      · Link ảnh · **THUẾ THEO DÒNG**, và điều khoản riêng ghép trước `COMMON_TERMS`. Nhờ vậy toàn bộ
+      phần thuế (mục 10.46) chạy y hệt nhóm hệ thống mà **không một dòng đặc biệt nào**. Bỏ `cols()`
+      đi là cột thuế biến mất và tiền thuế của nhóm đó sai trong im lặng.
+    - ⚠ **BA BẤT BIẾN, phá cái nào cũng mất dữ liệu âm thầm** (ghi ở đầu `settings/rfq-groups/actions.ts`):
+      1. `RfqGroup.code` sinh MỘT LẦN, **KHÔNG có đường đổi** — là khoá dữ liệu ở `VendorGroup.groupCode`,
+         `Rfq.groupCode` và setting `production.shared_group_codes`.
+      2. `RfqGroupField.key` sinh MỘT LẦN từ nhãn — là khoá trong `extraJson`/`termsJson` của báo giá
+         ĐÃ LƯU (khuôn `VendorFieldDef` của PUR-2).
+      3. **KHÔNG có đường XOÁ** nhóm lẫn cột, chỉ tắt `isActive` (mirror ClientGroup mục 10.12 /
+         JobPosition / VendorFieldDef).
+    - ⚠ **`loadRfqTemplates()` (lib/rfq-groups.ts) là MỘT NGUỒN SỰ THẬT** cho mọi chỗ cần danh mục.
+      **ĐỪNG import thẳng `SYSTEM_RFQ_TEMPLATES` ở trang/action rồi tưởng là đủ** — nhóm admin vừa tạo
+      sẽ không hiện, và tệ hơn là `createRfq` từ chối đúng nhóm vừa khai. Đã đổi 14 chỗ tiêu thụ.
+    - ⚠ **Đường ĐỌC KHÔNG lọc `isActive`, đường CHỌN thì có.** `loadRfqTemplate(code)` trả cả nhóm đã
+      tắt để RFQ cũ + cổng NCC cũ vẫn mở và **vẫn tính tiền đúng**; chỉ ô chọn mẫu, tab nhóm ở danh
+      sách NCC, ô tick nhóm trên hồ sơ NCC và trang chia sẻ PRO mới lọc. Đã verify sống: tắt nhóm →
+      chi tiết RFQ vẫn 200 và thành tiền vẫn 12.000.000, cổng NCC vẫn render đủ cột riêng, còn trang
+      lập RFQ + danh sách NCC thì nhóm đó biến mất.
+    - ⚠ **`syncGroups` (hồ sơ NCC) CHỈ động vào nhóm ĐANG BẬT.** NCC còn thuộc nhóm đã tắt thì GIỮ
+      NGUYÊN: form không hiện ô đó, coi "không tick" là "bỏ khỏi nhóm" sẽ xoá dữ liệu ngay lần sửa hồ
+      sơ kế tiếp. Tắt nhóm là ngưng dùng, không phải xoá lịch sử.
+    - ⚠ **`RfqTemplate.code` nay là CHUỖI, không còn union 8 mã.** Union `RfqTemplateCode` chỉ còn mô
+      tả nhóm hệ thống; chỗ duy nhất còn cần nó là nhánh công thức riêng của `OUTSOURCED_STAFF`.
+      `isRfqTemplateCode(code)` đã thay bằng `isKnownGroupCode(templates, code)` — kiểm theo DANH SÁCH.
+    - ⚠ **Seed KHÔNG import `lib/rfq-groups.ts`** (file khai `server-only` → `db:seed` nổ ngay lúc nạp
+      module, đúng lỗi đã trả giá ở đợt Web Push, mục 10.55). Seed dựng 8 dòng hệ thống bằng
+      `systemGroupRows()` của file THUẦN. **CHỈ TẠO KHI CHƯA CÓ, không bao giờ đè** — nhãn/thứ tự là
+      thứ admin sửa trong app; vì vậy **không cần marker one-shot**, phép "chỉ tạo khi thiếu" đã
+      idempotent VÀ tự nhận nhóm hệ thống mới thêm vào code sau này. Verify: chạy seed lần hai không
+      in dòng tạo nào, tổng nhóm giữ nguyên.
+    - **Client component nhận danh mục qua PROP** (`RfqGroupOption`/`RfqTemplate`), không tự đọc DB:
+      `rfq-new-form` (`allTemplates`), `vendor-forms` (`groups`), `sharing-form` (`groups`),
+      `rfq-detail` (`template` — trước đây tự gọi `resolveRfqTemplate` phía client).
+    - **Trang `/settings/rfq-groups`**: mỗi nhóm là một card gập, **hiện luôn "N NCC · M RFQ" đang trỏ
+      vào** — người sắp tắt một nhóm phải thấy nó đang gánh bao nhiêu dữ liệu trước khi bấm. Nhóm hệ
+      thống hiện dòng giải thích vì sao không khai thêm cột được. Panel cột của nhóm tự tạo in sẵn
+      công thức đang có hiệu lực (`Số lượng × Số ngày × … × Đơn giá`).
+    - **Verify: 40/40 test thuần** (nhóm hệ thống giữ nguyên cột + công thức cơm 1.060.000 khớp báo giá
+      BV Miền Bắc · nhóm tự tạo có đủ cột chung + thuế · cột đã tắt không vào mẫu · chỉ cột SỐ mới
+      thành hệ số · nhóm tự tạo KHÔNG dính nhánh cơm · thuế 2 mức 17.400.000 → 18.876.000 · gợi ý theo
+      ranh giới từ · sinh mã/khoá) **+ browser end-to-end**: tạo nhóm "Hoa tươi & trang trí" (mã tự
+      sinh `HOA_TUOI_TRANG_TRI`, sửa thành `HOA_TUOI`) → mã `A` bị server chặn và **6 ô còn nguyên**
+      (bẫy `requestFormReset` không cắn) → mã trùng `AV_LED` bị chặn → khai 2 cột (Số ngày trưng bày
+      = hệ số, Loại hoa = select 2 lựa chọn) → gán NCC Phương Lam → lập RFQ với nhóm đó → form nhập hộ
+      render **đúng thứ tự** cột chung + cột riêng + nhãn đơn giá tuỳ chỉnh → nhập 8 × 3 ngày ×
+      500.000 ⇒ màn hình **12.000.000** và **server tính lại ra đúng 12.000.000** từ `extraJson` →
+      Excel mẫu 200 (7.627 byte, chữ ký ZIP) → cổng NCC 200, có cột riêng, **không lộ giá CO** →
+      act-as Production Manager: `/settings/rfq-groups` đá về Dashboard, HTML không có form lẫn tên
+      nhóm. tsc · eslint · i18n **0/0 (4412 key)** · `next build` sạch có route mới · `migrate diff`
+      rỗng. Dữ liệu test đã dọn sạch: 8 nhóm hệ thống / 0 cột / 0 RFQ, dev.db về 36/68/25 · 30 NCC ·
+      483 dòng CO · 1348 grant · 88 AuditLog.
+    - **CHƯA LÀM (cố ý):** đổi mã nhóm (bất biến 1) · xoá nhóm/cột (bất biến 3) · kéo-thả sắp thứ tự
+      cột (nhập số ở ô "Thứ tự") · sửa nhãn/kiểu của cột đã tạo (sai thì tắt rồi tạo cột mới — mirror
+      VendorFieldDef) · công thức tuỳ ý (cộng/trừ/điều kiện) cho nhóm tự tạo · nhóm tự tạo mang khối
+      điều khoản riêng theo ngành như 8 nhóm gốc (chỉ khai được từng ô rời) · gợi ý cột sẵn theo loại
+      hàng · nhân bản một nhóm để làm nhóm mới.
 
 ---
 

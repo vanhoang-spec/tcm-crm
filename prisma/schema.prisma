@@ -660,6 +660,73 @@ model VendorFieldDef {
   @@map("vendor_field_def")
 }
 
+/// PUR-3b (21/08/2026) — NHÓM HÀNG KHAI TRONG APP. Trước đó danh mục 8 nhóm nằm hoàn toàn ở
+/// lib/rfq-templates.ts, muốn thêm nhóm là phải deploy.
+///
+/// ⚠ CHIA ĐÔI TRÁCH NHIỆM, đừng gộp lại: 8 nhóm HỆ THỐNG (isSystem) vẫn lấy CỘT / ĐIỀU KHOẢN /
+/// CÔNG THỨC THÀNH TIỀN từ CODE — trong đó có nhánh viết tay của nhóm nhân sự thuê ngoài (cơm ×
+/// người × ngày) mà không khuôn dữ liệu nào diễn đạt được. DB chỉ giữ phần khai được: nhãn, mô tả,
+/// từ khoá gợi ý, thứ tự, bật/tắt. Nhóm TỰ TẠO thì cột/điều khoản đọc từ rfq_group_field và công
+/// thức là mặc định (SL × Π hệ số × đơn giá) — hệ số do admin tick trên từng cột số.
+///
+/// ⚠ Cột "code" là KHOÁ DỮ LIỆU: VendorGroup.groupCode, Rfq.groupCode và setting production.
+/// shared_group_codes đều lưu chuỗi mã này. Vì vậy KHÔNG có đường đổi mã và KHÔNG có đường xoá
+/// nhóm — chỉ tắt (mirror ClientGroup mục 10.12 / JobPosition / VendorFieldDef).
+model RfqGroup {
+  id               String  @id @default(cuid())
+  /// 2–24 ký tự A-Z 0-9 _ . Bất biến sau khi tạo.
+  code             String  @unique
+  labelVi          String
+  labelEn          String
+  descVi           String  @default("")
+  descEn           String  @default("")
+  /// Từ khoá gợi ý mẫu từ tên dòng CO, phân cách bằng dấu phẩy. Rỗng = không bao giờ tự gợi ý.
+  keywords         String  @default("")
+  unitPriceLabelVi String  @default("")
+  unitPriceLabelEn String  @default("")
+  /// true = 8 nhóm gốc: cột/điều khoản/công thức ở CODE, admin chỉ sửa được nhãn/mô tả/thứ tự/bật-tắt.
+  isSystem         Boolean @default(false)
+  isActive         Boolean @default(true)
+  sort             Int     @default(0)
+
+  fields RfqGroupField[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("rfq_group")
+}
+
+/// PUR-3b — cột dòng / điều khoản của nhóm TỰ TẠO. Khuôn VendorFieldDef: key sinh MỘT LẦN từ nhãn
+/// và không đổi được (nó là khoá trong extraJson/termsJson của báo giá đã lưu), chỉ tắt không xoá.
+model RfqGroupField {
+  id      String @id @default(cuid())
+  groupId String
+  /// LINE = cột trên từng dòng báo giá · TERM = điều khoản chung khai một lần cho cả báo giá.
+  kind    String @default("LINE")
+  key     String
+  labelVi String
+  labelEn String
+
+  /// LINE: number | text | select | bool · TERM: number | text | textarea
+  type           String  @default("text")
+  /// JSON [{value,labelVi,labelEn}] cho type=select.
+  optionsJson    String?
+  hintVi         String?
+  hintEn         String?
+  defaultValue   String?
+  /// Chỉ với kind=LINE + type=number: cột này NHÂN vào thành tiền (SL × Π hệ số × đơn giá).
+  isAmountFactor Boolean @default(false)
+  sort           Int     @default(0)
+  isActive       Boolean @default(true)
+
+  group RfqGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, kind, key])
+  @@index([groupId])
+  @@map("rfq_group_field")
+}
+
 /// PUR-1 — NCC thuộc NHÓM HÀNG nào (mã nhóm = mã MẪU FORM RFQ trong lib/rfq-templates.ts; danh
 /// mục ở CODE vì mỗi nhóm ứng với một form có thật). Một NCC nhiều nhóm (Sông Lam vừa thiết bị
 /// sự kiện vừa POSM cho thuê) — bảng nối thay vì CSV để lọc được bằng SQL.

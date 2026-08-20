@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Link2, Copy, Check, Ban, Upload, Sparkles, FileSpreadsheet, Send, XCircle, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/utils";
-import { quoteTotalsOf, resolveRfqTemplate } from "@/lib/rfq-templates";
+import { quoteTotalsOf, type RfqTemplate } from "@/lib/rfq-templates";
 import { RFQ_FILE_MIME_TYPES, MAX_RFQ_FILE_BYTES } from "@/lib/rfq";
 import { QuoteForm, type QuoteFormInitial } from "@/components/rfq/quote-form";
 import type { Locale } from "@/i18n/locales";
@@ -63,9 +63,8 @@ const ERR_KEY: Record<string, string> = {
 const btn = "inline-flex h-8 items-center gap-1.5 rounded-lg border border-border-strong px-2.5 text-xs font-medium text-foreground hover:bg-surface-2 disabled:opacity-50";
 const btnPrimary = "inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-50";
 
-export function RfqDetail({ data, canManage, canAi, locale }: { data: RfqDetailData; canManage: boolean; canAi: boolean; locale: Locale }) {
+export function RfqDetail({ data, template, canManage, canAi, locale }: { data: RfqDetailData; template: RfqTemplate; canManage: boolean; canAi: boolean; locale: Locale }) {
   const t = useTranslations("purchasing.rfq");
-  const template = resolveRfqTemplate(data.templateCode)!;
   const open = data.status === "SENT" || data.status === "COMPARING";
 
   return (
@@ -123,7 +122,7 @@ function VendorCard({
 }: {
   rv: RfqDetailData["vendors"][number];
   data: RfqDetailData;
-  template: NonNullable<ReturnType<typeof resolveRfqTemplate>>;
+  template: RfqTemplate;
   canManage: boolean;
   canAi: boolean;
   open: boolean;
@@ -286,7 +285,7 @@ function ManualPanel({
 }: {
   rv: RfqDetailData["vendors"][number];
   data: RfqDetailData;
-  template: NonNullable<ReturnType<typeof resolveRfqTemplate>>;
+  template: RfqTemplate;
   locale: Locale;
   initial: QuoteFormInitial | null;
   via: "MANUAL" | "FILE";
@@ -349,7 +348,7 @@ function UploadPanel({
 }: {
   rv: RfqDetailData["vendors"][number];
   data: RfqDetailData;
-  template: NonNullable<ReturnType<typeof resolveRfqTemplate>>;
+  template: RfqTemplate;
   canAi: boolean;
   locale: Locale;
   onDone: () => void;

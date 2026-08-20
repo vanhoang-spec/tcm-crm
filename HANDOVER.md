@@ -2700,7 +2700,40 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `be0a01e`** (20/08/2026 16:03) — **Thu mua PUR-3a**: 8 nhóm hàng dựng lại từ 23 file báo giá
+**Production đang chạy `67bd0a3`** (20/08/2026 18:41) — gói 3 commit **AI**: đợt 1 output có cấu trúc + xuất
+Word/PDF (mục 10.48) · đợt 2 soạn thảo văn bản hành chính/nhân sự/kế toán (10.50) · đối chiếu chi ngân hàng cho kế
+toán (10.51). Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **KHÔNG migration mới**
+(74, "No pending migrations"), **2 mã quyền mới** (146 → 148: `ai.document` + `ai.bank_recon`). Không có file mồ côi.
+Backup TRƯỚC deploy: `~/backup/*-20260820-184141*` trên server + `D:/TCM/backup-prod-20260820-184141/` máy dev.
+
+Đối chiếu production SAU deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 37 / 68 / 24 | **37 / 68 / 24** |
+| coTotal + ceTotal 4 bảng CO/CE | (8 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO / NCC | 481 / 30 | **481 / 30** |
+| dòng grant quyền | 1336 | **1344** (+8 = `ai.document` 6 vai + `ai.bank_recon` 2 vai) |
+| `ProjectFile` | 0 | **0** — đúng thiết kế: 2 công cụ AI mới KHÔNG lưu file nào |
+| `integrity_check` | — | **ok** |
+
+Đủ 2 marker `20260820_ai_document` + `20260820_ai_bank_recon`. Health check: `/login` **200** · `/ai` **307** về login ·
+`/api/ai-doc/docx` GET **405** (chỉ nhận POST), POST chưa đăng nhập **401** · pm2 `online`, **restart 0** ·
+`[jobs] scheduler bật` · **error log không thêm dòng nào** (ghi cuối 17:43, trước deploy 1 tiếng).
+
+⚠ **AI ĐỐI CHIẾU CHI NGÂN HÀNG chỉ CFO + Nhân viên Kế toán thấy** (2 vai, đúng yêu cầu chủ dự án). BGĐ muốn xem thì
+tick `ai.bank_recon` ở `/settings/roles` — không cần deploy. Công cụ **Soạn thảo văn bản** mở cho 6 vai: HR ×3 (gồm
+Hành chính) + CFO + Kế toán + BGĐ.
+
+⚠ **Hai công cụ AI mới KHÔNG lưu bất cứ thứ gì** (quyết định chủ dự án 20/08/2026): file mẫu/kế hoạch chi/sao kê đọc
+trong bộ nhớ rồi bỏ, bản soạn và kết quả đối chiếu không ghi DB. **Người dùng phải bấm Tải Word/PDF về máy ngay** — rời
+trang là mất. Nói rõ trên băng cảnh báo của cả hai form.
+
+---
+
+### Deploy trước đó — 20/08/2026 lúc 16:5x
+
+**Production khi đó chạy `be0a01e`** (20/08/2026 16:03) — **Thu mua PUR-3a**: 8 nhóm hàng dựng lại từ 23 file báo giá
 NCC thật · thuế khai theo % ở form (mặc định cả bảng, sửa được theo dòng) · tổng có "bằng chữ" · file Excel mẫu thêm
 cột Tiền thuế — mục 10.46; kèm quyết định hợp đồng NCC ở mục 10.47. Chạy `bash scripts/deploy.sh` **đường LAN
 192.168.1.111:22**, fingerprint khớp. **KHÔNG migration mới** (74, "No pending migrations"), **KHÔNG mã quyền mới**.

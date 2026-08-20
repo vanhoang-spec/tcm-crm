@@ -2725,6 +2725,59 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - Verify: tsc · eslint · i18n **0/0** · `next build` sạch · đo trên khung 375px và 1280px, desktop
       giữ nguyên (nút back `display:none`, chữ 14px, danh sách vẫn hiện song song).
 
+53. **PWA — CÀI APP VỀ MÀN HÌNH CHÍNH (20/08/2026)** (KHÔNG migration, KHÔNG mã quyền mới, KHÔNG
+    thêm dependency). Yêu cầu chủ dự án, kèm ràng buộc **"không được làm chậm bất kỳ trang nào"**.
+    - ⚠ **NGUYÊN TẮC SỐ 1 CỦA `public/sw.js`: KHÔNG CACHE BẤT KỲ NỘI DUNG NÀO CỦA APP.** Đây là app
+      vận hành có tiền, tồn kho và phân quyền — phục vụ một trang từ cache là hiện số dư cũ, tồn kho
+      cũ, hoặc tệ hơn là dữ liệu của phiên đăng nhập TRƯỚC. Cụ thể:
+      · chỉ chặn request **điều hướng trang** (`mode === "navigate"`), và luôn **đi mạng trước**;
+      · mọi request khác (JS/CSS/ảnh/server action/API) **không gọi `respondWith`** ⇒ trình duyệt xử
+        lý y như khi không có service worker;
+      · cache chứa **đúng một trang `/offline`** — Chrome đòi có fetch handler chạy được khi mất mạng
+        thì mới cho cài, và người dùng cần thứ gì đó tử tế thay cho màn hình lỗi trần của trình duyệt.
+    - **Đo thật (dev, localhost):** `workerStart` cho thấy **31/31 request đều đi qua service worker**
+      — đó là bản chất khi SW điều khiển trang, KHÔNG tránh được với bất kỳ SW nào. Nhưng độ trễ thêm
+      vào tài liệu đo được là **0 ms** (`fetchStart − workerStart`) vì handler thoát ngay. Sau khi bật
+      lại mạng, `transferSize > 0` xác nhận trang vẫn lấy từ MẠNG chứ không phải cache.
+      ⚠ Số đo trên là dev + localhost. Đo lại trên production sau khi deploy.
+    - **Trang `/offline`**: ⚠ CỐ Ý không gác quyền, không đọc DB, không dùng `next-intl` — đây là thứ
+      duy nhất còn dùng được khi mất mạng, gọi `requirePermission`/Prisma ở đó là trang chết đúng lúc
+      cần nó nhất; còn bản HTML bị cache lúc cài nên ngôn ngữ chọn sau đó không đổi được ⇒ viết cứng
+      song ngữ. Verify end-to-end: **tắt hẳn dev server** rồi vào `/finance` ⇒ hiện đúng trang offline;
+      bật lại ⇒ app chạy bình thường.
+    - ⚠ **Service worker BÁM DAI**: cài rồi thì bản lỗi theo người dùng tới khi có bản mới thay. Đổi
+      `VERSION` trong `public/sw.js` mỗi lần sửa file đó; `skipWaiting` + `clients.claim` để bản mới
+      có hiệu lực ngay. Gỡ tay: DevTools → Application → Service Workers → Unregister.
+    - **Đăng ký SAU sự kiện `load`** (`components/layout/service-worker.tsx`), không phải lúc render —
+      đăng ký sớm là giành băng thông với chính lần tải trang đầu. Lỗi đăng ký được nuốt (trình duyệt
+      cũ, chạy trên HTTP) vì PWA là tính năng cộng thêm, không được làm vỡ app khi thiếu.
+    - **Icon sinh từ `public/brand/icon-square.png`** (512×512 nền trong suốt) bằng `sharp` (đã có sẵn,
+      dependency gián tiếp của Next). ⚠ Ba loại icon KHÁC NHAU, không dùng chung một file:
+      · `icon-192/512.png` — `purpose: any`, **nền trong suốt**, hệ điều hành tự bo góc;
+      · `icon-maskable-192/512.png` — Android **CẮT icon theo hình của máy** nên phải **nền đặc** +
+        chừa **vùng an toàn 80%**, nếu không mark bị xén rìa;
+      · `apple-touch-icon.png` 180×180 — **nền đặc**, vì iOS đặt icon trong suốt lên nền ĐEN.
+      Đã kiểm giá trị pixel: góc của bản maskable/apple = `255,255,255,255`, góc bản `any` = alpha 0.
+      Sinh lại thì chạy lại script (ghi trong lịch sử); nguồn vẫn là `public/brand/icon-square.png`.
+    - ⚠ **Next `appleWebApp.capable` CHỈ phát thẻ chuẩn mới `mobile-web-app-capable`.** Safari trước
+      iOS 15.4 chỉ đọc `apple-mobile-web-app-capable` — thiếu nó thì trên máy đó app cài về màn hình
+      chính vẫn mở kèm thanh địa chỉ. Đã khai thêm thẻ cũ qua `metadata.other`.
+    - ⚠ **`maximumScale`/`userScalable: false` CỐ Ý KHÔNG dùng**: chặn zoom là chặn luôn người cần
+      phóng to để đọc. Ô nhập nào bị iOS auto-zoom thì sửa bằng cỡ chữ 16px trên mobile (mục 10.52).
+    - **PWA KHÔNG bỏ qua chốt chặn nào**: `start_url: "/"` vẫn đi qua `requirePermission` như thường,
+      mở app đã cài mà chưa đăng nhập thì rơi vào `/login`.
+    - **Verify:** `/manifest.webmanifest` **200**, `application/manifest+json`, 4 icon đều 200 ·
+      apple-touch-icon 200 · `/sw.js` 200 · `/offline` 200 · thẻ trong `<head>` đủ (manifest,
+      apple-touch-icon, theme-color `#0b84fa`, mobile-web-app-capable) · service worker đăng ký được,
+      `clients.claim` có tác dụng, cache đúng 1 mục `/offline` · `next build` sinh cả hai route ở dạng
+      **TĨNH** (`○`) nên không tốn việc server · tsc · eslint sạch.
+    - **CHƯA LÀM — Web Push (đợt sau):** cần khoá VAPID, bảng lưu subscription theo thiết bị, endpoint
+      gửi, và thư viện `web-push` (**dependency MỚI**). ⚠ **iOS chỉ nhận push khi app đã được "Thêm vào
+      màn hình chính"** — tức PWA là điều kiện bắt buộc của push trên iPhone, không phải tính năng rời.
+      Push sẽ bám vào bảng `Notification` + bộ hẹn giờ 5 phút đã có (`instrumentation.ts`), KHÔNG dựng
+      hệ thống thông báo thứ hai; và có push rồi thì **giãn được nhịp poll thông báo hiện tại**, tức
+      nhẹ đi chứ không nặng thêm.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

@@ -3505,6 +3505,20 @@
     }
   },
   "profile": {
+    "push": {
+      "title": "Push notifications",
+      "desc": "Get notified even when the site is closed. Enabled per device — phone and computer are separate.",
+      "checking": "Checking this device…",
+      "turnOn": "Enable on this device",
+      "turnOff": "Disable on this device",
+      "onHint": "This device is receiving push notifications.",
+      "offHint": "Your browser will ask for permission when you tap enable.",
+      "testSent": "A test notification was sent to this device.",
+      "unsupported": "This browser does not support push, or the server has no push keys configured. On iPhone: open in Safari, tap Share → Add to Home Screen, then open the app from the home screen and try again.",
+      "denied": "You have blocked notifications for this site. Allow them again in your browser's site settings, then come back here.",
+      "errSave": "Could not save this device. Try again later.",
+      "errGeneric": "Something went wrong enabling notifications. Try again later."
+    },
     "title": "My Profile",
     "subtitle": "Your avatar helps others recognize you in the app.",
     "uploadButton": "Upload photo",

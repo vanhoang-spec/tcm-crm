@@ -5,6 +5,8 @@ import { checkPasswordAge } from "@/lib/password";
 import { StaffAvatar } from "@/components/ui/staff-avatar";
 import { ProfileAvatarForm } from "./profile-avatar-form";
 import { ProfileDatesForm } from "./profile-dates-form";
+import { PushToggle } from "./push-toggle";
+import { getVapidPublicKey } from "@/lib/push";
 import { formatDate } from "@/lib/utils";
 
 export default async function ProfilePage() {
@@ -46,6 +48,14 @@ export default async function ProfilePage() {
         <div className="mt-5 border-t border-border pt-4">
           <ProfileAvatarForm hasAvatar={!!me.avatarKey} />
         </div>
+      </div>
+
+      {/* Thông báo đẩy — thiết lập THEO THIẾT BỊ, không theo tài khoản. Khoá VAPID đọc ở server lúc
+          CHẠY (không phải NEXT_PUBLIC_) nên đổi khoá chỉ cần restart, không phải build lại. */}
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("push.title")}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">{t("push.desc")}</p>
+        <PushToggle vapidPublicKey={getVapidPublicKey()} />
       </div>
 
       {/* Thông tin cá nhân — ngày sinh / ngày đi làm đầu tiên: HR có thể để trống lúc tạo, nhân sự tự bổ sung ở đây. */}

@@ -10,6 +10,7 @@ import {
 } from "./reminders";
 import { checkSpecialOccasions } from "./occasions";
 import { checkChatReminders } from "./chat-reminders";
+import { checkPendingPush } from "./push";
 
 // ─────────────────────────────────────────────────────────
 // Chạy các job kiểm-và-nhắc theo lịch.
@@ -58,6 +59,9 @@ const JOBS: [string, () => Promise<unknown>][] = [
   ["ar-overdue", checkArOverdueReminders],
   ["inventory-expiry", checkExpiryWarnings],
   ["special-occasions", checkSpecialOccasions],
+  // ⚠ ĐẶT CUỐI DANH SÁCH: các job trên có thể vừa tạo thông báo mới, chạy sau thì đẩy luôn trong
+  // cùng một chu kỳ thay vì đợi thêm 5 phút nữa.
+  ["push-dispatch", checkPendingPush],
   ["chat-reminders", checkChatReminders],
 ];
 

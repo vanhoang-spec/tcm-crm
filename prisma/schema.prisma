@@ -154,8 +154,8 @@ model Staff {
   team          Team?          @relation(fields: [teamId], references: [id])
   creativeSquad CreativeSquad? @relation("StaffCreativeSquad", fields: [creativeSquadId], references: [id])
   role          Role?          @relation(fields: [roleId], references: [id])
-  manager    Staff?      @relation("StaffManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports    Staff[]     @relation("StaffManager")
+  manager       Staff?         @relation("StaffManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports       Staff[]        @relation("StaffManager")
 
   passwordResets PasswordResetToken[]
 
@@ -174,6 +174,7 @@ model Staff {
   invoicesEntered             Contract[]                @relation("ContractInvoiceBy")
   costSheetRejections         CostSheet[]               @relation("CostSheetRejectedBy")
   notifications               Notification[]            @relation("NotificationRecipient")
+  pushSubscriptions           PushSubscription[]        @relation("StaffPushSubscriptions")
   projectOrdersSent           ProjectOrder[]            @relation("ProjectOrderSentBy")
   projectOrdersAccepted       ProjectOrder[]            @relation("ProjectOrderAcceptedBy")
   projectOrdersResultSent     ProjectOrder[]            @relation("ProjectOrderResultSentBy")
@@ -394,22 +395,46 @@ model AuditLog {
 /// Thông báo in-app — chưa có session thật nên KHÔNG lọc theo "current user" ở UI (xem
 /// getCurrentStaffId TODO); mọi người xem /reminders đều thấy toàn bộ thông báo chưa đọc.
 model Notification {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   recipientStaffId String
   type             String // TEAM_ASSIGNMENT_NEEDED | COSTSHEET_REJECTED | BRAINSTORM_MEETING_INVITE | DEPARTMENT_ORDER_RECEIVED | ORDER_RESULT_RECEIVED | ORDER_DEADLINE_REMINDER | EXTERNAL_TIMELINE_UPDATED | TIMELINE_DEADLINE_REMINDER | CREATIVE_TASK_ASSIGNED | CREATIVE_TASK_NEEDS_APPROVAL | CREATIVE_TASK_DELIVERED | CREATIVE_TASK_REVISION | CREATIVE_TASK_DEADLINE_REMINDER | CREATIVE_TASK_ROUTED | ACCEPTANCE_SIGN_REMINDER | ADVANCE_REQUESTED | ADVANCE_DISBURSED | ADVANCE_SETTLED | AR_OVERDUE_REMINDER | CHAT_MESSAGE | CHAT_MENTION | REMINDER_DUE | POLL_CREATED | CTV_CONTRACTS_GENERATED | INVENTORY_TRANSFER_INCOMING | INVENTORY_RETURN_OVERDUE | SCHEDULE_CONFIRMED | SCHEDULE_UPDATED | PLANNING_STAGE_ASSIGNED | PLANNING_RESULT_SUBMITTED | PLANNING_REVISION_REQUESTED | PLANNING_FINAL_CONFIRMED | DEPT_TASK_ASSIGNED | DEPT_TASK_NEEDS_APPROVAL | DEPT_TASK_DELIVERED | DEPT_TASK_REVISION | DEPT_TASK_DEADLINE_REMINDER | INTERVIEW_REQUESTED | INTERVIEW_CONFIRMED | INTERVIEW_DECLINED
   title            String
   body             String?
   projectId        String?
   conversationId   String?
-  isRead           Boolean  @default(false)
-  createdAt        DateTime @default(now())
+  isRead           Boolean   @default(false)
+  /// Mốc đã gửi push cho thông báo này. null = chưa gửi. Là chốt chống gửi trùng giữa đường đẩy
+  /// NGAY (chat) và job quét mỗi 5 phút — ai gửi trước thì ghi mốc, người sau bỏ qua.
+  pushedAt         DateTime?
+  createdAt        DateTime  @default(now())
 
   recipient    Staff         @relation("NotificationRecipient", fields: [recipientStaffId], references: [id])
   project      Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([recipientStaffId, isRead])
+  @@index([pushedAt])
   @@map("notification")
+}
+
+/// Một THIẾT BỊ đã bật thông báo đẩy. Một người có nhiều dòng (điện thoại + máy tính + trình duyệt khác).
+/// endpoint là khoá duy nhất do trình duyệt cấp — cùng thiết bị bật lại thì trả về đúng endpoint cũ.
+model PushSubscription {
+  id        String    @id @default(cuid())
+  staffId   String
+  endpoint  String    @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime  @default(now())
+  lastOkAt  DateTime?
+  /// Số lần gửi lỗi liên tiếp. Trình duyệt trả 404/410 = thiết bị đã gỡ ⇒ XOÁ ngay, không đếm.
+  failCount Int       @default(0)
+
+  staff Staff @relation("StaffPushSubscriptions", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@map("push_subscription")
 }
 
 // ─────────────────────────────────────────────────────────
@@ -481,7 +506,7 @@ model Client {
   projects            Project[]
   careNotes           CareNote[]
   invoices            ClientInvoice[]
-  inventoryItemsOwned InventoryItem[]  @relation("InventoryItemOwnerClient")
+  inventoryItemsOwned InventoryItem[]     @relation("InventoryItemOwnerClient")
   kbSpace             ClientKbSpace?
   meetingRows         AccountMeetingRow[]
 
@@ -551,20 +576,20 @@ model ClientTransfer {
 
 /// Nhà cung cấp — master dùng chung; cost_line trỏ vào để truy nguồn giá mua.
 model Vendor {
-  id        String   @id @default(cuid())
+  id                String   @id @default(cuid())
   /// PUR-2: chuẩn 3 ký tự A-Z0-9 (như Client.code) — mã cũ dài hơn vẫn giữ được, ĐỔI thì phải theo chuẩn.
   /// KHÔNG vào mã sinh nào (PO/RFQ đều theo mã dự án) nên đổi mã không hỏng dữ liệu.
-  code      String   @unique
+  code              String   @unique
   /// Tên GIAO DỊCH / hiển thị ngắn ("Sông Lam"). Tên pháp nhân đầy đủ ở legalName (khuôn Client.legalNameVi).
-  name      String
-  legalName String?
-  category  String // PCC | PRO | OPE | OTHER — PHÒNG phụ trách (không phải nhóm hàng; nhóm hàng xem VendorGroup)
+  name              String
+  legalName         String?
+  category          String // PCC | PRO | OPE | OTHER — PHÒNG phụ trách (không phải nhóm hàng; nhóm hàng xem VendorGroup)
   /// Người liên hệ CHÍNH — 3 cột cũ, nay ĐỒNG BỘ từ VendorContact.isPrimary để chỗ đọc cũ không đổi.
   /// Nguồn sự thật của người liên hệ (1..N) là bảng vendor_contact.
-  contact   String?
-  phone     String?
-  email     String?
-  taxCode   String?
+  contact           String?
+  phone             String?
+  email             String?
+  taxCode           String?
   /// PUR-1 — hồ sơ NCC "đủ thông tin căn bản": địa chỉ, tài khoản ngân hàng (phiếu chi NCC cần),
   /// điều khoản thanh toán thường áp (vd "cọc 50%, còn lại sau khi xuất HĐ"), ghi chú.
   address           String?
@@ -576,9 +601,9 @@ model Vendor {
   /// PUR-2 — giá trị các TRƯỜNG TUỲ CHỈNH admin định nghĩa ở /settings/vendor-fields (VendorFieldDef):
   /// JSON object { <fieldKey>: value }. Trường bị tắt vẫn giữ giá trị, chỉ không hiện trên form.
   customJson        String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   contacts         VendorContact[]
   costLines        CostLine[]
@@ -617,20 +642,20 @@ model VendorContact {
 /// Vendor.customJson theo `key`. `key` sinh từ nhãn lúc tạo và KHÔNG đổi (là khoá JSON của mọi NCC).
 /// Không xoá — chỉ tắt isActive (giá trị đã nhập vẫn còn, mirror Vendor/ClientGroup).
 model VendorFieldDef {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  labelVi   String
-  labelEn   String?
+  id          String   @id @default(cuid())
+  key         String   @unique
+  labelVi     String
+  labelEn     String?
   /// TEXT | NUMBER | DATE | SELECT | BOOL | TEXTAREA
-  type      String   @default("TEXT")
+  type        String   @default("TEXT")
   /// JSON string[] cho SELECT.
   optionsJson String?
-  hint      String?
-  required  Boolean  @default(false)
-  sort      Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  hint        String?
+  required    Boolean  @default(false)
+  sort        Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("vendor_field_def")
 }
@@ -724,16 +749,16 @@ model Rfq {
 /// CO bị tạo lại mỗi lần lưu bảng, chỉ stableKey mới bền (tiền lệ FinanceCostLine.lineKey). Các
 /// trường còn lại là ẢNH CHỤP lúc tạo RFQ để NCC nhìn thấy đúng thứ được hỏi kể cả khi CO đổi.
 model RfqLine {
-  id                String   @id @default(cuid())
+  id                String  @id @default(cuid())
   rfqId             String
   costLineStableKey String
   itemName          String
   specs             String?
   unit              String?
-  quantity          Float    @default(1)
+  quantity          Float   @default(1)
   /// Đơn giá CO TRƯỚC THUẾ lúc tạo — tham chiếu để so (PUR có view_paycap nên được thấy).
   refUnitPrice      BigInt?
-  sort              Int      @default(0)
+  sort              Int     @default(0)
 
   rfq        Rfq            @relation(fields: [rfqId], references: [id], onDelete: Cascade)
   quoteLines RfqQuoteLine[]
@@ -960,7 +985,7 @@ model Project {
   stockDocuments      StockDocument[]       @relation("StockDocProject")
   stockDocumentsFrom  StockDocument[]       @relation("StockDocFromProject")
   stockRequests       StockRequest[]
-  stockRequestsOwned  StockRequest[] @relation("StockRequestOwnerProject") // K6: phiếu xin dùng hàng mà dự án này SỞ HỮU
+  stockRequestsOwned  StockRequest[]        @relation("StockRequestOwnerProject") // K6: phiếu xin dùng hàng mà dự án này SỞ HỮU
   inventoryHoldings   ProjectHolding[]
   inventoryItemsBound InventoryItem[]       @relation("InventoryItemBoundProject")
   planningJobs        PlanningJob[]
@@ -1471,7 +1496,7 @@ model CostLine {
   /// dự án 05/08/2026 — KHÔNG xoá tự động, vì dòng đã xoá là mất dấu để thương lượng lại).
   /// ⚠ Cột này tác động cách tính CE: `ceRowsOf` bỏ qua dòng dropped khi cộng CE và khi xuất báo
   /// giá. CO của dòng vẫn tính bình thường — hàng vẫn phải mua nếu Account chưa quyết bỏ.
-  ceDropped   Boolean   @default(false)
+  ceDropped   Boolean @default(false)
 
   costSheet CostSheet        @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
   section   CostSheetSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -1783,11 +1808,11 @@ model CreativeTask {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  squad      CreativeSquad?         @relation(fields: [squadId], references: [id], onDelete: SetNull)
-  order      ProjectOrder?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  orderItem  ProjectOrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
-  taskType   OptionItem?            @relation("CreativeTaskType", fields: [taskTypeId], references: [id])
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  squad      CreativeSquad?    @relation(fields: [squadId], references: [id], onDelete: SetNull)
+  order      ProjectOrder?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderItem  ProjectOrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  taskType   OptionItem?       @relation("CreativeTaskType", fields: [taskTypeId], references: [id])
   assignee   Staff?            @relation("CreativeTaskAssignee", fields: [assigneeId], references: [id])
   assignedBy Staff?            @relation("CreativeTaskAssignedBy", fields: [assignedById], references: [id])
   reviewedBy Staff?            @relation("CreativeTaskReviewedBy", fields: [reviewedById], references: [id])
@@ -2480,8 +2505,8 @@ model InventoryProduct {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  catNode InventoryCategory @relation("InventoryProductCatNode", fields: [catNodeId], references: [id])
-  lots    InventoryItem[]   @relation("InventoryItemProduct")
+  catNode    InventoryCategory       @relation("InventoryProductCatNode", fields: [catNodeId], references: [id])
+  lots       InventoryItem[]         @relation("InventoryItemProduct")
   orderLines ProjectOrderStockLine[]
 
   @@index([catNodeId])
@@ -3430,8 +3455,8 @@ model JobPosition {
   /// Không có đường XOÁ: xoá vị trí đang có ứng viên là mất dấu vết cả kho hồ sơ (mirror ClientGroup).
   status String @default("OPEN")
 
-  departmentId String?
-  teamId       String?
+  departmentId         String?
+  teamId               String?
   /// Người quản lý trực tiếp của vị trí này. Cùng với trưởng phòng, đây là người NGOÀI HR được
   /// nhìn thấy lương mong muốn của ứng viên (xem lib/recruit.ts → canSeeExpectedSalary).
   hiringManagerStaffId String?

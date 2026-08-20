@@ -17,7 +17,7 @@
  * Gỡ tay khi cần: DevTools → Application → Service Workers → Unregister.
  */
 
-const VERSION = "tcm-v1";
+const VERSION = "tcm-v2";
 const OFFLINE_URL = "/offline";
 
 self.addEventListener("install", (event) => {
@@ -47,5 +47,51 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     // Luôn đi mạng trước ⇒ online thì tốc độ y hệt lúc chưa có service worker, không bao giờ trả trang cũ.
     fetch(req).catch(() => caches.match(OFFLINE_URL).then((res) => res ?? Response.error())),
+  );
+});
+
+/**
+ * ── THÔNG BÁO ĐẨY ────────────────────────────────────────────────────────────────────────────────
+ * ⚠ `userVisibleOnly: true` lúc đăng ký nghĩa là NHẬN push thì BẮT BUỘC phải hiện thông báo. Nhận
+ * mà không hiện là trình duyệt tự thu hồi quyền push của cả site. Vì vậy mọi nhánh dưới đây đều kết
+ * thúc bằng showNotification, kể cả khi payload hỏng.
+ */
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = data.title || "TCM";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: data.tag || undefined,
+      // renotify chỉ hợp lệ khi có tag — rung/kêu lại khi tin mới cùng hội thoại
+      renotify: Boolean(data.tag),
+      data: { url: data.url || "/reminders" },
+    }),
+  );
+});
+
+/**
+ * Bấm vào thông báo: nếu app đang mở sẵn ở tab nào đó thì ĐƯA TAB ĐÓ LÊN rồi điều hướng, thay vì mở
+ * thêm tab mới — người dùng bấm 5 thông báo không nên có 5 tab TCM.
+ */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/reminders";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (new URL(c.url).origin === self.location.origin && "focus" in c) {
+          return c.focus().then((w) => (w && w.navigate ? w.navigate(url) : w));
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
   );
 });

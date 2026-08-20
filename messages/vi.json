@@ -3505,6 +3505,20 @@
     }
   },
   "profile": {
+    "push": {
+      "title": "Thông báo đẩy",
+      "desc": "Nhận thông báo ngay cả khi không mở trang web. Bật riêng cho từng thiết bị — điện thoại và máy tính bật độc lập.",
+      "checking": "Đang kiểm tra thiết bị…",
+      "turnOn": "Bật trên thiết bị này",
+      "turnOff": "Tắt trên thiết bị này",
+      "onHint": "Thiết bị này đang nhận thông báo đẩy.",
+      "offHint": "Trình duyệt sẽ hỏi quyền khi bạn bấm bật.",
+      "testSent": "Đã gửi một thông báo thử về thiết bị này.",
+      "unsupported": "Trình duyệt này không hỗ trợ thông báo đẩy, hoặc máy chủ chưa khai báo khoá đẩy. Trên iPhone: mở Safari, bấm Chia sẻ → Thêm vào MH chính, rồi mở app từ màn hình chính và bật lại.",
+      "denied": "Bạn đã chặn thông báo cho trang này. Mở phần cài đặt trang của trình duyệt để cho phép lại, sau đó quay lại đây bật.",
+      "errSave": "Không lưu được đăng ký thiết bị. Thử lại sau.",
+      "errGeneric": "Có lỗi khi bật thông báo. Thử lại sau."
+    },
     "title": "Hồ sơ cá nhân",
     "subtitle": "Ảnh đại diện giúp mọi người nhận ra bạn trong app.",
     "uploadButton": "Tải ảnh lên",

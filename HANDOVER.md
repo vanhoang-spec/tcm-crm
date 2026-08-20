@@ -2778,6 +2778,64 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       hệ thống thông báo thứ hai; và có push rồi thì **giãn được nhịp poll thông báo hiện tại**, tức
       nhẹ đi chứ không nặng thêm.
 
+54. **WEB PUSH — THÔNG BÁO ĐẨY KHI KHÔNG MỞ TRANG (20/08/2026)** (migration `web_push` — additive;
+    **KHÔNG mã quyền mới**; **2 dependency MỚI: `web-push` + `@types/web-push`**).
+    - ⚠ **KHÔNG dựng hệ thống thông báo thứ hai.** Nguồn sự thật vẫn là bảng `Notification` đang chạy;
+      push chỉ là một ĐƯỜNG PHÁT thêm. Nhờ vậy **39 chỗ tạo thông báo trong 20 file KHÔNG phải sửa
+      một dòng nào**, và loại thông báo thêm mới sau này tự động có push.
+    - **Hai đường phát, chống trùng bằng cột mới `Notification.pushedAt`:**
+      1. **Ngay lập tức** — chỉ chat (`lib/chat.ts`), vì tin nhắn báo trễ 5 phút thì vô nghĩa.
+      2. **Job `push-dispatch`** trong bộ hẹn giờ 5 phút — lưới hứng cho MỌI loại còn lại.
+      ⚠ Job đặt **CUỐI** danh sách `JOBS`: các job trên có thể vừa tạo thông báo mới, chạy sau thì đẩy
+      luôn trong cùng chu kỳ thay vì đợi thêm 5 phút.
+      ⚠ **Đánh dấu `pushedAt` KỂ CẢ khi không gửi được thiết bị nào** (người nhận chưa bật push) —
+      không thì job quét lôi lại đúng đống đó mỗi 5 phút, mãi mãi.
+      ⚠ `checkPendingPush` chỉ lấy thông báo trong **24 giờ gần nhất**: bật push lần đầu mà bắn cả
+      tháng thông báo cũ vào màn hình khoá là cách nhanh nhất để người dùng tắt push vĩnh viễn.
+    - ⚠ **Chưa khai VAPID thì mọi hàm trong `lib/push.ts` là no-op im lặng** (khuôn `isAiConfigured`).
+      App phải chạy bình thường trên máy dev và trên server chưa khai khoá. **3 biến trong `.env`
+      SERVER (không vào git)**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. Sinh lại
+      bằng `npx web-push generate-vapid-keys --json`.
+      ⚠ **Đổi khoá VAPID = mọi thiết bị đã đăng ký thành RÁC** (endpoint gắn với khoá cũ) — phải xoá
+      sạch bảng `push_subscription` và bảo mọi người bật lại. Đừng sinh khoá mới nếu không có lý do.
+      ⚠ Khoá công khai đọc ở SERVER lúc chạy rồi truyền xuống client qua prop, **KHÔNG dùng
+      `NEXT_PUBLIC_`** — biến `NEXT_PUBLIC_` bị nướng vào bundle lúc build, đổi khoá là phải build lại.
+    - **Trạng thái bật/tắt là THEO THIẾT BỊ, không theo tài khoản** — một người có thể bật ở điện thoại
+      mà không bật ở máy tính. Vì vậy nút trong `/profile` đọc trạng thái từ chính trình duyệt
+      (`pushManager.getSubscription`) chứ không từ DB; DB có thể còn đăng ký của máy khác.
+    - ⚠ **Trình duyệt CHỈ cho xin quyền trong một cú bấm thật.** Tuyệt đối không tự gọi
+      `Notification.requestPermission()` lúc trang tải: trình duyệt từ chối, và người dùng bị hỏi khi
+      chưa hiểu vì sao thì bấm "Chặn" — **đã chặn thì lần sau không hỏi lại được nữa**, chỉ còn cách
+      vào cài đặt trang của trình duyệt mở lại.
+    - ⚠ **`userVisibleOnly: true` là bắt buộc**: nhận push thì PHẢI hiện thông báo. Service worker
+      nhận mà không `showNotification` là trình duyệt **thu hồi quyền push của cả site**. Vì vậy mọi
+      nhánh trong handler `push` đều kết thúc bằng `showNotification`, kể cả khi payload hỏng.
+    - **Dọn thiết bị chết**: 404/410 = endpoint không còn tồn tại (gỡ app, xoá dữ liệu duyệt web) ⇒
+      **xoá NGAY**. Lỗi khác (mạng tạm) chỉ tăng `failCount`, quá 5 lần liên tiếp mới xoá.
+    - ⚠ **`sendPushToStaff` KHÔNG BAO GIỜ ném lỗi ra ngoài** — nó được gọi từ trong luồng nghiệp vụ
+      (gửi tin nhắn, duyệt đề xuất). Push hỏng mà làm hỏng luôn việc chính là đánh đổi sai hoàn toàn.
+    - ⚠ **iPhone chỉ nhận push khi app đã "Thêm vào màn hình chính"** — mở bằng Safari thường thì
+      không có push, dù đã bấm bật. Tức **PWA (mục 10.53) là điều kiện bắt buộc của push trên iOS**,
+      không phải tính năng rời. Câu hướng dẫn này đã nằm trong thông báo "không hỗ trợ" của nút bật.
+    - **Migration `20260820200000_web_push` viết TAY** (`migrate diff` → `db execute` →
+      `migrate resolve --applied`): `prisma migrate dev` đòi **RESET dev.db** vì hai migration cũ từng
+      bị sửa tại chỗ (mục 10.39, 10.41) nên checksum lệch. SQL đã kiểm: chỉ `ALTER TABLE ADD COLUMN`
+      + `CREATE TABLE` + index, **0 lệnh DROP/RedefineTables**.
+    - **Verify:** 12/12 assertion server-side trên dev.db — đọc được khoá VAPID · không có thiết bị ⇒
+      trả 0 không ném · endpoint hỏng ⇒ tăng `failCount` chứ không xoá ngay · quá 5 lần ⇒ xoá thiết bị ·
+      `checkPendingPush` quét đúng (chưa đọc + chưa đẩy), đánh dấu hết, **chạy lần 2 không lôi lại** ·
+      không đụng thông báo đã đọc. **Browser**: thẻ "Thông báo đẩy" hiện ở `/profile`, nhánh "đã chặn"
+      hiển thị đúng. **Gửi tin nhắn chat thật**: tin gửi được như cũ, 3 thông báo sinh ra đều
+      `pushedAt` đã đánh dấu ngay. tsc · eslint · i18n 0/0 · `next build` sạch · `migrate diff` rỗng.
+    - ⚠ **CHƯA KIỂM ĐƯỢC: đường giao push THẬT.** Trình duyệt trong môi trường làm việc chặn quyền
+      thông báo ở mức chính sách (`Notification.permission === "denied"` cứng) nên không đăng ký được
+      subscription thật. **Sau khi deploy phải test trên máy thật**: mở `/profile` → bật → phải nhận
+      được thông báo thử ngay. Trên iPhone nhớ "Thêm vào màn hình chính" trước.
+    - **CHƯA LÀM (cố ý):** chưa giãn nhịp poll thông báo hiện tại (đợi push chạy ổn đã rồi mới giảm,
+      giảm sớm mà push trục trặc là mất cả hai đường) · chưa có màn hình quản lý danh sách thiết bị đã
+      bật · chưa gom nhiều thông báo cùng lúc thành một (mỗi thông báo một push) · chưa có nút tắt
+      push theo LOẠI thông báo.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { sendPushToStaff, markNotificationsPushed } from "./push";
 import { getStringSetting } from "./settings";
 import { saveChatAttachment } from "./chat-storage";
 import { buildWelcomeSvg } from "./welcome-card";
@@ -208,7 +209,34 @@ export async function notifyNewMessage(opts: {
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
-  if (rows.length > 0) await prisma.notification.createMany({ data: rows });
+  if (rows.length === 0) return;
+  await prisma.notification.createMany({ data: rows });
+
+  /**
+   * Đẩy NGAY, không đợi job 5 phút — tin nhắn báo trễ 5 phút thì vô nghĩa.
+   *
+   * ⚠ Đánh dấu `pushedAt` cho đúng những thông báo vừa tạo để job quét không bắn lại lần hai. Lọc
+   * theo (người nhận + hội thoại + chưa đẩy) vì `createMany` của SQLite không trả về id.
+   * ⚠ Bọc try/catch: push hỏng KHÔNG được làm hỏng việc gửi tin nhắn.
+   */
+  try {
+    const ids = rows.map((r) => r.recipientStaffId);
+    await sendPushToStaff(ids, {
+      title,
+      body: rows[0].body,
+      url: `/chat/${opts.conversationId}`,
+      tag: `chat-${opts.conversationId}`,
+    });
+    // Đánh dấu KỂ CẢ khi không gửi được thiết bị nào (người nhận chưa bật push): không thì job quét
+    // sẽ lôi lại đúng đống thông báo đó mỗi 5 phút, mãi mãi.
+    const fresh = await prisma.notification.findMany({
+      where: { conversationId: opts.conversationId, recipientStaffId: { in: ids }, pushedAt: null },
+      select: { id: true },
+    });
+    await markNotificationsPushed(fresh.map((n) => n.id));
+  } catch (e) {
+    console.error("[push] lỗi đẩy thông báo chat:", e);
+  }
 }
 
 /** Ghi 1 system message (join/leave/rename/promote). body = biến phụ (tên người / tên nhóm mới). */

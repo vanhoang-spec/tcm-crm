@@ -1,13 +1,15 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AiResult, RunButton, ToolCard, aiInput, aiTextarea } from "./ai-shared";
+import { DOCUMENT_TYPES } from "@/lib/ai/document-types";
 import {
   analyzeCostSheet,
   askIndustryTrend,
   brainstormIdeas,
+  draftDocument,
   generateBoardReport,
   generateCanvaBrief,
   writeContent,
@@ -59,7 +61,7 @@ export function BrainstormTool({ projects }: { projects: ProjectOption[] }) {
           <input id="bs-files" name="files" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*" className={fileInputClass} />
           <p className="mt-1 text-[11px] text-muted-foreground">{t("attachHint")}</p>
         </div>
-        <RunButton pending={pending} hasResult={!!state.text} />
+        <RunButton pending={pending} hasResult={!!state.doc} />
       </form>
       <AiResult doc={state.doc} error={state.error} />
       <AttachSummary state={state} t={t} />
@@ -94,7 +96,7 @@ export function ContentWriterTool({ projects }: { projects: ProjectOption[] }) {
           <input id="ct-files" name="files" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*" className={fileInputClass} />
           <p className="mt-1 text-[11px] text-muted-foreground">{t("attachHint")}</p>
         </div>
-        <RunButton pending={pending} hasResult={!!state.text} />
+        <RunButton pending={pending} hasResult={!!state.doc} />
       </form>
       <AiResult doc={state.doc} error={state.error} />
       <AttachSummary state={state} t={t} />
@@ -133,7 +135,7 @@ export function CanvaBriefTool({ projects }: { projects: ProjectOption[] }) {
           <input id="cv-files" name="files" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*" className={fileInputClass} />
           <p className="mt-1 text-[11px] text-muted-foreground">{t("attachHint")}</p>
         </div>
-        <RunButton pending={pending} hasResult={!!state.text} />
+        <RunButton pending={pending} hasResult={!!state.doc} />
       </form>
       <AiResult doc={state.doc} error={state.error} />
       <AttachSummary state={state} t={t} />
@@ -178,7 +180,7 @@ function CostSheetForm({ projectId }: { projectId: string }) {
   return (
     <>
       <form action={action}>
-        <RunButton pending={pending} hasResult={!!state.text} />
+        <RunButton pending={pending} hasResult={!!state.doc} />
       </form>
       <AiResult doc={state.doc} error={state.error} />
     </>
@@ -195,7 +197,7 @@ export function BoardReportTool() {
     <ToolCard title={t("title")} desc={t("desc")}>
       <form action={action}>
         <p className="mb-3 text-[11px] text-muted-foreground">{t("hint")}</p>
-        <RunButton pending={pending} hasResult={!!state.text} />
+        <RunButton pending={pending} hasResult={!!state.doc} />
       </form>
       <AiResult doc={state.doc} error={state.error} />
     </ToolCard>
@@ -226,14 +228,64 @@ export function TrendTool({ webSearchOn }: { webSearchOn: boolean }) {
           <label htmlFor="tr-q" className="mb-1 block text-xs font-medium text-foreground">{t("questionLabel")}</label>
           <textarea id="tr-q" name="question" rows={3} required placeholder={t("questionPlaceholder")} className={aiTextarea} />
         </div>
-        <RunButton pending={pending} hasResult={!!state.text} />
+        <RunButton pending={pending} hasResult={!!state.doc} />
       </form>
       {/* Nhãn nguồn gốc kết quả: người đọc luôn biết câu trả lời có link kiểm chứng hay không. */}
-      {state.text && (
+      {state.doc && (
         <p className={`mt-3 text-xs ${state.grounded ? "text-success" : "text-warning"}`}>
           {state.grounded ? t("resultGrounded", { count: state.sourceCount ?? 0 }) : t("resultUngrounded")}
         </p>
       )}
+      <AiResult doc={state.doc} error={state.error} />
+    </ToolCard>
+  );
+}
+
+// ───────────────────────── Soạn thảo văn bản (hành chính / nhân sự / kế toán) ──────────────────
+
+/**
+ * ⚠ Công cụ này KHÔNG lưu gì: file mẫu đọc xong là bỏ, bản soạn không vào DB (quyết định chủ dự án
+ * 20/08/2026). Vì vậy phải nói rõ với người dùng ngay trên form là **phải tải Word/PDF về máy**, và
+ * nội dung vẫn đi sang DeepSeek — "không lưu trong app" khác "không rời công ty".
+ */
+export function DocumentTool() {
+  const t = useTranslations("ai.document");
+  const locale = useLocale();
+  const [state, action, pending] = useActionState<AiState, FormData>(draftDocument, {});
+  const [typeCode, setTypeCode] = useState(DOCUMENT_TYPES[0].code);
+  const current = DOCUMENT_TYPES.find((d) => d.code === typeCode) ?? DOCUMENT_TYPES[0];
+
+  return (
+    <ToolCard title={t("title")} desc={t("desc")}>
+      <p className="mb-3 rounded-lg border border-warning/40 bg-warning-bg px-3 py-2 text-xs text-warning">{t("privacyWarning")}</p>
+      <form action={action} className="space-y-3">
+        <div>
+          <label htmlFor="doc-type" className="mb-1 block text-xs font-medium text-foreground">{t("typeLabel")}</label>
+          <select id="doc-type" name="docType" value={typeCode} onChange={(e) => setTypeCode(e.target.value as typeof typeCode)} className={aiInput}>
+            {DOCUMENT_TYPES.map((d) => (
+              <option key={d.code} value={d.code}>
+                {locale === "en" ? d.labelEn : d.labelVi}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-[11px] text-muted-foreground">{locale === "en" ? current.hintEn : current.hintVi}</p>
+        </div>
+        <div>
+          <label htmlFor="doc-subject" className="mb-1 block text-xs font-medium text-foreground">{t("subjectLabel")}</label>
+          <input id="doc-subject" name="subject" placeholder={t("subjectPlaceholder")} className={aiInput} />
+        </div>
+        <div>
+          <label htmlFor="doc-brief" className="mb-1 block text-xs font-medium text-foreground">{t("briefLabel")}</label>
+          <textarea id="doc-brief" name="brief" rows={5} required placeholder={t("briefPlaceholder")} className={aiTextarea} />
+          <p className="mt-1 text-[11px] text-muted-foreground">{t("briefHint")}</p>
+        </div>
+        <div>
+          <label htmlFor="doc-ref" className="mb-1 block text-xs font-medium text-foreground">{t("referenceLabel")}</label>
+          <input id="doc-ref" type="file" name="reference" accept=".pdf,.docx,.txt,.md,.csv" className="block w-full text-xs text-muted-foreground file:mr-3 file:h-8 file:rounded-lg file:border file:border-border-strong file:bg-surface file:px-3 file:text-xs file:text-foreground" />
+          <p className="mt-1 text-[11px] text-muted-foreground">{t("referenceHint")}</p>
+        </div>
+        <RunButton pending={pending} hasResult={!!state.doc} />
+      </form>
       <AiResult doc={state.doc} error={state.error} />
     </ToolCard>
   );

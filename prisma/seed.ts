@@ -2430,7 +2430,21 @@ async function main() {
     code === "iso.export" ||
     code.startsWith("ai."); // (3)
 
-  const AI_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
+  /**
+   * ⚠ HẰNG ĐÔNG CỨNG — 6 công cụ AI có từ thời `getAiVisibility` cũ, cấp trọn gói cho đúng một role
+   * (xem `extraByRole.PRODUCTION_MANAGER`). **ĐỪNG thêm mã AI mới vào đây.** Thêm là âm thầm cấp
+   * quyền cho role đó, VÀ làm lệch hai đường: DB dựng-từ-đầu có, DB đang chạy (đi đường backfill lọc
+   * theo role) thì không. Đã vấp đúng lỗi này khi thêm `ai.document` (đo được 7 vai vs 6 vai) —
+   * cùng họ với bẫy cấp-theo-nhóm ở mục 10.15 của HANDOVER. Mã AI mới thì khai policy riêng.
+   */
+  const AI_LEGACY_ALL = ["ai.brainstorm", "ai.content", "ai.canva", "ai.costsheet", "ai.board_report", "ai.trend"];
+  /**
+   * AI soạn thảo văn bản (đợt 2, 20/08/2026) — đúng ba bộ phận sinh ra văn bản hành chính nội bộ,
+   * cộng BGĐ. Liệt kê theo MÃ ROLE chứ không theo nhóm: bài học SECURITY_GUARD nằm trong nhóm
+   * WAREHOUSE (mục 10.15). Nhóm HR ở đây gồm cả ADMIN_STAFF và đó là CHỦ Ý — hành chính chính là
+   * người soạn thông báo/quyết định nhiều nhất.
+   */
+  const AI_DOCUMENT_ROLES = ["HR_MANAGER", "HR_STAFF", "ADMIN_STAFF", "CFO", "ACCOUNTANT_STAFF", "BOARD_OF_MANAGEMENT"];
   /** Kho v2 K2 — quyền của THỦ KHO: người duy nhất chốt số thực xuất/thực nhập, chuyển lô, xuất hủy. */
   const WAREHOUSE_EXTRA = ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"];
   /**
@@ -2445,6 +2459,7 @@ async function main() {
     "dashboard.all_teams",
     "ai.board_report",
     "ai.trend",
+    "ai.document",
     "finance.vendor_payment.over_cap",
     "finance.invoice.over_cap",
     "projects.pnl.view",
@@ -2487,8 +2502,8 @@ async function main() {
     // CO/CE v3: OPE/PRO cần thấy TRẦN CHI để làm việc với NCC — nhưng không thấy CE/margin/Total CO.
     OPERATIONS: ["bidding.costsheet.view_paycap"],
     PRODUCTION: ["bidding.costsheet.view_paycap"],
-    HR: ["ai.brainstorm", "ai.content"],
-    FINANCE: ["ai.costsheet", "inventory.reservation.approve", "bidding.costsheet.view_cost", "bidding.costsheet.view_paycap"],
+    HR: ["ai.brainstorm", "ai.content", "ai.document"],
+    FINANCE: ["ai.costsheet", "ai.document", "inventory.reservation.approve", "bidding.costsheet.view_cost", "bidding.costsheet.view_paycap"],
     PURCHASING: ["purchasing.po.manage", "purchasing.po.receive", "bidding.costsheet.view_paycap"],
     // ⚠ CỐ Ý KHÔNG có `WAREHOUSE: WAREHOUSE_EXTRA` ở đây. Nhóm WAREHOUSE chứa CẢ `SECURITY_GUARD`
     // (bảo vệ điểm kho) — cấp 4 mã xác nhận thực xuất/thực nhập + chuyển lô + XUẤT HỦY theo NHÓM
@@ -2510,7 +2525,7 @@ async function main() {
     HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "inventory.request.approve", "inventory.request.approve_overhead"],
     HR_STAFF: ["mkt.review", "mkt.generate"],
     CFO: [...EXEC_EXTRA, ...BIDDING_APPROVE_EXTRA], // Phạm Thu Huyền — exec trong cả (2) và (3)
-    PRODUCTION_MANAGER: AI_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
+    PRODUCTION_MANAGER: AI_LEGACY_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
     // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
     ACCOUNT_DIRECTOR: ["inventory.request.approve_any", "clients.kb.compliance"],
     ACCOUNT_MANAGER: ["inventory.request.approve_any", "clients.kb.compliance"],
@@ -2869,6 +2884,13 @@ async function main() {
       key: "20260816_pur_manage",
       codes: ["purchasing.rfq.manage", "purchasing.rfq.ai", "purchasing.vendor.manage"],
       roleFilter: (r) => PUR_ROLES.includes(r.code),
+    },
+
+    // 20/08/2026 AI SOẠN THẢO VĂN BẢN (đợt 2) — 1 mã mới. Lọc theo MÃ ROLE, khớp AI_DOCUMENT_ROLES.
+    {
+      key: "20260820_ai_document",
+      codes: ["ai.document"],
+      roleFilter: (r) => AI_DOCUMENT_ROLES.includes(r.code),
     },
 
     // 17/08/2026 HỌP ACCOUNT TEAM (MEET-1) — 3 mã mới, dịch từ MEETING_POLICY sang đường backfill.

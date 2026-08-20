@@ -3748,6 +3748,19 @@
       "desc": "Tổng hợp tình hình dự án, cảnh báo rủi ro và phân tích chăm sóc khách hàng từ dữ liệu vận hành hiện tại.",
       "hint": "Số liệu lấy trực tiếp từ CRM tại thời điểm bấm chạy — khớp với trang Nhắc việc và Tài chính."
     },
+    "document": {
+      "title": "Soạn thảo văn bản",
+      "desc": "Quyết định, thông báo, công văn, tờ trình, biên bản, quy chế, văn bản nhân sự và kế toán — AI soạn theo đúng bố cục hành chính, tải về Word hoặc PDF.",
+      "privacyWarning": "App KHÔNG lưu file mẫu bạn tải lên và KHÔNG lưu bản soạn — hãy tải Word/PDF về máy ngay, rời trang là mất. Lưu ý nội dung vẫn được gửi sang DeepSeek để xử lý.",
+      "typeLabel": "Loại văn bản",
+      "subjectLabel": "Trích yếu (tuỳ chọn)",
+      "subjectPlaceholder": "vd: Về việc điều chỉnh giờ làm việc mùa cao điểm",
+      "briefLabel": "Nội dung / dữ kiện",
+      "briefPlaceholder": "Nêu đủ dữ kiện: ai, việc gì, từ ngày nào, áp dụng cho ai, số tiền nếu có…",
+      "briefHint": "Đây là nguồn dữ kiện DUY NHẤT. Thiếu thông tin thì AI để chỗ trống […] chứ không tự đoán.",
+      "referenceLabel": "File mẫu tham chiếu (tuỳ chọn)",
+      "referenceHint": "PDF/DOCX/TXT — AI học bố cục và cách hành văn, không chép số liệu. File chỉ dùng cho lượt chạy này rồi bỏ, app không lưu."
+    },
     "trend": {
       "title": "Xu hướng ngành",
       "desc": "Trao đổi về mô típ và xu hướng trong ngành event/activation.",

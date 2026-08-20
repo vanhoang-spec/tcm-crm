@@ -3748,6 +3748,19 @@
       "desc": "Summarises project status, flags risks, and analyses client care from current operational data.",
       "hint": "Figures are pulled live from the CRM when you run it — they match the Reminders and Finance pages."
     },
+    "document": {
+      "title": "Document drafting",
+      "desc": "Decisions, announcements, official letters, proposals, minutes, policies, HR and accounting documents — drafted to the standard Vietnamese administrative layout, downloadable as Word or PDF.",
+      "privacyWarning": "The app does NOT keep your reference file and does NOT store the draft — download Word/PDF now, it is gone when you leave. Note the content is still sent to DeepSeek for processing.",
+      "typeLabel": "Document type",
+      "subjectLabel": "Subject line (optional)",
+      "subjectPlaceholder": "e.g. Regarding adjusted working hours during peak season",
+      "briefLabel": "Content / facts",
+      "briefPlaceholder": "Give the full facts: who, what, effective date, who it applies to, amounts if any…",
+      "briefHint": "This is the ONLY source of facts. Where information is missing the AI leaves a […] placeholder rather than guessing.",
+      "referenceLabel": "Reference template (optional)",
+      "referenceHint": "PDF/DOCX/TXT — the AI learns layout and tone, it does not copy figures. Used for this run only, never stored."
+    },
     "trend": {
       "title": "Industry trends",
       "desc": "Discuss patterns and directions in the event/activation industry.",

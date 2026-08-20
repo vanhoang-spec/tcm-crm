@@ -18,6 +18,11 @@ import {
 } from "@/lib/ai/prompts";
 import { buildBoardReportInput, buildBrainstormInput, buildCanvaBriefInput, buildContentWriterInput, buildCostSheetSnapshot } from "@/lib/ai/context";
 import { saveProjectFilesFromFormData } from "@/lib/ai/attachments";
+import { extractTextFromFile } from "@/lib/ai/extract-text";
+import { AI_FILE_MIME_TYPES, MAX_AI_FILE_BYTES } from "@/lib/ai-file-storage";
+import { getStringSetting } from "@/lib/settings";
+import { documentDraftPrompt } from "@/lib/ai/document-prompts";
+import { MAX_DOCUMENT_BRIEF, MAX_DOCUMENT_REF_CHARS, resolveDocumentType } from "@/lib/ai/document-types";
 import { buildIndustryQuery, isWebSearchConfigured, searchWeb } from "@/lib/ai/websearch";
 import { requirePermission } from "@/lib/permissions";
 
@@ -273,4 +278,60 @@ export async function loadAiPanel(): Promise<{ vis: Awaited<ReturnType<typeof ge
     configured: isAiConfigured(),
     webSearchOn: isWebSearchConfigured(),
   };
+}
+
+// ───────────────────────── 7. Soạn thảo văn bản hành chính / nhân sự / kế toán ─────────────────
+
+/**
+ * Soạn văn bản theo LOẠI (quyết định, thông báo, công văn, tờ trình, biên bản…).
+ *
+ * ⚠ KHÔNG LƯU GÌ CẢ — quyết định chủ dự án 20/08/2026: "nội dung AI làm ra thì user phải lưu xuống
+ * máy luôn, không lưu lại trên app". Cụ thể:
+ *  - File mẫu tham chiếu đọc trong BỘ NHỚ rồi bỏ. **CỐ Ý không gọi `saveProjectFilesFromFormData`**
+ *    như 3 công cụ Brainstorm/Content/Canva — hàm đó ghi file vào `ProjectFile` của dự án và ai xem
+ *    được dự án thì tải về được. Văn bản nhân sự/kế toán không được nằm trong kho file dự án.
+ *  - Bản soạn ra không ghi DB. Người dùng bấm Tải Word/PDF; F5 là mất.
+ * Đổi hành vi này là đổi một quyết định về DỮ LIỆU, phải hỏi chủ dự án.
+ *
+ * ⚠ Nội dung VẪN đi sang DeepSeek (API nước ngoài) — "không lưu trong app" khác "không rời công ty".
+ * Hộp xác nhận ở giao diện nói rõ điều đó.
+ */
+export async function draftDocument(_prev: AiState, formData: FormData): Promise<AiState> {
+  await requirePermission("ai.document");
+  const blocked = await guard();
+  if (blocked) return { error: blocked };
+
+  const t = await getTranslations("ai.errors");
+  const type = resolveDocumentType(String(formData.get("docType") ?? ""));
+  const brief = String(formData.get("brief") ?? "").trim().slice(0, MAX_DOCUMENT_BRIEF);
+  if (!type || !brief) return { error: t("MISSING_INPUT") };
+  const subject = String(formData.get("subject") ?? "").trim().slice(0, 300) || null;
+
+  try {
+    // File mẫu: đọc text rồi BỎ. Sai định dạng/quá lớn/không bóc được text thì vẫn soạn bình thường,
+    // chỉ mất phần tham chiếu — chặn cả lượt chạy vì một file hỏng là bắt người dùng làm lại từ đầu.
+    let referenceText: string | null = null;
+    let referenceName: string | null = null;
+    const file = formData.get("reference");
+    if (file instanceof File && file.size > 0 && file.size <= MAX_AI_FILE_BYTES && (AI_FILE_MIME_TYPES as readonly string[]).includes(file.type)) {
+      const extracted = await extractTextFromFile(Buffer.from(await file.arrayBuffer()), file.type, { maxChars: MAX_DOCUMENT_REF_CHARS });
+      if (extracted?.text.trim()) {
+        referenceText = extracted.text;
+        referenceName = file.name || null;
+      }
+    }
+
+    const companyName = await getStringSetting("company", "legal_name_vi", "Công ty Cổ phần Tiếp thị Tân Cường Minh");
+    // temperature thấp: văn bản hành chính cần đúng khuôn, không cần sáng tạo.
+    const doc = parseAiDoc(
+      await aiChatJson(withDocFormat(documentDraftPrompt({ type, subject, brief, referenceText, referenceName, companyName })), {
+        temperature: 0.3,
+        maxTokens: 6000,
+      }),
+    );
+    if (!doc) return { error: t("BAD_FORMAT") };
+    return { doc };
+  } catch (e) {
+    return { error: await toMessage(e) };
+  }
 }

@@ -119,7 +119,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | ⑨ | Chat nội bộ | `/chat` | Xong (1-1, group, file/ảnh/voice, reaction, poll, pin) |
 | ✦ | Creative | `/creative` | Xong (task board + cost-per-task kế hoạch vs thực tế) + **3 team nhỏ + điều phối + duyệt nhiều bên** (CR-1 + CR-1b: 3 team nhỏ, hạn bắt buộc, tab "Việc của tôi", một người duyệt rồi trả Account — xem mục 10.32) |
 | — | Dashboard | `/` | Xong (KPI kinh doanh theo team, cashflow MTD, tiến độ bộ phận) |
-| — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) · **Đợt 1 (20/08/2026)**: output là TÀI LIỆU CÓ CẤU TRÚC (heading/bảng/danh sách) thay vì text thuần, **xuất Word (.docx) và PDF** — mục 10.48 · **Review hợp đồng + soạn thảo văn bản HR/kế toán/hành chính**: chưa làm, ràng buộc ở mục 10.49 |
+| — | AI | `/ai` | Xong (rà soát CO/CE, brainstorm, báo cáo BGĐ — DeepSeek + Tavily) · **Đợt 1 (20/08/2026)**: output là TÀI LIỆU CÓ CẤU TRÚC (heading/bảng/danh sách) thay vì text thuần, **xuất Word (.docx) và PDF** — mục 10.48 · **Đợt 2 (20/08/2026)**: công cụ **Soạn thảo văn bản** — 9 loại (quyết định, thông báo, công văn, tờ trình, biên bản, quy chế, nhân sự, kế toán), KHÔNG lưu file mẫu và KHÔNG lưu bản soạn — mục 10.50 · **Review hợp đồng (đợt 3)**: chưa làm, ràng buộc ở mục 10.49 |
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Hồ sơ ISO | `/iso` | Xong (sổ đăng ký 25 loại hồ sơ / dự án, 8 loại app tự chấm, tab `/projects/[id]/iso`, xuất Excel 33 cột — xem mục 10.20) |
 | — | Bài đăng MKT | `/mkt` | Xong (bài LinkedIn/Fanpage: Account nộp ý chính + ảnh → AI DeepSeek viết riêng từng kênh → HR duyệt, copy đăng tay; banner nhịp tuần; phân tích insights quý — xem mục 10.23) |
@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 125 model Prisma · 74 migration · 86 file `src/lib` · 4264 key i18n × 2 ngôn ngữ · 146 mã quyền.
+**Quy mô:** 125 model Prisma · 74 migration · 90 file `src/lib` · 4304 key i18n × 2 ngôn ngữ · 147 mã quyền.
 
 ---
 
@@ -2577,6 +2577,68 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       `.doc` cũ và PDF scan vẫn không đọc được (mammoth chỉ `.docx`, pdf-parse cần PDF có text).
     - **Quyền**: nên có mã riêng cho việc gọi AI (tính tiền theo LƯỢT), mirror `mkt.generate` /
       `clients.kb.generate` — kiểm bằng `hasPermission` BÊN TRONG action đã có `requirePermission` khác.
+
+50. **AI — ĐỢT 2: SOẠN THẢO VĂN BẢN HÀNH CHÍNH / NHÂN SỰ / KẾ TOÁN (20/08/2026)** (KHÔNG migration;
+    **1 mã quyền mới: `ai.document`, 146 → 147**). Công cụ thứ 7 ở `/ai`: chọn LOẠI văn bản → nhập dữ
+    kiện → (tuỳ chọn) tải file mẫu tham chiếu → AI soạn theo bố cục hành chính → tải Word/PDF.
+    - ⚠ **KHÔNG LƯU GÌ CẢ — quyết định chủ dự án 20/08/2026**: *"nội dung AI làm ra thì user phải lưu
+      xuống máy luôn, không lưu lại trên app"*. Cụ thể: **file mẫu đọc trong BỘ NHỚ rồi bỏ**, bản soạn
+      không ghi DB, F5 là mất.
+      ⚠ **CỐ Ý KHÔNG gọi `saveProjectFilesFromFormData`** như 3 công cụ Brainstorm/Content/Canva — hàm
+      đó ghi file vào `ProjectFile` của dự án và **ai xem được dự án thì tải về được** qua
+      `/api/project-file/[id]`. Văn bản nhân sự/kế toán không được nằm trong kho file dự án. Đổi hành
+      vi này là đổi một quyết định về DỮ LIỆU, phải hỏi chủ dự án.
+      ⚠ Nội dung VẪN đi sang DeepSeek — "không lưu trong app" KHÁC "không rời công ty". Băng cảnh báo
+      trên form nói thẳng cả hai điều.
+    - **9 loại văn bản để ở CODE** (`lib/ai/document-types.ts`, khuôn `quote-templates.ts`): Quyết định ·
+      Thông báo nội bộ · Công văn gửi ra ngoài · Tờ trình/Đề xuất · Biên bản · Quy định/Quy chế · Văn
+      bản nhân sự · Văn bản kế toán · Khác. Mỗi loại mang **`outline`** — bố cục chuẩn đưa thẳng vào
+      prompt. ⚠ `outline` là thứ quyết định chất lượng: không có nó thì model trả một bài văn xuôi đúng
+      nội dung nhưng **sai khuôn văn bản** (thiếu "Nơi nhận", thiếu căn cứ, thiếu chỗ ký).
+    - **Ba luật quan trọng trong prompt** (`lib/ai/document-prompts.ts`):
+      · Thiếu thông tin thì **để `[…]`** và liệt kê ở cuối những chỗ còn trống — KHÔNG tự đoán cho đủ.
+      · **KHÔNG tự sinh số hiệu văn bản, KHÔNG tự điền ngày ban hành.**
+      · **KHÔNG viện dẫn điều luật cụ thể** (số nghị định, điều khoản BLLĐ) trừ khi người dùng đã nêu
+        chính xác — viện dẫn sai luật nguy hiểm hơn là không viện dẫn.
+      · File tham chiếu dùng để học **BỐ CỤC và CÁCH HÀNH VĂN**, KHÔNG chép số liệu sang văn bản mới.
+    - **Quyền `ai.document` — đúng 6 vai**: HR_MANAGER · HR_STAFF · **ADMIN_STAFF** · CFO ·
+      ACCOUNTANT_STAFF · BGĐ. Nhóm HR ở đây gồm cả ADMIN_STAFF và đó là CHỦ Ý (hành chính chính là
+      người soạn thông báo/quyết định nhiều nhất) — khác ca `mkt.review` phải lọc theo mã role để loại
+      ADMIN_STAFF. Backfill `20260820_ai_document` lọc theo MÃ ROLE.
+    - ⚠ **BẪY ĐÃ CẮN — `AI_ALL` trong seed là MÌN.** Có dòng cũ `extraByRole.PRODUCTION_MANAGER: AI_ALL`
+      (cấp trọn gói AI cho đúng một người từ thời `getAiVisibility` cũ). Thêm `ai.document` vào `AI_ALL`
+      là **âm thầm cấp quyền soạn văn bản nhân sự cho Trưởng phòng Sản xuất**, VÀ làm hai đường lệch
+      nhau: DB dựng-từ-đầu **7 vai**, DB đang chạy (đi backfill lọc theo role) **6 vai**. Chỉ lộ ra khi
+      ĐO cả hai bên — cùng họ với bẫy cấp-theo-nhóm ở mục 10.15. Đã đổi tên thành **`AI_LEGACY_ALL`**
+      và đóng băng: **ĐỪNG thêm mã AI mới vào hằng đó**, mã mới thì khai policy riêng. Sau khi vá: cả
+      hai đường ra **đúng 6 vai, cùng danh sách**.
+    - **Sửa kèm hai chỗ HỒI QUY do đợt 1 (mục 10.48) gây ra**, phát hiện lúc làm giao diện: `RunButton`
+      và nhãn nguồn gốc của Xu hướng ngành còn đọc `state.text` trong khi kết quả nay nằm ở `state.doc`
+      ⇒ nút không bao giờ đổi thành "Chạy lại" và nhãn "có/không có nguồn kiểm chứng" biến mất. Đã đổi
+      6 chỗ `hasResult` + 1 chỗ nhãn.
+    - **Verify trên browser thật, 2 lượt gọi AI THẬT:**
+      · **Văn bản kế toán** (đề nghị thanh toán NCC Sông Lam, cố ý thiếu số hợp đồng và số hoá đơn):
+        ra đúng khuôn "Kính gửi / V/v / Căn cứ thực hiện / bảng kê / đề nghị", **bảng 4 cột** (Nội dung
+        · Số tiền chưa VAT · VAT 8% · Ghi chú) với **số học đúng** (15.300.000 × 8% = 1.224.000 ·
+        4.200.000 × 8% = 336.000 · tổng 19.500.000 / 1.560.000), và **để `[…]`** cho số hợp đồng + số
+        hoá đơn thay vì bịa. **0 ký tự markdown.**
+      · **Thông báo nội bộ có KÈM FILE MẪU** (`mau-thong-bao.txt` mang "Số: 12/2026/TB-TCM"): bản soạn
+        học đúng bố cục ra `Số: […] /2026/TB-TCM` — **học khuôn nhưng KHÔNG chép số hiệu của mẫu**, có
+        "Nơi nhận".
+      · **KHÔNG LƯU GÌ — đo sau khi chạy**: `ProjectFile` **0** · `storage/ai` **0 file** · `AuditLog`
+        **88 (không đổi)** · `find storage -newermt "-10 minutes"` **rỗng** · không dấu vết tên file.
+      · **Cổng quyền**: act-as TRƯƠNG VĂN TƯƠI (ACCOUNT_STAFF) → `/ai` chỉ còn **5 công cụ, KHÔNG có
+        Soạn thảo văn bản** (chuỗi tên công cụ vẫn nằm trong HTML vì bundle i18n dùng chung toàn app —
+        không phải dữ liệu). Cổng server là `requirePermission("ai.document")` ở **câu lệnh đầu tiên**
+        của action, cùng cơ chế với ~220 action khác. ⚠ **Chưa giả mạo được lời gọi action** để thử
+        cổng server độc lập: React 19 không phơi `$ACTION_ID` của form này ra hidden input (phải bắt
+        gói mạng rồi phát lại) — nếu ngày nào cần bằng chứng đó thì phải đi đường capture network.
+      · tsc · eslint · i18n **0/0 (4304 key)** · `next build` sạch · seed lần hai no-op · grant dev.db
+        1336 → **1342** (+6, đúng bằng số vai).
+    - **CHƯA LÀM (cố ý):** chưa có mẫu Word mang letterhead/logo TCM — file xuất ra là văn bản trơn ·
+      chưa lưu lịch sử bản soạn (đúng quyết định "không lưu") · chưa nhập được nhiều file mẫu cùng lúc
+      · chưa có bước duyệt nội bộ trước khi phát hành · **Review hợp đồng (đợt 3) vẫn chưa làm** — bốn
+      ràng buộc ở mục 10.49 còn nguyên.
 
 ---
 

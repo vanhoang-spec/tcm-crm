@@ -235,6 +235,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "ai.canva", module: "ai", labelVi: "AI brief thiết kế", labelEn: "AI design brief" },
   { code: "ai.board_report", module: "ai", labelVi: "AI báo cáo BGĐ", labelEn: "AI board report", sensitive: true },
   { code: "ai.trend", module: "ai", labelVi: "AI xu hướng ngành", labelEn: "AI industry trends" },
+  { code: "ai.document", module: "ai", labelVi: "AI soạn thảo văn bản", labelEn: "AI document drafting" },
 
   // ── Cơ sở tri thức ──
   { code: "kb.view", module: "kb", labelVi: "Xem tài liệu", labelEn: "View knowledge base" },

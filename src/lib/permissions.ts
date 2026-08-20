@@ -147,6 +147,7 @@ export type AiVisibility = {
   canCostSheet: boolean;
   canBoardReport: boolean;
   canTrend: boolean;
+  canDocument: boolean;
 };
 
 export async function getAiVisibility(): Promise<AiVisibility> {
@@ -158,5 +159,6 @@ export async function getAiVisibility(): Promise<AiVisibility> {
     canCostSheet: p.has("ai.costsheet"),
     canBoardReport: p.has("ai.board_report"),
     canTrend: p.has("ai.trend"),
+    canDocument: p.has("ai.document"),
   };
 }

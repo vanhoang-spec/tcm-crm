@@ -2468,7 +2468,42 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `afa18f1`** (19/08/2026 13:18) — gói 6 commit: **Họp Account tuần (/meetings, MEET-1+2)** ·
+**Production đang chạy `be0a01e`** (20/08/2026 16:03) — **Thu mua PUR-3a**: 8 nhóm hàng dựng lại từ 23 file báo giá
+NCC thật · thuế khai theo % ở form (mặc định cả bảng, sửa được theo dòng) · tổng có "bằng chữ" · file Excel mẫu thêm
+cột Tiền thuế — mục 10.46; kèm quyết định hợp đồng NCC ở mục 10.47. Chạy `bash scripts/deploy.sh` **đường LAN
+192.168.1.111:22**, fingerprint khớp. **KHÔNG migration mới** (74, "No pending migrations"), **KHÔNG mã quyền mới**.
+Backup TRƯỚC deploy: `~/backup/*-20260820-160259*` trên server + `D:/TCM/backup-prod-20260820-160259/` máy dev.
+
+⚠ Trước lần này production đang chạy `b3b5672` (gồm cả xoá chặn hợp đồng/PO khi vào Đang triển khai · xoá người liên
+hệ khách · nháp tự lưu · tìm thông minh nhân sự — mục 10.43 → 10.45); §11 khi đó chưa được cập nhật, khối "Deploy
+trước đó" ngay dưới vẫn ghi `afa18f1`.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — **khớp từng số, không đổi một dòng nào** (đúng như mong đợi
+với một đợt thuần code):
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 37 / 68 / 24 | **37 / 68 / 24** |
+| coTotal + ceTotal 4 bảng CO/CE | (8 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO/CE / NCC / nhóm NCC | 481 / 20 / 20 | **481 / 20 / 20** |
+| dòng grant quyền | 1336 | **1336 — không đổi** |
+| RFQ | 0 | **0** (chưa ai lập, đúng như mong đợi) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Health check: `/login` **200** · `/purchasing`, `/purchasing/rfq/new`, `/purchasing/vendors` đều **307** về login ·
+`/api/rfq/x/template.xlsx` **401** · cổng NCC với token sai trả 200 nhưng **không có thẻ `<form>` nào** (chỉ trang báo
+link không hợp lệ) · pm2 `online` · `[jobs] scheduler bật`.
+
+⚠ **VIỆC CẦN LÀM TRƯỚC KHI PUR DÙNG BẢN MỚI:** 20 NCC trên production đang gắn nhóm theo bộ 6 nhóm CŨ. Nhóm
+`SPECIAL_STRUCTURE` đã gỡ khỏi danh mục — đo trước deploy là **0 NCC gắn nhóm đó** nên không mất dữ liệu, nhưng 2 nhóm
+MỚI (`LOGISTICS`, `GOODS_PURCHASE`) hiện **chưa NCC nào được gắn**, nên lập RFQ hai nhóm này sẽ thấy danh sách NCC rỗng
+— bật "Hiện mọi NCC" để mời, rồi gắn nhóm lại cho NCC ở `/purchasing/vendors`.
+
+---
+
+### Deploy trước đó — 19/08/2026 lúc 13:18
+
+**Production khi đó chạy `afa18f1`** (19/08/2026 13:18) — gói 6 commit: **Họp Account tuần (/meetings, MEET-1+2)** ·
 **mã lô v3** (SẢN PHẨM `PO-0042` tách khỏi LÔ `PO-0042.01`, nhóm 2 ký tự) · **Kho K6 + K6-3 + K6-4** (duyệt theo CHỦ
 SỞ HỮU, duyệt từng dòng 0..n, Order OPE/PRO mang vật dụng, hàng overhead → Senior HR Manager duyệt) · **Kho K7** (khép
 flow trước tồn đầu kỳ) — mục 10.39 → 10.42. Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint

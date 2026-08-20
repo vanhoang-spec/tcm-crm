@@ -2519,10 +2519,13 @@ Health check: `/login` **200** · `/purchasing`, `/purchasing/rfq/new`, `/purcha
 `/api/rfq/x/template.xlsx` **401** · cổng NCC với token sai trả 200 nhưng **không có thẻ `<form>` nào** (chỉ trang báo
 link không hợp lệ) · pm2 `online` · `[jobs] scheduler bật`.
 
-⚠ **VIỆC CẦN LÀM TRƯỚC KHI PUR DÙNG BẢN MỚI:** 20 NCC trên production đang gắn nhóm theo bộ 6 nhóm CŨ. Nhóm
-`SPECIAL_STRUCTURE` đã gỡ khỏi danh mục — đo trước deploy là **0 NCC gắn nhóm đó** nên không mất dữ liệu, nhưng 2 nhóm
-MỚI (`LOGISTICS`, `GOODS_PURCHASE`) hiện **chưa NCC nào được gắn**, nên lập RFQ hai nhóm này sẽ thấy danh sách NCC rỗng
-— bật "Hiện mọi NCC" để mời, rồi gắn nhóm lại cho NCC ở `/purchasing/vendors`.
+**Deploy tiếp theo cùng ngày — `0d7d12d` (20/08/2026 16:5x): gắn nhóm hàng cho NCC + 10 NCC mới.** Không migration,
+không mã quyền mới. Đo trên production sau seed (NCC đang hoạt động / nhóm): thiết bị 4 · AV 7 · POSM 4 · sản xuất 4 ·
+nhân sự 2 · **vận chuyển 2 (NQL, EVD)** · **mua sắm 10** · Khác 0; **30 NCC tổng, 27 hoạt động**, 3 NCC mẫu demo đã tắt.
+Hai marker `20260820_pur_vendor_groups` = `{added:2}` và `20260820_pur_vendors_new` = `{created:10, demoDisabled:3}`.
+Dữ liệu cũ không đổi: 37 nhân sự · 68 khách · 24 dự án · 481 dòng CO · 1336 grant. Chi tiết ở mục 10.46.
+
+⚠ **Nhóm `OTHER` không có NCC nào là ĐÚNG** — đó là mẫu hứng ca chưa thuộc nhóm; lập RFQ nhóm đó thì bật "Hiện mọi NCC".
 
 ---
 

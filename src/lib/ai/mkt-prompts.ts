@@ -155,3 +155,101 @@ export function mktInsightsPrompt(input: MktInsightsInput): AiMessage[] {
     { role: "user", content: lines.join("\n") },
   ];
 }
+
+// ─────────────────────────────────────────────────────────
+// MKT-2a — Brief cho designer
+// ─────────────────────────────────────────────────────────
+
+const DESIGN_BRIEF_SYSTEM = `Bạn là art director của TCM. ${AGENCY}
+Nhiệm vụ: từ bài đăng đã viết, soạn BRIEF NGẮN cho designer/video maker làm hình ảnh đi kèm.
+
+Brief bằng tiếng Việt, TEXT THUẦN (không markdown, không dấu # hay *), đúng 5 mục, mỗi mục 1–3 dòng:
+THÔNG ĐIỆP CHÍNH — một câu, hình ảnh phải truyền được ý này.
+Ý TƯỞNG HÌNH — gợi ý bố cục/chủ thể/mood; nếu bài có ảnh thật thì ưu tiên dùng ảnh thật, chỉ gợi
+  cách chọn/cắt.
+CHỮ TRÊN HÌNH — tối đa 1 headline ≤ 8 từ và 1 dòng phụ (nếu cần); lấy từ nội dung bài, KHÔNG bịa.
+KÍCH THƯỚC — LinkedIn 1200×627 (ngang) hoặc 1080×1080; Fanpage 1080×1080 hoặc 1080×1350; ghi rõ
+  kênh nào cần cỡ nào theo danh sách kênh được cung cấp.
+LƯU Ý — frame/logo TCM theo mẫu sẵn có; điều KHÔNG được làm (vd không dùng logo khách nếu chưa
+  được phép).
+
+Chỉ dùng dữ kiện trong bài và ý chính; không thêm tên khách hàng/số liệu không có sẵn.
+Chỉ trả về JSON đúng khuôn {"brief":"..."} — không lời dẫn, không bọc markdown.`;
+
+export type MktDesignBriefInput = {
+  title: string;
+  keyPoints: string;
+  channels: string[];
+  /** Nội dung bài từng kênh đã có (nếu chưa có thì rỗng — brief dựa vào ý chính). */
+  contents: { channel: string; content: string }[];
+  imageCount: number;
+  contentTypeLabel: string | null;
+};
+
+export function mktDesignBriefPrompt(input: MktDesignBriefInput): AiMessage[] {
+  const lines = [
+    `Tiêu đề làm việc: ${input.title}`,
+    `Loại nội dung: ${input.contentTypeLabel ?? "Khác"}`,
+    `Kênh sẽ đăng: ${input.channels.join(", ")}`,
+    `Ảnh thật đã có: ${input.imageCount > 0 ? `${input.imageCount} ảnh` : "chưa có"}`,
+    "",
+    "Ý CHÍNH:",
+    input.keyPoints,
+  ];
+  for (const c of input.contents) {
+    if (c.content.trim()) lines.push("", `NỘI DUNG BÀI (${c.channel}):`, c.content.slice(0, 3000));
+  }
+  return [
+    { role: "system", content: DESIGN_BRIEF_SYSTEM },
+    { role: "user", content: lines.join("\n") },
+  ];
+}
+
+// ─────────────────────────────────────────────────────────
+// MKT-2a — AI đề xuất MASTER PLAN theo tuần
+// ─────────────────────────────────────────────────────────
+
+const PLAN_SYSTEM = `Bạn là content planner cho TCM. ${AGENCY}
+TCM đăng 2 kênh: LinkedIn (chính, giọng B2B, ${MKT_WEEKLY_TARGET.LINKEDIN.min}–${MKT_WEEKLY_TARGET.LINKEDIN.max} bài/tuần) và Fanpage Facebook
+(phụ, giọng trẻ trung, ${MKT_WEEKLY_TARGET.FANPAGE.min}–${MKT_WEEKLY_TARGET.FANPAGE.max} bài/tuần). Một đề tài có thể đăng cả hai kênh (mỗi kênh một bản viết riêng).
+
+Nhiệm vụ: đề xuất KẾ HOẠCH NỘI DUNG cho các tuần được liệt kê — mỗi tuần 1–2 đề tài, mỗi đề tài
+ghi rõ kênh.
+
+QUY TẮC BẮT BUỘC:
+- Đề tài phải là thứ TCM THẬT SỰ CÓ THỂ VIẾT mà không cần bịa: góc nhìn nghề event/activation, quy
+  trình làm việc, bài học vận hành, văn hoá đội ngũ, tuyển dụng, dịp lễ/mùa vụ của thị trường Việt
+  Nam rơi vào đúng tuần đó (Tết, 8/3, 30/4, 1/6, Trung thu, 20/10, 20/11, Giáng sinh, cuối năm…).
+- TUYỆT ĐỐI không bịa tên khách hàng, tên dự án, số liệu, giải thưởng. Đề tài cần dữ kiện thật
+  (recap dự án, con số) thì trong keyPoints ghi chỗ trống dạng "[cần điền: tên dự án/khách đã được
+  phép truyền thông]", "[cần điền: số liệu]" để HR/Account bổ sung.
+- Không trùng hoặc na ná các bài ĐÃ ĐĂNG / ĐÃ LÊN KẾ HOẠCH được liệt kê.
+- Xoay vòng loại nội dung, không 2 tuần liền cùng một loại.
+- keyPoints: 3–6 gạch đầu dòng (mỗi dòng bắt đầu bằng "- "), đủ để người viết triển khai.
+- contentTypeCode chỉ được chọn trong danh sách mã cung cấp, không rõ thì null.
+- weekStart chỉ được là một trong các thứ Hai đã liệt kê, định dạng YYYY-MM-DD.
+- Chỉ trả về JSON đúng khuôn {"items":[{"weekStart":"YYYY-MM-DD","title":"...","keyPoints":"- ...\n- ...","channels":["LINKEDIN","FANPAGE"],"contentTypeCode":"..."}]} — không lời dẫn, không bọc markdown.`;
+
+export type MktPlanSuggestInput = {
+  /** Các thứ Hai (YYYY-MM-DD) cần lên kế hoạch, theo thứ tự. */
+  weeks: string[];
+  contentTypes: { code: string; label: string }[];
+  recentTitles: string[];
+  plannedTitles: string[];
+};
+
+export function mktPlanSuggestPrompt(input: MktPlanSuggestInput): AiMessage[] {
+  const lines = [
+    "CÁC TUẦN CẦN LÊN KẾ HOẠCH (thứ Hai đầu tuần):",
+    ...input.weeks.map((w) => `- ${w}`),
+    "",
+    "LOẠI NỘI DUNG (mã — nhãn):",
+    ...input.contentTypes.map((c) => `- ${c.code} — ${c.label}`),
+  ];
+  if (input.recentTitles.length) lines.push("", "BÀI ĐÃ ĐĂNG GẦN ĐÂY (tránh trùng):", ...input.recentTitles.map((x) => `- ${x}`));
+  if (input.plannedTitles.length) lines.push("", "ĐÃ LÊN KẾ HOẠCH (tránh trùng):", ...input.plannedTitles.map((x) => `- ${x}`));
+  return [
+    { role: "system", content: PLAN_SYSTEM },
+    { role: "user", content: lines.join("\n") },
+  ];
+}

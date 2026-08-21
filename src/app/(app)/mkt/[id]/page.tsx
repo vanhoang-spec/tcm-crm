@@ -10,6 +10,7 @@ import { MKT_CHANNELS, isMktChannel } from "@/lib/mkt";
 import type { Locale } from "@/i18n/locales";
 import { VariantPanel, type VariantView } from "./variant-panel";
 import { DeletePostButton, DeleteImageButton } from "./post-actions";
+import { DesignBriefPanel } from "./design-brief-panel";
 
 export default async function MktPostDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("mkt.view");
@@ -30,6 +31,7 @@ export default async function MktPostDetailPage({ params }: { params: Promise<{ 
       title: true,
       keyPoints: true,
       driveUrl: true,
+      designBrief: true,
       createdAt: true,
       contentType: { select: { labelVi: true, labelEn: true } },
       project: { select: { code: true, name: true, client: { select: { name: true } } } },
@@ -131,6 +133,8 @@ export default async function MktPostDetailPage({ params }: { params: Promise<{ 
           </>
         )}
       </section>
+
+      <DesignBriefPanel postId={post.id} brief={post.designBrief} canGenerate={canGenerate} aiConfigured={isAiConfigured()} />
 
       {variants.map((v) => (
         <VariantPanel

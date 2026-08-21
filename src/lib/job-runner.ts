@@ -11,6 +11,7 @@ import {
 import { checkSpecialOccasions } from "./occasions";
 import { checkChatReminders } from "./chat-reminders";
 import { checkPendingPush } from "./push";
+import { runMktPlanAutoDraft } from "./mkt-plan-server";
 
 // ─────────────────────────────────────────────────────────
 // Chạy các job kiểm-và-nhắc theo lịch.
@@ -59,6 +60,9 @@ const JOBS: [string, () => Promise<unknown>][] = [
   ["ar-overdue", checkArOverdueReminders],
   ["inventory-expiry", checkExpiryWarnings],
   ["special-occasions", checkSpecialOccasions],
+  // MKT-2a: dựng bài từ master plan khi tới hạn. Job trả về nhanh — phần AI thả chạy nền (xem
+  // mkt-plan-server.ts). Đặt TRƯỚC push-dispatch để thông báo "đã dựng bài" được đẩy ngay chu kỳ này.
+  ["mkt-plan-autodraft", runMktPlanAutoDraft],
   // ⚠ ĐẶT CUỐI DANH SÁCH: các job trên có thể vừa tạo thông báo mới, chạy sau thì đẩy luôn trong
   // cùng một chu kỳ thay vì đợi thêm 5 phút nữa.
   ["push-dispatch", checkPendingPush],

@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 128 model Prisma · 76 migration · 96 file `src/lib` · 4412 key i18n × 2 ngôn ngữ · 148 mã quyền.
+**Quy mô:** 129 model Prisma · 77 migration · 98 file `src/lib` · 4478 key i18n × 2 ngôn ngữ · 148 mã quyền.
 
 ---
 
@@ -3031,6 +3031,65 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       `claude -p` tự chẩn đoán khi CI đỏ (làm sau khi CI chạy ổn vài tuần) · staging environment ·
       build trên CI rồi copy `.next` sang server (giữ build-trên-server vì đã chứng minh an toàn:
       hỏng build thì app cũ nguyên vẹn).
+
+58. **MKT-2a — MASTER PLAN + TỰ DỰNG BÀI + BRIEF DESIGNER (21/08/2026)** (migration
+    `20260821100000_mkt_plan` — bảng MỚI `mkt_plan_item` + cột `mkt_post.designBrief`, 0 lệnh DROP;
+    **KHÔNG mã quyền mới** — dùng lại `mkt.view` / `mkt.review` / `mkt.generate`). Mục tiêu chủ dự án:
+    đưa vòng content về gần tự động hoàn toàn, chỉ còn 1 designer + một cú bấm duyệt.
+    - **Vòng đời mới:** HR lên master plan theo TUẦN (hoặc bấm "AI đề xuất 4 tuần tới") → tới hạn
+      (**3 ngày trước thứ Hai của tuần**, hằng `MKT_PLAN_LEAD_DAYS`) thì **bộ hẹn giờ 5 phút TỰ dựng
+      bài** + variant theo kênh → **AI viết nháp từng kênh** → **AI soạn brief cho designer** → báo HR
+      "chờ duyệt" + báo designer "có brief". HR chỉ còn sửa nội dung và bấm đã đăng.
+    - ⚠ **BẤT BIẾN NẶNG NHẤT: phần AI trong job là FIRE-AND-FORGET (không await).** `runDueJobs` được
+      `(app)/layout.tsx` AWAIT khi render trang (lưới an toàn, mục 10.10) — một lượt AI tới 75s × 2
+      kênh + brief nằm trong job là **trang của người dùng treo hơn 3 phút**. Job chỉ ghi DB + bắn
+      notification rồi thả promise chạy nền. Tiến trình restart giữa chừng thì bài nằm ở DRAFT không
+      có nháp; HR bấm nút AI tay là xong, không mất gì.
+    - ⚠ **Chống dựng trùng bằng claim `updateMany` có `status: "PLANNED"` trong `where`** (khuôn
+      `moveBudget` của Overhead): count === 0 nghĩa là tick trước / instance khác đã lấy dòng đó.
+      Verify bằng số: chạy job lần hai ⇒ `drafted: 0`, vẫn đúng 1 bài.
+    - ⚠ **HAI QUY ƯỚC NGÀY SỐNG CẠNH NHAU — đừng trộn.** `weekStartLocal` (có sẵn từ MKT-1) là mốc
+      THỜI GIAN THẬT của bài đã đăng; `planWeekUtc` (mới) là thứ Hai của tuần kế hoạch lưu
+      **UTC-midnight** theo quy ước ngày nghiệp vụ (mục 4.3). So "hôm nay" với `weekStart` phải đi qua
+      `planWeekUtc`/`planDueCutoff`, cả hai đọc thành phần ngày ĐỊA PHƯƠNG — test có hẳn ca 02:41
+      sáng thứ Hai và 01:00 sáng thứ Sáu, đúng lớp bug đã vá ở Kho v2 K4.
+    - ⚠ **`lib/mkt-ai-server.ts` là MỘT lõi gọi AI** cho cả nút bấm tay (`ai-actions.ts`) lẫn job.
+      Tách khỏi file `"use server"` vì job không có request context (không `getCurrentStaffId`, không
+      `getTranslations`) và vì mọi export của file action là endpoint gọi được từ client. Lõi KHÔNG
+      gác quyền — người gọi gác.
+    - **AI đề xuất kế hoạch chỉ TRẢ VỀ FORM**, không ghi thẳng (mirror `parseCvWithAi`): HR sửa/bỏ
+      từng dòng rồi bấm "Lưu vào kế hoạch" mới ghi. Kết quả nằm trong state của panel — rời trang là
+      mất, đúng chuẩn mọi đường AI khác của repo.
+    - ⚠ **Lọc lại output AI bằng CODE, không tin model:** tuần phải nằm trong danh sách đã đưa vào
+      prompt, mã loại nội dung phải có thật trong OptionSet (`typeByCode`), kênh qua `channelsToCsv`.
+      Prompt bắt AI ghi `[cần điền: …]` khi cần dữ kiện thật thay vì bịa — verify thấy AI dùng đúng.
+    - **Brief designer** (`MktPost.designBrief`): 5 mục cố định (thông điệp · ý tưởng hình · chữ trên
+      hình · kích thước theo kênh · lưu ý). Người nhận khai ở setting `mkt.designer_staff_ids`
+      (tick trên trang Kế hoạch) — ⚠ **lọc `isActive` lúc đọc**, con trỏ tới người đã nghỉ bị bỏ, đúng
+      bài học trưởng team Creative đã nghỉ (mục 10.32 CR-1c). Chưa tick ai thì brief vẫn soạn và nằm
+      trong bài, chỉ không ai được báo — trang nói rõ điều đó.
+    - **Dòng đã DRAFTED KHÔNG sửa/xoá được ở trang Kế hoạch nữa** (server chặn `LOCKED`) — mọi thứ
+      tiếp theo sống ở bài đăng. Dòng chưa dựng thì sửa / bỏ qua (`SKIPPED`) / xoá / **"Dựng bài
+      ngay"** (cùng đường `draftPlanItem` với job).
+    - **Verify: 28/28 test thuần** (tuần/hạn/CSV/Zod/prompt) **+ 16/16 test job** chạy trên dev.db
+      (dựng đúng 1 dòng tới hạn, bỏ qua dòng chưa tới hạn và dòng SKIPPED; bài mang đúng tiêu đề/ý
+      chính/loại; đúng 2 variant; báo đúng 3 người có `mkt.review`; chạy lần hai không trùng;
+      designer lọc người đã nghỉ) **+ browser end-to-end với AI THẬT**: bấm "AI đề xuất 4 tuần tới" ⇒
+      4 đề tài hợp lệ (có mùa vụ Trung thu, có `[cần điền: …]`, tuần đều nằm trong danh sách) → lưu 4
+      dòng → "Dựng bài ngay" ⇒ bài LinkedIn **1.324 ký tự** giọng B2B 5 hashtag **0 ký tự markdown**,
+      brief **631 ký tự** đủ 5 mục đúng kích thước LinkedIn, thông báo bay đúng 3 người duyệt + đúng 2
+      designer đã tick. tsc · eslint · i18n **0/0 (4478 key)** · `next build` sạch có route `/mkt/plan`
+      · `migrate diff` rỗng · `db:seed` chạy lại sạch.
+    - ⚠ **DỌN DẸP SAU TEST — CÓ MỘT SƠ SUẤT ĐÃ GHI NHẬN:** lệnh dọn xoá `AuditLog` theo
+      `entityType IN ("mkt","mkt_plan")` nên **xoá luôn 9 dòng audit CŨ của module MKT-1** trên dev.db
+      (88 → 79). dev.db là sandbox (mục 8.2) nên không ảnh hưởng gì tới production, nhưng lần sau dọn
+      audit phải lọc thêm theo `createdAt`/`reason`, đừng xoá theo entityType trần.
+    - **CHƯA LÀM (đúng phạm vi 2a — muốn thêm phải hỏi chủ dự án):** **KHÔNG nối API đăng bài** (vẫn
+      copy đăng tay, đúng quyết định MKT-1 — nối Facebook/LinkedIn là đợt 2b, cần lập App + duyệt
+      chương trình, LinkedIn company page là cửa hẹp nhất) · chưa tự kéo insights qua API (2c) · chưa
+      có cờ "dự án được phép truyền thông" trên `Project` nên AI KHÔNG được tự lấy đề tài từ CRM ·
+      chưa nhắc "tuần sau chưa có bài nào" qua notification · chưa gắn ảnh tự động vào bài dựng từ
+      kế hoạch (designer vẫn upload tay).
 
 ---
 

@@ -5,11 +5,12 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { hasPermission, requirePermission } from "@/lib/permissions";
-import { AiError, aiChat, aiChatJson, isAiConfigured } from "@/lib/ai/deepseek";
+import { AiError, aiChat, isAiConfigured } from "@/lib/ai/deepseek";
 import { extractTextFromFile } from "@/lib/ai/extract-text";
-import { mktInsightsPrompt, mktVariantPrompt } from "@/lib/ai/mkt-prompts";
+import { mktInsightsPrompt } from "@/lib/ai/mkt-prompts";
 import { readMktFile } from "@/lib/mkt-storage";
-import { buildQuarterStats, isMktChannel, mktAiContentSchema, quarterRange, type MktChannel } from "@/lib/mkt";
+import { aiDesignBrief, aiDraftVariant } from "@/lib/mkt-ai-server";
+import { buildQuarterStats, isMktChannel, quarterRange, type MktChannel } from "@/lib/mkt";
 import type { MktState } from "./actions";
 
 /**
@@ -67,52 +68,38 @@ export async function generateVariant(
   const blocked = await guard();
   if (blocked) return { aiError: blocked };
 
-  const post = await prisma.mktPost.findUnique({
-    where: { id: postId },
-    select: {
-      title: true,
-      keyPoints: true,
-      contentType: { select: { labelVi: true } },
-      project: { select: { code: true, name: true, client: { select: { name: true } } } },
-      _count: { select: { images: true } },
-      variants: { where: { channel }, select: { id: true, status: true } },
-    },
-  });
-  const variant = post?.variants[0];
-  if (!post || !variant) return { error: "NOT_FOUND" };
-  if (variant.status === "POSTED") return { error: "LOCKED" };
-
-  let content: string;
+  // Lõi AI ở lib/mkt-ai-server.ts — chung với job tự dựng bài từ master plan (MKT-2a). Action chỉ còn
+  // gác quyền, dịch lỗi, audit, revalidate.
+  let step;
   try {
-    const raw = await aiChatJson<unknown>(
-      mktVariantPrompt(channel, {
-        title: post.title,
-        keyPoints: post.keyPoints,
-        contentTypeLabel: post.contentType?.labelVi ?? null,
-        projectCode: post.project?.code ?? null,
-        projectName: post.project?.name ?? null,
-        clientName: post.project?.client?.name ?? null,
-        imageCount: post._count.images,
-      }),
-      // Fanpage nóng hơn để có giọng trẻ; LinkedIn giữ thấp cho ổn định văn phong công ty.
-      { temperature: channel === "FANPAGE" ? 0.7 : 0.5, maxTokens: 1600 },
-    );
-    const parsed = mktAiContentSchema.safeParse(raw);
-    if (!parsed.success) return { error: "AI_SHAPE" };
-    content = parsed.data.content;
+    step = await aiDraftVariant(postId, channel);
   } catch (e) {
     return { aiError: await toMessage(e) };
   }
-
-  // Guard trạng thái: giữa lúc gọi AI (tới 75s) có thể đã có người đánh dấu ĐÃ ĐĂNG — ghi đè lúc
-  // đó là sửa nội dung của bài đang nằm ngoài kia.
-  const res = await prisma.mktPostVariant.updateMany({
-    where: { id: variant.id, status: { in: ["DRAFT", "AI_DRAFTED"] } },
-    data: { aiDraft: content, finalContent: content, status: "AI_DRAFTED", aiDraftedAt: new Date() },
-  });
-  if (res.count === 0) return { error: "WRONG_STATE" };
+  if (!step.ok) return { error: step.code };
 
   await audit(postId, `AI draft ${channel}`);
+  revalidatePath(`/mkt/${postId}`);
+  return { success: true };
+}
+
+/**
+ * AI soạn BRIEF cho designer (MKT-2a) — cùng cửa gác hai lớp như viết bài. Ghi đè brief cũ (HR đã
+ * được hỏi xác nhận ở client).
+ */
+export async function generateDesignBrief(postId: string, _prev: MktState, _formData: FormData): Promise<MktState> {
+  await requirePermission("mkt.view");
+  if (!(await hasPermission("mkt.generate"))) return { error: "NO_GENERATE_PERM" };
+  const blocked = await guard();
+  if (blocked) return { aiError: blocked };
+  let step;
+  try {
+    step = await aiDesignBrief(postId);
+  } catch (e) {
+    return { aiError: await toMessage(e) };
+  }
+  if (!step.ok) return { error: step.code };
+  await audit(postId, "AI design brief");
   revalidatePath(`/mkt/${postId}`);
   return { success: true };
 }

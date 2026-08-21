@@ -186,3 +186,90 @@ export function buildQuarterStats(posted: PostedMark[], year: number, quarter: n
   }
   return { totals, weekCount: weeks.length, weeks };
 }
+
+// ─────────────────────────────────────────────────────────
+// MKT-2a — MASTER PLAN nội dung (HÀM THUẦN)
+//
+// Dòng kế hoạch neo vào THỨ HAI của tuần, lưu UTC-midnight theo quy ước ngày nghiệp vụ (HANDOVER
+// 4.3) — KHÁC với `weekStartLocal` ở trên (mốc thời gian thật của bài đã đăng). Hai quy ước, hai
+// hàm; đừng trộn: so "hôm nay" với weekStart phải đi qua `planWeekUtc(new Date())`.
+// ─────────────────────────────────────────────────────────
+
+export const MKT_PLAN_STATUSES = ["PLANNED", "DRAFTED", "SKIPPED"] as const;
+export type MktPlanStatus = (typeof MKT_PLAN_STATUSES)[number];
+
+/**
+ * Dựng bài TRƯỚC thứ Hai của tuần bao nhiêu ngày. 3 = thứ Sáu tuần trước: HR có cuối tuần + sáng thứ
+ * Hai để duyệt, designer có thời gian làm ảnh trước khi bài cần lên.
+ */
+export const MKT_PLAN_LEAD_DAYS = 3;
+
+/** Số tuần kế hoạch AI đề xuất một lượt và số tuần hiện trên trang. */
+export const MKT_PLAN_HORIZON_WEEKS = 4;
+
+/** Thứ Hai (UTC-midnight) của tuần chứa ngày địa phương `d`. */
+export function planWeekUtc(d: Date): Date {
+  const m = weekStartLocal(d);
+  return new Date(Date.UTC(m.getFullYear(), m.getMonth(), m.getDate()));
+}
+
+/** Cộng N tuần vào một mốc thứ Hai UTC-midnight. */
+export function addWeeksUtc(weekStart: Date, n: number): Date {
+  return new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 7 * n));
+}
+
+/** "YYYY-MM-DD" của mốc UTC-midnight — khoá so sánh/tra cứu, không phải chuỗi hiển thị. */
+export function weekKey(weekStart: Date): string {
+  return weekStart.toISOString().slice(0, 10);
+}
+
+/** Parse "YYYY-MM-DD" phải là THỨ HAI → UTC-midnight; sai khuôn hoặc không phải thứ Hai → null. */
+export function parseWeekKey(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (Number.isNaN(d.getTime()) || weekKey(d) !== s) return null;
+  return d.getUTCDay() === 1 ? d : null;
+}
+
+/**
+ * Mốc "tuần nào đã tới hạn dựng bài": mọi dòng PLANNED có weekStart ≤ mốc này thì job dựng. Tính
+ * từ NGÀY ĐỊA PHƯƠNG hôm nay + lead — đúng bài học 0–7h sáng ở Kho K4.
+ */
+export function planDueCutoff(now: Date = new Date(), leadDays: number = MKT_PLAN_LEAD_DAYS): Date {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + leadDays));
+}
+
+/** CSV kênh ↔ mảng, chỉ nhận mã hợp lệ, khử trùng, giữ thứ tự MKT_CHANNELS. */
+export function parseChannelsCsv(csv: string): MktChannel[] {
+  const set = new Set(csv.split(",").map((x) => x.trim()));
+  return MKT_CHANNELS.filter((c) => set.has(c));
+}
+export function channelsToCsv(channels: readonly string[]): string {
+  return MKT_CHANNELS.filter((c) => channels.includes(c)).join(",");
+}
+
+/** Khuôn JSON brief cho designer. */
+export const mktDesignBriefSchema = z.object({
+  brief: z.string().trim().min(40).max(MAX_MKT_NOTE),
+});
+
+/**
+ * Khuôn JSON kế hoạch AI đề xuất. `weekStart` phải là một trong các thứ Hai đã đưa vào prompt —
+ * kiểm ở caller (Zod không biết danh sách). `contentTypeCode` là mã OptionItem, null nếu không rõ.
+ */
+export const mktPlanSuggestSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        title: z.string().trim().min(5).max(MAX_MKT_TITLE),
+        keyPoints: z.string().trim().min(20).max(MAX_MKT_KEY_POINTS),
+        channels: z.array(z.enum(MKT_CHANNELS)).min(1),
+        contentTypeCode: z.string().trim().max(40).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+export type MktPlanSuggestItem = z.infer<typeof mktPlanSuggestSchema>["items"][number];

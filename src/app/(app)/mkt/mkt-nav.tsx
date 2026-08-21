@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type Labels = { posts: string; insights: string };
+type Labels = { posts: string; plan: string; insights: string };
 
 /**
  * Thanh sub-module MKT post — mirror `overhead-nav.tsx`, bỏ phần giữ query param (module này không
@@ -15,9 +15,11 @@ type Labels = { posts: string; insights: string };
 export function MktNav({ labels }: { labels: Labels }) {
   const pathname = usePathname();
   const onInsights = pathname.startsWith("/mkt/insights");
+  const onPlan = pathname.startsWith("/mkt/plan");
 
   const tabs = [
-    { key: "posts", href: "/mkt", label: labels.posts, active: !onInsights },
+    { key: "posts", href: "/mkt", label: labels.posts, active: !onInsights && !onPlan },
+    { key: "plan", href: "/mkt/plan", label: labels.plan, active: onPlan },
     { key: "insights", href: "/mkt/insights", label: labels.insights, active: onInsights },
   ];
 

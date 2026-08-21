@@ -257,6 +257,7 @@ model Staff {
   clientKbSourcesUploaded     ClientKbSource[]          @relation("ClientKbSourceUploadedBy")
   clientKbAttempts            ClientKbAttempt[]         @relation("ClientKbAttemptStaff")
   mktPostsCreated             MktPost[]                 @relation("MktPostCreatedBy")
+  mktPlanItemsCreated         MktPlanItem[]             @relation("MktPlanItemCreatedBy")
   mktPostImagesUploaded       MktPostImage[]            @relation("MktPostImageUploadedBy")
   mktPostVariantsPosted       MktPostVariant[]          @relation("MktPostVariantPostedBy")
   mktInsightReportsCreated    MktInsightReport[]        @relation("MktInsightReportCreatedBy")
@@ -318,6 +319,7 @@ model OptionItem {
   inventoryItemsAsCategory    InventoryItem[]           @relation("InventoryItemCategory")
   shiftAssignmentsAsLeaveType ShiftAssignment[]         @relation("ShiftAssignmentLeaveType")
   mktPostsAsContentType       MktPost[]                 @relation("MktPostContentType")
+  mktPlanItemsAsContentType   MktPlanItem[]             @relation("MktPlanItemContentType")
 
   @@unique([setId, code])
   @@map("option_item")
@@ -1060,6 +1062,7 @@ model Project {
   files               ProjectFile[]
   isoDocs             ProjectIsoDoc[]
   mktPosts            MktPost[]
+  mktPlanItems        MktPlanItem[]
   group               ProjectGroup?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
   meetingRows         AccountMeetingRow[]
 
@@ -3393,6 +3396,9 @@ model MktPost {
   projectId     String?
   /// Link thư mục ảnh gốc trên Drive/OneDrive — tuỳ chọn, chỉ để mở xem.
   driveUrl      String?
+  /// MKT-2a — brief cho designer (AI soạn từ ý chính + nội dung bài; HR sửa được). Render
+  /// whitespace-pre-wrap. null = chưa có brief.
+  designBrief   String?
   createdById   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -3402,6 +3408,7 @@ model MktPost {
   createdBy   Staff?           @relation("MktPostCreatedBy", fields: [createdById], references: [id])
   images      MktPostImage[]
   variants    MktPostVariant[]
+  planItem    MktPlanItem?
 
   @@index([projectId])
   @@index([createdAt])
@@ -3457,6 +3464,41 @@ model MktPostVariant {
   @@index([channel, status])
   @@index([postedAt])
   @@map("mkt_post_variant")
+}
+
+/// MKT-2a (21/08/2026) — MASTER PLAN nội dung: mỗi dòng là MỘT bài dự kiến cho MỘT tuần, kèm kênh.
+/// Bộ hẹn giờ (job-runner) tới hạn thì TỰ dựng MktPost + variant từ dòng này rồi gọi AI viết nháp
+/// (fire-and-forget — job phải trả về nhanh vì layout còn await runDueJobs).
+///
+/// Vòng đời: PLANNED (chờ tới hạn) → DRAFTED (đã dựng bài, postId trỏ sang) | SKIPPED (HR bỏ).
+/// Dòng đã DRAFTED thì KHÔNG sửa/xoá ở đây nữa — mọi thứ tiếp theo sống ở bài đăng.
+model MktPlanItem {
+  id            String    @id @default(cuid())
+  /// Thứ Hai của tuần dự kiến đăng — UTC-midnight theo quy ước ngày nghiệp vụ (HANDOVER 4.3).
+  weekStart     DateTime
+  title         String
+  keyPoints     String    @default("")
+  /// CSV các mã trong MKT_CHANNELS, vd "LINKEDIN,FANPAGE".
+  channels      String
+  contentTypeId String?
+  projectId     String?
+  status        String    @default("PLANNED")
+  postId        String?   @unique
+  note          String?
+  /// true = do AI đề xuất (HR đã duyệt mới lưu) — để thống kê, không đổi hành vi.
+  aiSuggested   Boolean   @default(false)
+  createdById   String?
+  draftedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  contentType OptionItem? @relation("MktPlanItemContentType", fields: [contentTypeId], references: [id])
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  post        MktPost?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  createdBy   Staff?      @relation("MktPlanItemCreatedBy", fields: [createdById], references: [id])
+
+  @@index([weekStart, status])
+  @@map("mkt_plan_item")
 }
 
 /// Báo cáo insights MỘT quý. `aiResult` là text dài, render whitespace-pre-wrap + nút Copy.

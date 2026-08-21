@@ -3229,7 +3229,50 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `42f98c1`** (21/08/2026 13:57) — **LẦN DEPLOY ĐẦU TIÊN BẰNG NÚT BẤM GitHub Actions**
+**Production đang chạy `7c54b5c`** (21/08/2026 19:32) — gói **3 commit MKT**: MKT-2a master plan tuần +
+tự dựng bài + brief designer (mục 10.58) · MKT-2b/2c đăng qua API, hẹn giờ, tự kéo số liệu (10.59) ·
+MKT-3 kế hoạch THÁNG → tuần → bài + order thiết kế tự sinh (10.60). Deploy **bằng nút bấm GitHub
+Actions** (lần thứ hai), runner `tcm-server` chạy `scripts/deploy-local.sh`. **3 migration mới** áp sạch
+(76 → 79: `mkt_plan`, `mkt_channels_metrics`, `mkt_month_plan_design_order`), **1 mã quyền mới**
+(149 → 150 tính cả `mkt.channel.manage`; grant 1350 → **1352**, đúng 2 vai HR_MANAGER + BGĐ).
+CI trên commit này XANH trước khi deploy.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 37 / 68 / 24 | **37 / 68 / 24** |
+| coTotal + ceTotal 4 bảng CO/CE | (8 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO / NCC | 481 / 30 | **481 / 30** |
+| dòng grant quyền | 1350 | **1352** (+2 = `mkt.channel.manage`) |
+| `push_subscription` | 1 | **1** (thiết bị đã bật push vẫn nguyên) |
+| 5 bảng MKT mới | — | **0 / 0 / 0 / 0 / 0** (chưa ai nhập, đúng như mong đợi) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+⚠ **Migration `mkt_month_plan_design_order` CÓ RedefineTables** trên `mkt_plan_item` (SQLite không thêm
+được cột kèm FK bằng ALTER). Bảng đó **0 dòng ở cả hai bên** khi deploy nên không có gì để mất; SQL có
+`INSERT…SELECT` chép đủ cột trước khi DROP và chỉ đụng đúng bảng đó — đã đọc kỹ trước khi chạy.
+
+Health check (curl từ máy dev qua nginx): `/login` **200** · `/mkt`, `/mkt/plan`, `/mkt/design`,
+`/settings/mkt-channels` đều **307** về login · `/api/notifications/poll` **401** · pm2 `tcm-crm` +
+`gh-runner` online, **restart 1** (do deploy) · `[jobs] scheduler bật` · **error log không thêm dòng
+nào** (ghi cuối 18:03, deploy 19:32) · giờ server `+07` đúng.
+
+📣 **ĐĂNG BÀI VẪN LÀ ĐĂNG TAY** (quyết định chủ dự án 21/08/2026: bài thường kèm ảnh/video). Production
+**CHƯA khai `MKT_TOKEN_SECRET`** nên toàn bộ phần đăng qua API / hẹn giờ / kéo số liệu của MKT-2b/2c
+**tự tắt** — đúng thiết kế, không phải lỗi. Ngày nào muốn bật thì khai biến đó vào `.env` server rồi nối
+kênh ở `/settings/mkt-channels`.
+
+**Việc nên làm sớm trên production:** vào `/mkt/plan` → chọn tháng → nhập **chủ đề tháng** → bấm "AI lên
+kế hoạch cả tháng" → sửa/bổ sung cho đủ chỉ tiêu (khối đối chiếu hiện rõ thiếu bao nhiêu) → **Duyệt kế
+hoạch tháng**. Chưa duyệt thì app KHÔNG dựng bài. Nhớ tick **designer nhận brief** ở cùng trang, nếu
+không thì brief vẫn soạn nhưng không ai được báo.
+
+---
+
+### Deploy trước đó — 21/08/2026 lúc 13:57
+
+**Production khi đó chạy `42f98c1`** (21/08/2026 13:57) — **LẦN DEPLOY ĐẦU TIÊN BẰNG NÚT BẤM GitHub Actions**
 (mục 10.57): bấm "Run workflow" → runner `tcm-server` trên server tự chạy `scripts/deploy-local.sh`, xong trong
 ~100 giây (lockfile không đổi nên bỏ qua npm ci). Nội dung deploy chỉ là 4 file CI/CD + HANDOVER — không đụng code
 app, dùng làm bài test end-to-end của tầng 3 đúng kế hoạch.

@@ -15,7 +15,7 @@ export default async function MktLayout({ children }: { children: React.ReactNod
         <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("desc")}</p>
       </div>
-      <MktNav labels={{ posts: t("navPosts"), plan: t("navPlan"), insights: t("navInsights") }} />
+      <MktNav labels={{ posts: t("navPosts"), plan: t("navPlan"), design: t("navDesign"), insights: t("navInsights") }} />
       <div className="min-w-0">{children}</div>
     </div>
   );

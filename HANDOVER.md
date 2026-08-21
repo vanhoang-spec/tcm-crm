@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 131 model Prisma · 78 migration · 101 file `src/lib` · 4541 key i18n × 2 ngôn ngữ · 149 mã quyền.
+**Quy mô:** 133 model Prisma · 79 migration · 101 file `src/lib` · 4582 key i18n × 2 ngôn ngữ · 149 mã quyền.
 
 ---
 
@@ -3158,6 +3158,72 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý):** đăng kèm ẢNH qua API (hiện chỉ đăng chữ; ảnh vẫn upload tay lên nền tảng) ·
       OAuth flow trong app để tự lấy/gia hạn token · kéo số liệu cấp TRANG (follower, reach tổng) ·
       biểu đồ số liệu theo thời gian · tự chỉnh master plan theo hiệu quả (vòng khép kín thật sự).
+
+60. **MKT-3 — SUB-MODULE KẾ HOẠCH THÁNG → TUẦN → BÀI, ORDER THIẾT KẾ TỰ SINH (21/08/2026)**
+    (migration `20260821120000_mkt_month_plan_design_order` — 2 bảng MỚI `mkt_month_plan` /
+    `mkt_design_order` + 4 cột trên `mkt_plan_item`; **KHÔNG mã quyền mới** — dùng lại `mkt.review`
+    / `mkt.generate` / `mkt.view`). Yêu cầu chủ dự án: *"tự động lên plan → HR duyệt → viết bài theo
+    plan → tự generate order qua team creative (kèm brief) → viết bài chờ duyệt/đăng"*.
+    - **Chỉ tiêu chốt:** Fanpage **2 bài/tuần**, LinkedIn **1 bài/tuần** (`MKT_WEEKLY_TARGET`).
+    - ⚠ **ĐĂNG VẪN LÀ ĐĂNG TAY** (quyết định chủ dự án 21/08/2026: bài thường kèm ảnh/video nên HR/ADM
+      copy đăng thủ công). Phần đăng qua API của MKT-2b (mục 10.59) GIỮ NGUYÊN trong code và **tự tắt**
+      khi chưa nối kênh — không gỡ, không cản trở gì.
+    - ⚠ **DUYỆT THÁNG LÀ CỔNG NGƯỜI GIỮ của cả luồng tự động.** Job dựng bài nay lọc thêm
+      `approvedAt: { not: null }` — kế hoạch AI đề xuất mà chưa ai đọc thì nằm im mãi, không tự biến
+      thành bài đăng. Duyệt tháng đóng dấu `approvedAt` lên TỪNG DÒNG (không chỉ trên tháng): dòng
+      thêm vào SAU khi duyệt phải tự chịu bước duyệt riêng chứ không ăn theo.
+      ⚠ Dòng HR **tự thêm tay** được đóng dấu duyệt NGAY lúc tạo — người tạo đã là người có quyền
+      duyệt, bắt bấm duyệt lại chính dòng mình vừa gõ là thêm bước vô nghĩa.
+    - ⚠ **CỐ Ý KHÔNG dùng `CreativeTask` cho order thiết kế.** Model đó bắt buộc `projectId` (không
+      nullable) và dùng dày đặc `task.project.code` trong tiêu đề thông báo + revalidate
+      `/projects/{id}/orders`; bài MKT thường KHÔNG gắn dự án nào (tuyển dụng, văn hoá công ty, kiến
+      thức ngành). Làm `projectId` nullable là đụng hơn chục chỗ của một module đang chạy thật, đổi
+      lấy việc gộp hai hàng việc vốn khác hẳn nhau về vòng đời (Creative có duyệt CD, đo giờ, tính
+      cost-per-task; thiết kế MKT thì không). Nên có bảng riêng `MktDesignOrder`, vòng đời gọn
+      NEW → IN_PROGRESS → DELIVERED · CANCELED, hiện ở tab **/mkt/design**.
+    - ⚠ **Brief trong order là ẢNH CHỤP** lúc sinh: bài sửa brief về sau KHÔNG đổi yêu cầu đã gửi —
+      designer có thể đã bắt tay làm theo bản cũ. Một bài một order (`postId` unique); AI viết lại thì
+      BỎ QUA chứ không đẻ order thứ hai và cũng không ghi đè brief đang có.
+    - **Hạn giao hình = thứ Hai của tuần đăng trừ 2 ngày** (`designDueDate`). Quá hạn thì thẻ viền đỏ.
+    - ⚠ **`mondaysInMonth` lấy thứ Hai NẰM TRONG tháng, KHÔNG lấy tuần chứa ngày 1.** Tuần bắc cầu hai
+      tháng thuộc về tháng chứa THỨ HAI đó — nếu không thì một tuần bị đếm vào hai tháng và chỉ tiêu
+      sai ở cả hai. Test có ca 01/08/2026 (thứ Bảy): thứ Hai 27/07 KHÔNG thuộc tháng 8.
+    - ⚠ **Mốc tháng đọc thành phần ngày ĐỊA PHƯƠNG** (`monthKeyUtc`) — 01:00 sáng 1/9 giờ Sài Gòn là
+      18:00 ngày 31/8 UTC, đọc bằng UTC là lùi về tháng 8. Đúng lớp bug đã vá ở Kho v2 K4; có test.
+    - ⚠ **BUG ĐÃ VÁ — `<form>` LỒNG `<form>`, ĐỌC TRƯỚC KHI SỬA MonthPanel.** Bản đầu đặt form "AI lên
+      kế hoạch" và form "Duyệt" BÊN TRONG form lưu chủ đề. HTML cấm, React ném *"A React form was
+      unexpectedly submitted"* và **nút bên trong không gửi được** — bấm AI không có gì xảy ra, không
+      lỗi, không audit. Mất một lượt verify mới tìm ra. Nay các form hành động nằm NGOÀI form chủ đề.
+      Đúng bẫy đã trả giá ở MEET-2 (mục 10.39).
+    - ⚠ **AI CÓ THỂ RA THIẾU BÀI — khối đối chiếu chỉ tiêu là lưới bắt.** Đo thật: prompt ghi rõ
+      "Fanpage: ĐÚNG 2 bài" mà model vẫn ra 1 bài/kênh/tuần (8 bài thay vì 12). Đã siết prompt bằng
+      cách nêu SẴN TỔNG SỐ BÀI phải có ("4 LinkedIn + 8 Fanpage, tháng này có 4 tuần") và bắt tự đếm
+      lại. Trang luôn hiện `LinkedIn 4/4` (xanh) · `Fanpage 4/8` (vàng) để HR thấy ngay chỗ thiếu và
+      tự thêm — **đừng bỏ khối này đi**.
+    - **Đã GỠ panel AI đề xuất theo TUẦN của MKT-2a** (`suggest-panel.tsx` + `suggestPlan`/
+      `savePlanItems` + `mktPlanSuggestPrompt` + `mktPlanSuggestSchema` + `MKT_PLAN_HORIZON_WEEKS` +
+      10 key i18n): luồng nay đi qua kế hoạch THÁNG, giữ hai đường AI đề xuất song song là thừa và dễ
+      lẫn. Dọn theo đúng quy tắc "xoá rác do chính mình tạo".
+    - ⚠ **Migration này CÓ RedefineTables trên `mkt_plan_item`** (SQLite không thêm được cột kèm FK
+      bằng ALTER). Đã đọc kỹ SQL: chỉ đụng đúng bảng đó, có `INSERT…SELECT` chép đủ 15 cột trước khi
+      DROP, không bảng nào khác bị động, và không bảng nào có FK trỏ TỚI nó. Bảng đang **0 dòng** ở cả
+      dev.db lẫn production (MKT-2a chưa deploy) nên không có gì để mất. `integrity_check` ok,
+      `foreign_key_check` 0 dòng.
+    - **Verify: 26/26 test thuần** (chỉ tiêu · mốc tháng 0–7h sáng · thứ Hai trong tháng gồm ca tuần
+      bắc cầu · chỉ tiêu cả tháng 4/5 tuần · hạn giao hình · Zod · prompt nêu đủ chỉ tiêu và tuần)
+      **+ browser end-to-end với 2 lượt AI THẬT**: lưu chủ đề tháng 9 → "AI lên kế hoạch cả tháng" ⇒
+      8 dòng chia đều 4 tuần, có `[cần điền: …]` thay vì bịa số liệu → chỉ tiêu hiện đúng 4/4 và 4/8
+      → Duyệt ⇒ **8/8 dòng đóng dấu duyệt** → "Dựng bài ngay" ⇒ bài + variant LinkedIn, AI viết
+      **1290 ký tự**, brief **629 ký tự đủ 5/5 mục** (thông điệp · ý tưởng hình · chữ trên hình · kích
+      thước 1200×627 · lưu ý), **order thiết kế tự sinh** trạng thái NEW hạn **05/09** (= thứ Hai
+      07/09 − 2 ngày) → trang /mkt/design hiện đủ brief → "Nhận việc" ⇒ IN_PROGRESS đúng người →
+      nộp link SAI khuôn ⇒ **server chặn và 2 ô còn nguyên** → link hợp lệ ⇒ DELIVERED + báo người
+      duyệt. tsc · eslint · i18n **0/0 (4582 key)** · `next build` sạch có 2 route mới ·
+      `migrate diff` rỗng · `db:seed` chạy lại sạch. Dữ liệu test đã dọn sạch.
+    - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** AI tự bổ sung cho đủ chỉ tiêu khi ra thiếu
+      (hiện HR tự thêm dòng) · kéo-thả dời bài giữa các tuần · nhân bản kế hoạch tháng trước sang
+      tháng sau · gắn order thiết kế vào KPI/cost-per-task của Creative · nhắc hạn giao hình qua
+      notification (mới có viền đỏ trên thẻ) · đính file thiết kế thẳng vào app (hiện dán link Drive).
 
 ---
 

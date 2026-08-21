@@ -5,11 +5,26 @@ import { isAiConfigured } from "@/lib/ai/deepseek";
 import { getStringSetting } from "@/lib/settings";
 import { formatDate, pickLabel } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
-import { MKT_PLAN_HORIZON_WEEKS, MKT_PLAN_LEAD_DAYS, MKT_WEEKLY_TARGET, addWeeksUtc, planDueCutoff, planWeekUtc, weekKey } from "@/lib/mkt";
+import {
+  MKT_CHANNELS,
+  MKT_PLAN_LEAD_DAYS,
+  MKT_WEEKLY_TARGET,
+  addMonthsUtc,
+  addWeeksUtc,
+  monthKey,
+  monthKeyUtc,
+  mondaysInMonth,
+  monthTargetCounts,
+  parseChannelsCsv,
+  parseMonthKey,
+  planDueCutoff,
+  planWeekUtc,
+  weekKey,
+} from "@/lib/mkt";
 import type { Locale } from "@/i18n/locales";
 import { PlanBoard, type PlanItemView, type WeekView } from "./plan-board";
-import { SuggestPanel } from "./suggest-panel";
 import { DesignersForm, type DesignerOption } from "./designers-form";
+import { MonthPanel, type MonthView } from "./month-panel";
 
 /**
  * MKT-2a — MASTER PLAN theo tuần. Xem: `mkt.view`. Ghi: `mkt.review` (kiểm ở action). AI: `mkt.generate`.
@@ -20,24 +35,28 @@ import { DesignersForm, type DesignerOption } from "./designers-form";
 /** "1" khi min = max, "1–2" khi khác — tránh câu "1–1 bài/tuần". */
 const range = (x: { min: number; max: number }) => (x.min === x.max ? String(x.min) : `${x.min}–${x.max}`);
 
-export default async function MktPlanPage() {
+export default async function MktPlanPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   await requirePermission("mkt.view");
-  const [t, locale, canReview, canGenerate] = await Promise.all([
+  const [t, locale, canReview, canGenerate, sp] = await Promise.all([
     getTranslations("mkt.plan"),
     getLocale() as Promise<Locale>,
     hasPermission("mkt.review"),
     hasPermission("mkt.generate"),
+    searchParams,
   ]);
 
   const now = new Date();
   const thisWeek = planWeekUtc(now);
   const cutoff = planDueCutoff(now);
-  const from = addWeeksUtc(thisWeek, -2);
-  const to = addWeeksUtc(thisWeek, MKT_PLAN_HORIZON_WEEKS);
+  // MKT-3: trang xoay quanh MỘT THÁNG. Mặc định tháng này; ?month=YYYY-MM để xem tháng khác.
+  const month = parseMonthKey(sp.month ?? "") ?? monthKeyUtc(now);
+  const monthWeeks = mondaysInMonth(month);
+  const from = monthWeeks[0] ?? thisWeek;
+  const to = monthWeeks[monthWeeks.length - 1] ?? thisWeek;
 
-  const [items, types, projects, designerRaw, designerPool] = await Promise.all([
+  const [items, types, projects, designerRaw, monthPlan, designerPool] = await Promise.all([
     prisma.mktPlanItem.findMany({
-      where: { weekStart: { gte: from } },
+      where: { weekStart: { gte: from, lte: to } },
       orderBy: [{ weekStart: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -51,6 +70,7 @@ export default async function MktPlanPage() {
         postId: true,
         note: true,
         aiSuggested: true,
+        approvedAt: true,
         contentType: { select: { labelVi: true, labelEn: true } },
         project: { select: { code: true, name: true } },
       },
@@ -63,6 +83,10 @@ export default async function MktPlanPage() {
       select: { id: true, code: true, name: true, client: { select: { name: true } } },
     }),
     getStringSetting("mkt", "designer_staff_ids", "[]"),
+    prisma.mktMonthPlan.findUnique({
+      where: { month },
+      select: { theme: true, goals: true, note: true, status: true, approvedAt: true, approvedBy: { select: { fullName: true } }, _count: { select: { items: true } } },
+    }),
     // Ứng viên nhận brief: phòng Creative (designer/video thường ở đó) + bất kỳ ai đang được tick.
     prisma.staff.findMany({
       where: { isActive: true },
@@ -82,10 +106,11 @@ export default async function MktPlanPage() {
     .filter((s) => s.department?.code === "CREATIVE" || designerIds.includes(s.id))
     .map((s) => ({ id: s.id, name: s.fullName, title: s.title, dept: s.department?.name ?? null, checked: designerIds.includes(s.id) }));
 
-  // Khung tuần: -2 … +HORIZON, cộng thêm tuần của dòng nào nằm xa hơn.
-  const weekKeys = new Set<string>();
-  for (let w = from; w <= to; w = addWeeksUtc(w, 1)) weekKeys.add(weekKey(w));
+// Khung tuần = đúng các thứ Hai của THÁNG đang xem, cộng tuần của dòng nào lệch ra (dòng cũ được
+  // dời tuần). addWeeksUtc giữ lại vì khung có thể phải nối thêm tuần.
+  const weekKeys = new Set<string>(monthWeeks.map(weekKey));
   for (const i of items) weekKeys.add(weekKey(i.weekStart));
+  void addWeeksUtc;
   const weeks: WeekView[] = [...weekKeys].sort().map((k) => {
     const d = new Date(k + "T00:00:00.000Z");
     return { key: k, label: formatDate(d), isCurrent: k === weekKey(thisWeek), isDue: d <= cutoff };
@@ -107,6 +132,28 @@ export default async function MktPlanPage() {
     aiSuggested: i.aiSuggested,
   }));
 
+  // Đếm bài đã lên kế hoạch theo kênh (bỏ dòng đã bỏ qua) để đối chiếu chỉ tiêu tháng.
+  const target = monthTargetCounts(month);
+  const planned: Record<string, number> = { LINKEDIN: 0, FANPAGE: 0 };
+  for (const i of items) {
+    if (i.status === "SKIPPED") continue;
+    for (const c of parseChannelsCsv(i.channels)) planned[c] = (planned[c] ?? 0) + 1;
+  }
+  const monthView: MonthView = {
+    monthKey: monthKey(month),
+    label: `${String(month.getUTCMonth() + 1).padStart(2, "0")}/${month.getUTCFullYear()}`,
+    theme: monthPlan?.theme ?? "",
+    goals: monthPlan?.goals ?? "",
+    note: monthPlan?.note ?? null,
+    status: monthPlan?.status ?? "DRAFT",
+    approvedAt: monthPlan?.approvedAt ? formatDate(monthPlan.approvedAt) : null,
+    approvedByName: monthPlan?.approvedBy?.fullName ?? null,
+    itemCount: monthPlan?._count.items ?? 0,
+    counts: MKT_CHANNELS.map((c) => ({ channel: c, planned: planned[c] ?? 0, target: target[c] })),
+  };
+  const prevMonth = monthKey(addMonthsUtc(month, -1));
+  const nextMonth = monthKey(addMonthsUtc(month, 1));
+
   const contentTypes = types.map((x) => ({ value: x.id, label: pickLabel(x, locale) }));
   const projectOpts = projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, sublabel: p.client?.name }));
 
@@ -116,7 +163,18 @@ export default async function MktPlanPage() {
         {t("howItWorks", { li: range(MKT_WEEKLY_TARGET.LINKEDIN), fb: range(MKT_WEEKLY_TARGET.FANPAGE), lead: MKT_PLAN_LEAD_DAYS })}
       </div>
 
-      {canReview && canGenerate && <SuggestPanel weeks={weeks.filter((w) => w.key >= weekKey(thisWeek))} contentTypes={contentTypes} aiConfigured={isAiConfigured()} />}
+      <div className="flex items-center justify-between gap-2">
+        <a href={`/mkt/plan?month=${prevMonth}`} className="inline-flex h-8 items-center rounded-lg border border-border-strong px-2.5 text-xs font-medium hover:bg-surface-2">
+          ‹ {prevMonth}
+        </a>
+        <span className="text-sm font-semibold text-foreground">{monthView.label}</span>
+        <a href={`/mkt/plan?month=${nextMonth}`} className="inline-flex h-8 items-center rounded-lg border border-border-strong px-2.5 text-xs font-medium hover:bg-surface-2">
+          {nextMonth} ›
+        </a>
+      </div>
+
+      <MonthPanel month={monthView} canReview={canReview} canGenerate={canGenerate} aiConfigured={isAiConfigured()} />
+
       {canReview && <DesignersForm options={designerOptions} />}
 
       <PlanBoard weeks={weeks} items={views} contentTypes={contentTypes} projects={projectOpts} canReview={canReview} />

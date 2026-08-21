@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getStringSetting } from "@/lib/settings";
 import { AiError } from "@/lib/ai/deepseek";
 import { aiDesignBrief, aiDraftVariant, isAiConfigured } from "@/lib/mkt-ai-server";
-import { parseChannelsCsv, planDueCutoff, type MktChannel } from "@/lib/mkt";
+import { designDueDate, parseChannelsCsv, planDueCutoff, type MktChannel } from "@/lib/mkt";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -59,7 +59,7 @@ async function audit(entityId: string, action: string, payload: unknown): Promis
 }
 
 /** Phần CHẬM chạy nền: AI viết từng kênh → brief → thông báo. Nuốt mọi lỗi, chỉ ghi log. */
-async function finishAutoDraft(postId: string, title: string, channels: MktChannel[]): Promise<void> {
+async function finishAutoDraft(postId: string, title: string, channels: MktChannel[], weekStart: Date): Promise<void> {
   const written: string[] = [];
   const failed: string[] = [];
   for (const ch of channels) {
@@ -96,10 +96,33 @@ async function finishAutoDraft(postId: string, title: string, channels: MktChann
     await notify(reviewers, "MKT_AUTO_DRAFT_FAILED", `AI không viết được bài "${title}"`, `Bài đã dựng sẵn từ kế hoạch, cần bấm AI tay hoặc tự viết ở mục Bài đăng MKT.`);
   }
   if (brief) {
+    // MKT-3: sinh YÊU CẦU THIẾT KẾ thật (hàng việc của designer), không chỉ là một thông báo trôi qua.
+    await createDesignOrder(postId, brief, channels, weekStart);
     const designers = await designerStaffIds();
-    await notify(designers, "MKT_DESIGN_BRIEF", `Brief thiết kế: "${title}"`, `${brief.slice(0, 400)}${brief.length > 400 ? "…" : ""}\n\nXem đầy đủ trong bài ở mục Bài đăng MKT.`);
+    await notify(
+      designers,
+      "MKT_DESIGN_BRIEF",
+      `Yêu cầu thiết kế mới: "${title}"`,
+      `${brief.slice(0, 400)}${brief.length > 400 ? "…" : ""}\n\nMở mục Bài đăng MKT → Yêu cầu thiết kế để nhận việc và nộp file.`,
+    );
   }
   await audit(postId, "AUTO_DRAFT_AI", { written, failed, brief: !!brief });
+}
+
+/**
+ * Sinh YÊU CẦU THIẾT KẾ cho bài (MKT-3).
+ *
+ * ⚠ Brief được CHÉP làm ảnh chụp: bài sửa brief về sau KHÔNG đổi yêu cầu đã gửi designer — người ta
+ * có thể đã bắt tay làm theo bản cũ.
+ * ⚠ Một bài một order (`postId` unique). Gọi lại (AI viết lại) thì BỎ QUA, không đẻ order thứ hai và
+ * cũng không ghi đè brief đang có: designer đang làm dở mà yêu cầu tự đổi dưới chân là tệ hơn.
+ */
+async function createDesignOrder(postId: string, brief: string, channels: MktChannel[], weekStart: Date): Promise<void> {
+  const existing = await prisma.mktDesignOrder.findUnique({ where: { postId }, select: { id: true } });
+  if (existing) return;
+  await prisma.mktDesignOrder.create({
+    data: { postId, brief, channels: channels.join(","), dueDate: designDueDate(weekStart) },
+  });
 }
 
 type PlanItemRow = {
@@ -145,14 +168,16 @@ export async function draftPlanItem(item: PlanItemRow, opts?: { reviewerIds?: st
   );
 
   // Fan-out SAU transaction; phần AI KHÔNG await (xem ghi chú đầu file).
-  if (aiOn) void finishAutoDraft(post.id, item.title, channels).catch((e) => console.error("[mkt-plan] finishAutoDraft:", e));
+  if (aiOn) void finishAutoDraft(post.id, item.title, channels, item.weekStart).catch((e) => console.error("[mkt-plan] finishAutoDraft:", e));
   return post.id;
 }
 
 /** Job: dựng bài cho mọi dòng kế hoạch đã tới hạn. Trả về nhanh — phần AI thả chạy nền. */
 export async function runMktPlanAutoDraft(): Promise<{ drafted: number }> {
   const due = await prisma.mktPlanItem.findMany({
-    where: { status: "PLANNED", weekStart: { lte: planDueCutoff() } },
+    // ⚠ CHỈ dòng ĐÃ DUYỆT (MKT-3). Kế hoạch AI đề xuất mà chưa ai đọc thì KHÔNG được tự biến thành
+    // bài đăng — duyệt là cổng người giữ, giống nút duyệt CO của FIN-B.
+    where: { status: "PLANNED", approvedAt: { not: null }, weekStart: { lte: planDueCutoff() } },
     orderBy: { weekStart: "asc" },
     select: { id: true, weekStart: true, title: true, keyPoints: true, channels: true, contentTypeId: true, projectId: true, createdById: true },
   });

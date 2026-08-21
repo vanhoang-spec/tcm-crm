@@ -259,6 +259,10 @@ model Staff {
   mktPostsCreated             MktPost[]                 @relation("MktPostCreatedBy")
   mktPlanItemsCreated         MktPlanItem[]             @relation("MktPlanItemCreatedBy")
   mktChannelsConnected        MktChannelConnection[]    @relation("MktChannelConnectedBy")
+  mktPlanItemsApproved        MktPlanItem[]             @relation("MktPlanItemApprovedBy")
+  mktMonthPlansCreated        MktMonthPlan[]            @relation("MktMonthPlanCreatedBy")
+  mktMonthPlansApproved       MktMonthPlan[]            @relation("MktMonthPlanApprovedBy")
+  mktDesignOrders             MktDesignOrder[]          @relation("MktDesignOrderAssignee")
   mktPostImagesUploaded       MktPostImage[]            @relation("MktPostImageUploadedBy")
   mktPostVariantsPosted       MktPostVariant[]          @relation("MktPostVariantPostedBy")
   mktInsightReportsCreated    MktInsightReport[]        @relation("MktInsightReportCreatedBy")
@@ -3410,6 +3414,7 @@ model MktPost {
   images      MktPostImage[]
   variants    MktPostVariant[]
   planItem    MktPlanItem?
+  designOrder MktDesignOrder?
 
   @@index([projectId])
   @@index([createdAt])
@@ -3554,6 +3559,13 @@ model MktPostMetric {
 /// Dòng đã DRAFTED thì KHÔNG sửa/xoá ở đây nữa — mọi thứ tiếp theo sống ở bài đăng.
 model MktPlanItem {
   id            String    @id @default(cuid())
+  /// MKT-3 — thuộc kế hoạch THÁNG nào. null = dòng lẻ HR thêm tay ngoài kế hoạch tháng.
+  monthPlanId   String?
+  /// MKT-3 — mốc HR DUYỆT dòng này. ⚠ Job CHỈ dựng bài cho dòng đã duyệt: kế hoạch AI đề xuất mà
+  /// chưa ai đọc thì không được tự biến thành bài. Dòng HR tự thêm tay được đóng dấu duyệt ngay
+  /// lúc tạo (người tạo đã là người có quyền duyệt).
+  approvedAt    DateTime?
+  approvedById  String?
   /// Thứ Hai của tuần dự kiến đăng — UTC-midnight theo quy ước ngày nghiệp vụ (HANDOVER 4.3).
   weekStart     DateTime
   title         String
@@ -3572,13 +3584,88 @@ model MktPlanItem {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  contentType OptionItem? @relation("MktPlanItemContentType", fields: [contentTypeId], references: [id])
-  project     Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  post        MktPost?    @relation(fields: [postId], references: [id], onDelete: SetNull)
-  createdBy   Staff?      @relation("MktPlanItemCreatedBy", fields: [createdById], references: [id])
+  contentType OptionItem?   @relation("MktPlanItemContentType", fields: [contentTypeId], references: [id])
+  project     Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  post        MktPost?      @relation(fields: [postId], references: [id], onDelete: SetNull)
+  createdBy   Staff?        @relation("MktPlanItemCreatedBy", fields: [createdById], references: [id])
+  approvedBy  Staff?        @relation("MktPlanItemApprovedBy", fields: [approvedById], references: [id])
+  monthPlan   MktMonthPlan? @relation(fields: [monthPlanId], references: [id], onDelete: SetNull)
 
   @@index([weekStart, status])
+  @@index([monthPlanId])
   @@map("mkt_plan_item")
+}
+
+/// MKT-3 (21/08/2026) — KẾ HOẠCH THÁNG, tầng trên của kế hoạch tuần.
+///
+/// Vòng đời: DRAFT (đang soạn / AI vừa đề xuất) → APPROVED (HR duyệt). ⚠ DUYỆT THÁNG là thứ MỞ KHOÁ
+/// cho job dựng bài: duyệt xong thì mọi dòng tuần thuộc tháng đó được đóng dấu "approvedAt" và tới
+/// hạn sẽ tự thành bài. Chưa duyệt thì kế hoạch chỉ nằm im — AI đề xuất không tự biến thành bài đăng.
+model MktMonthPlan {
+  id    String   @id @default(cuid())
+  /// Ngày 1 của tháng, UTC-midnight.
+  month DateTime @unique
+
+  /// Chủ đề xuyên suốt tháng (vd "Mùa cao điểm year-end party").
+  theme String
+  /// Định hướng / mục tiêu tháng — đi vào prompt khi AI chia bài theo tuần.
+  goals String  @default("")
+  note  String?
+
+  status       String    @default("DRAFT")
+  approvedById String?
+  approvedAt   DateTime?
+
+  aiSuggested Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy  Staff?        @relation("MktMonthPlanCreatedBy", fields: [createdById], references: [id])
+  approvedBy Staff?        @relation("MktMonthPlanApprovedBy", fields: [approvedById], references: [id])
+  items      MktPlanItem[]
+
+  @@map("mkt_month_plan")
+}
+
+/// MKT-3 — YÊU CẦU THIẾT KẾ gửi team Creative, sinh TỰ ĐỘNG khi bài được dựng và AI soạn xong brief.
+///
+/// ⚠ CỐ Ý KHÔNG dùng "CreativeTask": model đó bắt buộc "projectId" (không nullable) và dùng dày đặc
+/// "task.project.code" trong tiêu đề thông báo + revalidate "/projects/{id}/orders". Bài MKT thường
+/// KHÔNG gắn dự án nào (bài tuyển dụng, văn hoá công ty, kiến thức ngành) — làm "projectId" nullable
+/// là đụng hơn chục chỗ của một module đang chạy thật, đổi lấy việc gộp hai hàng việc vốn khác nhau
+/// về vòng đời (Creative có duyệt CD, đo giờ, tính cost-per-task; thiết kế MKT thì không).
+///
+/// Vòng đời gọn: NEW → IN_PROGRESS (designer nhận) → DELIVERED (nộp link) · CANCELED.
+model MktDesignOrder {
+  id     String @id @default(cuid())
+  /// Một bài một yêu cầu thiết kế.
+  postId String @unique
+
+  /// ẢNH CHỤP brief lúc sinh — bài sửa brief về sau KHÔNG đổi yêu cầu đã gửi đi.
+  brief    String
+  /// CSV kênh cần hình, quyết định kích thước designer phải làm.
+  channels String
+  /// Hạn giao hình — mặc định 2 ngày trước thứ Hai của tuần đăng.
+  dueDate  DateTime?
+
+  status     String  @default("NEW")
+  assigneeId String?
+
+  deliverableLinkUrl String?
+  designerNote       String?
+
+  acceptedAt  DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  post     MktPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  assignee Staff?  @relation("MktDesignOrderAssignee", fields: [assigneeId], references: [id])
+
+  @@index([status])
+  @@index([assigneeId, status])
+  @@map("mkt_design_order")
 }
 
 /// Báo cáo insights MỘT quý. `aiResult` là text dài, render whitespace-pre-wrap + nút Copy.

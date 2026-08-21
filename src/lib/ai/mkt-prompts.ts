@@ -223,50 +223,72 @@ export function mktDesignBriefPrompt(input: MktDesignBriefInput): AiMessage[] {
 }
 
 // ─────────────────────────────────────────────────────────
-// MKT-2a — AI đề xuất MASTER PLAN theo tuần
+// MKT-3 — AI đề xuất KẾ HOẠCH THÁNG (chủ đề + chia bài theo tuần)
 // ─────────────────────────────────────────────────────────
 
-const PLAN_SYSTEM = `Bạn là content planner cho TCM. ${AGENCY}
-TCM đăng 2 kênh: LinkedIn (chính, giọng B2B, ${MKT_WEEKLY_TARGET.LINKEDIN.min}–${MKT_WEEKLY_TARGET.LINKEDIN.max} bài/tuần) và Fanpage Facebook
-(phụ, giọng trẻ trung, ${MKT_WEEKLY_TARGET.FANPAGE.min}–${MKT_WEEKLY_TARGET.FANPAGE.max} bài/tuần). Một đề tài có thể đăng cả hai kênh (mỗi kênh một bản viết riêng).
+const MONTH_PLAN_SYSTEM = `Bạn là content planner cho TCM. ${AGENCY}
+TCM đăng 2 kênh: LinkedIn (CHÍNH, giọng B2B) và Fanpage Facebook (PHỤ, giọng trẻ trung).
 
-Nhiệm vụ: đề xuất KẾ HOẠCH NỘI DUNG cho các tuần được liệt kê — mỗi tuần 1–2 đề tài, mỗi đề tài
-ghi rõ kênh.
+Nhiệm vụ: từ THÁNG được nêu, đề xuất (a) MỘT chủ đề xuyên suốt tháng, (b) định hướng ngắn, và
+(c) danh sách bài chia sẵn theo từng tuần.
+
+CHỈ TIÊU BẮT BUỘC cho MỖI tuần được liệt kê:
+- Fanpage: ĐÚNG ${MKT_WEEKLY_TARGET.FANPAGE.min} bài.
+- LinkedIn: ĐÚNG ${MKT_WEEKLY_TARGET.LINKEDIN.min} bài.
+Một đề tài đăng cả hai kênh thì tính là 1 bài cho MỖI kênh (điền cả hai mã vào "channels"). Cộng lại
+phải đủ chỉ tiêu từng kênh ở từng tuần — không thiếu, không thừa.
 
 QUY TẮC BẮT BUỘC:
-- Đề tài phải là thứ TCM THẬT SỰ CÓ THỂ VIẾT mà không cần bịa: góc nhìn nghề event/activation, quy
-  trình làm việc, bài học vận hành, văn hoá đội ngũ, tuyển dụng, dịp lễ/mùa vụ của thị trường Việt
-  Nam rơi vào đúng tuần đó (Tết, 8/3, 30/4, 1/6, Trung thu, 20/10, 20/11, Giáng sinh, cuối năm…).
-- TUYỆT ĐỐI không bịa tên khách hàng, tên dự án, số liệu, giải thưởng. Đề tài cần dữ kiện thật
-  (recap dự án, con số) thì trong keyPoints ghi chỗ trống dạng "[cần điền: tên dự án/khách đã được
-  phép truyền thông]", "[cần điền: số liệu]" để HR/Account bổ sung.
+- Mọi đề tài phải bám CHỦ ĐỀ THÁNG, và phải là thứ TCM viết được mà không cần bịa: góc nhìn nghề
+  event/activation, quy trình làm việc, bài học vận hành, văn hoá đội ngũ, tuyển dụng, dịp lễ/mùa vụ
+  của thị trường Việt Nam rơi đúng tuần đó.
+- TUYỆT ĐỐI không bịa tên khách hàng, tên dự án, số liệu, giải thưởng. Đề tài cần dữ kiện thật thì
+  trong keyPoints ghi chỗ trống dạng "[cần điền: tên dự án đã được phép truyền thông]",
+  "[cần điền: số liệu]" để HR/Account bổ sung.
 - Không trùng hoặc na ná các bài ĐÃ ĐĂNG / ĐÃ LÊN KẾ HOẠCH được liệt kê.
-- Xoay vòng loại nội dung, không 2 tuần liền cùng một loại.
-- keyPoints: 3–6 gạch đầu dòng (mỗi dòng bắt đầu bằng "- "), đủ để người viết triển khai.
-- contentTypeCode chỉ được chọn trong danh sách mã cung cấp, không rõ thì null.
+- Xoay vòng loại nội dung trong tháng; bài LinkedIn nghiêng về giá trị chuyên môn, bài Fanpage
+  nghiêng về đời sống đội ngũ và hậu trường.
+- keyPoints: 3–6 gạch đầu dòng (mỗi dòng bắt đầu bằng "- ").
+- contentTypeCode chỉ chọn trong danh sách mã cung cấp, không rõ thì null.
 - weekStart chỉ được là một trong các thứ Hai đã liệt kê, định dạng YYYY-MM-DD.
-- Chỉ trả về JSON đúng khuôn {"items":[{"weekStart":"YYYY-MM-DD","title":"...","keyPoints":"- ...\n- ...","channels":["LINKEDIN","FANPAGE"],"contentTypeCode":"..."}]} — không lời dẫn, không bọc markdown.`;
+- Chỉ trả về JSON đúng khuôn {"theme":"...","goals":"...","items":[{"weekStart":"YYYY-MM-DD","title":"...","keyPoints":"- ...\n- ...","channels":["LINKEDIN"],"contentTypeCode":"..."}]} — không lời dẫn, không bọc markdown.`;
 
-export type MktPlanSuggestInput = {
-  /** Các thứ Hai (YYYY-MM-DD) cần lên kế hoạch, theo thứ tự. */
+export type MktMonthSuggestInput = {
+  /** "MM/YYYY" để model biết mùa vụ. */
+  monthLabel: string;
+  /** Các thứ Hai (YYYY-MM-DD) trong tháng, theo thứ tự. */
   weeks: string[];
   contentTypes: { code: string; label: string }[];
   recentTitles: string[];
   plannedTitles: string[];
+  /** Chủ đề HR đã tự nhập (nếu có) — AI phải bám, không tự đổi. */
+  themeHint?: string | null;
 };
 
-export function mktPlanSuggestPrompt(input: MktPlanSuggestInput): AiMessage[] {
+export function mktMonthSuggestPrompt(input: MktMonthSuggestInput): AiMessage[] {
+  // ⚠ Nêu SẴN TỔNG SỐ BÀI phải có, không chỉ nêu chỉ tiêu tuần: đo thật trên DeepSeek thấy model
+  // hay ra đúng 1 bài/kênh/tuần dù prompt ghi "ĐÚNG 2 bài Fanpage". Có con số tổng thì nó tự đối
+  // chiếu lại. Khối chỉ tiêu trên trang vẫn là lưới bắt cuối cùng nếu model vẫn ra thiếu.
+  const nWeeks = input.weeks.length;
+  const liTotal = nWeeks * MKT_WEEKLY_TARGET.LINKEDIN.min;
+  const fbTotal = nWeeks * MKT_WEEKLY_TARGET.FANPAGE.min;
   const lines = [
-    "CÁC TUẦN CẦN LÊN KẾ HOẠCH (thứ Hai đầu tuần):",
+    `THÁNG CẦN LÊN KẾ HOẠCH: ${input.monthLabel}`,
+    "",
+    `TỔNG SỐ BÀI PHẢI CÓ TRONG THÁNG: ${liTotal} bài LinkedIn + ${fbTotal} bài Fanpage (tháng này có ${nWeeks} tuần).`,
+    `Tự đếm lại trước khi trả về: mỗi tuần đúng ${MKT_WEEKLY_TARGET.LINKEDIN.min} LinkedIn và ${MKT_WEEKLY_TARGET.FANPAGE.min} Fanpage — KHÔNG được ít hơn.`,
+    "",
+    "CÁC TUẦN TRONG THÁNG (thứ Hai đầu tuần) — mỗi tuần phải đủ chỉ tiêu:",
     ...input.weeks.map((w) => `- ${w}`),
     "",
     "LOẠI NỘI DUNG (mã — nhãn):",
     ...input.contentTypes.map((c) => `- ${c.code} — ${c.label}`),
   ];
+  if (input.themeHint?.trim()) lines.push("", `CHỦ ĐỀ THÁNG DO HR CHỈ ĐỊNH (bám đúng, không tự đổi): ${input.themeHint.trim()}`);
   if (input.recentTitles.length) lines.push("", "BÀI ĐÃ ĐĂNG GẦN ĐÂY (tránh trùng):", ...input.recentTitles.map((x) => `- ${x}`));
   if (input.plannedTitles.length) lines.push("", "ĐÃ LÊN KẾ HOẠCH (tránh trùng):", ...input.plannedTitles.map((x) => `- ${x}`));
   return [
-    { role: "system", content: PLAN_SYSTEM },
+    { role: "system", content: MONTH_PLAN_SYSTEM },
     { role: "user", content: lines.join("\n") },
   ];
 }

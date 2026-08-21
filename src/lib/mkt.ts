@@ -33,9 +33,13 @@ export type MktVariantStatus = (typeof MKT_VARIANT_STATUSES)[number];
  * Nhịp đăng mục tiêu mỗi tuần — cam kết với chủ dự án 04/08/2026.
  * `max` chỉ để hiển thị dải "1–2" của Fanpage; phép so "đủ hay chưa" dùng `min`.
  */
+/**
+ * Chỉ tiêu nhịp đăng — quyết định chủ dự án 21/08/2026: Fanpage 2 bài/tuần, LinkedIn 1 bài/tuần.
+ * AI chia bài theo tuần bám đúng con số này.
+ */
 export const MKT_WEEKLY_TARGET: Record<MktChannel, { min: number; max: number }> = {
   LINKEDIN: { min: 1, max: 1 },
-  FANPAGE: { min: 1, max: 2 },
+  FANPAGE: { min: 2, max: 2 },
 };
 
 /** Số tuần hiện trên banner nhịp (tuần này + 3 tuần trước). */
@@ -204,9 +208,6 @@ export type MktPlanStatus = (typeof MKT_PLAN_STATUSES)[number];
  */
 export const MKT_PLAN_LEAD_DAYS = 3;
 
-/** Số tuần kế hoạch AI đề xuất một lượt và số tuần hiện trên trang. */
-export const MKT_PLAN_HORIZON_WEEKS = 4;
-
 /** Thứ Hai (UTC-midnight) của tuần chứa ngày địa phương `d`. */
 export function planWeekUtc(d: Date): Date {
   const m = weekStartLocal(d);
@@ -254,11 +255,83 @@ export const mktDesignBriefSchema = z.object({
   brief: z.string().trim().min(40).max(MAX_MKT_NOTE),
 });
 
+
+// ─────────────────────────────────────────────────────────
+// MKT-3 — KẾ HOẠCH THÁNG (HÀM THUẦN)
+//
+// Tháng neo vào NGÀY 1, lưu UTC-midnight — cùng quy ước ngày nghiệp vụ với weekStart. Mọi phép dựng
+// mốc đọc thành phần ngày ĐỊA PHƯƠNG rồi mới sang UTC (bài học 0–7h sáng, Kho v2 K4).
+// ─────────────────────────────────────────────────────────
+
+export const MKT_MONTH_STATUSES = ["DRAFT", "APPROVED"] as const;
+export type MktMonthStatus = (typeof MKT_MONTH_STATUSES)[number];
+
+export const MKT_DESIGN_STATUSES = ["NEW", "IN_PROGRESS", "DELIVERED", "CANCELED"] as const;
+export type MktDesignStatus = (typeof MKT_DESIGN_STATUSES)[number];
+
+/** Hình phải xong trước thứ Hai của tuần đăng bao nhiêu ngày. */
+export const MKT_DESIGN_LEAD_DAYS = 2;
+
+/** Ngày 1 (UTC-midnight) của tháng chứa ngày địa phương `d`. */
+export function monthKeyUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), 1));
+}
+
+/** Cộng N tháng vào một mốc ngày-1 UTC-midnight. */
+export function addMonthsUtc(month: Date, n: number): Date {
+  return new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + n, 1));
+}
+
+/** "YYYY-MM" — khoá tra cứu/so sánh tháng, không phải chuỗi hiển thị. */
+export function monthKey(month: Date): string {
+  return month.toISOString().slice(0, 7);
+}
+
+/** Parse "YYYY-MM" → ngày 1 UTC-midnight; sai khuôn → null. */
+export function parseMonthKey(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const mo = Number(m[2]);
+  if (mo < 1 || mo > 12) return null;
+  return new Date(Date.UTC(Number(m[1]), mo - 1, 1));
+}
+
 /**
- * Khuôn JSON kế hoạch AI đề xuất. `weekStart` phải là một trong các thứ Hai đã đưa vào prompt —
- * kiểm ở caller (Zod không biết danh sách). `contentTypeCode` là mã OptionItem, null nếu không rõ.
+ * Các thứ Hai NẰM TRONG tháng — dùng để chia bài theo tuần.
+ *
+ * ⚠ Lấy thứ Hai nào có ngày rơi vào tháng này, KHÔNG lấy tuần chứa ngày 1: tuần bắc cầu hai tháng
+ * thì bài của nó thuộc tháng chứa THỨ HAI đó, để một tuần không bị đếm vào hai tháng.
  */
-export const mktPlanSuggestSchema = z.object({
+export function mondaysInMonth(month: Date): Date[] {
+  const y = month.getUTCFullYear();
+  const mo = month.getUTCMonth();
+  const out: Date[] = [];
+  const d = new Date(Date.UTC(y, mo, 1));
+  // Nhích tới thứ Hai đầu tiên của tháng (getUTCDay: 0 = CN, 1 = T2).
+  const shift = (8 - d.getUTCDay()) % 7;
+  d.setUTCDate(1 + shift);
+  while (d.getUTCMonth() === mo) {
+    out.push(new Date(d));
+    d.setUTCDate(d.getUTCDate() + 7);
+  }
+  return out;
+}
+
+/** Tổng số bài cần có trong tháng theo chỉ tiêu — dùng để đối chiếu kế hoạch đã đủ chưa. */
+export function monthTargetCounts(month: Date): Record<MktChannel, number> {
+  const n = mondaysInMonth(month).length;
+  return { LINKEDIN: n * MKT_WEEKLY_TARGET.LINKEDIN.min, FANPAGE: n * MKT_WEEKLY_TARGET.FANPAGE.min };
+}
+
+/** Hạn giao hình cho bài của tuần `weekStart`. */
+export function designDueDate(weekStart: Date): Date {
+  return new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() - MKT_DESIGN_LEAD_DAYS));
+}
+
+/** Khuôn JSON AI đề xuất kế hoạch THÁNG: chủ đề + danh sách bài đã chia sẵn theo tuần. */
+export const mktMonthSuggestSchema = z.object({
+  theme: z.string().trim().min(5).max(MAX_MKT_TITLE),
+  goals: z.string().trim().max(MAX_MKT_KEY_POINTS).default(""),
   items: z
     .array(
       z.object({
@@ -270,6 +343,6 @@ export const mktPlanSuggestSchema = z.object({
       }),
     )
     .min(1)
-    .max(20),
+    .max(30),
 });
-export type MktPlanSuggestItem = z.infer<typeof mktPlanSuggestSchema>["items"][number];
+export type MktMonthSuggest = z.infer<typeof mktMonthSuggestSchema>;

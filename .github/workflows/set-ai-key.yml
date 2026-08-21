@@ -1,0 +1,79 @@
+# Khai khoá API Claude cho production — NÚT BẤM trên web GitHub, KHÔNG cần SSH.
+#
+# Sinh ra vì đường SSH cổng 2222 thi thoảng không thông từ ngoài công ty (HANDOVER §11: 04/08 và
+# 16/08), trong khi web vẫn chạy — lúc đó không có cách nào khai khoá mới lên server. Runner nằm
+# SẴN trên server và tự gọi RA GitHub qua HTTPS nên không phụ thuộc NAT.
+#
+# CÁCH DÙNG (không cần biết code):
+#   1. GitHub → Settings → Secrets and variables → Actions → New repository secret
+#      Name:   ANTHROPIC_API_KEY
+#      Secret: dán khoá sk-ant-... lấy ở console.anthropic.com
+#   2. GitHub → Actions → "Khai khoá AI cho production" → Run workflow → gõ: set
+#
+# ⚠ Khoá KHÔNG BAO GIỜ được in ra log: script chỉ báo "đã ghi, độ dài N ký tự". GitHub cũng tự
+#   che secret trong log, nhưng đó là lưới thứ hai.
+# ⚠ Đổi khoá về sau: sửa lại secret rồi bấm workflow này lần nữa — script gỡ dòng cũ trước khi
+#   ghi dòng mới nên chạy bao nhiêu lần cũng chỉ có ĐÚNG MỘT dòng trong .env.
+# ⚠ Workflow này KHÔNG deploy code. Code phải lên production trước bằng "Deploy production".
+name: Khai khoá AI cho production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Gõ "set" để xác nhận (chống bấm nhầm)'
+        required: true
+        type: string
+      model:
+        description: 'Model Claude cho module MKT'
+        required: true
+        default: claude-opus-5
+        type: choice
+        options:
+          - claude-opus-5
+          - claude-sonnet-5
+
+concurrency:
+  group: deploy-production # dùng chung nhóm với deploy: không sửa .env lúc đang deploy
+  cancel-in-progress: false
+
+jobs:
+  set-key:
+    runs-on: [self-hosted]
+    timeout-minutes: 10
+    if: inputs.confirm == 'set'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Kiểm secret đã khai chưa
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "❌ Chưa có secret ANTHROPIC_API_KEY."
+            echo "   Vào: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          case "$KEY" in
+            sk-ant-*) echo "✅ Secret có, đúng dạng khoá Anthropic (độ dài ${#KEY})" ;;
+            *) echo "❌ Secret không bắt đầu bằng 'sk-ant-' — dán nhầm chuỗi khác?"; exit 1 ;;
+          esac
+
+      - name: Ghi ANTHROPIC_API_KEY vào .env trên server
+        env:
+          KEY_NAME: ANTHROPIC_API_KEY
+          KEY_VALUE: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: bash scripts/set-env-key.sh
+
+      - name: Ghi CLAUDE_MODEL vào .env trên server
+        env:
+          KEY_NAME: CLAUDE_MODEL
+          KEY_VALUE: ${{ inputs.model }}
+        run: bash scripts/set-env-key.sh
+
+      - name: Xong
+        run: |
+          echo "🎉 Đã khai khoá. Kiểm lại tại: https://app.tcmbtl.com/settings/ai"
+          echo "   Phải thấy: 'Claude (Anthropic): đã kết nối' và 'Module MKT đang dùng: Claude (${{ inputs.model }})'"

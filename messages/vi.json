@@ -24,7 +24,8 @@
     "closeMenu": "Đóng menu",
     "comingSoon": "sắp có",
     "days": "ngày",
-    "required": "bắt buộc"
+    "required": "bắt buộc",
+    "__ciTestKeyChiCoVi": "key thử — cố ý chỉ có ở vi.json để CI phải ĐỎ"
   },
   "desktopNotif": {
     "prompt": "Bật thông báo trên máy tính/điện thoại để không bỏ lỡ hoạt động mới trong app.",

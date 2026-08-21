@@ -1,4 +1,9 @@
 import "server-only";
+import { AI_TIMEOUT_MS, AiError, parseAiJson, type AiMessage, type AiResult, type ChatOptions } from "./types";
+
+// Hợp đồng chung (AiMessage / AiError / AiResult / AiUsage…) nay ở "./types" để Claude dùng lại
+// được. Re-export để ~15 chỗ đang import từ file này không phải sửa.
+export * from "./types";
 
 /**
  * Client gọi DeepSeek API.
@@ -18,52 +23,9 @@ import "server-only";
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_MODEL = "deepseek-chat";
-/**
- * Cắt sau 75s — tránh giữ request Next.js treo vô hạn khi API chậm.
- *
- * ⚠ CON SỐ NÀY BỊ TRẦN TỪ BÊN NGOÀI, đừng nâng lên mà không kiểm lại đường mạng phía trước:
- * Cloudflare (gói free) ngắt request proxy ở khoảng 100s và trả lỗi 524. Nếu app chỉ bỏ cuộc SAU
- * mốc đó thì người dùng thấy trang lỗi của Cloudflare chứ không phải thông báo của app — mà server
- * vẫn chạy tiếp và CÓ THỂ đã ghi xong vào DB, tức là "hỏng" nhưng thật ra đã thành công.
- * Trước 01/08/2026 để 90s, chỉ còn 10s biên — quá mỏng. 75s cho biên 25s.
- * nginx phía trước đặt `proxy_read_timeout 300s` nên nginx KHÔNG phải chỗ thắt cổ chai.
- *
- * Nếu sau này lượt sinh nội dung dài hơn 75s và bắt đầu rớt, cách đúng KHÔNG phải nâng số này lên
- * quá 100s mà là đẩy phần gọi AI sang chạy nền rồi cho client hỏi kết quả sau.
- */
-const TIMEOUT_MS = 75_000;
-
 export function isAiConfigured(): boolean {
   return !!process.env.DEEPSEEK_API_KEY;
 }
-
-export type AiMessage = { role: "system" | "user" | "assistant"; content: string };
-
-/** Mã lỗi để UI dịch sang vi/en — KHÔNG trả thẳng thông báo lỗi thô của API cho người dùng. */
-export type AiErrorCode = "NOT_CONFIGURED" | "AUTH" | "RATE_LIMIT" | "TIMEOUT" | "SERVER" | "EMPTY" | "UNKNOWN";
-
-export class AiError extends Error {
-  constructor(
-    readonly code: AiErrorCode,
-    /** Chi tiết kỹ thuật — chỉ ghi log phía server, không hiện cho người dùng. */
-    readonly detail?: string,
-  ) {
-    super(code);
-    this.name = "AiError";
-  }
-}
-
-export type AiUsage = { promptTokens: number; completionTokens: number; totalTokens: number };
-export type AiResult = { text: string; usage: AiUsage | null };
-
-type ChatOptions = {
-  /** 0 = bám sát dữ liệu (phân tích số liệu); 1+ = sáng tạo (brainstorm idea). */
-  temperature?: number;
-  maxTokens?: number;
-  /** Ép model trả JSON thuần — dùng cho các tính năng cần parse có cấu trúc. */
-  json?: boolean;
-  model?: string;
-};
 
 /**
  * Gọi chat completion. Ném `AiError` khi thất bại — caller bắt và dịch mã lỗi sang i18n.
@@ -78,7 +40,7 @@ export async function aiChat(messages: AiMessage[], opts: ChatOptions = {}): Pro
   const model = opts.model ?? process.env.DEEPSEEK_MODEL ?? DEFAULT_MODEL;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
 
   let res: Response;
   try {
@@ -134,10 +96,5 @@ export async function aiChat(messages: AiMessage[], opts: ChatOptions = {}): Pro
 /** Gọi và parse JSON. Model đôi khi bọc JSON trong ```json — hàm này gỡ trước khi parse. */
 export async function aiChatJson<T>(messages: AiMessage[], opts: Omit<ChatOptions, "json"> = {}): Promise<T> {
   const { text } = await aiChat(messages, { ...opts, json: true });
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    throw new AiError("EMPTY", `Không parse được JSON: ${cleaned.slice(0, 300)}`);
-  }
+  return parseAiJson<T>(text);
 }

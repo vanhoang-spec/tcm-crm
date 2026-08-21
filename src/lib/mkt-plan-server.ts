@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getStringSetting } from "@/lib/settings";
 import { AiError } from "@/lib/ai/deepseek";
-import { aiDesignBrief, aiDraftVariant, isAiConfigured } from "@/lib/mkt-ai-server";
+import { aiDesignBrief, aiDraftVariant, isMktAiConfigured } from "@/lib/mkt-ai-server";
 import { designDueDate, parseChannelsCsv, planDueCutoff, type MktChannel } from "@/lib/mkt";
 import { formatDate } from "@/lib/utils";
 
@@ -143,7 +143,7 @@ type PlanItemRow = {
 export async function draftPlanItem(item: PlanItemRow, opts?: { reviewerIds?: string[] }): Promise<string | null> {
   const channels = parseChannelsCsv(item.channels);
   if (channels.length === 0) return null;
-  const aiOn = isAiConfigured();
+  const aiOn = isMktAiConfigured();
   const now = new Date();
 
   const post = await prisma.$transaction(async (tx) => {

@@ -1,7 +1,7 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, requirePermission } from "@/lib/permissions";
-import { isAiConfigured } from "@/lib/ai/deepseek";
+import { isMktAiConfigured, mktAiProviderLabel } from "@/lib/ai/mkt-ai";
 import { getStringSetting } from "@/lib/settings";
 import { formatDate, pickLabel } from "@/lib/utils";
 import { EXECUTION_STATUS_CODES } from "@/lib/projects";
@@ -180,11 +180,11 @@ export default async function MktPlanPage({ searchParams }: { searchParams: Prom
         </a>
       </div>
 
-      <MonthPanel month={monthView} canReview={canReview} canGenerate={canGenerate} aiConfigured={isAiConfigured()} />
+      <MonthPanel month={monthView} canReview={canReview} canGenerate={canGenerate} aiConfigured={isMktAiConfigured()} aiProvider={mktAiProviderLabel()} />
 
       {canReview && <DesignersForm options={designerOptions} />}
 
-      <PlanBoard weeks={weeks} items={views} contentTypes={contentTypes} projects={projectOpts} canReview={canReview} />
+      <PlanBoard weeks={weeks} items={views} contentTypes={contentTypes} projects={projectOpts} canReview={canReview} aiProvider={mktAiProviderLabel()} />
     </div>
   );
 }

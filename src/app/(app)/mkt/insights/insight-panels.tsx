@@ -103,6 +103,7 @@ export function ReportPanel({
   canReview,
   canGenerate,
   aiConfigured,
+  aiProvider,
 }: {
   report: {
     id: string;
@@ -117,6 +118,7 @@ export function ReportPanel({
   canReview: boolean;
   canGenerate: boolean;
   aiConfigured: boolean;
+  aiProvider: string;
 }) {
   const t = useTranslations("mkt");
   const err = useErr();
@@ -245,7 +247,7 @@ export function ReportPanel({
             <form
               action={genAction}
               onSubmit={(e) => {
-                if (!window.confirm(t("insightsRunConfirm"))) e.preventDefault();
+                if (!window.confirm(t("insightsRunConfirm", { provider: aiProvider }))) e.preventDefault();
               }}
             >
               <button

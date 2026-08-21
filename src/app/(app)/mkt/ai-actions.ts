@@ -5,7 +5,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { hasPermission, requirePermission } from "@/lib/permissions";
-import { AiError, aiChat, isAiConfigured } from "@/lib/ai/deepseek";
+import { AiError } from "@/lib/ai/deepseek";
+import { isMktAiConfigured, mktChat } from "@/lib/ai/mkt-ai";
 import { extractTextFromFile } from "@/lib/ai/extract-text";
 import { mktInsightsPrompt } from "@/lib/ai/mkt-prompts";
 import { readMktFile } from "@/lib/mkt-storage";
@@ -39,7 +40,7 @@ async function guard(): Promise<string | null> {
   const t = await getTranslations("ai.errors");
   const staffId = await getCurrentStaffId();
   if (!staffId) return t("NOT_LOGGED_IN");
-  if (!isAiConfigured()) return t("NOT_CONFIGURED");
+  if (!isMktAiConfigured()) return t("NOT_CONFIGURED");
   return null;
 }
 
@@ -168,7 +169,7 @@ export async function generateInsights(reportId: string, _prev: MktState, _formD
 
   let text: string;
   try {
-    const result = await aiChat(
+    const result = await mktChat(
       mktInsightsPrompt({ year: report.year, quarter: report.quarter, stats, note: report.note, fileBlocks, autoMetrics }),
       { temperature: 0.2, maxTokens: 2400 },
     );

@@ -5,7 +5,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { hasPermission, requirePermission } from "@/lib/permissions";
-import { AiError, aiChatJson, isAiConfigured } from "@/lib/ai/deepseek";
+import { AiError } from "@/lib/ai/deepseek";
+import { isMktAiConfigured, mktChatJson } from "@/lib/ai/mkt-ai";
 import { mktMonthSuggestPrompt } from "@/lib/ai/mkt-prompts";
 import {
   MAX_MKT_KEY_POINTS,
@@ -125,7 +126,7 @@ export async function suggestMonthPlan(monthKeyStr: string, _prev: MonthState, f
   await requirePermission("mkt.review");
   if (!(await hasPermission("mkt.generate"))) return { error: "NO_GENERATE_PERM" };
   const t = await getTranslations("ai.errors");
-  if (!isAiConfigured()) return { aiError: t("NOT_CONFIGURED") };
+  if (!isMktAiConfigured()) return { aiError: t("NOT_CONFIGURED") };
 
   const month = parseMonthKey(monthKeyStr);
   if (!month) return { error: "BAD_MONTH" };
@@ -161,7 +162,7 @@ export async function suggestMonthPlan(monthKeyStr: string, _prev: MonthState, f
 
   let parsed;
   try {
-    const raw = await aiChatJson<unknown>(
+    const raw = await mktChatJson<unknown>(
       mktMonthSuggestPrompt({
         monthLabel: `${String(month.getUTCMonth() + 1).padStart(2, "0")}/${month.getUTCFullYear()}`,
         weeks,

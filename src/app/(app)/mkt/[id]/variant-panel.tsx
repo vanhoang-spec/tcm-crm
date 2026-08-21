@@ -40,6 +40,7 @@ export function VariantPanel({
   canReview,
   canGenerate,
   aiConfigured,
+  aiProvider,
   channelConnected,
 }: {
   postId: string;
@@ -47,6 +48,7 @@ export function VariantPanel({
   canReview: boolean;
   canGenerate: boolean;
   aiConfigured: boolean;
+  aiProvider: string;
   /** Kênh này đã nối API chưa — chưa nối thì chỉ còn luồng copy đăng tay của MKT-1. */
   channelConnected: boolean;
 }) {
@@ -105,7 +107,7 @@ export function VariantPanel({
             <form
               action={genAction}
               onSubmit={(e) => {
-                if (!window.confirm(t("aiWriteConfirm", { channel: t(`channel${variant.channel}` as "channelLINKEDIN") }))) {
+                if (!window.confirm(t("aiWriteConfirm", { channel: t(`channel${variant.channel}` as "channelLINKEDIN"), provider: aiProvider }))) {
                   e.preventDefault();
                 }
               }}

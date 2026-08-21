@@ -3269,6 +3269,67 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       tháng sau · gắn order thiết kế vào KPI/cost-per-task của Creative · nhắc hạn giao hình qua
       notification (mới có viền đỏ trên thẻ) · đính file thiết kế thẳng vào app (hiện dán link Drive).
 
+61. **AI — GẮN API CLAUDE CHO MODULE MKT (21/08/2026)** (KHÔNG migration, KHÔNG mã quyền mới;
+    **1 dependency MỚI: `@anthropic-ai/sdk`**; **2 biến .env server MỚI: `ANTHROPIC_API_KEY` +
+    `CLAUDE_MODEL`**). Yêu cầu chủ dự án: dùng Claude cho phần lên kế hoạch và viết bài MKT.
+    - **Phạm vi: CHỈ module MKT** — kế hoạch tháng · viết bài từng kênh · brief designer · phân tích
+      quý. ⚠ Đọc CV tuyển dụng, bóc biên bản họp, so báo giá NCC, kho kiến thức khách, soạn văn bản
+      hành chính, đối chiếu chi ngân hàng **vẫn đi DeepSeek**. Đừng "thống nhất" bằng cách kéo hết
+      sang Claude — đó là đổi nhà cung cấp cho 5 module đang chạy thật, phải hỏi chủ dự án trước.
+    - ⚠ **`lib/ai/mkt-ai.ts` là MỘT NGUỒN SỰ THẬT cho câu "MKT dùng ai".** Có Claude thì Claude,
+      không thì **rơi về DeepSeek**. Đường rơi là CHỦ ĐÍCH: production đang chạy bằng DeepSeek, deploy
+      bản này trước khi khai khoá mà không có đường rơi là toàn bộ MKT chết ngay.
+      ⚠ Đổi lại, việc đang dùng model nào **KHÔNG ĐƯỢC IM LẶNG**: `mktAiProviderLabel()` đi vào **6 hộp
+      xác nhận** trước mỗi nút AI (người bấm phải biết dữ liệu bay sang đâu — 6 câu i18n đó trước
+      đây ghi cứng "DeepSeek", để nguyên là **nói dối người dùng**), vào dòng "Trợ lý đang dùng" ở
+      `/mkt/plan`, và vào `/settings/ai`. **Bỏ nhãn đi là biến đây thành thứ đổi model sau lưng.**
+    - **Tách `lib/ai/types.ts`** (AiMessage · AiError · AiResult · AiUsage · ChatOptions ·
+      `AI_TIMEOUT_MS` · `parseAiJson`): hai client phải ném CÙNG một loại lỗi, nếu không thì mỗi chỗ
+      gọi phải biết mình đang nói chuyện với ai — đúng thứ tầng này sinh ra để giấu. `deepseek.ts`
+      `export * from "./types"` nên **~15 chỗ import cũ KHÔNG phải sửa**.
+    - **Dùng SDK CHÍNH THỨC `@anthropic-ai/sdk`**, không fetch thuần như DeepSeek: DeepSeek nói giao
+      thức OpenAI nên fetch là đủ, Anthropic có kiểu riêng (content blocks, stream events) mà viết tay
+      chỉ để lặp lại việc SDK đã làm.
+    - ⚠ **BA KHÁC BIỆT CỦA ANTHROPIC SO VỚI DEEPSEEK — quên cái nào cũng hỏng thầm lặng:**
+      1. **System prompt TÁCH RA KHỎI mảng messages** (DeepSeek/OpenAI nhét chung). Nhiều dòng system
+         phải gộp lại; phần còn lại mới là `messages`.
+      2. **KHÔNG có `response_format: json_object`.** Cách ép JSON ổn định mà không phải dựng JSON
+         Schema cho từng lời gọi: **điền sẵn lượt assistant bằng `{`** (`JSON_PREFILL`) — model buộc
+         viết tiếp từ đó nên không thể mở đầu bằng lời dẫn hay bọc khối mã json. ⚠ **Phần điền sẵn KHÔNG
+         nằm trong nội dung trả về — phải tự ghép lại**, quên là MỌI lượt JSON hỏng ngay ký tự đầu.
+      3. **Hết tiền / vượt hạn mức về dưới dạng HTTP 400** kèm chữ "credit balance", không phải 429.
+         Xếp vào UNKNOWN thì người dùng thấy "lỗi không xác định" và không ai biết phải đi nạp tiền —
+         nay ánh xạ sang RATE_LIMIT.
+    - **Streaming + `finalMessage()`**: lượt sinh kế hoạch cả tháng ~6000 token, gọi kiểu chờ-một-cục
+      thì SDK từ chối vì có thể vượt trần request. `maxRetries: 0` giữ đúng chính sách của
+      `deepseek.ts` (người dùng bấm nút, mỗi lần thử lại ăn vào ngân sách 75s chung).
+    - ⚠ **KHÔNG bật extended thinking.** Trần 75s là trần CỨNG từ Cloudflare (ngắt ở ~100s, xem chú
+      thích `AI_TIMEOUT_MS`); thinking cộng thêm hàng chục giây là rớt. Muốn bật thì việc đúng phải
+      làm TRƯỚC là đẩy lượt gọi AI sang chạy nền rồi cho client hỏi kết quả sau.
+    - **Model mặc định `claude-opus-5`**, đổi bằng `CLAUDE_MODEL` (mirror `DEEPSEEK_MODEL` sẵn có).
+    - **Verify: 42/42 assertion** với **fetch giả phát đúng luồng SSE thật của Anthropic** — chạy qua
+      ĐÚNG SDK và ĐÚNG code của app, **không tốn một đồng nào**: system tách + gộp 2 dòng · messages
+      chỉ còn lượt user · điền sẵn `{` và ghép lại đúng · gỡ được khối mã thừa · khoá đi ở header
+      `x-api-key` và **KHÔNG lọt vào body** · 401/403→AUTH · 429→RATE_LIMIT · 500→SERVER · **400 kèm
+      "credit balance"→RATE_LIMIT** · 400 khác→UNKNOWN · rỗng→EMPTY · **429 chỉ gọi ĐÚNG 1 lần** (không
+      tự retry) · `CLAUDE_MODEL` đè mặc định · router: không khoá→tắt, chỉ DeepSeek→DeepSeek, **có cả
+      hai→Claude thắng**, mất Claude→rơi về DeepSeek (đo bằng HOST thật của request).
+      **Browser thật:** chưa khai khoá ⇒ nhãn và hộp xác nhận đều ghi *"DeepSeek (deepseek-chat)"* ·
+      khai **khoá GIẢ** rồi khởi động lại ⇒ nhãn đổi thành *"Claude (claude-opus-5)"*, bấm AI ⇒ request
+      **đi thật tới api.anthropic.com**, nhận 401, hiện đúng câu *"Khoá API của trợ lý AI không hợp lệ"*
+      (log server: `[MKT-MONTH-AI] AUTH: 401 … "API key is invalid."`) — tức **toàn bộ đường dây đã
+      thông, chỉ còn thiếu khoá thật** · `/settings/ai` hiện đủ hai thẻ + dòng "Module MKT đang dùng".
+      tsc · eslint · i18n **0/0 (4594 key)** · `next build` sạch · `migrate diff` rỗng · `db:seed` sạch.
+      `.env` máy dev đã khôi phục, **không còn khoá giả**.
+    - ⚠ **CHƯA CHẠY ĐƯỢC MỘT LƯỢT SINH NỘI DUNG THẬT** — cần khoá Anthropic có tiền, việc của chủ dự
+      án (console.anthropic.com → Billing nạp tiền → API keys). Chưa có khoá thì MKT chạy y như hôm
+      nay bằng DeepSeek, không hỏng gì.
+    - **CHƯA LÀM (cố ý):** chưa cho chọn nhà cung cấp bằng giao diện (đổi = sửa `.env` + khởi động
+      lại, giống mọi khoá khác — xem chú thích đầu `/settings/ai`) · chưa ghi nhận số token/chi phí
+      theo người bấm · chưa dùng structured outputs của Anthropic (`output_config.format`) vì phải
+      dựng JSON Schema cho từng lời gọi trong khi Zod đã chặn ở đầu ra · chưa bật extended thinking
+      (xem trần 75s ở trên) · các module khác vẫn DeepSeek.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

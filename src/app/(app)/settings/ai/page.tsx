@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { isAiConfigured } from "@/lib/ai/deepseek";
+import { isClaudeConfigured } from "@/lib/ai/claude";
+import { mktAiProviderLabel } from "@/lib/ai/mkt-ai";
 import { isWebSearchConfigured } from "@/lib/ai/websearch";
 import { requirePermission } from "@/lib/permissions";
 
@@ -23,6 +25,7 @@ export default async function SettingsAiPage() {
     getTranslations("settings.ai"),
   ]);
   const configured = isAiConfigured();
+  const claudeOn = isClaudeConfigured();
   const searchOn = isWebSearchConfigured();
 
   return (
@@ -34,6 +37,24 @@ export default async function SettingsAiPage() {
         </Link>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">{tIdx("aiTitle")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{tIdx("aiDesc")}</p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="flex items-center gap-2">
+          {claudeOn ? <CheckCircle2 className="h-5 w-5 text-success" /> : <XCircle className="h-5 w-5 text-muted-foreground" />}
+          <span className="text-sm font-medium text-foreground">{claudeOn ? tAi("claudeOn") : tAi("claudeOff")}</span>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">{tAi("claudeHint")}</p>
+        <p className="mt-2 text-xs font-medium text-foreground">{tAi("mktProvider", { provider: mktAiProviderLabel() })}</p>
+        <ol className="mt-3 space-y-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
+          <li>{tAi("claudeStep1")}</li>
+          <li>
+            {tAi("claudeStep2")}
+            <pre className="mt-1 overflow-x-auto rounded bg-surface-2 p-2 text-[11px] leading-relaxed">{`ANTHROPIC_API_KEY="sk-ant-..."
+CLAUDE_MODEL="claude-opus-5"`}</pre>
+          </li>
+          <li>{tAi("claudeStep3")}</li>
+        </ol>
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-5">

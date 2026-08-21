@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requirePermission, hasPermission } from "@/lib/permissions";
-import { isAiConfigured } from "@/lib/ai/deepseek";
+import { isMktAiConfigured, mktAiProviderLabel } from "@/lib/ai/mkt-ai";
 import { formatDate } from "@/lib/utils";
 import { MKT_WEEKLY_TARGET, buildQuarterStats, quarterRange } from "@/lib/mkt";
 import { CreateReportForm, ReportPanel } from "./insight-panels";
@@ -68,7 +68,7 @@ export default async function MktInsightsPage() {
         <p className="rounded-xl border border-dashed border-border-strong p-6 text-center text-sm text-muted-foreground">{t("insightsEmpty")}</p>
       ) : (
         withStats.map((r) => (
-          <ReportPanel key={r.id} report={r} canReview={canReview} canGenerate={canGenerate} aiConfigured={isAiConfigured()} />
+          <ReportPanel key={r.id} report={r} canReview={canReview} canGenerate={canGenerate} aiConfigured={isMktAiConfigured()} aiProvider={mktAiProviderLabel()} />
         ))
       )}
     </div>

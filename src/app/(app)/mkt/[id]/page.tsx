@@ -4,7 +4,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requirePermission, hasPermission } from "@/lib/permissions";
-import { isAiConfigured } from "@/lib/ai/deepseek";
+import { isMktAiConfigured, mktAiProviderLabel } from "@/lib/ai/mkt-ai";
 import { formatDate, pickLabel } from "@/lib/utils";
 import { MKT_CHANNELS, isMktChannel } from "@/lib/mkt";
 import type { Locale } from "@/i18n/locales";
@@ -145,7 +145,7 @@ export default async function MktPostDetailPage({ params }: { params: Promise<{ 
         )}
       </section>
 
-      <DesignBriefPanel postId={post.id} brief={post.designBrief} canGenerate={canGenerate} aiConfigured={isAiConfigured()} />
+      <DesignBriefPanel postId={post.id} brief={post.designBrief} canGenerate={canGenerate} aiConfigured={isMktAiConfigured()} aiProvider={mktAiProviderLabel()} />
 
       {variants.map((v) => (
         <VariantPanel
@@ -154,7 +154,7 @@ export default async function MktPostDetailPage({ params }: { params: Promise<{ 
           variant={v}
           canReview={canReview}
           canGenerate={canGenerate}
-          aiConfigured={isAiConfigured()}
+          aiConfigured={isMktAiConfigured()} aiProvider={mktAiProviderLabel()}
           channelConnected={connected.includes(v.channel)}
         />
       ))}

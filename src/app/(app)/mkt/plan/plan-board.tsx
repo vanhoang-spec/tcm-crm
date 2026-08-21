@@ -161,14 +161,14 @@ function PlanItemForm({
   );
 }
 
-function DraftNowButton({ id }: { id: string }) {
+function DraftNowButton({ id, aiProvider }: { id: string; aiProvider: string }) {
   const t = useTranslations("mkt.plan");
   const [state, action, pending] = useActionState<PlanState, FormData>(draftPlanItemNow.bind(null, id), {});
   return (
     <form
       action={action}
       onSubmit={(e) => {
-        if (!window.confirm(t("confirmDraftNow"))) e.preventDefault();
+        if (!window.confirm(t("confirmDraftNow", { provider: aiProvider }))) e.preventDefault();
       }}
       className="inline"
     >
@@ -180,7 +180,7 @@ function DraftNowButton({ id }: { id: string }) {
   );
 }
 
-function ItemRow({ item, weeks, contentTypes, projects, canReview }: { item: PlanItemView; weeks: WeekView[]; contentTypes: Option[]; projects: Option[]; canReview: boolean }) {
+function ItemRow({ item, weeks, contentTypes, projects, canReview, aiProvider }: { item: PlanItemView; weeks: WeekView[]; contentTypes: Option[]; projects: Option[]; canReview: boolean; aiProvider: string }) {
   const t = useTranslations("mkt.plan");
   const [editing, setEditing] = useState(false);
   const chans = parseChannelsCsv(item.channels);
@@ -221,7 +221,7 @@ function ItemRow({ item, weeks, contentTypes, projects, canReview }: { item: Pla
           <button type="button" onClick={() => setEditing(true)} className={btn}>
             <Pencil className="h-3.5 w-3.5" /> {t("editBtn")}
           </button>
-          {item.status === "PLANNED" && <DraftNowButton id={item.id} />}
+          {item.status === "PLANNED" && <DraftNowButton id={item.id} aiProvider={aiProvider} />}
           <form action={togglePlanItemSkip.bind(null, item.id)} className="inline">
             <button type="submit" className={btn}>
               {item.status === "SKIPPED" ? <RotateCcw className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
@@ -258,12 +258,14 @@ export function PlanBoard({
   contentTypes,
   projects,
   canReview,
+  aiProvider,
 }: {
   weeks: WeekView[];
   items: PlanItemView[];
   contentTypes: Option[];
   projects: Option[];
   canReview: boolean;
+  aiProvider: string;
 }) {
   const t = useTranslations("mkt.plan");
   const [adding, setAdding] = useState(false);
@@ -302,7 +304,7 @@ export function PlanBoard({
             ) : (
               <ul className="mt-2 space-y-2">
                 {rows.map((item) => (
-                  <ItemRow key={item.id} item={item} weeks={weeks} contentTypes={contentTypes} projects={projects} canReview={canReview} />
+                  <ItemRow key={item.id} item={item} weeks={weeks} contentTypes={contentTypes} projects={projects} canReview={canReview} aiProvider={aiProvider} />
                 ))}
               </ul>
             )}

@@ -10,7 +10,7 @@ import type { MktState } from "../actions";
  * MKT-2a — khối BRIEF CHO DESIGNER trên trang bài. Bài dựng từ master plan có brief sẵn (AI soạn
  * nền); bài tạo tay thì HR bấm nút. Brief là text thuần, render whitespace-pre-wrap.
  */
-export function DesignBriefPanel({ postId, brief, canGenerate, aiConfigured }: { postId: string; brief: string | null; canGenerate: boolean; aiConfigured: boolean }) {
+export function DesignBriefPanel({ postId, brief, canGenerate, aiConfigured, aiProvider }: { postId: string; brief: string | null; canGenerate: boolean; aiConfigured: boolean; aiProvider: string }) {
   const t = useTranslations("mkt");
   const [state, formAction, pending] = useActionState<MktState, FormData>(generateDesignBrief.bind(null, postId), {});
 
@@ -25,7 +25,7 @@ export function DesignBriefPanel({ postId, brief, canGenerate, aiConfigured }: {
           <form
             action={formAction}
             onSubmit={(e) => {
-              if (brief && !window.confirm(t("designBriefOverwriteConfirm"))) e.preventDefault();
+              if (brief && !window.confirm(t("designBriefOverwriteConfirm", { provider: aiProvider }))) e.preventDefault();
             }}
           >
             <button

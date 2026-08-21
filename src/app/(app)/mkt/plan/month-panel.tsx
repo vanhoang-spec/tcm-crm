@@ -45,7 +45,7 @@ const ERR: Record<string, string> = {
  *
  * ⚠ Form chặn `reset` (React 19 xoá cả select/checkbox sau mỗi lần action chạy — HANDOVER 10.37).
  */
-export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { month: MonthView; canReview: boolean; canGenerate: boolean; aiConfigured: boolean }) {
+export function MonthPanel({ month, canReview, canGenerate, aiConfigured, aiProvider }: { month: MonthView; canReview: boolean; canGenerate: boolean; aiConfigured: boolean; aiProvider: string }) {
   const t = useTranslations("mkt.plan");
   const [save, saveAction, saving] = useActionState<MonthState, FormData>(saveMonthPlan, {});
   const [sug, sugAction, suggesting] = useActionState<MonthState, FormData>(suggestMonthPlan.bind(null, month.monthKey), {});
@@ -127,7 +127,7 @@ export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { mo
                 <form
                   action={sugAction}
                   onSubmit={(e) => {
-                    if (!window.confirm(t("confirmRedoMonth", { n: month.plannedCount }))) e.preventDefault();
+                    if (!window.confirm(t("confirmRedoMonth", { n: month.plannedCount, provider: aiProvider }))) e.preventDefault();
                   }}
                   className="inline"
                 >
@@ -142,7 +142,7 @@ export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { mo
                 <form
                   action={sugAction}
                   onSubmit={(e) => {
-                    if (month.itemCount > 0 || !window.confirm(t("confirmSuggestMonth"))) e.preventDefault();
+                    if (month.itemCount > 0 || !window.confirm(t("confirmSuggestMonth", { provider: aiProvider }))) e.preventDefault();
                   }}
                   className="inline"
                 >
@@ -182,6 +182,7 @@ export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { mo
 
               <p className="mt-2 text-[11px] text-muted-foreground">{approved ? t("approvedNote") : t("draftNote")}</p>
           {!approved && canGenerate && !noFuture && <p className="mt-1 text-[11px] text-muted-foreground">{t("futureOnlyNote", { n: month.futureWeeks })}</p>}
+          {canGenerate && <p className="mt-1 text-[11px] text-muted-foreground">{t("aiProviderNote", { provider: aiProvider })}</p>}
         </>
       )}
     </section>

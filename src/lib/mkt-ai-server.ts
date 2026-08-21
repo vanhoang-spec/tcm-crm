@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { aiChatJson, isAiConfigured } from "@/lib/ai/deepseek";
+import { isMktAiConfigured, mktChatJson } from "@/lib/ai/mkt-ai";
 import { mktDesignBriefPrompt, mktVariantPrompt } from "@/lib/ai/mkt-prompts";
 import { mktAiContentSchema, mktDesignBriefSchema, type MktChannel } from "@/lib/mkt";
 
@@ -33,7 +33,7 @@ export async function aiDraftVariant(postId: string, channel: MktChannel): Promi
   if (!post || !variant) return { ok: false, code: "NOT_FOUND" };
   if (variant.status === "POSTED") return { ok: false, code: "LOCKED" };
 
-  const raw = await aiChatJson<unknown>(
+  const raw = await mktChatJson<unknown>(
     mktVariantPrompt(channel, {
       title: post.title,
       keyPoints: post.keyPoints,
@@ -72,7 +72,7 @@ export async function aiDesignBrief(postId: string): Promise<AiStepResult & { br
   });
   if (!post) return { ok: false, code: "NOT_FOUND" };
 
-  const raw = await aiChatJson<unknown>(
+  const raw = await mktChatJson<unknown>(
     mktDesignBriefPrompt({
       title: post.title,
       keyPoints: post.keyPoints,
@@ -90,4 +90,4 @@ export async function aiDesignBrief(postId: string): Promise<AiStepResult & { br
   return { ok: true, brief: parsed.data.brief };
 }
 
-export { isAiConfigured };
+export { isMktAiConfigured };

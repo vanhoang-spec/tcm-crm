@@ -3036,7 +3036,35 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `859a5fe`** (21/08/2026 12:39) — gói **5 commit**: chat UX trên điện thoại (mục 10.52) ·
+**Production đang chạy `42f98c1`** (21/08/2026 13:57) — **LẦN DEPLOY ĐẦU TIÊN BẰNG NÚT BẤM GitHub Actions**
+(mục 10.57): bấm "Run workflow" → runner `tcm-server` trên server tự chạy `scripts/deploy-local.sh`, xong trong
+~100 giây (lockfile không đổi nên bỏ qua npm ci). Nội dung deploy chỉ là 4 file CI/CD + HANDOVER — không đụng code
+app, dùng làm bài test end-to-end của tầng 3 đúng kế hoạch.
+
+Kiểm chứng CI/CD trong cùng ngày:
+- **CI run 1 (master) XANH** — đủ 10 bước, kể cả migrate+seed trên DB dựng-từ-đầu.
+- **Chứng minh CI bắt lỗi thật**: PR #1 cố ý thêm 1 key chỉ có ở vi.json → CI **ĐỎ đúng ở bước i18n parity**
+  (các bước trước xanh, các bước sau skip) → đóng PR, xoá nhánh. Không merge gì.
+- **Deploy run 1 (nút bấm) XANH** — sau deploy: `.deployed-commit` = 42f98c1 (runner) · pm2 `tcm-crm` +
+  `gh-runner` đều online · backup mới `~/backup/*-20260821-135726` · dữ liệu KHÔNG đổi một dòng
+  (37/68/24 · 481 dòng CO · 30 NCC · 1348 grant · integrity_check ok) · `/login` qua nginx 200.
+
+⚠ **PAT của vanhoang-spec đã được tick thêm scope `workflow`** (chủ dự án tự làm trên web 21/08 — chỉ tick +
+Update, không regenerate nên chuỗi token giữ nguyên). Thiếu scope đó là không push được file trong
+`.github/workflows/`.
+
+📣 **Ghi nhận 13:57: `push_subscription` = 1** — đã có MỘT thiết bị thật bật thông báo đẩy (lúc 12:39 còn 0).
+Đường push tới thiết bị thật coi như bắt đầu có dữ liệu sống; mục "còn phải test trên máy thật" ở khối dưới đã
+được thực hiện một phần.
+
+**Việc còn chờ chủ dự án:** cài GitHub App Claude + secret cho `claude.yml` (tầng 2 — hướng dẫn trong comment
+đầu file đó) · hai việc production của khối dưới (tick chia sẻ PRO, khai nhóm hàng) vẫn nguyên.
+
+---
+
+### Deploy trước đó — 21/08/2026 lúc 12:39
+
+**Production khi đó chạy `859a5fe`** (21/08/2026 12:39) — gói **5 commit**: chat UX trên điện thoại (mục 10.52) ·
 PWA cài app về màn hình chính (10.53) · Web Push (10.54) · phòng Sản xuất dùng chung NCC/nhóm/form của Thu mua
 (10.55) · PUR-3b nhóm hàng & form báo giá khai trong app (10.56). Chạy `bash scripts/deploy.sh` **đường LAN
 192.168.1.111:22**, fingerprint khớp. **2 migration mới** áp sạch (`web_push`, `rfq_group_in_app` — cả hai

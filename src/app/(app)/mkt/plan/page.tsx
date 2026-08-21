@@ -13,6 +13,7 @@ import {
   addWeeksUtc,
   monthKey,
   monthKeyUtc,
+  futureWeeksInMonth,
   mondaysInMonth,
   monthTargetCounts,
   parseChannelsCsv,
@@ -68,6 +69,7 @@ export default async function MktPlanPage({ searchParams }: { searchParams: Prom
         projectId: true,
         status: true,
         postId: true,
+        monthPlanId: true,
         note: true,
         aiSuggested: true,
         approvedAt: true,
@@ -149,6 +151,11 @@ export default async function MktPlanPage({ searchParams }: { searchParams: Prom
     approvedAt: monthPlan?.approvedAt ? formatDate(monthPlan.approvedAt) : null,
     approvedByName: monthPlan?.approvedBy?.fullName ?? null,
     itemCount: monthPlan?._count.items ?? 0,
+    // Số dòng nút "Xoá đề xuất – Chạy lại" SẼ xoá: chỉ dòng còn PLANNED và có gắn kế hoạch tháng.
+    // Dòng đã dựng bài / đã bỏ qua không bị đụng — hộp xác nhận phải nói đúng con số đó.
+    plannedCount: items.filter((i) => i.monthPlanId && i.status === "PLANNED").length,
+    // Tuần TƯƠNG LAI còn lại trong tháng — hết tuần thì AI không đề xuất được nữa (nút khoá).
+    futureWeeks: futureWeeksInMonth(month, now).length,
     counts: MKT_CHANNELS.map((c) => ({ channel: c, planned: planned[c] ?? 0, target: target[c] })),
   };
   const prevMonth = monthKey(addMonthsUtc(month, -1));

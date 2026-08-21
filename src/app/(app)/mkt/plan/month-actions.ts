@@ -12,8 +12,8 @@ import {
   MAX_MKT_NOTE,
   MAX_MKT_TITLE,
   channelsToCsv,
+  futureWeeksInMonth,
   mktMonthSuggestSchema,
-  mondaysInMonth,
   monthKey,
   parseMonthKey,
   weekKey,
@@ -103,11 +103,23 @@ export async function reopenMonthPlan(monthKeyStr: string, _prev: MonthState, _f
 }
 
 /**
- * AI đề xuất CẢ THÁNG: chủ đề + chia bài từng tuần theo đúng chỉ tiêu.
+ * AI đề xuất CẢ THÁNG: chia bài từng tuần theo đúng chỉ tiêu, bám chủ đề + định hướng HR nhập.
  *
  * Ghi thẳng vào DB dưới dạng NHÁP (tháng DRAFT, dòng chưa duyệt) để HR sửa trực tiếp trên bảng —
  * kế hoạch tháng có 12–15 dòng, giữ trong state của form rồi mới lưu thì mất hết nếu lỡ tải lại.
- * ⚠ Chỉ chạy khi tháng CHƯA có dòng nào: chạy lại trên tháng đã có kế hoạch sẽ đẻ bài trùng.
+ *
+ * ⚠ CHỈ ĐỀ XUẤT VÀO TUẦN TƯƠNG LAI (quyết định chủ dự án 21/08/2026). Tuần đã qua và tuần đang chạy
+ * đều bị loại: hạn dựng bài là 3 ngày TRƯỚC thứ Hai của tuần đăng, nên bài của tuần hiện tại đã quá
+ * hạn dựng ngay lúc đề xuất. Tháng không còn tuần tương lai nào ⇒ từ chối, KHÔNG gọi AI.
+ *
+ * ⚠ CHỦ ĐỀ + ĐỊNH HƯỚNG HR NHẬP LÀ NGUỒN, KHÔNG PHẢI Ý KIẾN THAM KHẢO: hai trường đó đi vào prompt
+ * (trước 21/08/2026 "goals" KHÔNG hề được gửi đi — HR gõ định hướng mà AI không bao giờ đọc), và
+ * khi ghi lại thì GIỮ NGUYÊN VĂN bản HR gõ; chỉ lấy bản AI viết cho trường HR để trống.
+ *
+ * Hai chế độ: mặc định chỉ chạy trên tháng CHƯA có dòng nào; "replace=1" (nút "Xoá đề xuất – Chạy
+ * lại") thì xoá các dòng CHƯA dựng bài rồi ghi bộ mới.
+ * ⚠ Thứ tự BẮT BUỘC: gọi AI TRƯỚC, xoá + ghi trong CÙNG một transaction SAU. Xoá trước rồi mới gọi
+ * AI thì một lượt AI hỏng là kế hoạch cũ mất trắng mà không có gì thay thế.
  */
 export async function suggestMonthPlan(monthKeyStr: string, _prev: MonthState, formData: FormData): Promise<MonthState> {
   await requirePermission("mkt.review");
@@ -117,17 +129,34 @@ export async function suggestMonthPlan(monthKeyStr: string, _prev: MonthState, f
 
   const month = parseMonthKey(monthKeyStr);
   if (!month) return { error: "BAD_MONTH" };
-  const weeks = mondaysInMonth(month).map(weekKey);
-  if (weeks.length === 0) return { error: "BAD_MONTH" };
+  const replace = String(formData.get("replace") ?? "") === "1";
 
-  const plan = await prisma.mktMonthPlan.findUnique({ where: { month }, select: { id: true, theme: true, status: true, _count: { select: { items: true } } } });
+  // Chỉ tuần TƯƠNG LAI — xem chú thích trên hàm.
+  const weeks = futureWeeksInMonth(month).map(weekKey);
+  if (weeks.length === 0) return { error: "NO_FUTURE_WEEK" };
+
+  const plan = await prisma.mktMonthPlan.findUnique({
+    where: { month },
+    select: { id: true, theme: true, goals: true, status: true, _count: { select: { items: true } } },
+  });
   if (plan?.status === "APPROVED") return { error: "LOCKED" };
-  if (plan && plan._count.items > 0) return { error: "HAS_ITEMS" };
+  if (!replace && plan && plan._count.items > 0) return { error: "HAS_ITEMS" };
+
+  // Chủ đề / định hướng: ưu tiên thứ HR đang gõ trên màn hình, rồi tới thứ đã lưu.
+  const themeHint = str(formData.get("themeHint"), MAX_MKT_TITLE) || plan?.theme || "";
+  const goalsHint = str(formData.get("goalsHint"), MAX_MKT_KEY_POINTS) || plan?.goals || "";
+
+  // Dòng SẼ BỊ XOÁ ở chế độ chạy lại thì KHÔNG đưa vào danh sách "tránh trùng" — bảo AI né chính
+  // những đề tài mình vừa vứt đi là tự bó tay nó.
+  const dropIds =
+    replace && plan
+      ? (await prisma.mktPlanItem.findMany({ where: { monthPlanId: plan.id, status: "PLANNED" }, select: { id: true } })).map((x) => x.id)
+      : [];
 
   const [types, recent, planned] = await Promise.all([
     prisma.optionItem.findMany({ where: { set: { code: "mkt_content_type" }, isActive: true }, orderBy: { sort: "asc" }, select: { id: true, code: true, labelVi: true } }),
     prisma.mktPost.findMany({ orderBy: { createdAt: "desc" }, take: 15, select: { title: true } }),
-    prisma.mktPlanItem.findMany({ where: { status: { not: "SKIPPED" } }, orderBy: { weekStart: "desc" }, take: 30, select: { title: true } }),
+    prisma.mktPlanItem.findMany({ where: { status: { not: "SKIPPED" }, id: { notIn: dropIds } }, orderBy: { weekStart: "desc" }, take: 30, select: { title: true } }),
   ]);
 
   let parsed;
@@ -139,7 +168,8 @@ export async function suggestMonthPlan(monthKeyStr: string, _prev: MonthState, f
         contentTypes: types.map((x) => ({ code: x.code, label: x.labelVi })),
         recentTitles: recent.map((x) => x.title),
         plannedTitles: planned.map((x) => x.title),
-        themeHint: str(formData.get("themeHint"), MAX_MKT_TITLE) || plan?.theme || null,
+        themeHint: themeHint || null,
+        goalsHint: goalsHint || null,
       }),
       { temperature: 0.7, maxTokens: 6000 },
     );
@@ -154,7 +184,8 @@ export async function suggestMonthPlan(monthKeyStr: string, _prev: MonthState, f
   }
   if (!parsed.success) return { error: "AI_SHAPE" };
 
-  // Lọc lại bằng CODE — AI gợi ý, code gác: tuần phải nằm trong tháng, mã loại phải có thật.
+  // Lọc lại bằng CODE — AI gợi ý, code gác: tuần phải nằm trong danh sách tuần TƯƠNG LAI đã gửi đi,
+  // mã loại phải có thật. Model tự ý trả về tuần quá khứ thì dòng đó rơi ở đây.
   const weekSet = new Set(weeks);
   const typeByCode = new Map(types.map((x) => [x.code, x.id]));
   const rows = parsed.data.items
@@ -171,20 +202,27 @@ export async function suggestMonthPlan(monthKeyStr: string, _prev: MonthState, f
   if (rows.length === 0) return { error: "AI_SHAPE" };
 
   const staffId = await getCurrentStaffId();
+  const theme = themeHint || parsed.data.theme;
+  const goals = goalsHint || parsed.data.goals;
+  let removed = 0;
   await prisma.$transaction(async (tx) => {
-    const p =
-      plan ??
-      (await tx.mktMonthPlan.create({ data: { month, theme: parsed.data.theme, goals: parsed.data.goals, aiSuggested: true, createdById: staffId } }));
-    if (plan) await tx.mktMonthPlan.update({ where: { id: p.id }, data: { theme: parsed.data.theme, goals: parsed.data.goals, aiSuggested: true } });
-    // Kiểm LẠI trong transaction: cửa sổ giữa lần đếm đầu và lúc ghi dài bằng cả lượt gọi AI (tới
-    // 90s) — hai người cùng bấm cách nhau 20 giây là tháng có hai kế hoạch chồng nhau (bài học
-    // generateOutline của KB-H3).
-    const n = await tx.mktPlanItem.count({ where: { monthPlanId: p.id } });
-    if (n > 0) return;
+    const p = plan ?? (await tx.mktMonthPlan.create({ data: { month, theme, goals, aiSuggested: true, createdById: staffId } }));
+    if (plan) await tx.mktMonthPlan.update({ where: { id: p.id }, data: { theme, goals, aiSuggested: true } });
+    if (replace) {
+      // ⚠ CHỈ xoá dòng còn PLANNED: dòng DRAFTED đã thành bài đăng (có thể đã gửi brief cho
+      // designer), dòng SKIPPED là quyết định của người — xoá cả hai là xoá việc người khác đã làm.
+      removed = (await tx.mktPlanItem.deleteMany({ where: { monthPlanId: p.id, status: "PLANNED" } })).count;
+    } else {
+      // Kiểm LẠI trong transaction: cửa sổ giữa lần đếm đầu và lúc ghi dài bằng cả lượt gọi AI (tới
+      // 90s) — hai người cùng bấm cách nhau 20 giây là tháng có hai kế hoạch chồng nhau (bài học
+      // generateOutline của KB-H3).
+      const n = await tx.mktPlanItem.count({ where: { monthPlanId: p.id } });
+      if (n > 0) return;
+    }
     await tx.mktPlanItem.createMany({ data: rows.map((r) => ({ ...r, monthPlanId: p.id, createdById: staffId })) });
   });
 
-  await audit(monthKeyStr, "AI_SUGGEST", { theme: parsed.data.theme, items: rows.length });
+  await audit(monthKeyStr, replace ? "AI_REPLACE" : "AI_SUGGEST", { theme, items: rows.length, removed, weeks: weeks.length });
   revalidatePath("/mkt/plan");
   return { success: true };
 }

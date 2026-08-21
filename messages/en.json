@@ -4303,7 +4303,11 @@
       "errNoItems": "The monthly plan has no posts yet.",
       "errHasItems": "The month already has posts — clear them before re-running AI.",
       "errMonthLocked": "Month is approved — reopen it to edit first.",
-      "awaitingApproval": "awaiting monthly approval"
+      "awaitingApproval": "awaiting monthly approval",
+      "redoMonthBtn": "Clear & re-run",
+      "confirmRedoMonth": "Delete {n} not-yet-drafted rows this month and let AI plan again from the theme and direction currently entered? Drafted posts and skipped rows stay. (billed per call)",
+      "errNoFutureWeek": "This month has no future week left to plan — pick the next month.",
+      "futureOnlyNote": "AI only plans into the {n} weeks still ahead (posts for the current week are already past the drafting deadline). Edit the theme/direction then re-run and AI follows the new content."
     },
     "publishNow": "Publish now",
     "publishing": "Publishing…",

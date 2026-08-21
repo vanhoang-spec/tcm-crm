@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, CheckCircle2, Undo2, Save } from "lucide-react";
+import { Sparkles, CheckCircle2, Undo2, Save, RefreshCw } from "lucide-react";
 import { saveMonthPlan, approveMonthPlan, reopenMonthPlan, suggestMonthPlan, type MonthState } from "./month-actions";
 
 export type MonthView = {
@@ -15,6 +15,10 @@ export type MonthView = {
   approvedAt: string | null;
   approvedByName: string | null;
   itemCount: number;
+  /** Số dòng còn PLANNED — đúng số dòng nút "Xoá đề xuất – Chạy lại" sẽ xoá. */
+  plannedCount: number;
+  /** Số tuần TƯƠNG LAI còn lại trong tháng; 0 thì AI không đề xuất được nữa. */
+  futureWeeks: number;
   /** Số bài đã lên kế hoạch / chỉ tiêu, theo kênh. */
   counts: { channel: string; planned: number; target: number }[];
 };
@@ -32,6 +36,7 @@ const ERR: Record<string, string> = {
   HAS_ITEMS: "errHasItems",
   LOCKED: "errMonthLocked",
   NO_GENERATE_PERM: "errNoGenerate",
+  NO_FUTURE_WEEK: "errNoFutureWeek",
   AI_SHAPE: "errAiShape",
 };
 
@@ -49,6 +54,9 @@ export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { mo
   const [theme, setTheme] = useState(month.theme);
   const [goals, setGoals] = useState(month.goals);
   const approved = month.status === "APPROVED";
+  // Hết tuần tương lai thì AI không đề xuất được nữa (server cũng chặn) — nói thẳng thay vì để
+  // người dùng bấm rồi nhận lỗi.
+  const noFuture = month.futureWeeks === 0;
 
   const err = (s: MonthState) => (s.error ? t(ERR[s.error] ?? "errGeneric") : s.aiError ? s.aiError : null);
 
@@ -110,7 +118,27 @@ export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { mo
               "A React form was unexpectedly submitted" và nút bên trong KHÔNG gửi được (đúng bẫy đã
               trả giá ở MEET-2 — HANDOVER 10.39). */}
           <div className="mt-3 flex flex-wrap items-center gap-3">
-              {!approved && canGenerate && (
+              {/* ⚠ Hai nút dùng CHUNG một action, khác nhau đúng ô ẩn `replace`. Cả hai gửi kèm
+                  chủ đề + định hướng ĐANG GÕ trên màn hình (chưa bấm Lưu cũng có tác dụng) — đó là
+                  yêu cầu "chạy lại phải dựa trên định hướng mới cập nhật". */}
+              {!approved && canGenerate && (noFuture ? (
+                <span className="text-[11px] text-warning">{t("errNoFutureWeek")}</span>
+              ) : month.plannedCount > 0 ? (
+                <form
+                  action={sugAction}
+                  onSubmit={(e) => {
+                    if (!window.confirm(t("confirmRedoMonth", { n: month.plannedCount }))) e.preventDefault();
+                  }}
+                  className="inline"
+                >
+                  <input type="hidden" name="themeHint" value={theme} />
+                  <input type="hidden" name="goalsHint" value={goals} />
+                  <input type="hidden" name="replace" value="1" />
+                  <button type="submit" disabled={suggesting || !aiConfigured} className={btnPrimary}>
+                    <RefreshCw className="h-3.5 w-3.5" /> {suggesting ? t("suggesting") : t("redoMonthBtn")}
+                  </button>
+                </form>
+              ) : (
                 <form
                   action={sugAction}
                   onSubmit={(e) => {
@@ -119,11 +147,12 @@ export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { mo
                   className="inline"
                 >
                   <input type="hidden" name="themeHint" value={theme} />
+                  <input type="hidden" name="goalsHint" value={goals} />
                   <button type="submit" disabled={suggesting || !aiConfigured || month.itemCount > 0} className={btnPrimary} title={month.itemCount > 0 ? t("suggestMonthHasItems") : ""}>
                     <Sparkles className="h-3.5 w-3.5" /> {suggesting ? t("suggesting") : t("suggestMonthBtn")}
                   </button>
                 </form>
-              )}
+              ))}
 
               {!approved ? (
                 <form action={aprAction} className="inline">
@@ -151,7 +180,8 @@ export function MonthPanel({ month, canReview, canGenerate, aiConfigured }: { mo
             {(save.success || sug.success || apr.success || reo.success) && <p className="text-xs text-success">{t("saved")}</p>}
           </div>
 
-          <p className="mt-2 text-[11px] text-muted-foreground">{approved ? t("approvedNote") : t("draftNote")}</p>
+              <p className="mt-2 text-[11px] text-muted-foreground">{approved ? t("approvedNote") : t("draftNote")}</p>
+          {!approved && canGenerate && !noFuture && <p className="mt-1 text-[11px] text-muted-foreground">{t("futureOnlyNote", { n: month.futureWeeks })}</p>}
         </>
       )}
     </section>

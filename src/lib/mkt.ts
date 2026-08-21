@@ -317,6 +317,21 @@ export function mondaysInMonth(month: Date): Date[] {
   return out;
 }
 
+/**
+ * Các thứ Hai TRONG TƯƠNG LAI của tháng — AI chỉ được đề xuất vào những tuần này.
+ *
+ * ⚠ Quyết định chủ dự án 21/08/2026: KHÔNG đề xuất nội dung cho tuần đã qua. Mốc so là THỨ HAI CỦA
+ * TUẦN HIỆN TẠI, và tuần hiện tại cũng bị loại: hạn dựng bài là 3 ngày TRƯỚC thứ Hai của tuần đăng
+ * (MKT_PLAN_LEAD_DAYS), nên bài của tuần đang chạy đã quá hạn dựng ngay khi tuần bắt đầu — đề xuất
+ * vào đó là đẻ ra kế hoạch không bao giờ kịp làm.
+ * ⚠ Chỉ áp cho AI. HR tự thêm dòng vào tuần quá khứ thì VẪN cho (job sẽ dựng bài ngay) — đó là
+ * đường ra cho bài gấp, người tự chịu trách nhiệm.
+ */
+export function futureWeeksInMonth(month: Date, now: Date = new Date()): Date[] {
+  const current = planWeekUtc(now);
+  return mondaysInMonth(month).filter((w) => w.getTime() > current.getTime());
+}
+
 /** Tổng số bài cần có trong tháng theo chỉ tiêu — dùng để đối chiếu kế hoạch đã đủ chưa. */
 export function monthTargetCounts(month: Date): Record<MktChannel, number> {
   const n = mondaysInMonth(month).length;

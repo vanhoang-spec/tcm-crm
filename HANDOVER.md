@@ -3220,6 +3220,50 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       nộp link SAI khuôn ⇒ **server chặn và 2 ô còn nguyên** → link hợp lệ ⇒ DELIVERED + báo người
       duyệt. tsc · eslint · i18n **0/0 (4582 key)** · `next build` sạch có 2 route mới ·
       `migrate diff` rỗng · `db:seed` chạy lại sạch. Dữ liệu test đã dọn sạch.
+    - **MKT-3b — BA CHỈNH THEO YÊU CẦU CHỦ DỰ ÁN 21/08/2026** (KHÔNG migration, KHÔNG mã quyền mới):
+      · ⚠ **AI CHỈ ĐỀ XUẤT VÀO TUẦN TƯƠNG LAI** (`futureWeeksInMonth`): loại tuần đã qua VÀ tuần đang
+        chạy. Loại tuần hiện tại là CỐ Ý — hạn dựng bài là 3 ngày TRƯỚC thứ Hai của tuần đăng, nên bài
+        của tuần đang chạy đã quá hạn dựng ngay lúc đề xuất; đề xuất vào đó là đẻ kế hoạch không bao
+        giờ kịp làm. Chặn ở CẢ hai tầng: danh sách tuần gửi cho AI, VÀ bộ lọc `weekSet` khi nhận kết
+        quả (model biết lịch, tự ý trả tuần quá khứ thì rơi ở đây). Hết tuần tương lai ⇒ `NO_FUTURE_WEEK`,
+        **không gọi AI**, trang thay nút bằng câu "chọn tháng sau". ⚠ Chỉ áp cho AI — **HR tự thêm dòng
+        vào tuần quá khứ thì VẪN cho** (đường ra cho bài gấp, người tự chịu trách nhiệm).
+      · ⚠ **LỖI THẬT ĐÃ VÁ: "định hướng/mục tiêu tháng" CHƯA BAO GIỜ ĐƯỢC GỬI SANG AI.**
+        `MktMonthSuggestInput` có `themeHint` mà KHÔNG có `goalsHint` ⇒ HR gõ định hướng, AI không đọc
+        một chữ nào. Nay có `goalsHint`; chủ đề + định hướng in **NGAY ĐẦU** user message (trước cả chỉ
+        tiêu và danh sách tuần), system prompt thêm "BƯỚC 0 — ĐỌC KỸ TRƯỚC KHI NGHĨ ĐỀ TÀI" bắt mỗi đề
+        tài phải bám được vào một ý cụ thể, và **nhắc lại ở CUỐI** user message (prompt dài thì model
+        bám phần gần cuối hơn phần đầu).
+      · ⚠ **CHỦ ĐỀ + ĐỊNH HƯỚNG HR GÕ LÀ NGUỒN, AI KHÔNG ĐƯỢC GHI ĐÈ.** Bản trước ghi thẳng
+        `parsed.data.theme/goals` vào DB — tức AI "viết lại cho hay" đè mất câu HR vừa gõ. Nay chỉ lấy
+        bản AI cho trường HR ĐỂ TRỐNG.
+      · **Nút "Xoá đề xuất – Chạy lại"** (`replace=1`, cùng action, khác đúng một ô ẩn): tự thay chỗ nút
+        "AI lên kế hoạch cả tháng" khi tháng đã có dòng. ⚠ **Thứ tự BẮT BUỘC: gọi AI TRƯỚC, xoá + ghi
+        trong CÙNG một transaction SAU** — xoá trước rồi mới gọi AI thì một lượt AI hỏng là kế hoạch cũ
+        mất trắng mà không có gì thay thế. ⚠ **CHỈ xoá dòng còn `PLANNED`**: dòng `DRAFTED` đã thành bài
+        đăng (có thể đã gửi brief cho designer), dòng `SKIPPED` là quyết định của người. Hộp xác nhận nói
+        ĐÚNG số dòng sẽ xoá. Dòng sắp bị xoá cũng bị loại khỏi danh sách "tránh trùng" gửi cho AI — bảo
+        nó né chính những đề tài vừa vứt đi là tự bó tay nó.
+      · **Cả hai nút gửi kèm chủ đề + định hướng ĐANG GÕ trên màn hình** (chưa bấm "Lưu chủ đề" cũng có
+        tác dụng) — đúng yêu cầu "chạy lại phải dựa trên định hướng mới cập nhật".
+      · **Verify: 19/19 test thuần** (tuần tương lai ở 5 mốc, gồm ca **02:41 sáng thứ Hai** đọc giờ ĐỊA
+        PHƯƠNG · prompt có định hướng, đứng trước danh sách tuần, có nhắc lại ở cuối) **+ browser với 2
+        lượt AI THẬT trên tháng 08/2026** (đứng ngày 21/08, thứ Sáu): lượt 1 ra **đúng 6 dòng chỉ ở
+        24/08 và 31/08** — 3 tuần 03/08, 10/08, **17/08 (tuần đang chạy) KHÔNG có dòng nào**; định hướng
+        "nhắm sinh viên năm cuối, mỗi bài nêu một VỊ TRÍ CÔNG VIỆC" ra đúng *"Một ngày của Production
+        Coordinator"*, *"Account Executive là gì?"*, *"Thực tập sinh event…"* · đánh dấu 1 dòng DRAFTED +
+        1 dòng SKIPPED rồi đổi định hướng sang "nhắm GIÁM ĐỐC MARKETING FMCG, nói về NGÂN SÁCH và RỦI
+        RO, cấm nói tuyển dụng" → bấm Chạy lại ⇒ hộp xác nhận nói **"Xoá 4 dòng"** (đúng số PLANNED),
+        kết quả **8 dòng: DRAFTED + SKIPPED còn nguyên, 6 dòng mới toàn ngân sách/rủi ro, 0 dòng nhắc
+        sinh viên/thực tập**, audit `AI_REPLACE {items:6, removed:4, weeks:2}` · tháng 07/2026 (quá khứ
+        hẳn): **không có nút AI**, chỉ câu cảnh báo · **giả mạo form**: giữ lại HTML form "Chạy lại",
+        bấm Duyệt tháng rồi phát lại form ⇒ server từ chối (`LOCKED`), 8 dòng nguyên vẹn, không có audit
+        `AI_REPLACE` thứ hai. tsc · eslint · i18n **0/0 (4586 key)** · `next build` sạch · `migrate diff`
+        rỗng. Dữ liệu test đã dọn sạch (dev.db về 0 kế hoạch / 79 audit / 36-68-25).
+      · ⚠ Khối đối chiếu chỉ tiêu vẫn tính theo **CẢ THÁNG** (08/2026 = 5 tuần ⇒ 5 LinkedIn / 10 Fanpage)
+        trong khi AI chỉ lấp được phần tuần còn lại — lên kế hoạch giữa tháng thì badge ở màu vàng là
+        ĐÚNG SỰ THẬT, không phải lỗi. Đổi mẫu số theo thời điểm xem sẽ làm con số mang nghĩa khác nhau
+        ở mỗi lần mở trang.
     - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** AI tự bổ sung cho đủ chỉ tiêu khi ra thiếu
       (hiện HR tự thêm dòng) · kéo-thả dời bài giữa các tuần · nhân bản kế hoạch tháng trước sang
       tháng sau · gắn order thiết kế vào KPI/cost-per-task của Creative · nhắc hạn giao hình qua

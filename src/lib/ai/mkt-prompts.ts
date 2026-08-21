@@ -229,8 +229,16 @@ export function mktDesignBriefPrompt(input: MktDesignBriefInput): AiMessage[] {
 const MONTH_PLAN_SYSTEM = `Bạn là content planner cho TCM. ${AGENCY}
 TCM đăng 2 kênh: LinkedIn (CHÍNH, giọng B2B) và Fanpage Facebook (PHỤ, giọng trẻ trung).
 
-Nhiệm vụ: từ THÁNG được nêu, đề xuất (a) MỘT chủ đề xuyên suốt tháng, (b) định hướng ngắn, và
-(c) danh sách bài chia sẵn theo từng tuần.
+Nhiệm vụ: từ THÁNG được nêu, đề xuất danh sách bài chia sẵn theo từng tuần.
+
+BƯỚC 0 — ĐỌC KỸ TRƯỚC KHI NGHĨ ĐỀ TÀI (bắt buộc):
+- Đọc hết CHỦ ĐỀ THÁNG và ĐỊNH HƯỚNG / MỤC TIÊU THÁNG ở phần dưới. Đây là YÊU CẦU CỦA NGƯỜI DÙNG,
+  không phải gợi ý tham khảo.
+- Rút ra: tháng này muốn nói về cái gì, nhắm tới ai, muốn đạt điều gì, có ràng buộc/điều cấm nào.
+- MỖI đề tài đưa ra phải phục vụ một ý cụ thể trong chủ đề hoặc định hướng đó. Đề tài không bám được
+  vào ý nào thì BỎ, thay bằng đề tài khác — thà lặp lại một góc nhìn trong chủ đề còn hơn đi lạc.
+- Định hướng có nêu đối tượng / thông điệp / điều cần tránh thì phải tuân theo ở TỪNG TUẦN, không
+  chỉ ở tuần đầu.
 
 CHỈ TIÊU BẮT BUỘC cho MỖI tuần được liệt kê:
 - Fanpage: ĐÚNG ${MKT_WEEKLY_TARGET.FANPAGE.min} bài.
@@ -251,6 +259,8 @@ QUY TẮC BẮT BUỘC:
 - keyPoints: 3–6 gạch đầu dòng (mỗi dòng bắt đầu bằng "- ").
 - contentTypeCode chỉ chọn trong danh sách mã cung cấp, không rõ thì null.
 - weekStart chỉ được là một trong các thứ Hai đã liệt kê, định dạng YYYY-MM-DD.
+- CHỦ ĐỀ và ĐỊNH HƯỚNG do người dùng đưa: giữ NGUYÊN VĂN vào "theme"/"goals", KHÔNG viết lại, KHÔNG
+  "cải thiện". Chỉ khi người dùng để trống thì mới tự đề xuất.
 - Chỉ trả về JSON đúng khuôn {"theme":"...","goals":"...","items":[{"weekStart":"YYYY-MM-DD","title":"...","keyPoints":"- ...\n- ...","channels":["LINKEDIN"],"contentTypeCode":"..."}]} — không lời dẫn, không bọc markdown.`;
 
 export type MktMonthSuggestInput = {
@@ -263,6 +273,12 @@ export type MktMonthSuggestInput = {
   plannedTitles: string[];
   /** Chủ đề HR đã tự nhập (nếu có) — AI phải bám, không tự đổi. */
   themeHint?: string | null;
+  /**
+   * Định hướng / mục tiêu tháng HR nhập.
+   * ⚠ Trước 21/08/2026 trường này KHÔNG hề được đưa vào prompt — HR gõ định hướng mà AI không bao
+   * giờ đọc. Đừng gỡ nó ra khỏi đây.
+   */
+  goalsHint?: string | null;
 };
 
 export function mktMonthSuggestPrompt(input: MktMonthSuggestInput): AiMessage[] {
@@ -275,6 +291,14 @@ export function mktMonthSuggestPrompt(input: MktMonthSuggestInput): AiMessage[] 
   const lines = [
     `THÁNG CẦN LÊN KẾ HOẠCH: ${input.monthLabel}`,
     "",
+    // ⚠ Đặt NGAY ĐẦU, trước cả chỉ tiêu và danh sách tuần: đây là thứ model phải đọc trước khi nghĩ
+    // ra bất cứ đề tài nào. Nhét xuống cuối là nó lướt qua.
+    "═══ CHỦ ĐỀ THÁNG (bám sát, không đi lạc) ═══",
+    input.themeHint?.trim() || "(người dùng chưa nhập — hãy tự đề xuất một chủ đề phù hợp)",
+    "",
+    "═══ ĐỊNH HƯỚNG / MỤC TIÊU THÁNG (yêu cầu của người dùng) ═══",
+    input.goalsHint?.trim() || "(người dùng chưa nhập)",
+    "",
     `TỔNG SỐ BÀI PHẢI CÓ TRONG THÁNG: ${liTotal} bài LinkedIn + ${fbTotal} bài Fanpage (tháng này có ${nWeeks} tuần).`,
     `Tự đếm lại trước khi trả về: mỗi tuần đúng ${MKT_WEEKLY_TARGET.LINKEDIN.min} LinkedIn và ${MKT_WEEKLY_TARGET.FANPAGE.min} Fanpage — KHÔNG được ít hơn.`,
     "",
@@ -284,9 +308,14 @@ export function mktMonthSuggestPrompt(input: MktMonthSuggestInput): AiMessage[] 
     "LOẠI NỘI DUNG (mã — nhãn):",
     ...input.contentTypes.map((c) => `- ${c.code} — ${c.label}`),
   ];
-  if (input.themeHint?.trim()) lines.push("", `CHỦ ĐỀ THÁNG DO HR CHỈ ĐỊNH (bám đúng, không tự đổi): ${input.themeHint.trim()}`);
   if (input.recentTitles.length) lines.push("", "BÀI ĐÃ ĐĂNG GẦN ĐÂY (tránh trùng):", ...input.recentTitles.map((x) => `- ${x}`));
   if (input.plannedTitles.length) lines.push("", "ĐÃ LÊN KẾ HOẠCH (tránh trùng):", ...input.plannedTitles.map((x) => `- ${x}`));
+  // Nhắc lại ở CUỐI: prompt dài thì model hay bám phần gần cuối hơn phần đầu.
+  lines.push(
+    "",
+    "NHẮC LẠI TRƯỚC KHI TRẢ LỜI: đọc lại CHỦ ĐỀ THÁNG và ĐỊNH HƯỚNG ở đầu. Từng đề tài phải bám được",
+    "vào một ý trong đó; đề tài nào không bám được thì thay đề tài khác.",
+  );
   return [
     { role: "system", content: MONTH_PLAN_SYSTEM },
     { role: "user", content: lines.join("\n") },

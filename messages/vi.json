@@ -4303,7 +4303,11 @@
       "errNoItems": "Chưa có bài nào trong kế hoạch tháng.",
       "errHasItems": "Tháng đã có bài — xoá hết rồi mới chạy AI lại được.",
       "errMonthLocked": "Tháng đã duyệt — mở lại để sửa trước.",
-      "awaitingApproval": "chờ duyệt tháng"
+      "awaitingApproval": "chờ duyệt tháng",
+      "redoMonthBtn": "Xoá đề xuất – Chạy lại",
+      "confirmRedoMonth": "Xoá {n} dòng chưa dựng bài của tháng này rồi để AI đề xuất lại theo chủ đề + định hướng đang nhập? Bài đã dựng và dòng đã bỏ qua vẫn giữ nguyên. (tính tiền theo lượt)",
+      "errNoFutureWeek": "Tháng này không còn tuần nào ở tương lai để đề xuất — chọn tháng sau.",
+      "futureOnlyNote": "AI chỉ đề xuất vào {n} tuần còn ở tương lai (bài của tuần đang chạy đã quá hạn dựng). Sửa chủ đề/định hướng rồi bấm chạy lại là AI bám theo nội dung mới."
     },
     "publishNow": "Đăng ngay",
     "publishing": "Đang đăng…",

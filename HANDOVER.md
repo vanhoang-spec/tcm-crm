@@ -3066,7 +3066,13 @@ settings" — trang đó thuộc TÍNH NĂNG KHÁC (tích hợp web claude.ai ch
 Claude tự comment lên issue sẽ sinh thêm một run `skipped` của claude.yml (event issue_comment không có chữ
 @claude) — đúng thiết kế, không phải lỗi.
 
-**Việc còn chờ chủ dự án:** hai việc production của khối dưới (tick chia sẻ PRO, khai nhóm hàng) vẫn nguyên.
+**Hai việc production ĐÃ XONG trong ngày (21/08 ~15:0x, quyết định chủ dự án chọn qua trợ lý):**
+(a) chia sẻ PRO đã tick trên production — nhóm **PRODUCTION_PRINT + LOGISTICS**, NCC = toàn bộ 6 NCC đang
+hoạt động của hai nhóm đó (TDA NPH DHG MHG + NQL EVD; danh sách NCC là TICK TĨNH — thêm NCC vào nhóm sau này
+thì vào /settings/production-sharing tick thêm, không tự ăn theo). Ghi bằng script server mirror đúng đường
+writeProductionSharing + audit khuôn saveProductionSharing (cũ→mới, changedBy = chủ dự án); đọc lại đối chiếu
+6/6 NCC đều hoạt động và thuộc đúng nhóm. (b) nhóm hàng mới: chủ dự án chốt **chưa cần** — 8 nhóm hệ thống đủ
+dùng, khi có nhu cầu thật thì tự khai ở /settings/rfq-groups.
 
 ---
 

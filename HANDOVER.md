@@ -3074,6 +3074,14 @@ writeProductionSharing + audit khuôn saveProductionSharing (cũ→mới, change
 6/6 NCC đều hoạt động và thuộc đúng nhóm. (b) nhóm hàng mới: chủ dự án chốt **chưa cần** — 8 nhóm hệ thống đủ
 dùng, khi có nhu cầu thật thì tự khai ở /settings/rfq-groups.
 
+📣 **Quyền MKT trên production (21/08 ~16h, quyết định chủ dự án):** người đăng bài fanpage/LinkedIn là 2 nhân sự
+HR — TRẦN THỊ HẢI YẾN (HR_MANAGER, đã đủ quyền sẵn) và LÊ NGỌC CHÂU (lnchau@, chức danh Assistant HR Manager
+nhưng đeo role **ADMIN_STAFF** nên trước đó chỉ xem được). Chủ dự án chọn đường HẸP: tick thêm `mkt.review` +
+`mkt.generate` cho role ADMIN_STAFF trong ma trận (grant 1348 → 1350; Châu là người DUY NHẤT giữ role đó nên
+không ảnh hưởng ai khác; đã cân nhắc và BỎ phương án đổi role sang HR_STAFF). ⚠ Mục 10.23 ghi "mkt.review cố ý
+loại ADMIN_STAFF" là nói về SEED MẶC ĐỊNH — tick tay này là chính sách BGĐ trên ma trận, ĐỪNG "sửa lại"; seed
+không đè tick tay (chỉ Vòng 4d xoá mã tiền, mkt.* không thuộc nhóm đó).
+
 ---
 
 ### Deploy trước đó — 21/08/2026 lúc 12:39

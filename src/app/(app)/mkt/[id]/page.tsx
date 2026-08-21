@@ -11,17 +11,19 @@ import type { Locale } from "@/i18n/locales";
 import { VariantPanel, type VariantView } from "./variant-panel";
 import { DeletePostButton, DeleteImageButton } from "./post-actions";
 import { DesignBriefPanel } from "./design-brief-panel";
+import { connectedChannels } from "@/lib/mkt-publish-server";
 
 export default async function MktPostDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("mkt.view");
   const { id } = await params;
 
-  const [t, locale, canManage, canReview, canGenerate] = await Promise.all([
+  const [t, locale, canManage, canReview, canGenerate, connected] = await Promise.all([
     getTranslations("mkt"),
     getLocale() as Promise<Locale>,
     hasPermission("mkt.post.manage"),
     hasPermission("mkt.review"),
     hasPermission("mkt.generate"),
+    connectedChannels(),
   ]);
 
   const post = await prisma.mktPost.findUnique({
@@ -46,6 +48,11 @@ export default async function MktPostDetailPage({ params }: { params: Promise<{ 
           finalContent: true,
           postedAt: true,
           postUrl: true,
+          externalId: true,
+          scheduledAt: true,
+          publishError: true,
+          // Ảnh chụp số liệu MỚI NHẤT (MKT-2c) — chỉ 1 dòng, không kéo cả lịch sử vào trang.
+          metrics: { orderBy: { day: "desc" }, take: 1, select: { day: true, impressions: true, reactions: true, comments: true, shares: true, clicks: true } },
           postedBy: { select: { fullName: true } },
         },
       },
@@ -68,6 +75,10 @@ export default async function MktPostDetailPage({ params }: { params: Promise<{ 
         postedAt: v.postedAt,
         postUrl: v.postUrl,
         postedByName: v.postedBy?.fullName ?? null,
+        externalId: v.externalId,
+        scheduledAt: v.scheduledAt,
+        publishError: v.publishError,
+        metric: v.metrics[0] ?? null,
       },
     ];
   });
@@ -144,6 +155,7 @@ export default async function MktPostDetailPage({ params }: { params: Promise<{ 
           canReview={canReview}
           canGenerate={canGenerate}
           aiConfigured={isAiConfigured()}
+          channelConnected={connected.includes(v.channel)}
         />
       ))}
     </div>

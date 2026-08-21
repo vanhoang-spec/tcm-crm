@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, Copy, Check, Undo2 } from "lucide-react";
+import { Sparkles, Copy, Check, Undo2, Send, CalendarClock, BarChart3 } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 import type { MktChannel } from "@/lib/mkt";
-import { saveFinal, markPosted, unmarkPosted, type MktState } from "../actions";
+import { saveFinal, markPosted, unmarkPosted, publishNow, scheduleVariant, type MktState } from "../actions";
 import { generateVariant } from "../ai-actions";
 
 export type VariantView = {
@@ -18,6 +18,12 @@ export type VariantView = {
   postedAt: Date | null;
   postUrl: string | null;
   postedByName: string | null;
+  /** MKT-2b — id bài trên nền tảng; có nghĩa là bài này đăng QUA API, kéo được số liệu. */
+  externalId: string | null;
+  scheduledAt: Date | null;
+  publishError: string | null;
+  /** MKT-2c — ảnh chụp số liệu mới nhất, null khi chưa kéo được lần nào. */
+  metric: { day: Date; impressions: number | null; reactions: number | null; comments: number | null; shares: number | null; clicks: number | null } | null;
 };
 
 const input =
@@ -34,12 +40,15 @@ export function VariantPanel({
   canReview,
   canGenerate,
   aiConfigured,
+  channelConnected,
 }: {
   postId: string;
   variant: VariantView;
   canReview: boolean;
   canGenerate: boolean;
   aiConfigured: boolean;
+  /** Kênh này đã nối API chưa — chưa nối thì chỉ còn luồng copy đăng tay của MKT-1. */
+  channelConnected: boolean;
 }) {
   const t = useTranslations("mkt");
   const err = useErr();
@@ -52,6 +61,8 @@ export function VariantPanel({
   const [saved, saveAction, savePending] = useActionState<MktState, FormData>(saveFinal.bind(null, variant.id), {});
   const [mark, markAction, markPending] = useActionState<MktState, FormData>(markPosted.bind(null, variant.id), {});
   const [unmark, unmarkAction, unmarkPending] = useActionState<MktState, FormData>(unmarkPosted.bind(null, variant.id), {});
+  const [pub, pubAction, pubPending] = useActionState<MktState, FormData>(publishNow.bind(null, variant.id), {});
+  const [sch, schAction, schPending] = useActionState<MktState, FormData>(scheduleVariant.bind(null, variant.id), {});
 
   // Bản cuối là ô CHỮ → phải controlled (bẫy requestFormReset của React 19). Khi AI vừa viết xong,
   // prop `variant.finalContent` đổi nhưng state cũ vẫn đang giữ chữ cũ — dùng mẫu "điều chỉnh state
@@ -165,6 +176,77 @@ export function VariantPanel({
               {variant.aiDraft}
             </pre>
           )}
+        </div>
+      )}
+
+      {/* ── MKT-2b: đăng qua API / hẹn giờ ── */}
+      {canReview && !posted && channelConnected && (
+        <div className="mt-3 border-t border-border pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <form
+              action={pubAction}
+              onSubmit={(e) => {
+                // ⚠ Đăng lên trang CÔNG KHAI không thu hồi tự động được — luôn hỏi trước.
+                if (!window.confirm(t("publishNowConfirm"))) e.preventDefault();
+              }}
+            >
+              <button type="submit" disabled={pubPending} className="inline-flex h-9 items-center gap-1 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
+                <Send className="h-3.5 w-3.5" />
+                {pubPending ? t("publishing") : t("publishNow")}
+              </button>
+            </form>
+
+            <form action={schAction} className="flex flex-wrap items-end gap-2">
+              <label className="text-[11px] text-muted-foreground">
+                {t("scheduleAt")}
+                <div className="mt-1 flex gap-1">
+                  <input name="date" type="date" className={input + " w-36"} required />
+                  <input name="time" type="time" defaultValue="09:00" className={input + " w-24"} />
+                </div>
+              </label>
+              <button type="submit" disabled={schPending} className="inline-flex h-9 items-center gap-1 rounded-lg border border-border-strong px-3 text-xs font-medium hover:bg-surface-2 disabled:opacity-50">
+                <CalendarClock className="h-3.5 w-3.5" />
+                {schPending ? "…" : t("schedule")}
+              </button>
+            </form>
+          </div>
+
+          {variant.scheduledAt && (
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-brand-700">
+              {t("scheduledInfo", { at: formatDateTime(variant.scheduledAt) })}
+              <form action={schAction} className="inline">
+                <input type="hidden" name="clear" value="1" />
+                <button type="submit" className="text-danger hover:underline">
+                  {t("cancelSchedule")}
+                </button>
+              </form>
+            </p>
+          )}
+          {variant.publishError && <p className="mt-1 text-[11px] text-danger">{t("publishErrorInfo", { msg: variant.publishError })}</p>}
+          {err(pub.error) && (
+            <p className="mt-1 text-[11px] text-danger">
+              {err(pub.error)}
+              {pub.message ? ` — ${pub.message}` : ""}
+            </p>
+          )}
+          {err(sch.error) && <p className="mt-1 text-[11px] text-danger">{err(sch.error)}</p>}
+        </div>
+      )}
+
+      {/* ── MKT-2c: số liệu bài đã đăng qua API ── */}
+      {posted && variant.metric && (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+            <BarChart3 className="h-3.5 w-3.5" />
+            {t("metricsTitle", { date: formatDateTime(variant.metric.day) })}
+          </p>
+          <div className="mt-1 flex flex-wrap gap-3 text-xs text-foreground">
+            {([["metricImpressions", variant.metric.impressions], ["metricReactions", variant.metric.reactions], ["metricComments", variant.metric.comments], ["metricShares", variant.metric.shares], ["metricClicks", variant.metric.clicks]] as const).map(([k, v]) => (
+              <span key={k} className="rounded-lg border border-border px-2 py-1">
+                {t(k)}: <b>{v === null ? "—" : v.toLocaleString("vi-VN")}</b>
+              </span>
+            ))}
+          </div>
         </div>
       )}
 

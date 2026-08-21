@@ -258,6 +258,7 @@ model Staff {
   clientKbAttempts            ClientKbAttempt[]         @relation("ClientKbAttemptStaff")
   mktPostsCreated             MktPost[]                 @relation("MktPostCreatedBy")
   mktPlanItemsCreated         MktPlanItem[]             @relation("MktPlanItemCreatedBy")
+  mktChannelsConnected        MktChannelConnection[]    @relation("MktChannelConnectedBy")
   mktPostImagesUploaded       MktPostImage[]            @relation("MktPostImageUploadedBy")
   mktPostVariantsPosted       MktPostVariant[]          @relation("MktPostVariantPostedBy")
   mktInsightReportsCreated    MktInsightReport[]        @relation("MktInsightReportCreatedBy")
@@ -3453,6 +3454,15 @@ model MktPostVariant {
   postedAt     DateTime?
   /// Link bài đã đăng thật trên kênh — tuỳ chọn, HR dán lúc đánh dấu.
   postUrl      String?
+  /// MKT-2b — id bài trên chính nền tảng (Facebook "{pageId}_{postId}", LinkedIn share URN). Có id
+  /// này thì MKT-2c kéo được số liệu về; đăng tay (copy-paste) thì null và bài đó không có số liệu.
+  externalId   String?
+  /// MKT-2b — HẸN GIỜ ĐĂNG. Là THUỘC TÍNH, KHÔNG phải trạng thái mới: variant chưa POSTED mà có mốc
+  /// này thì job tới giờ sẽ đăng. Thêm status "SCHEDULED" sẽ phải sửa mọi chỗ đang so 3 trạng thái
+  /// và vỡ ngay khi HR bấm đăng ngay (bài học squadId ở Creative CR-1, HANDOVER 10.32).
+  scheduledAt  DateTime?
+  /// Lỗi của LẦN ĐĂNG QUA API gần nhất — hiện trên panel để HR biết vì sao chưa lên.
+  publishError String?
   postedById   String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -3460,10 +3470,80 @@ model MktPostVariant {
   post     MktPost @relation(fields: [postId], references: [id], onDelete: Cascade)
   postedBy Staff?  @relation("MktPostVariantPostedBy", fields: [postedById], references: [id])
 
+  metrics MktPostMetric[]
+
   @@unique([postId, channel])
   @@index([channel, status])
   @@index([postedAt])
+  @@index([scheduledAt])
   @@map("mkt_post_variant")
+}
+
+/// MKT-2b (21/08/2026) — KẾT NỐI KÊNH để đăng qua API và kéo số liệu. Mỗi kênh đúng MỘT kết nối.
+///
+/// ⚠ "tokenCipher" là access token ĐÃ MÃ HOÁ aes-256-gcm bằng khoá MKT_TOKEN_SECRET trong .env
+/// server. TUYỆT ĐỐI không select cột này ra client, không ghi log, không đưa vào audit. Token của
+/// Facebook Page / LinkedIn organization cho phép ĐĂNG CÔNG KHAI dưới danh nghĩa công ty — lộ là
+/// người ngoài đăng được lên trang chính thức.
+/// ⚠ Chưa khai MKT_TOKEN_SECRET thì toàn bộ tính năng tự tắt (mirror isAiConfigured/isPushConfigured)
+/// và app quay về luồng copy đăng tay của MKT-1 — KHÔNG có khoá mặc định, vì khoá mặc định nghĩa là
+/// token nằm trong DB coi như không mã hoá.
+model MktChannelConnection {
+  id      String @id @default(cuid())
+  /// LINKEDIN | FANPAGE — cùng danh mục MKT_CHANNELS.
+  channel String @unique
+
+  /// Facebook Page ID, hoặc LinkedIn organization URN ("urn:li:organization:123").
+  targetId   String
+  /// Tên trang để hiện cho người dùng đối chiếu đã nối đúng chỗ chưa.
+  targetName String?
+
+  tokenCipher     String
+  /// Hạn token do người nối khai (Facebook long-lived ~60 ngày). null = không rõ hạn.
+  tokenExpiresAt  DateTime?
+  /// Thang cảnh báo hạn token: null → 30 → 14 → 7 → 0. Là THANG BẬC, mỗi mức bắn đúng một lần
+  /// (mirror EXPIRY_RANK của Kho v2 K4).
+  expiryWarnLevel Int?
+
+  isActive Boolean @default(true)
+
+  /// Kết quả lần kiểm kết nối gần nhất (nút "Kiểm tra kết nối" hoặc lần đăng gần nhất).
+  lastCheckAt DateTime?
+  lastCheckOk Boolean?
+  /// Câu lỗi đã rút gọn — KHÔNG chứa token.
+  lastError   String?
+
+  connectedById String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  connectedBy Staff? @relation("MktChannelConnectedBy", fields: [connectedById], references: [id])
+
+  @@map("mkt_channel_connection")
+}
+
+/// MKT-2c (21/08/2026) — SỐ LIỆU bài đăng kéo tự động từ nền tảng, MỘT ảnh chụp mỗi ngày.
+///
+/// ⚠ Ảnh chụp TÍCH LUỸ, không phải delta: mỗi dòng là số liệu tại thời điểm kéo. Muốn biết tăng bao
+/// nhiêu thì trừ hai ảnh chụp — đừng cộng dồn các dòng lại.
+model MktPostMetric {
+  id        String   @id @default(cuid())
+  variantId String
+  /// Ngày kéo, UTC-midnight — khoá chống kéo trùng trong ngày.
+  day       DateTime
+  fetchedAt DateTime @default(now())
+
+  impressions Int?
+  reactions   Int?
+  comments    Int?
+  shares      Int?
+  clicks      Int?
+
+  variant MktPostVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, day])
+  @@index([day])
+  @@map("mkt_post_metric")
 }
 
 /// MKT-2a (21/08/2026) — MASTER PLAN nội dung: mỗi dòng là MỘT bài dự kiến cho MỘT tuần, kèm kênh.

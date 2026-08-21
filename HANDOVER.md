@@ -127,7 +127,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
 
-**Quy mô:** 129 model Prisma · 77 migration · 98 file `src/lib` · 4478 key i18n × 2 ngôn ngữ · 148 mã quyền.
+**Quy mô:** 131 model Prisma · 78 migration · 101 file `src/lib` · 4541 key i18n × 2 ngôn ngữ · 149 mã quyền.
 
 ---
 
@@ -3090,6 +3090,74 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       có cờ "dự án được phép truyền thông" trên `Project` nên AI KHÔNG được tự lấy đề tài từ CRM ·
       chưa nhắc "tuần sau chưa có bài nào" qua notification · chưa gắn ảnh tự động vào bài dựng từ
       kế hoạch (designer vẫn upload tay).
+
+59. **MKT-2b + 2c — ĐĂNG QUA API, HẸN GIỜ, TỰ KÉO SỐ LIỆU (21/08/2026)** (migration
+    `20260821110000_mkt_channels_metrics` — 2 bảng MỚI `mkt_channel_connection` / `mkt_post_metric`
+    + 3 cột trên `mkt_post_variant`, 0 lệnh DROP; **1 mã quyền mới `mkt.channel.manage`, 148 → 149**;
+    **1 biến .env server MỚI: `MKT_TOKEN_SECRET`**).
+    - ⚠ **RANH GIỚI KHÔNG ĐƯỢC PHÁ: app KHÔNG tự đăng nội dung chưa ai duyệt.** AI viết → HR đọc →
+      HR bấm "Đăng ngay" hoặc "Hẹn giờ" trên đúng bài đó → job chỉ THI HÀNH lệnh đã ra. Job không bao
+      giờ tự chọn bài để đăng. Đây là bất biến từ MKT-1 (bài đăng là bộ mặt công ty, một câu sai ra
+      ngoài không thu về được) và 2b KHÔNG nới nó.
+    - ⚠ **TOKEN MÃ HOÁ aes-256-gcm, KHÔNG CÓ KHOÁ MẶC ĐỊNH** (`lib/mkt-secret.ts`). Thiếu
+      `MKT_TOKEN_SECRET` thì toàn bộ 2b/2c TỰ TẮT và app chạy nguyên luồng copy đăng tay của MKT-1 —
+      khác `AUTH_SESSION_SECRET` (có fallback dev). Khoá mặc định nghĩa là token nằm trong DB coi
+      như KHÔNG mã hoá, vì khoá đó ở ngay trong mã nguồn.
+      ⚠ **ĐỔI khoá = mọi token đã lưu thành RÁC** → app báo `BAD_TOKEN` và KHÔNG đăng với token
+      rỗng; phải nối lại kênh.
+    - ⚠ **TOKEN CHỈ ĐI MỘT CHIỀU VÀO.** Trang `/settings/mkt-channels` KHÔNG select `tokenCipher`;
+      ô nhập là `type=password` + `autoComplete=off` + luôn trống (để trống lúc sửa = giữ token cũ);
+      audit chỉ ghi 4 ký tự cuối (`tokenHint`). Đã đo trên HTML thô: không có token thường lẫn bản mã.
+    - ⚠ **`scrubSecrets` chạy trên MỌI câu lỗi trước khi lưu/log.** Meta và LinkedIn hay dội lại
+      nguyên URL có `access_token=…` trong message — lưu thẳng là token nằm chữ thường ngay cột
+      `lastError`. Đã verify bằng lời gọi THẬT tới LinkedIn với token giả: lưu ra `HTTP 401: Invalid
+      access token`, không lộ gì.
+    - ⚠ **PHÂN BIỆT `AUTH` / `TEMP` / `BAD_REQUEST`** (`lib/mkt-api.ts`) vì cách xử lý khác hẳn:
+      `AUTH` (token chết) thì job **GỠ lịch hẹn** + báo người duyệt, thử lại vô ích; `TEMP` (429/5xx/
+      mạng) thì **GIỮ lịch** cho lượt sau. ⚠ Graph nhét lỗi token vào `error.code 190` kèm **HTTP 400**
+      — không đọc code này thì token chết bị xếp nhầm `BAD_REQUEST` và job thử lại mãi. Có test.
+    - ⚠ **LinkedIn trả id bài ở HEADER `x-restli-id`, không phải body** (body thường rỗng). Đọc body
+      là luôn ra null và 2c không bao giờ kéo được số liệu. Thiếu header thì báo lỗi chứ không im lặng.
+    - ⚠ **Chống đăng HAI LẦN bằng `updateMany` có `status: { not: "POSTED" }`** — hai người cùng bấm,
+      hoặc job và người cùng lúc, chỉ MỘT lượt ghi được. Bài lên trang hai lần không có đường thu hồi
+      tự động.
+    - **Hẹn giờ là THUỘC TÍNH `scheduledAt`, KHÔNG phải trạng thái mới** — thêm status "SCHEDULED"
+      phải sửa mọi chỗ đang so 3 trạng thái và vỡ ngay khi HR bấm đăng ngay (bài học `squadId` ở
+      Creative CR-1, mục 10.32). Mốc hẹn là THỜI ĐIỂM THẬT → dựng bằng giờ ĐỊA PHƯƠNG, không
+      UTC-midnight.
+    - **2c — số liệu:** job kéo MỘT ảnh chụp/ngày cho bài đăng qua API trong 45 ngày gần nhất
+      (`upsert` theo `(variantId, day)` — không có khoá này thì job 5 phút đẻ 288 dòng/bài/ngày).
+      ⚠ **Ảnh chụp TÍCH LUỸ, không phải delta** — muốn biết tăng bao nhiêu thì trừ hai ảnh chụp, đừng
+      cộng dồn. Chỉ số nền tảng không trả thì để **null**, KHÔNG đoán bằng 0. Bài đăng TAY không có
+      `externalId` nên không kéo được — đó là lý do cột đó tồn tại. Số liệu này vào thẳng prompt báo
+      cáo quý làm **nguồn (2)**, và prompt nói rõ: mâu thuẫn với file HR tải lên thì TIN nguồn tự kéo.
+    - ⚠ **Thang cảnh báo hạn token — BUG ĐÃ VÁ, TEST BẮT ĐƯỢC.** `TOKEN_WARN_LEVELS = [30,14,7,0]`
+      xếp GIẢM DẦN nên `find(l => days <= l)` luôn trả **30**: còn 5 ngày vẫn báo "còn 30 ngày" và mức
+      7 không bao giờ bắn. Phải lấy mức THẤP NHẤT còn thoả (`[...levels].reverse().find(...)`). Cùng
+      họ với lỗi thang bậc `EXPIRY_RANK` của Kho v2 K4 — mỗi mức bắn đúng một lần.
+    - **Quyền: `mkt.channel.manage` = Senior HR Manager + BGĐ (2 vai).** Tách hẳn khỏi `mkt.review`:
+      duyệt NỘI DUNG và giữ TOKEN là hai mức rủi ro khác nhau — HR_STAFF đăng bài được nhưng không
+      cầm token. Backfill `20260821_mkt_channel_manage` lọc theo MÃ ROLE. Đo GIỐNG HỆT NHAU trên DB
+      dựng-từ-đầu và dev.db: **2 vai, cùng danh sách**; seed lần hai no-op.
+    - **Verify: 47/47 assertion** với **fetch giả mô phỏng đúng phản hồi thật** (đăng OK · token hết
+      hạn code 190 · 429 · mạng đứt · thiếu `x-restli-id` · metrics đủ/thiếu · đăng trùng · token giải
+      mã hỏng · hẹn giờ chưa tới/tới/AUTH-gỡ-lịch/TEMP-giữ-lịch · kéo số liệu 1 lần/ngày · thang cảnh
+      báo 30→7) — **KHÔNG đụng trang thật của công ty**. Cộng browser: banner đỏ khi chưa khai khoá +
+      nút bị khoá → khai khoá thì mở; URN sai khuôn bị server chặn và **giá trị còn nguyên**; lưu
+      token ⇒ DB chỉ có bản mã, audit chỉ có `••••defg`; **bấm "Kiểm tra kết nối" gọi LinkedIn THẬT ⇒
+      401 Invalid access token, lỗi lưu sạch**; trang bài hiện nút Đăng ngay/Hẹn giờ **chỉ ở kênh đã
+      nối**, kênh chưa nối giữ nguyên luồng đăng tay. tsc · eslint · i18n **0/0 (4541 key)** ·
+      `next build` sạch · `migrate diff` rỗng.
+    - ⚠ **CHƯA CHẠY ĐƯỢC END-TO-END VỚI TRANG THẬT — và đó là việc của chủ dự án, không phải thiếu
+      sót của code.** Cần: (a) Facebook App + Page Access Token dài hạn có quyền đăng (qua App
+      Review của Meta); (b) LinkedIn app được duyệt quyền quản lý trang công ty — **cửa hẹp nhất**,
+      có thể bị từ chối. App KHÔNG tự xin quyền hộ (không có OAuth flow trong app — phạm vi 2b cố ý
+      dừng ở "dán token"). Chưa có token thì mọi thứ tự tắt, không hỏng gì.
+    - ⚠ **`.env` máy dev đã được thêm `MKT_TOKEN_SECRET` giá trị TEST** để verify giao diện (file này
+      bị gitignore). **Production phải sinh khoá RIÊNG**, đừng dùng lại chuỗi dev.
+    - **CHƯA LÀM (cố ý):** đăng kèm ẢNH qua API (hiện chỉ đăng chữ; ảnh vẫn upload tay lên nền tảng) ·
+      OAuth flow trong app để tự lấy/gia hạn token · kéo số liệu cấp TRANG (follower, reach tổng) ·
+      biểu đồ số liệu theo thời gian · tự chỉnh master plan theo hiệu quả (vòng khép kín thật sự).
 
 ---
 

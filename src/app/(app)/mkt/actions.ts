@@ -457,3 +457,58 @@ export async function deleteInsightReport(reportId: string, _prev: MktState, _fo
   revalidatePath("/mkt/insights");
   return { success: true };
 }
+
+// ─────────────────────────────────────────────────────────
+// MKT-2b — ĐĂNG QUA API / HẸN GIỜ
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Đăng NGAY qua API. Gác `mkt.review` — cùng vai với đánh dấu đã đăng, vì đây vẫn là hành động
+ * "duyệt xong và cho lên trang", chỉ khác ở chỗ máy bấm hộ thay vì người copy sang trình duyệt.
+ *
+ * ⚠ Đăng lên trang CÔNG KHAI là việc không thu hồi tự động được — client BẮT BUỘC hỏi xác nhận
+ * trước khi gọi (variant-panel.tsx). Server không hỏi lại được nên guard thật nằm ở publishVariant:
+ * chưa nối kênh / token hỏng / đã POSTED đều bị chặn.
+ */
+export async function publishNow(variantId: string, _prev: MktState, _formData: FormData): Promise<MktState> {
+  await requirePermission("mkt.review");
+  const { publishVariant } = await import("@/lib/mkt-publish-server");
+  const v = await prisma.mktPostVariant.findUnique({ where: { id: variantId }, select: { postId: true } });
+  if (!v) return { error: "NOT_FOUND" };
+  const r = await publishVariant(variantId, { actorStaffId: await getCurrentStaffId() });
+  revalidate(v.postId);
+  if (!r.ok) return { error: r.code, message: r.message };
+  return { success: true };
+}
+
+/** Đặt / gỡ lịch hẹn đăng. Mốc là THỜI ĐIỂM THẬT nên dựng bằng giờ ĐỊA PHƯƠNG, không UTC-midnight. */
+export async function scheduleVariant(variantId: string, _prev: MktState, formData: FormData): Promise<MktState> {
+  await requirePermission("mkt.review");
+  const v = await prisma.mktPostVariant.findUnique({ where: { id: variantId }, select: { postId: true, status: true, finalContent: true } });
+  if (!v) return { error: "NOT_FOUND" };
+  if (v.status === "POSTED") return { error: "WRONG_STATE" };
+
+  const clear = str(formData.get("clear")) === "1";
+  if (clear) {
+    await prisma.mktPostVariant.update({ where: { id: variantId }, data: { scheduledAt: null } });
+    await audit(v.postId, "UPDATE", { variantId, schedule: null });
+    revalidate(v.postId);
+    return { success: true };
+  }
+
+  if (!v.finalContent.trim()) return { error: "NO_CONTENT" };
+  const date = str(formData.get("date"));
+  const time = str(formData.get("time")) || "09:00";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const hm = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!m || !hm) return { error: "BAD_SCHEDULE" };
+  const when = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(hm[1]), Number(hm[2]));
+  if (Number.isNaN(when.getTime())) return { error: "BAD_SCHEDULE" };
+  // Hẹn vào quá khứ = đăng ở tick kế tiếp. Cho phép nhưng chặn hẹn quá xa (gõ nhầm năm).
+  if (when.getTime() > Date.now() + 400 * 86_400_000) return { error: "BAD_SCHEDULE" };
+
+  await prisma.mktPostVariant.update({ where: { id: variantId }, data: { scheduledAt: when, publishError: null } });
+  await audit(v.postId, "UPDATE", { variantId, schedule: when.toISOString() });
+  revalidate(v.postId);
+  return { success: true };
+}

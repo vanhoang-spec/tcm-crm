@@ -12,6 +12,7 @@ import { checkSpecialOccasions } from "./occasions";
 import { checkChatReminders } from "./chat-reminders";
 import { checkPendingPush } from "./push";
 import { runMktPlanAutoDraft } from "./mkt-plan-server";
+import { checkMktTokenExpiry, runMktMetricsPull, runMktScheduledPublish } from "./mkt-publish-server";
 
 // ─────────────────────────────────────────────────────────
 // Chạy các job kiểm-và-nhắc theo lịch.
@@ -63,6 +64,11 @@ const JOBS: [string, () => Promise<unknown>][] = [
   // MKT-2a: dựng bài từ master plan khi tới hạn. Job trả về nhanh — phần AI thả chạy nền (xem
   // mkt-plan-server.ts). Đặt TRƯỚC push-dispatch để thông báo "đã dựng bài" được đẩy ngay chu kỳ này.
   ["mkt-plan-autodraft", runMktPlanAutoDraft],
+  // MKT-2b/2c: đăng bài tới giờ hẹn · kéo số liệu bài đã đăng · cảnh báo hạn token. Cả ba tự tắt
+  // khi chưa khai MKT_TOKEN_SECRET hoặc chưa nối kênh nào.
+  ["mkt-scheduled-publish", runMktScheduledPublish],
+  ["mkt-metrics-pull", runMktMetricsPull],
+  ["mkt-token-expiry", checkMktTokenExpiry],
   // ⚠ ĐẶT CUỐI DANH SÁCH: các job trên có thể vừa tạo thông báo mới, chạy sau thì đẩy luôn trong
   // cùng một chu kỳ thay vì đợi thêm 5 phút nữa.
   ["push-dispatch", checkPendingPush],

@@ -133,6 +133,24 @@ export async function generateInsights(reportId: string, _prev: MktState, _formD
     report.quarter,
   );
 
+  // MKT-2c — số liệu app TỰ KÉO: ảnh chụp MỚI NHẤT của mỗi bài đã đăng trong quý. Đây là nguồn
+  // chuẩn, khác hẳn file export HR tải lên (có thể cũ / khác kỳ / thiếu bài).
+  const metricRows = await prisma.mktPostVariant.findMany({
+    where: { status: "POSTED", postedAt: { gte: start, lt: end }, metrics: { some: {} } },
+    select: {
+      channel: true,
+      postedAt: true,
+      post: { select: { title: true } },
+      metrics: { orderBy: { day: "desc" }, take: 1, select: { impressions: true, reactions: true, comments: true, shares: true, clicks: true } },
+    },
+  });
+  const autoMetrics = metricRows.map((v) => ({
+    channel: v.channel,
+    title: v.post.title,
+    postedAt: v.postedAt ? v.postedAt.toISOString().slice(0, 10) : "—",
+    ...v.metrics[0],
+  }));
+
   // File không đọc được VẪN in header tên file: model cần biết có tài liệu mà không đọc được, thay
   // vì tưởng HR chưa nộp gì (khuôn buildProjectFilesText).
   const fileBlocks: string[] = [];
@@ -151,7 +169,7 @@ export async function generateInsights(reportId: string, _prev: MktState, _formD
   let text: string;
   try {
     const result = await aiChat(
-      mktInsightsPrompt({ year: report.year, quarter: report.quarter, stats, note: report.note, fileBlocks }),
+      mktInsightsPrompt({ year: report.year, quarter: report.quarter, stats, note: report.note, fileBlocks, autoMetrics }),
       { temperature: 0.2, maxTokens: 2400 },
     );
     text = result.text;

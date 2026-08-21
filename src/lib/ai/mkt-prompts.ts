@@ -101,10 +101,13 @@ export function mktVariantPrompt(channel: MktChannel, input: MktVariantInput): A
 const INSIGHTS_SYSTEM = `Bạn là chuyên viên phân tích social media cho TCM. ${AGENCY}
 TCM đăng bài trên 2 kênh: LinkedIn (giọng B2B) và Fanpage Facebook (giọng trẻ trung).
 
-Bạn nhận được ba nguồn:
+Bạn nhận được bốn nguồn:
 (1) SỐ BÀI ĐÃ ĐĂNG theo tuần do CRM tự đếm — đây là số CHUẨN về nhịp đăng, tin tuyệt đối;
-(2) SỐ LIỆU TRÍCH TỪ FILE EXPORT của Meta/LinkedIn do HR tải lên (reach, tương tác, follower…);
-(3) GHI CHÚ của HR.
+(2) SỐ LIỆU TỪNG BÀI do app TỰ KÉO qua API nền tảng (MKT-2c) — cũng là số CHUẨN, tin tuyệt đối; chỉ
+    có với bài đăng QUA APP, bài đăng tay không có;
+(3) SỐ LIỆU TRÍCH TỪ FILE EXPORT của Meta/LinkedIn do HR tải lên (reach, tương tác, follower…);
+(4) GHI CHÚ của HR.
+Nguồn (2) và (3) mâu thuẫn nhau thì TIN (2) và nói rõ chỗ lệch.
 
 Mục tiêu nhịp đăng đã cam kết: LinkedIn ${MKT_WEEKLY_TARGET.LINKEDIN.min} bài/tuần · Fanpage ${MKT_WEEKLY_TARGET.FANPAGE.min}–${MKT_WEEKLY_TARGET.FANPAGE.max} bài/tuần.
 
@@ -126,9 +129,21 @@ export type MktInsightsInput = {
   note: string | null;
   /** Mỗi phần tử là một khối text đã gắn header tên file + kênh. */
   fileBlocks: string[];
+  /** MKT-2c — số liệu app tự kéo, mỗi dòng một bài. Rỗng = chưa nối kênh hoặc bài đăng tay. */
+  autoMetrics?: { channel: string; title: string; postedAt: string; impressions: number | null; reactions: number | null; comments: number | null; shares: number | null; clicks: number | null }[];
 };
 
 const dmy = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+/** Bảng số liệu tự kéo — text thuần, một dòng một bài; chỉ số thiếu ghi "—" chứ không ghi 0. */
+function autoMetricsBlock(rows: NonNullable<MktInsightsInput["autoMetrics"]>): string {
+  const n = (v: number | null) => (v === null ? "—" : String(v));
+  return [
+    "SỐ LIỆU APP TỰ KÉO TỪ NỀN TẢNG (nguồn CHUẨN, chỉ có với bài đăng qua app):",
+    "kênh | ngày đăng | hiển thị | tương tác | bình luận | chia sẻ | click | tiêu đề",
+    ...rows.map((r) => [r.channel, r.postedAt, n(r.impressions), n(r.reactions), n(r.comments), n(r.shares), n(r.clicks), r.title].join(" | ")),
+  ].join("\n");
+}
 
 export function mktInsightsPrompt(input: MktInsightsInput): AiMessage[] {
   const { stats } = input;
@@ -142,6 +157,8 @@ export function mktInsightsPrompt(input: MktInsightsInput): AiMessage[] {
     "SỐ BÀI ĐÃ ĐĂNG THEO TUẦN (CRM tự đếm — nguồn chuẩn về nhịp):",
     `- Tổng quý: LinkedIn ${stats.totals.LINKEDIN} bài (mục tiêu ${liTarget}) · Fanpage ${stats.totals.FANPAGE} bài (mục tiêu ${fpMin}–${fpMax})`,
     ...stats.weeks.map((w) => `- Tuần ${dmy(w.start)}: LinkedIn ${w.counts.LINKEDIN} · Fanpage ${w.counts.FANPAGE}`),
+    "",
+    input.autoMetrics && input.autoMetrics.length > 0 ? autoMetricsBlock(input.autoMetrics) : "SỐ LIỆU APP TỰ KÉO: (chưa có — kênh chưa nối API, hoặc bài trong kỳ đều đăng tay)",
     "",
     "SỐ LIỆU TỪ FILE EXPORT:",
     input.fileBlocks.length > 0 ? input.fileBlocks.join("\n\n") : "(HR chưa tải file export nào)",

@@ -267,6 +267,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "mkt.post.manage", module: "mkt", labelVi: "Tạo / sửa / xoá bài đăng (ý chính + ảnh)", labelEn: "Create / edit / delete marketing posts" },
   { code: "mkt.review", module: "mkt", labelVi: "Sửa bản cuối, đánh dấu đã đăng, quản lý phân tích quý", labelEn: "Edit final content, mark as posted, manage insights" },
   { code: "mkt.frames.manage", module: "mkt", labelVi: "Sửa link thư mục frame (LinkedIn / Fanpage)", labelEn: "Edit frame folder links" },
+  // MKT-2b: NẮM ACCESS TOKEN của trang công ty — người có mã này nối/gỡ kênh, tức quyết định app
+  // đăng công khai dưới danh nghĩa TCM được hay không. Tách hẳn khỏi mkt.review (duyệt nội dung).
+  { code: "mkt.channel.manage", module: "mkt", labelVi: "Nối / gỡ kênh đăng bài (giữ access token)", labelEn: "Connect / disconnect posting channels (holds access token)" },
   { code: "mkt.generate", module: "mkt", labelVi: "Dùng AI viết bài & phân tích insights", labelEn: "Use AI to draft posts & analyse insights", sensitive: true },
 
   // ── Cài đặt ──

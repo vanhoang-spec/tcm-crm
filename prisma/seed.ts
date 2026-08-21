@@ -2449,6 +2449,8 @@ async function main() {
     code === "mkt.review" ||
     code === "mkt.frames.manage" ||
     code === "mkt.generate" ||
+    // MKT-2b: giữ token đăng bài công khai — hẹp nhất trong nhóm mkt.*, xem extraByRole dưới.
+    code === "mkt.channel.manage" ||
     // KB theo khách (H2): SOẠN nội dung chỉ Account + BGĐ — xem extraByGroup. Thiếu dòng này thì
     // seed MỚI (migrate reset, hoặc dựng lại production) cấp quyền soạn cho cả 20 role có base
     // grant, ngược hẳn chính sách mà backfill 20260801_client_kb_h2_manage đang thực thi.
@@ -2529,6 +2531,7 @@ async function main() {
       "mkt.review",
       "mkt.frames.manage",
       "mkt.generate",
+      "mkt.channel.manage",
       // CO/CE v3: BGĐ thấy đủ cả hai cột tiền.
       "bidding.costsheet.view_cost",
       "bidding.costsheet.view_paycap",
@@ -2564,7 +2567,7 @@ async function main() {
     // K6-4 (18/08/2026): Senior HR Manager DUYỆT đề xuất dùng hàng OVERHEAD công ty (mua từ ngân sách chung). Cần CẢ
     // gate `inventory.request.approve` (câu đầu action) lẫn mã phạm vi `approve_overhead`; với phiếu của dự án thì
     // canApproveIssue vẫn đòi PIC/Leader/trưởng team nên HR không duyệt lấn được.
-    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "inventory.request.approve", "inventory.request.approve_overhead"],
+    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "mkt.channel.manage", "inventory.request.approve", "inventory.request.approve_overhead"],
     HR_STAFF: ["mkt.review", "mkt.generate"],
     CFO: [...EXEC_EXTRA, ...BIDDING_APPROVE_EXTRA], // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_LEGACY_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
@@ -2854,6 +2857,14 @@ async function main() {
       key: "20260804_mkt_post_manage",
       codes: ["mkt.post.manage"],
       roleFilter: (r) => r.groupCode === "ACCOUNT" || r.groupCode === "BOD",
+    },
+    // 21/08/2026 MKT-2b — nối kênh đăng bài. CHỈ Senior HR Manager + BGĐ: mã này nắm access token
+    // cho phép đăng công khai dưới danh nghĩa công ty. HR_STAFF duyệt/đăng nội dung được nhưng KHÔNG
+    // cầm token — hai việc khác nhau về mức rủi ro.
+    {
+      key: "20260821_mkt_channel_manage",
+      codes: ["mkt.channel.manage"],
+      roleFilter: (r) => r.code === "HR_MANAGER" || r.groupCode === "BOD",
     },
     {
       key: "20260804_mkt_review",

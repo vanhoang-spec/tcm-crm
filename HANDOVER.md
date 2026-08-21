@@ -2989,7 +2989,62 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `67bd0a3`** (20/08/2026 18:41) — gói 3 commit **AI**: đợt 1 output có cấu trúc + xuất
+**Production đang chạy `859a5fe`** (21/08/2026 12:39) — gói **5 commit**: chat UX trên điện thoại (mục 10.52) ·
+PWA cài app về màn hình chính (10.53) · Web Push (10.54) · phòng Sản xuất dùng chung NCC/nhóm/form của Thu mua
+(10.55) · PUR-3b nhóm hàng & form báo giá khai trong app (10.56). Chạy `bash scripts/deploy.sh` **đường LAN
+192.168.1.111:22**, fingerprint khớp. **2 migration mới** áp sạch (`web_push`, `rfq_group_in_app` — cả hai
+additive, 74 → 76), **KHÔNG mã quyền mới** (vẫn 148). `npm ci` chạy lại vì lockfile đổi (thêm `web-push` +
+`@types/web-push`). Backup TRƯỚC deploy: `~/backup/*-20260821-123901*` trên server +
+`D:/TCM/backup-prod-20260821-123901/` máy dev.
+
+⚠ **VAPID trên server: chủ dự án đã tự khai 3 biến TRƯỚC khi deploy.** Đã kiểm chứ không tin suông — public
+87 ký tự / private 43 ký tự / subject `mailto:`, **cặp khoá KHỚP NHAU** (dựng lại điểm công khai từ khoá riêng
+bằng `crypto.createPrivateKey` với JWK — lệch cặp là `web-push` vẫn nhận nhưng server đẩy sẽ trả 403 âm
+thầm), và `webpush.setVapidDetails()` chạy được trên chính production. **Đừng sinh lại khoá** nếu không có lý
+do: đổi khoá là mọi thiết bị đã đăng ký thành rác.
+
+Đối chiếu production SAU deploy với backup TRƯỚC deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | backup trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 37 / 68 / 24 | **37 / 68 / 24** |
+| coTotal + ceTotal 4 bảng CO/CE | (8 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO / NCC | 481 / 30 | **481 / 30** |
+| dòng grant quyền | 1344 | **1348** (+4 = PRO share: 2 role × 2 mã `purchasing.*`) |
+| `rfq_group` / `rfq_group_field` | — | **8 nhóm hệ thống / 0 cột** (chưa ai tạo nhóm riêng, đúng như mong đợi) |
+| `push_subscription` | — | **0** (chưa ai bật push) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Quyền Thu mua đo trên production **khớp đúng bản dựng-từ-đầu và dev.db**: `purchasing.view` 10 vai ·
+`rfq.manage` 5 · `rfq.ai` 3 · `vendor.manage` 3; marker `20260820_pur_share_production` có đủ.
+
+Health check (curl từ máy dev qua nginx): `/login` **200** · `/`, `/purchasing`, `/purchasing/vendors`,
+`/settings/rfq-groups`, `/settings/production-sharing` đều **307** về login · `/api/notifications/poll` **401** ·
+**PWA**: `/manifest.webmanifest` 200 đúng MIME `application/manifest+json`, `/sw.js` 200, `/offline` 200,
+**5/5 icon** (`/icons/icon-192|512`, `maskable-192|512`, `apple-touch-icon`) 200 đúng `image/png`, thẻ
+`manifest` + `apple-mobile-web-app-capable` + `mobile-web-app-capable` + `theme-color #0b84fa` có trong
+`<head>` · pm2 `online`, **restart 1** (do deploy), bind `127.0.0.1:3000` · `[jobs] scheduler bật` ·
+**error log không thêm dòng nào** (ghi cuối 08:29, deploy 12:39) · giờ server `+07` đúng.
+
+⚠ **GHI NHẬN MỚI — máy trong LAN công ty MỞ ĐƯỢC `https://app.tcmbtl.com`.** Mục 8.2 và §11 bản 01/08 ghi
+"CHƯA KIỂM ĐƯỢC" chỗ này (tên miền phân giải ra IP public nên cần NAT hairpin). Nay đã kiểm từ máy dev đứng ở
+`192.168.1.81`: mọi route trả đúng mã. Không cần thêm bản ghi DNS nội bộ.
+
+⚠ **CÒN PHẢI TEST TRÊN MÁY THẬT: đường giao push.** Môi trường làm việc chặn quyền thông báo ở mức chính sách
+nên chưa bao giờ đăng ký được subscription thật (mục 10.54). Việc cần làm: mở `https://app.tcmbtl.com/profile`
+trên điện thoại/máy tính thật → bấm bật "Thông báo đẩy" → phải nhận được thông báo thử ngay. **Trên iPhone phải
+"Thêm vào màn hình chính" TRƯỚC**, Safari thường không nhận push. Chừng nào chưa có thiết bị nào bật thì job
+`push-dispatch` vẫn chạy mỗi 5 phút và chỉ đánh dấu `pushedAt` — đúng thiết kế, không phải lỗi.
+
+**Việc nên làm sớm trên production:** (a) `/settings/production-sharing` — tick nhóm hàng + NCC mà phòng Sản
+xuất được dùng; **chưa tick gì thì Sản xuất không thấy gì**, nav "Thu mua" hiện nhưng danh sách rỗng. (b)
+`/settings/rfq-groups` — nhóm hàng mới khai thẳng trong app, không cần deploy nữa.
+
+---
+
+### Deploy trước đó — 20/08/2026 lúc 18:41
+
+**Production khi đó chạy `67bd0a3`** (20/08/2026 18:41) — gói 3 commit **AI**: đợt 1 output có cấu trúc + xuất
 Word/PDF (mục 10.48) · đợt 2 soạn thảo văn bản hành chính/nhân sự/kế toán (10.50) · đối chiếu chi ngân hàng cho kế
 toán (10.51). Chạy `bash scripts/deploy.sh` **đường LAN 192.168.1.111:22**, fingerprint khớp. **KHÔNG migration mới**
 (74, "No pending migrations"), **2 mã quyền mới** (146 → 148: `ai.document` + `ai.bank_recon`). Không có file mồ côi.

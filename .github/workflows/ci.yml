@@ -1,0 +1,72 @@
+# CI — tự chạy bộ verify BẮT BUỘC của HANDOVER mục 7 trên mỗi lần push.
+#
+# Đây là ĐÚNG các lệnh vẫn chạy tay trước mỗi đợt, không thêm không bớt:
+#   tsc --noEmit · eslint src --quiet · i18n parity 0/0 · migrate deploy + db:seed trên DB
+#   DỰNG-TỪ-ĐẦU · migrate diff phải rỗng · next build.
+#
+# Vì sao có bước SEED trên DB dựng-từ-đầu (đắt nhất nhưng đáng nhất): tsc/eslint/build đều SẠCH
+# khi seed hỏng — đã nổ thật một lần (import "server-only" lọt vào chuỗi import của seed, HANDOVER
+# mục 10.55), và seed là bước BẮT BUỘC sau migrate deploy nên seed hỏng = deploy hỏng ở đúng bước
+# cấp quyền. Bước này cũng bắt lớp lỗi seed cấp nhầm quyền trên bản dựng mới (mục 10.15).
+#
+# CI KHÔNG thay phần verify browser với số thật (HANDOVER mục 7, nửa sau) — đó vẫn là việc người
+# làm trước khi deploy. Và cố ý KHÔNG có test framework ở đây (CODING-RULES mục 4).
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Server production bắt buộc TZ này (HANDOVER mục 8.2) — CI chạy cùng múi giờ để code có
+      # ngày giờ (seed, occasions, tuần thứ Hai) hành xử y hệt.
+      TZ: Asia/Ho_Chi_Minh
+      # DB tạm của riêng run này. KHÔNG secret thật nào lên CI: mọi secret của app đều có
+      # fallback dev (auth-session.ts:17...), chỉ DATABASE_URL là Prisma đòi thật.
+      DATABASE_URL: "file:./ci.db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # khớp máy dev + server (v24.18.0)
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: prisma generate
+        run: npx prisma generate
+
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+
+      - name: eslint src --quiet
+        run: npx eslint src --quiet
+
+      - name: i18n parity (vi.json / en.json phải khớp key tuyệt đối)
+        run: |
+          node -e 'const vi=require("./messages/vi.json"),en=require("./messages/en.json");function f(o,p=""){let k=[];for(const x in o){const q=p?p+"."+x:x;if(o[x]&&typeof o[x]==="object")k=k.concat(f(o[x],q));else k.push(q)}return k}const V=new Set(f(vi)),E=new Set(f(en));const a=[...V].filter(k=>!E.has(k)),b=[...E].filter(k=>!V.has(k));console.log("only vi:",a.length,"only en:",b.length,"| tổng",V.size);if(a.length||b.length){console.log("lệch:",a.slice(0,20),b.slice(0,20));process.exit(1)}'
+
+      - name: migrate deploy + db:seed trên DB dựng-từ-đầu
+        run: |
+          npx prisma migrate deploy
+          npm run db:seed
+
+      - name: schema phải khớp migrations (migrate diff rỗng)
+        # --exit-code: thoát ≠0 khi diff KHÔNG rỗng — bắt việc sửa schema.prisma mà quên migration.
+        # Chạy SAU bước trên vì cần ci.db đã dựng đủ bảng để so.
+        run: npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code
+
+      - name: next build
+        run: npx next build

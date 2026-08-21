@@ -1,0 +1,38 @@
+# Deploy production — NÚT BẤM, không tự chạy theo push (quyết định chủ dự án 21/08/2026:
+# một server duy nhất, SQLite chứa dữ liệu thật, không có staging → người vẫn là cổng quyết
+# định, máy làm phần tay chân).
+#
+# Cách dùng: GitHub → Actions → "Deploy production" → Run workflow (bấm được từ điện thoại).
+# Job chạy trên SELF-HOSTED RUNNER đặt ngay trên server 192.168.1.111 (user tcm, quản lý bằng
+# pm2, tên tiến trình `gh-runner`) — runner tự gọi RA GitHub qua HTTPS nên không phụ thuộc
+# đường NAT 2222, và không credential nào của server nằm trên GitHub.
+#
+# Trình tự deploy nằm ở scripts/deploy-local.sh (bản server-side của scripts/deploy.sh —
+# deploy.sh từ máy dev VẪN là đường dự phòng khi runner chết).
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Gõ "deploy" để xác nhận (chống bấm nhầm)'
+        required: true
+        type: string
+
+# Không bao giờ chạy 2 deploy chồng nhau; deploy đang chạy không bị cắt ngang.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted]
+    timeout-minutes: 30
+    if: inputs.confirm == 'deploy'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Deploy (backup → sync → build → migrate → seed → health check)
+        run: bash scripts/deploy-local.sh

@@ -2985,6 +2985,53 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       điều khoản riêng theo ngành như 8 nhóm gốc (chỉ khai được từng ô rời) · gợi ý cột sẵn theo loại
       hàng · nhân bản một nhóm để làm nhóm mới.
 
+57. **CI/CD — GITHUB ACTIONS + CLAUDE CODE (21/08/2026)** (KHÔNG đụng code app — 3 workflow +
+    1 script; KHÔNG migration, KHÔNG mã quyền). Quyết định chủ dự án: 3 tầng độc lập.
+    - **Tầng 1 — CI (`.github/workflows/ci.yml`)**: mỗi push/PR vào master tự chạy ĐÚNG bộ verify
+      bắt buộc của mục 7 — tsc · eslint · i18n parity · **migrate deploy + db:seed trên DB
+      DỰNG-TỪ-ĐẦU** · `migrate diff --exit-code` phải rỗng · next build. Bước seed là bước đắt
+      nhất nhưng đáng nhất: bắt lớp lỗi mà tsc/eslint/build đều SẠCH (import `server-only` lọt vào
+      chuỗi import của seed — mục 10.55, và seed cấp nhầm quyền trên bản dựng mới — mục 10.15).
+      ⚠ CI đặt `TZ: Asia/Ho_Chi_Minh` cho khớp server (mục 8.2). ⚠ KHÔNG secret thật nào trên CI —
+      mọi secret của app có fallback dev, chỉ `DATABASE_URL="file:./ci.db"` là Prisma đòi.
+      ⚠ CI KHÔNG thay phần verify browser với số thật (mục 7, nửa sau) — vẫn là việc người làm.
+    - **Tầng 2 — Claude trên GitHub (`.github/workflows/claude.yml`)**: gọi `@claude` trong
+      issue/PR (`anthropics/claude-code-action@v1`). ⚠ **CHƯA HOẠT ĐỘNG** cho tới khi chủ dự án
+      làm 2 bước một lần TỪ TÀI KHOẢN `vanhoang-spec` (hướng dẫn nằm trong comment đầu file):
+      cài GitHub App https://github.com/apps/claude cho repo, và thêm secret
+      `CLAUDE_CODE_OAUTH_TOKEN` (sinh bằng `claude setup-token`, dùng gói Claude đang có) HOẶC
+      `ANTHROPIC_API_KEY` (trả theo token). Chưa cài thì workflow chỉ fail vô hại khi ai đó gõ
+      `@claude`.
+    - **Tầng 3 — Deploy bằng NÚT BẤM (`.github/workflows/deploy.yml` + `scripts/deploy-local.sh`)**:
+      GitHub → Actions → "Deploy production" → Run workflow → gõ `deploy` xác nhận (bấm được từ
+      điện thoại). ⚠ **CỐ Ý KHÔNG auto-deploy theo push**: một server duy nhất, SQLite dữ liệu
+      thật, không có staging — người vẫn là cổng quyết định.
+      · Chạy trên **self-hosted runner đặt NGAY TRÊN server** (`~/actions-runner`, tên đăng ký
+        `tcm-server`, chạy dưới pm2 tên `gh-runner` vì user tcm không có sudo cho systemd; đã
+        `pm2 save` nên sống qua reboot cùng cơ chế sẵn có). Runner tự gọi RA GitHub qua HTTPS —
+        **không phụ thuộc NAT 2222** và **không credential nào của server nằm trên GitHub**.
+      · `deploy-local.sh` GIỮ NGUYÊN trình tự đã tôi luyện của `deploy.sh` (backup + kiểm backup
+        mở được bằng Prisma → sync tar + dọn file mồ côi + guard .env/storage → npm ci nếu lockfile
+        đổi → build khi app cũ còn chạy → pm2 stop → migrate deploy → **db:seed** → pm2 start →
+        health check `[jobs] scheduler bật`). Khác cố ý: không chạy tsc tiền trạm (CI đã chạy trên
+        mỗi push; build-khi-app-cũ-còn-chạy bắt lỗi TS y hệt). **Sửa trình tự ở một bản thì soi lại
+        bản kia** — `deploy.sh` từ máy dev VẪN là đường dự phòng khi runner chết.
+      · ⚠ Runner hỏng/gỡ: `pm2 delete gh-runner` trên server rồi đăng ký lại — registration token
+        lấy qua API `POST /repos/vanhoang-spec/tcm-crm/actions/runners/registration-token` (cần
+        PAT admin), token sống 1 giờ.
+    - ⚠ **HAI TÀI KHOẢN GITHUB TRÊN MÁY DEV — dễ nhầm**: `git push` dùng PAT của `vanhoang-spec`
+      (chủ repo, quyền admin) lưu trong credential manager; `gh` CLI lại đăng nhập `hoang-embassy`
+      (KHÔNG thấy repo). Mọi thao tác API với repo phải lấy token qua `git credential fill`, đừng
+      dùng `gh` mặc định. ⚠ PAT ban đầu THIẾU scope `workflow` — GitHub từ chối push file trong
+      `.github/workflows/` cho tới khi chủ dự án tick thêm scope đó (21/08/2026, chỉ tick + Update,
+      không regenerate nên chuỗi token giữ nguyên).
+    - **Server không có `curl`** (đã ghi ở mục §11 cũ) — script cài runner dùng `wget`; server CÓ
+      git 2.53 (ghi chú cũ "server không có git" đã hết đúng).
+    - **CHƯA LÀM (cố ý):** auto-deploy theo push (chính sách, không phải thiếu kỹ thuật) · bước
+      `claude -p` tự chẩn đoán khi CI đỏ (làm sau khi CI chạy ổn vài tuần) · staging environment ·
+      build trên CI rồi copy `.next` sang server (giữ build-trên-server vì đã chứng minh an toàn:
+      hỏng build thì app cũ nguyên vẹn).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

@@ -198,6 +198,33 @@ Không chắc đang ở mạng nào thì xem IP máy mình (`ipconfig`), hoặc 
 
 🔑 **Mật khẩu server KHÔNG nằm trong repo này** — nhận riêng qua kênh bảo mật, cùng nhóm với `.env` và `~/.ssh/tcm_deploy` (mục 1). Deploy bình thường dùng key, không cần mật khẩu. Nếu key báo `UNPROTECTED PRIVATE KEY FILE` thì siết quyền file trước: `chmod 600 ~/.ssh/tcm_deploy`.
 
+### 8.1b Khi CẢ HAI đường SSH đều tắc — vẫn sửa được `.env` production
+
+⚠ **Cổng 2222 thi thoảng KHÔNG thông từ ngoài công ty** trong khi web vẫn chạy bình thường: đã gặp
+04/08, 16/08 và 21/08/2026. Dấu hiệu nhận biết (đo từ máy dev ở wifi nhà, 21/08): `app.tcmbtl.com/login`
+trả **200**, cổng **443 mở**, nhưng cổng **2222 timeout** — tức server sống, chỉ đường SSH tắc. Đây
+KHÔNG phải lỗi máy, và cũng không có gì phải sửa trên server.
+
+Lúc đó vẫn khai được biến môi trường mới lên production mà **không cần SSH**, vì self-hosted runner
+nằm SẴN trên server và tự gọi RA GitHub qua HTTPS:
+
+1. GitHub → Settings → Secrets and variables → Actions → **New repository secret** (dán giá trị).
+2. GitHub → Actions → **"Khai khoá AI cho production"** → Run workflow → gõ `set`.
+
+Chạy `scripts/set-env-key.sh` trên server. ⚠ Ba tính chất phải giữ nếu sửa script này:
+- **Giá trị đi qua BIẾN MÔI TRƯỜNG, không qua tham số dòng lệnh** — tham số hiện trong `ps` cho mọi
+  tiến trình khác đọc được.
+- **KHÔNG BAO GIỜ `echo` giá trị** (chỉ in độ dài). GitHub có che secret trong log nhưng đó là lưới
+  thứ hai.
+- **Gỡ dòng cũ trước khi ghi dòng mới** ⇒ chạy bao nhiêu lần cũng đúng một dòng; backup `.env` trước,
+  health check sau, hỏng thì tự khôi phục.
+⚠ **Chỉ dùng `node` trong script chạy trên server — server KHÔNG có `curl`** (và không chắc có python3).
+⚠ **Chốt chặn tên biến phải viết kiểu LOẠI TRỪ** (`""|*[!A-Z0-9_]*|[0-9]*`). Bản đầu viết
+`[A-Z_][A-Z0-9_]*)` và **không chặn được gì**: trong glob `*` là "mọi ký tự", không phải "lặp lại lớp
+ký tự đứng trước" như regex — chuỗi `FOO"; rm -rf /` khớp và bị ghi thẳng vào `.env` (test bắt được).
+
+Hiện chỉ khai được 2 biến của Claude. Cần khai biến khác thì thêm step vào workflow, script đã tổng quát.
+
 ### 8.2 Quy trình deploy
 
 **Đã gói thành MỘT lệnh — chạy từ máy dev (Git Bash):**

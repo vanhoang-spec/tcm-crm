@@ -3057,8 +3057,16 @@ Update, không regenerate nên chuỗi token giữ nguyên). Thiếu scope đó 
 Đường push tới thiết bị thật coi như bắt đầu có dữ liệu sống; mục "còn phải test trên máy thật" ở khối dưới đã
 được thực hiện một phần.
 
-**Việc còn chờ chủ dự án:** cài GitHub App Claude + secret cho `claude.yml` (tầng 2 — hướng dẫn trong comment
-đầu file đó) · hai việc production của khối dưới (tick chia sẻ PRO, khai nhóm hàng) vẫn nguyên.
+**Tầng 2 ĐÃ HOÀN TẤT trong ngày (21/08 ~14:3x):** chủ dự án cài GitHub App Claude + thêm secret
+`CLAUDE_CODE_OAUTH_TOKEN` (sinh bằng `claude setup-token` — dùng gói Claude đang có). Test thật: issue #2
+gọi `@claude` → trả lời đúng tóm tắt HANDOVER mục 7 trong **19 giây** → đã đóng issue. ⚠ Hai điều ghi lại:
+(a) sau khi bấm Install, GitHub chuyển hướng sang trang claude.ai báo "You don’t have access to organization
+settings" — trang đó thuộc TÍNH NĂNG KHÁC (tích hợp web claude.ai cho gói Team/Enterprise), KỆ NÓ; phần cần
+(App nằm trong repo) đã xong trước khi chuyển hướng, kiểm ở github.com/settings/installations. (b) mỗi lần
+Claude tự comment lên issue sẽ sinh thêm một run `skipped` của claude.yml (event issue_comment không có chữ
+@claude) — đúng thiết kế, không phải lỗi.
+
+**Việc còn chờ chủ dự án:** hai việc production của khối dưới (tick chia sẻ PRO, khai nhóm hàng) vẫn nguyên.
 
 ---
 

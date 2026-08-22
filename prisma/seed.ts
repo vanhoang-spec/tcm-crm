@@ -2422,6 +2422,9 @@ async function main() {
     "recruit.interview.manage": ["HR_MANAGER", "HR_STAFF"],
     // Chốt nhận/loại là quyết định nhân sự — giữ ở trưởng phòng NS + BGĐ.
     "recruit.decide": ["HR_MANAGER", "BOARD_OF_MANAGEMENT"],
+    // TD-2b: gửi thư ra ngoài — giữ trong phòng NS, KHÔNG mở cho BGĐ theo mặc định (BGĐ quyết định
+    // nhận/loại, còn việc soạn và bấm gửi thư cho ứng viên là việc của HR).
+    "recruit.email.send": ["HR_MANAGER", "HR_STAFF"],
   };
 
   /**
@@ -2989,6 +2992,12 @@ async function main() {
       key: "20260806_recruit_decide",
       codes: ["recruit.jd.manage", "recruit.decide"],
       roleFilter: (r) => r.code === "HR_MANAGER" || r.groupCode === "BOD",
+    },
+    // 22/08/2026 TD-2b — gửi thư cho ứng viên. Lọc theo MÃ ROLE (bài học 10.15).
+    {
+      key: "20260822_recruit_email",
+      codes: ["recruit.email.send"],
+      roleFilter: (r) => r.code === "HR_MANAGER" || r.code === "HR_STAFF",
     },
 
     // 16/08/2026 THU MUA (PUR-1) — 4 mã mới, dịch từ PUR_POLICY sang đường backfill (DB đang chạy).

@@ -206,6 +206,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "recruit.salary.view", module: "recruit", labelVi: "Xem lương mong muốn của ứng viên", labelEn: "View candidate expected salary", sensitive: true },
   { code: "recruit.interview.manage", module: "recruit", labelVi: "Đặt lịch phỏng vấn, phân công người phỏng vấn", labelEn: "Schedule interviews & assign interviewers" },
   { code: "recruit.decide", module: "recruit", labelVi: "Chốt kết quả tuyển: Thành công / Từ chối", labelEn: "Decide outcome: hire / reject", sensitive: true },
+  // ⚠ Gửi thư RA NGOÀI công ty là mức rủi ro khác hẳn quyết định nội bộ: thư đã đi thì không thu hồi
+  // được, và nó mang danh nghĩa công ty. Vì vậy tách mã riêng thay vì dùng chung recruit.interview.manage.
+  { code: "recruit.email.send", module: "recruit", labelVi: "Gửi thư cho ứng viên (từ chối / mời PV / offer)", labelEn: "Send emails to candidates", sensitive: true },
 
   // ── Họp Account team hằng tuần (MEET-1) ──
   // Trưởng team KHÔNG cần mã nào: kiểm theo bản ghi Team.leadStaffId trong app/(app)/meetings/access.ts

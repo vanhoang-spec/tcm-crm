@@ -3433,6 +3433,72 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       thì thư gửi ứng viên vào spam hoặc bị chặn thẳng. Việc của chủ dự án/IT; code xây sẵn và tự tắt
       khi chưa có khoá (đúng khuôn Claude/VAPID).
 
+63. **TUYỂN DỤNG — TD-2b: HẠ TẦNG RESEND + MẪU THƯ DUYỆT MỘT LẦN (22/08/2026)** (migration
+    `20260822010000_recruit_td2b_email` — 2 bảng MỚI `recruit_email_template` / `recruit_email_log`,
+    thuần additive, 0 DROP / 0 RedefineTables; **1 mã quyền mới `recruit.email.send`, 150 → 151**;
+    **KHÔNG thêm dependency**; **3 biến .env server MỚI**). Đợt 2/4 của yêu cầu chủ dự án 22/08/2026.
+    - **Không thêm SDK**: Resend là đúng MỘT lời gọi `POST https://api.resend.com/emails` — `fetch`
+      thuần, cùng lý do `deepseek.ts` không kéo SDK về.
+    - ⚠ **LUÔN ĐI HAI BƯỚC: dựng BẢN XEM TRƯỚC → người đọc → mới bấm Gửi** (quyết định chủ dự án
+      22/08/2026). Thư đã ra khỏi hệ thống thì không thu hồi được; một cú bấm thêm đổi lại việc không
+      bao giờ gửi nhầm người hoặc gửi khi tên/vị trí điền sai. HR vẫn không phải soạn chữ nào.
+    - ⚠ **Lúc GỬI, server DỰNG LẠI nội dung từ mẫu đã duyệt — KHÔNG nhận chuỗi từ client.** Bản xem
+      trước chỉ để người đọc. Nhận nội dung từ trình duyệt là ai mở DevTools cũng gửi được thư bất kỳ
+      dưới danh nghĩa công ty tới địa chỉ bất kỳ.
+    - ⚠ **LƯU MẪU LÀ GỠ DẤU DUYỆT, bắt duyệt lại.** Không làm vậy thì một lần sửa nhầm là mọi thư
+      gửi sau đó sai — đây chính là lý do tồn tại của bước duyệt. Có nút "Gỡ duyệt" để chặn gửi ngay
+      khi phát hiện chữ sai mà chưa kịp sửa. Ô chọn mẫu ở hồ sơ ứng viên **chỉ liệt kê mẫu ĐÃ DUYỆT**
+      — đưa mẫu chưa duyệt vào rồi để người dùng bấm và nhận lỗi là thiết kế tồi.
+    - ⚠ **Biến THIẾU thì GIỮ NGUYÊN `{{ten}}` chứ KHÔNG thay bằng chuỗi rỗng**: chuỗi rỗng cho ra
+      "Kính gửi anh/chị ," trông vẫn bình thường và sẽ được gửi đi. Giữ dấu ngoặc thì bản xem trước
+      nhìn phát thấy, và `hasUnresolvedVars` có cớ CHẶN gửi ở chốt cuối (kể cả khi `missing` rỗng vì
+      biến gõ sai tên rơi vào `unknown`).
+    - ⚠ **5 mã mẫu để Ở CODE** (`lib/recruit-email.ts`), nội dung ở DB: mỗi mã ứng với MỘT chỗ trong
+      luồng gọi nó và MỘT bộ biến riêng. Cho tạo mã tuỳ ý trong DB là đẻ ra mẫu không có đường nào
+      gửi. Mã: `REJECT_SCREEN` · `INTERVIEW_INVITE` · `OFFER` · `REJECT_FINAL` · `ONBOARDING_NOTICE`
+      (mã cuối gửi NỘI BỘ cho trưởng bộ phận, người nhận lấy từ `JobPosition.hiringManager`).
+    - ⚠ **Thân thư là VĂN BẢN THUẦN; bộ gửi tự bọc HTML và tự thoát ký tự.** Nội dung do người dùng
+      gõ mà chèn thẳng vào HTML là mở đường tiêm mã vào hộp thư người NGOÀI công ty. Test có ca
+      `<script>` bị thoát.
+    - **SỔ THƯ `RecruitEmailLog` ghi CẢ lượt hỏng**, lưu ẢNH CHỤP subject/body đã thay biến (không
+      phải con trỏ tới mẫu): mẫu sửa về sau thì thư đã gửi vẫn đọc lại được đúng chữ ứng viên đã
+      nhận. Đây là bằng chứng, không phải bản nháp. Không có sổ thì lần sau không ai biết đã thử gửi
+      hay chưa.
+    - ⚠ **`scrubResendError` làm sạch khoá API trước khi lưu** — khoá có thể lọt vào thông báo lỗi
+      tầng mạng (cùng bài học `scrubSecrets` của MKT-2b). Đã verify: lỗi 500 dội lại nguyên khoá thì
+      bản lưu chỉ còn `re_***`.
+    - **KHÔNG tự thử lại** khi gửi hỏng: thử lại một thư có thể thành gửi HAI lần cho ứng viên nếu
+      lần đầu thật ra đã đi được mà chỉ hỏng lúc đọc phản hồi.
+    - **Quyền `recruit.email.send` = HR_MANAGER + HR_STAFF (2 vai), CỐ Ý không mở cho BGĐ**: BGĐ
+      quyết định nhận/loại, còn soạn và bấm gửi thư cho ứng viên là việc của HR. Gửi thư RA NGOÀI là
+      mức rủi ro khác hẳn quyết định nội bộ nên tách mã riêng thay vì dùng chung
+      `recruit.interview.manage`. `RECRUIT_POLICY` + backfill `20260822_recruit_email` lọc theo MÃ
+      ROLE. Đo: 2 vai, grant 1350 → **1352**.
+    - **Verify: 49/49 assertion** với **fetch giả phát đúng phản hồi thật của Resend** — chạy qua
+      đúng code của app, **không gửi thư thật**: biến thiếu giữ nguyên dấu ngoặc · biến lạ bị chặn ·
+      8 ca địa chỉ email · thoát `<script>` · khoá không lọt vào body và bị che trong lỗi · 403/500
+      · KHÔNG retry · **mọi biến dùng trong 5 mẫu mặc định đều được khai trong `vars` của chính mẫu
+      đó** (thiếu là bản xem trước báo "biến không hợp lệ" ngay lần đầu HR mở ra).
+      **Browser thật:** `/settings/recruit` hiện 5 mẫu + cảnh báo DNS · duyệt một mẫu ⇒ DB ghi đúng
+      người + audit · **act-as BGĐ**: panel thư hiện "Bạn không có quyền gửi thư cho ứng viên", không
+      có ô chọn mẫu · **act-as HR Manager**: ô chọn CHỈ có mẫu đã duyệt · ứng viên chưa có email ⇒
+      chặn đúng hai tầng (NOT_CONFIGURED trước, dòng "Gửi tới" báo thiếu email) · khai **khoá GIẢ** +
+      email `example.com` (RFC 2606, không thể nhận thư) ⇒ bản xem trước **thay hết biến**, hiện đúng
+      from/to/tiêu đề, nút Gửi mở ra · bấm Gửi ⇒ request **đi thật tới api.resend.com**, nhận
+      `HTTP 401 API key is invalid`, ghi sổ **FAILED**, **khoá KHÔNG lọt vào log**, thân thư **không
+      còn biến chưa thay**, sổ thư hiện đúng trên màn hình.
+      tsc · eslint · i18n **0/0 (4666 key)** · `next build` sạch · `migrate diff` rỗng · seed no-op.
+      Dữ liệu test đã dọn sạch, `.env` máy dev đã khôi phục (không còn khoá giả).
+    - ⚠ **CHƯA GỬI ĐƯỢC THƯ THẬT — và đó là việc của chủ dự án, không phải thiếu sót của code.** Cần:
+      (a) tài khoản resend.com + `RESEND_API_KEY`; (b) `RESEND_FROM` dạng `TCM Careers
+      <careers@tcmbtl.com>`; (c) ⚠ **XÁC MINH DOMAIN `tcmbtl.com` bằng bản ghi DNS (SPF + DKIM)** —
+      thiếu bước này thì thư vào spam hoặc bị chặn thẳng, **khai khoá KHÔNG đủ**. Tuỳ chọn:
+      `RESEND_REPLY_TO`. Chưa khai thì mọi thứ tự tắt, nút gửi khoá kèm câu giải thích, app không hỏng.
+    - **CHƯA LÀM (cố ý):** đính file Job Offer vào thư (TD-2d) · gửi hàng loạt nhiều ứng viên một
+      lượt (mỗi thư một lần bấm — đúng tinh thần "xem trước rồi gửi") · theo dõi trạng thái mở
+      thư/bounce qua webhook Resend · sửa nội dung thư cho RIÊNG một ứng viên trước khi gửi (mẫu là
+      mẫu; muốn viết riêng thì gửi tay ngoài app).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

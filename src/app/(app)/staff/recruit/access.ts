@@ -27,12 +27,14 @@ export type RecruitPerms = {
   canAiParse: boolean;
   canInterview: boolean;
   canDecide: boolean;
+  /** Gửi thư RA NGOÀI cho ứng viên — mã riêng vì thư đã đi thì không thu hồi được. */
+  canEmail: boolean;
   /** Mã quyền xem lương — MỘT trong các cửa, không phải cửa duy nhất (xem canSeeExpectedSalary). */
   salaryPermission: boolean;
 };
 
 export async function getRecruitPerms(): Promise<RecruitPerms> {
-  const [meId, canView, canManage, canJd, canAiParse, canInterview, canDecide, salaryPermission] = await Promise.all([
+  const [meId, canView, canManage, canJd, canAiParse, canInterview, canDecide, canEmail, salaryPermission] = await Promise.all([
     getCurrentStaffId(),
     hasPermission("recruit.view"),
     hasPermission("recruit.manage"),
@@ -40,9 +42,10 @@ export async function getRecruitPerms(): Promise<RecruitPerms> {
     hasPermission("recruit.ai_parse"),
     hasPermission("recruit.interview.manage"),
     hasPermission("recruit.decide"),
+    hasPermission("recruit.email.send"),
     hasPermission("recruit.salary.view"),
   ]);
-  return { meId, canView, canManage, canJd, canAiParse, canInterview, canDecide, salaryPermission };
+  return { meId, canView, canManage, canJd, canAiParse, canInterview, canDecide, canEmail, salaryPermission };
 }
 
 export type CandidateGate = {

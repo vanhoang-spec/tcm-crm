@@ -7,7 +7,10 @@ import { formatDate, pickLabel, toNum } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { RECRUIT_CRITERIA_SET } from "@/lib/recruit";
 import type { Locale } from "@/i18n/locales";
+import { EMAIL_TEMPLATES } from "@/lib/recruit-email";
+import { loadEmailLog, loadEmailTemplate } from "@/lib/recruit-email-server";
 import { getRecruitPerms, gateCandidate } from "../../access";
+import { EmailPanel } from "./email-panel";
 import { CandidateForm } from "./candidate-form";
 import { InterviewPanel } from "./interview-panel";
 import { DecisionForm } from "./decision-form";
@@ -86,6 +89,16 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
     },
   });
   if (!candidate) notFound();
+
+  // Thư (TD-2b): chỉ liệt kê mẫu ĐÃ DUYỆT — mẫu chưa duyệt bấm vào cũng bị server chặn, đưa vào ô
+  // chọn chỉ để người dùng bấm rồi nhận lỗi là thiết kế tồi.
+  const [emailLogs, emailTpls] = await Promise.all([
+    loadEmailLog(id),
+    Promise.all(EMAIL_TEMPLATES.map((d) => loadEmailTemplate(d.code))),
+  ]);
+  const emailChoices = emailTpls.flatMap((tpl) =>
+    tpl && tpl.approvedAt ? [{ code: tpl.def.code, label: tpl.def.labelVi, audience: tpl.def.audience }] : [],
+  );
 
   const [criteriaSet, staff] = await Promise.all([
     prisma.optionSet.findUnique({
@@ -174,6 +187,8 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           </div>
         </details>
       )}
+
+      <EmailPanel candidateId={candidate.id} choices={emailChoices} logs={emailLogs} canSend={perms.canEmail} />
 
       <InterviewPanel
         candidateId={candidate.id}

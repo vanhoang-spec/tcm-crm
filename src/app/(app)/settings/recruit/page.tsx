@@ -3,9 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { EMAIL_TEMPLATES } from "@/lib/recruit-email";
+import { loadEmailTemplate } from "@/lib/recruit-email-server";
+import { isResendConfigured } from "@/lib/resend";
 import { PositionEditor, type Option } from "./position-editor";
 import { JdTemplates } from "./jd-templates";
 import { PositionStatusForm } from "./position-status-form";
+import { EmailTemplates, type EmailTemplateView } from "./email-templates";
 
 const TONE: Record<string, "success" | "warning" | "neutral"> = {
   OPEN: "success",
@@ -70,6 +74,25 @@ export default async function RecruitSettingsPage() {
     jdBenefits: x.jdBenefits ?? "",
   }));
 
+  // Mẫu thư (TD-2b) — đọc song song, mỗi mẫu rơi về bản mặc định trong code khi DB chưa có dòng.
+  const emailTemplates: EmailTemplateView[] = (
+    await Promise.all(EMAIL_TEMPLATES.map((d) => loadEmailTemplate(d.code)))
+  ).flatMap((tpl) => {
+    if (!tpl) return [];
+    return [
+      {
+        code: tpl.def.code,
+        label: tpl.def.labelVi,
+        audience: tpl.def.audience,
+        vars: tpl.def.vars,
+        subject: tpl.subject,
+        body: tpl.body,
+        approvedAt: tpl.approvedAt ? formatDate(tpl.approvedAt) : null,
+        approvedByName: null,
+      },
+    ];
+  });
+
   return (
     <div className="max-w-4xl space-y-4">
       <div>
@@ -128,6 +151,8 @@ export default async function RecruitSettingsPage() {
           />
         </div>
       </details>
+
+      <EmailTemplates templates={emailTemplates} resendConfigured={isResendConfigured()} />
 
       <JdTemplates templates={templateData} />
     </div>

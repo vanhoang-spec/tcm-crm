@@ -272,6 +272,8 @@ model Staff {
   jobPositionsJdUpdated       JobPosition[]             @relation("JobPositionJdUpdatedBy")
   candidatesCreated           Candidate[]               @relation("CandidateCreatedBy")
   candidatesDecided           Candidate[]               @relation("CandidateDecidedBy")
+  candidatesScreenDecided     Candidate[]               @relation("CandidateScreenDecidedBy")
+  candidateAiReviews          CandidateAiReview[]       @relation("CandidateAiReviewCreatedBy")
   interviewsAsInterviewer     Interview[]               @relation("InterviewInterviewer")
   interviewsCreated           Interview[]               @relation("InterviewCreatedBy")
   accountMeetingsCreated      AccountMeeting[]          @relation("AccountMeetingCreatedBy")
@@ -3737,6 +3739,11 @@ model JobPosition {
   /// nhìn thấy lương mong muốn của ứng viên (xem lib/recruit.ts → canSeeExpectedSalary).
   hiringManagerStaffId String?
 
+  /// Vị trí quản lý ⇒ chấm bằng BỘ TIÊU CHÍ MANAGER (có leadership / quản lý nhóm / ownership).
+  /// ⚠ Là CỜ TICK, cố ý không đoán từ tên vị trí: "Account Executive" không phải quản lý, nhưng
+  /// "Trưởng nhóm Thiết kế" thì có — đoán theo chữ "Manager" trong tên là sai cả hai chiều.
+  isManagerial Boolean @default(false)
+
   jdSummary          String?
   jdResponsibilities String?
   jdRequirements     String?
@@ -3801,6 +3808,21 @@ model Candidate {
   /// Mốc lần AI đọc CV gần nhất. Null = chưa đọc lần nào (HR nhập tay hoàn toàn).
   aiParsedAt DateTime?
 
+  /// Trạng thái lượt AI CHẤM ĐIỂM đang chạy: QUEUED | RUNNING | ERROR. Null = không có lượt nào
+  /// đang chạy (đã xong, hoặc chưa từng chấm — đọc điểm ở CandidateAiReview mới nhất).
+  /// ⚠ Cần cột này vì chấm hàng loạt chạy NGOÀI vòng đời request (fire-and-forget, mirror MKT-2a):
+  /// không có nó thì màn hình không biết đang chạy hay đã hỏng giữa chừng.
+  aiReviewStatus String?
+  aiReviewError  String?
+
+  /// Quyết định ở cổng sàng lọc sau khi AI chấm CV: INTERVIEW (cho phỏng vấn) | REJECT (loại).
+  /// ⚠ CỐ Ý tách khỏi `status`: `status` là chặng của hồ sơ (NEW/INTERVIEWING/HIRED/REJECTED), còn
+  /// đây là quyết định của NGƯỜI — phải biết ai duyệt và lúc nào, kể cả khi hồ sơ đi tiếp và đổi
+  /// status nhiều lần sau đó.
+  screenDecision    String?
+  screenDecidedAt   DateTime?
+  screenDecidedById String?
+
   /// NEW = mới nhận · INTERVIEWING = đã có lịch phỏng vấn · HIRED · REJECTED.
   status       String    @default("NEW")
   decidedAt    DateTime?
@@ -3811,10 +3833,12 @@ model Candidate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  position   JobPosition @relation(fields: [positionId], references: [id])
-  decidedBy  Staff?      @relation("CandidateDecidedBy", fields: [decidedById], references: [id])
-  createdBy  Staff?      @relation("CandidateCreatedBy", fields: [createdById], references: [id])
-  interviews Interview[]
+  position        JobPosition         @relation(fields: [positionId], references: [id])
+  decidedBy       Staff?              @relation("CandidateDecidedBy", fields: [decidedById], references: [id])
+  screenDecidedBy Staff?              @relation("CandidateScreenDecidedBy", fields: [screenDecidedById], references: [id])
+  createdBy       Staff?              @relation("CandidateCreatedBy", fields: [createdById], references: [id])
+  interviews      Interview[]
+  aiReviews       CandidateAiReview[]
 
   @@index([positionId, status])
   @@index([status])
@@ -3879,6 +3903,75 @@ model InterviewScore {
 
   @@unique([interviewId, criterionCode])
   @@map("interview_score")
+}
+
+/// Tiêu chí chấm điểm — danh mục MỀM, HR sửa ở /settings/recruit, không cần deploy (TD-2a).
+///
+/// ⚠ HAI BỘ RIÊNG BIỆT, MỖI BỘ TỔNG TRỌNG SỐ = 100 — KHÔNG phải "bộ chung rồi cộng thêm cho quản
+/// lý". Cộng thêm là vượt quá 100; bộ quản lý phải HẠ trọng số chuyên môn để nhường chỗ cho
+/// leadership. `scope`: STANDARD (vị trí thường) | MANAGER (vị trí có JobPosition.isManagerial).
+/// `stage`: CV (AI chấm hồ sơ) | INTERVIEW (người phỏng vấn chấm) — hai chặng nhìn thấy những thứ
+/// khác nhau nên tiêu chí khác nhau.
+///
+/// ⚠ Tiêu chí dở thì TẮT (`isActive = false`), KHÔNG xoá: bảng điểm đã chấm lưu `code` dạng CHUỖI
+/// (trong criteriaJson và InterviewScore.criterionCode) và phải đọc lại được nguyên vẹn — cùng
+/// nguyên tắc với câu hỏi kiểm tra ở KB-H3.
+model RecruitCriterion {
+  id       String  @id @default(cuid())
+  stage    String
+  scope    String
+  code     String
+  labelVi  String
+  labelEn  String
+  /// Gợi ý cho AI / người chấm biết tiêu chí này nhìn vào cái gì. Đi THẲNG vào prompt.
+  hint     String?
+  /// Điểm TỐI ĐA của tiêu chí. Tổng theo (stage, scope) phải = 100 — Settings cảnh báo nếu lệch.
+  weight   Int
+  sort     Int     @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([stage, scope, code])
+  @@index([stage, scope, isActive])
+  @@map("recruit_criterion")
+}
+
+/// Một lượt AI chấm CV.
+///
+/// KHÔNG ghi đè bản cũ — mỗi lần chấm là MỘT DÒNG MỚI, đọc thì lấy dòng mới nhất. Giữ lịch sử gần
+/// như miễn phí: đổi JD hoặc đổi trọng số rồi chấm lại vẫn đối chiếu được với lần trước, và không
+/// ai mất bản đánh giá đã dùng để ra quyết định.
+model CandidateAiReview {
+  id          String @id @default(cuid())
+  candidateId String
+
+  /// Ảnh chụp bộ tiêu chí đã dùng — vị trí đổi cờ quản lý về sau thì bản chấm cũ vẫn đọc đúng.
+  scope          String
+  /// ⚠ TỔNG DO CODE CỘNG từ điểm từng tiêu chí, KHÔNG lấy con số AI tự khai (mirror bảng so sánh
+  /// báo giá NCC và đối chiếu chi ngân hàng: số tính bằng code, AI chỉ nhận xét).
+  totalScore     Int
+  /// Tổng trọng số lúc chấm — thường 100; giữ lại để bản cũ không đọc sai khi HR đổi trọng số.
+  maxScore       Int
+  /// INTERVIEW | CONSIDER | REJECT — SUY TỪ NGƯỠNG theo totalScore, không phải AI tự phán.
+  recommendation String
+
+  summary      String?
+  strengths    String?
+  concerns     String?
+  /// [{code,label,weight,score,note}] — ảnh chụp đầy đủ để bảng so sánh dựng lại được về sau.
+  criteriaJson String
+
+  model       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  createdBy Staff?    @relation("CandidateAiReviewCreatedBy", fields: [createdById], references: [id])
+
+  @@index([candidateId, createdAt])
+  @@map("candidate_ai_review")
 }
 
 // ─────────────────────────────────────────────────────────

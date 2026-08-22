@@ -3357,6 +3357,82 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       dựng JSON Schema cho từng lời gọi trong khi Zod đã chặn ở đầu ra · chưa bật extended thinking
       (xem trần 75s ở trên) · các module khác vẫn DeepSeek.
 
+62. **TUYỂN DỤNG — TD-2a: AI CHẤM CV THANG 100 + CỔNG SÀNG LỌC (22/08/2026)** (migration VIẾT TAY
+    `20260822000000_recruit_td2a_ai_screening` — 2 bảng MỚI `recruit_criterion` / `candidate_ai_review`
+    + 6 cột trên bảng cũ; **KHÔNG mã quyền mới**). Đợt 1/4 của yêu cầu chủ dự án 22/08/2026 "sub-module
+    Tuyển dụng chạy trọn quy trình tới Job Offer" — TD-1 (mục 10.31) mới làm được ~40%, đây là MỞ RỘNG
+    chứ không làm lại: vị trí, JD, upload CV, lịch phỏng vấn, 7 mã quyền đều giữ nguyên và đang chạy.
+    - ⚠ **HAI BỘ TIÊU CHÍ RIÊNG, MỖI BỘ TỔNG ĐÚNG 100 — không phải "bộ chung rồi cộng thêm cho quản
+      lý".** Cộng thêm leadership vào bộ 100 điểm là ra 130. Bộ MANAGER phải HẠ trọng số chuyên môn
+      (CV: 25 → 15) để nhường chỗ cho LEADERSHIP 20 · TEAM_MGMT 15 · OWNERSHIP 10. Cùng khuôn cho cả
+      chặng CV lẫn chặng PHỎNG VẤN ⇒ 4 bộ, test chốt cả 4 đều = 100.
+    - ⚠ **Bộ INTERVIEW/STANDARD giữ ĐÚNG 6 mã của TD-1** (ATTITUDE · CASE · COMMUNICATION · CULTURE ·
+      EXPERTISE · PRESSURE) — nhờ vậy phiếu phỏng vấn đã chấm trước TD-2a vẫn đọc lại được nguyên vẹn,
+      chỉ đổi thang từ 1–5 sang trọng số. TD-2c sẽ chuyển form phỏng vấn sang bảng mới.
+    - ⚠ **TỔNG ĐIỂM DO CODE CỘNG, AI CHỈ CHẤM TỪNG TIÊU CHÍ VÀ VIẾT NHẬN XÉT** (mirror bảng so sánh
+      báo giá NCC 10.36 và đối chiếu chi ngân hàng 10.51). `computeTotal` KẸP mỗi điểm vào [0, weight]
+      — không phải phòng xa: model rất hay chấm thang 100 cho MỌI tiêu chí bất kể trọng số, không kẹp
+      là tổng vọt lên mấy trăm. Điểm ghép theo BỘ TIÊU CHÍ CỦA APP: mã lạ bị bỏ, mã thiếu tính 0.
+    - ⚠ **ĐỀ XUẤT phỏng vấn/không SUY TỪ NGƯỠNG theo % của maxScore**, không để AI tự phán: ngưỡng là
+      CHÍNH SÁCH tuyển dụng, HR/BGĐ phải chỉnh được không cần deploy và phải giải thích được vì sao hồ
+      sơ bị loại; AI tự phán thì cùng một điểm ra hai kết luận ở hai lượt. Setting
+      `recruit.ai_interview_pct` (70) và `recruit.ai_consider_pct` (50). Tính bằng % nên HR đổi trọng
+      số làm tổng khác 100 vẫn đúng nghĩa.
+    - ⚠ **Cờ `JobPosition.isManagerial` là TICK TAY, cố ý không đoán từ tên vị trí**: "Account Executive"
+      không phải quản lý, "Trưởng nhóm Thiết kế" thì có — đoán theo chữ "Manager" sai cả hai chiều.
+    - **Chấm HÀNG LOẠT chạy NỀN (fire-and-forget)**: một lượt AI tới 75s, 20 hồ sơ là ~10 phút, await
+      trong server action là trang treo + Cloudflare cắt ở ~100s (mirror MKT-2a). Trạng thái đi qua
+      `Candidate.aiReviewStatus` (QUEUED → RUNNING → null/ERROR); claim từng hồ sơ bằng `updateMany`
+      có status trong `where` nên hai người cùng bấm không chấm (và không tính tiền) hai lần. Trần
+      `MAX_BATCH_SCORE = 20`/lượt. Mỗi lần chấm là một DÒNG MỚI, không ghi đè — lịch sử chấm giữ nguyên.
+    - ⚠ **BUG ĐÃ VÁ — LỌC NULL TRONG SQL. Đọc trước khi viết bộ lọc `not` trên cột nullable.**
+      `aiReviewStatus: { not: "RUNNING" }` **LOẠI SẠCH mọi hồ sơ chưa từng chấm**, vì `NULL != 'RUNNING'`
+      cho ra NULL chứ không phải TRUE — tức loại đúng những hồ sơ cần chấm nhất. Đo trên dev.db: câu gọn
+      ra **0/4** dòng, câu đúng `OR: [{ aiReviewStatus: null }, { aiReviewStatus: { not: "RUNNING" } }]`
+      ra **4/4**. Im lặng tuyệt đối — người dùng chỉ thấy "chưa chọn hồ sơ nào hợp lệ".
+    - ⚠ **BUG ĐÃ VÁ — form quyết định KHÔNG được lồng trong form chấm điểm**: HTML cấm form lồng form
+      (React ném "A React form was unexpectedly submitted", nút bên trong im lặng không gửi — đúng bẫy
+      đã trả giá ở MEET-2 và MKT-3), và hai bên còn tranh nhau ô `candidateId`. Nay form chấm CHỈ bọc
+      thanh công cụ, mỗi hàng có form quyết định riêng.
+    - ⚠ **BUG ĐÃ VÁ — bảng so sánh trộn hai bộ tiêu chí thì tiêu đề cột NÓI DỐI**: `JD_MATCH` là 30 ở
+      bộ thường nhưng 20 ở bộ quản lý, nên hàng quản lý 18/20 hiện dưới cột ghi "/30". Nay khi trộn
+      thì bỏ trọng số khỏi tiêu đề, ghi "điểm/trọng số" ngay trong Ô, kèm dòng cảnh báo.
+    - **Quyền: 0 mã mới.** Chấm AI dùng lại `recruit.ai_parse` (đặc quyền THÊM, kiểm bằng `hasPermission`
+      BÊN TRONG action đã có `requirePermission("recruit.manage")` — mirror mkt.generate). Quyết định
+      sàng lọc dùng `recruit.interview.manage` (người quyết có phỏng vấn hay không CHÍNH là người đặt
+      lịch), KHÔNG dùng `recruit.decide` — đó là quyết định CUỐI nhận/không nhận.
+    - **Seed:** 26 dòng tiêu chí (chỉ tạo khi thiếu theo từng (stage,scope,code) nên KHÔNG cần marker,
+      và bộ mới thêm vào code sau này tự được seed) + 7 vị trí chủ dự án nêu (marker one-shot
+      `20260822_recruit_positions`; Account Director/Manager gắn cờ quản lý, **Senior Designer CỐ Ý
+      không phải vị trí quản lý** — senior là bậc chuyên môn, không phải quản người).
+    - **Verify: 38/38 test thuần** (4 bộ đều = 100 · bộ quản lý hạ trọng số chuyên môn · kẹp điểm khi
+      model chấm thang 100 · ngưỡng tính theo % · đọc lại criteriaJson hỏng không ném · prompt cấm bịa,
+      cấm tự cộng tổng, cấm định kiến) **+ chạy AI THẬT trên 4 CV**: Account Manager hồ sơ mạnh
+      **89/100 INTERVIEW** (LEADERSHIP 17/20) vs Account Manager hồ sơ non **27/100 REJECT**
+      (LEADERSHIP 2/20, ghi chú "CV không nêu kinh nghiệm quản lý nhóm") — cộng tay khớp tuyệt đối
+      tổng máy tính, không tiêu chí nào vượt trọng số, ghi chú dẫn bằng chứng cụ thể từ CV · bảng so
+      sánh xếp đúng theo tổng 89/85/70/27 · quyết định sàng lọc lưu đúng người + audit · **act-as BGĐ
+      (chỉ `recruit.view`)**: không checkbox, không nút AI, không nút quyết định, vẫn xem được điểm ·
+      **giả mạo lời gọi**: giữ HTML form AI lúc là admin, đổi sang vai BGĐ rồi phát lại ⇒ server từ
+      chối, hồ sơ KHÔNG bị xếp hàng và KHÔNG có lượt AI thứ hai (không tốn tiền).
+      tsc · eslint · i18n **0/0 (4628 key)** · `next build` sạch · `migrate diff` rỗng · seed lần 3 no-op.
+      Dữ liệu test đã dọn sạch (dev.db về 2 ứng viên / 0 bản chấm / 36-68-25 / 79 audit).
+    - ⚠ **Ghi chú dev.db:** mật khẩu tài khoản `nvhoang@tcmbtl.com` trên **dev.db** đã đặt lại thành
+      `TCM123456` để verify trên browser (phiên đăng nhập mất khi khởi động lại dev server). dev.db là
+      SANDBOX (mục 8.2) — **production KHÔNG bị đụng**.
+    - ⚠ **Mất một lượt vì `.next/dev/types/routes.d.ts`** (file Next TỰ SINH) bị cắt ngang khi dev server
+      và `next build` chạy chồng nhau ⇒ `/staff/recruit` trả **404** và build báo lỗi type ở đúng file
+      đó. Không phải lỗi code: **tắt dev server → xoá `.next` → build lại** là hết.
+    - **CÒN LẠI CỦA YÊU CẦU 22/08 (chưa làm, đã chốt sẽ làm tiếp):** (b) hạ tầng **Resend** + 3 mẫu thư
+      (từ chối / mời phỏng vấn / offer) duyệt một lần rồi dùng, có **bản xem trước trước khi gửi**
+      (quyết định chủ dự án: thư đã ra khỏi hệ thống thì không thu hồi được) · (c) form đánh giá phỏng
+      vấn thang 100 + tự điền hồ sơ và điểm AI + vòng sau thấy kết quả vòng trước · (d) OFFER/REJECT
+      cuối + form Job Offer theo nhóm bộ phận + UV nhận offer → HR điền ngày đi làm → email onboarding
+      cho trưởng bộ phận.
+      ⚠ **Resend cần XÁC MINH DOMAIN `tcmbtl.com` bằng bản ghi DNS (SPF + DKIM)** — không làm bước đó
+      thì thư gửi ứng viên vào spam hoặc bị chặn thẳng. Việc của chủ dự án/IT; code xây sẵn và tự tắt
+      khi chưa có khoá (đúng khuôn Claude/VAPID).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

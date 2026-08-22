@@ -5,6 +5,7 @@ import { PERMISSION_CODES } from "../src/lib/permission-catalog";
 import { currentPeriodCode } from "../src/lib/creative-cost";
 import { DEFAULT_RECRUIT_CRITERIA } from "../src/lib/recruit";
 import { systemGroupRows } from "../src/lib/rfq-templates";
+import { DEFAULT_CRITERIA } from "../src/lib/recruit-scoring";
 
 const prisma = new PrismaClient();
 
@@ -1844,6 +1845,70 @@ async function main() {
   // ⚠ Phiếu đã chấm lưu criterionCode dạng CHUỖI nên tắt một tiêu chí về sau KHÔNG làm hỏng dữ
   // liệu cũ — cùng nguyên tắc với câu hỏi kiểm tra ở KB-H3 (tắt, không xoá).
   await seedOptionSet("recruit_criteria", "Tiêu chí đánh giá phỏng vấn", [...DEFAULT_RECRUIT_CRITERIA]);
+
+  // ── TD-2a (22/08/2026): bộ tiêu chí có TRỌNG SỐ, thang 100 ──
+  // Bảng riêng `RecruitCriterion` chứ không dùng OptionSet: OptionItem không có cột trọng số, mà
+  // trọng số mới là thứ làm nên thang 100. OptionSet `recruit_criteria` ở trên GIỮ NGUYÊN cho phiếu
+  // phỏng vấn TD-1 đang chạy; TD-2c sẽ chuyển form phỏng vấn sang bảng mới này.
+  // ⚠ CHỈ TẠO KHI THIẾU, theo từng (stage, scope, code) — HR sửa nhãn/trọng số trong Settings thì
+  // lần seed sau không đè. Nhờ phép "chỉ tạo khi thiếu" nên KHÔNG cần marker one-shot, và bộ tiêu
+  // chí mới thêm vào code sau này tự được seed.
+  let critCreated = 0;
+  for (const c of DEFAULT_CRITERIA) {
+    const found = await prisma.recruitCriterion.findUnique({
+      where: { stage_scope_code: { stage: c.stage, scope: c.scope, code: c.code } },
+      select: { id: true },
+    });
+    if (found) continue;
+    await prisma.recruitCriterion.create({
+      data: { stage: c.stage, scope: c.scope, code: c.code, labelVi: c.labelVi, labelEn: c.labelEn, hint: c.hint, weight: c.weight, sort: c.sort },
+    });
+    critCreated++;
+  }
+  if (critCreated) console.log(`  ↳ tiêu chí tuyển dụng (thang 100): tạo ${critCreated} dòng`);
+
+  // ── Vị trí tuyển dụng mặc định (TD-2a, chủ dự án nêu 22/08/2026) — one-shot marker ──
+  // ⚠ Marker để HR đóng/sửa vị trí rồi thì re-seed không dựng lại. Tạo theo TÊN: vị trí trùng tên
+  // đã có (vd "Account Executive" của TD-1) thì BỎ QUA chứ không tạo bản thứ hai.
+  // ⚠ `isManagerial` là thứ quyết định chấm bằng BỘ tiêu chí nào — Senior Designer CỐ Ý không phải
+  // vị trí quản lý (senior là bậc chuyên môn, không phải quản người).
+  const RECRUIT_POS_KEY = "20260822_recruit_positions";
+  const recruitPosMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: RECRUIT_POS_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!recruitPosMarker) {
+    const POSITIONS: { title: string; dept: string; isManagerial: boolean }[] = [
+      { title: "Account Director", dept: "ACCOUNT", isManagerial: true },
+      { title: "Account Manager", dept: "ACCOUNT", isManagerial: true },
+      { title: "Account Executive", dept: "ACCOUNT", isManagerial: false },
+      { title: "Senior Designer", dept: "CREATIVE", isManagerial: false },
+      { title: "Designer", dept: "CREATIVE", isManagerial: false },
+      { title: "HR Staff", dept: "HR", isManagerial: false },
+      { title: "Accounting Staff", dept: "FIN", isManagerial: false },
+    ];
+    let posCreated = 0;
+    let posFlagged = 0;
+    for (const p of POSITIONS) {
+      const dept = await prisma.department.findUnique({ where: { code: p.dept }, select: { id: true } });
+      const existing = await prisma.jobPosition.findFirst({ where: { title: p.title }, select: { id: true, isManagerial: true } });
+      if (existing) {
+        // Vị trí đã có từ TD-1 chưa biết cờ quản lý — đặt đúng một lần, không đụng gì khác.
+        if (existing.isManagerial !== p.isManagerial) {
+          await prisma.jobPosition.update({ where: { id: existing.id }, data: { isManagerial: p.isManagerial } });
+          posFlagged++;
+        }
+        continue;
+      }
+      await prisma.jobPosition.create({
+        data: { title: p.title, departmentId: dept?.id ?? null, isManagerial: p.isManagerial, status: "OPEN" },
+      });
+      posCreated++;
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: RECRUIT_POS_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ created: posCreated, flagged: posFlagged }) },
+    });
+    console.log(`  ↳ vị trí tuyển dụng: tạo ${posCreated}, gắn cờ quản lý ${posFlagged}`);
+  }
 
   // ── 3 team nhỏ Creative (CR-1, 06/08/2026) — one-shot marker ──
   // Marker để re-seed KHÔNG dựng lại squad admin đã sửa tay (đổi tên, tắt, gán lead).

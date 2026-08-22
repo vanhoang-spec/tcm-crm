@@ -5,15 +5,12 @@ import { Archive, CalendarCheck, Settings2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { isAiConfigured } from "@/lib/ai/deepseek";
+import { MAX_BATCH_SCORE } from "@/lib/recruit-score-server";
+import { parseScoredCriteria } from "@/lib/recruit-scoring";
 import { getRecruitPerms } from "./access";
 import { UploadCvForm } from "./upload-cv-form";
-
-const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "neutral"> = {
-  NEW: "warning",
-  INTERVIEWING: "neutral",
-  HIRED: "success",
-  REJECTED: "danger",
-};
+import { ScreeningBoard, type ScreeningRow } from "./screening-board";
 
 /**
  * Trang chính của sub-module Tuyển dụng: vị trí đang tuyển + hồ sơ đang chạy.
@@ -56,8 +53,18 @@ export default async function RecruitPage() {
         status: true,
         createdAt: true,
         aiParsedAt: true,
-        position: { select: { title: true } },
+        aiReviewStatus: true,
+        aiReviewError: true,
+        screenDecision: true,
+        position: { select: { title: true, isManagerial: true } },
         interviews: { select: { round: true, status: true } },
+        // Bản AI chấm MỚI NHẤT. `take: 1` + orderBy desc thay vì đọc hết: mỗi lần chấm lại đẻ một
+        // dòng, hồ sơ chấm nhiều lần sẽ kéo cả lịch sử ra danh sách mà không ai nhìn.
+        aiReviews: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { totalScore: true, maxScore: true, recommendation: true, summary: true, criteriaJson: true, createdAt: true },
+        },
       },
     }),
     prisma.jobPosition.findMany({
@@ -66,6 +73,41 @@ export default async function RecruitPage() {
       select: { id: true, title: true },
     }),
   ]);
+
+  // Dựng dòng cho bảng sàng lọc — format ngày và gom nhãn vòng phỏng vấn Ở SERVER để component
+  // client không phải kéo theo bộ định dạng ngày (và giữ đúng chuẩn dd/mm/yyyy của app, 10.19).
+  const screeningRows: ScreeningRow[] = candidates.map((c) => {
+    const r = c.aiReviews[0];
+    return {
+      id: c.id,
+      fullName: c.fullName,
+      positionTitle: c.position.title,
+      isManagerial: c.position.isManagerial,
+      status: c.status,
+      receivedAt: formatDate(c.createdAt),
+      aiParsed: !!c.aiParsedAt,
+      aiReviewStatus: c.aiReviewStatus,
+      aiReviewError: c.aiReviewError,
+      review: r
+        ? {
+            totalScore: r.totalScore,
+            maxScore: r.maxScore,
+            recommendation: r.recommendation,
+            summary: r.summary,
+            scoredAt: formatDate(r.createdAt),
+            criteria: parseScoredCriteria(r.criteriaJson),
+          }
+        : null,
+      screenDecision: c.screenDecision,
+      interviewsLabel:
+        c.interviews.length === 0
+          ? t("noInterview")
+          : c.interviews
+              .sort((a, b) => a.round - b.round)
+              .map((i) => `V${i.round}·${t(`ivStatus${i.status}`)}`)
+              .join("  "),
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -129,50 +171,14 @@ export default async function RecruitPage() {
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-foreground">{t("runningTitle")}</h2>
-        {candidates.length === 0 && <p className="text-sm text-muted-foreground">{t("noCandidates")}</p>}
-        <div className="overflow-hidden rounded-xl border border-border bg-surface">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="border-b border-border bg-surface-2 text-xs font-medium text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5 text-left">{t("colName")}</th>
-                  <th className="px-4 py-2.5 text-left">{t("colPosition")}</th>
-                  <th className="px-4 py-2.5 text-left">{t("colStatus")}</th>
-                  <th className="px-4 py-2.5 text-left">{t("colInterviews")}</th>
-                  <th className="px-4 py-2.5 text-left">{t("colReceived")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {candidates.map((c) => (
-                  <tr key={c.id} className="hover:bg-surface-2">
-                    <td className="px-4 py-2.5">
-                      <Link href={`/staff/recruit/candidates/${c.id}`} className="font-medium text-brand-700 hover:underline">
-                        {c.fullName}
-                      </Link>
-                      {!c.aiParsedAt && <span className="ml-2 text-xs text-muted-foreground">{t("notParsed")}</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{c.position.title}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{t(`status${c.status}`)}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {c.interviews.length === 0
-                        ? t("noInterview")
-                        : c.interviews
-                            .sort((a, b) => a.round - b.round)
-                            .map((i) => `V${i.round}·${t(`ivStatus${i.status}`)}`)
-                            .join("  ")}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{formatDate(c.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+      <ScreeningBoard
+        rows={screeningRows}
+        canManage={perms.canManage}
+        canAiScore={perms.canAiParse}
+        canDecide={perms.canInterview}
+        aiConfigured={isAiConfigured()}
+        maxBatch={MAX_BATCH_SCORE}
+      />
     </div>
   );
 }

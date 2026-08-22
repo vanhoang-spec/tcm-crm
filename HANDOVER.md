@@ -3499,6 +3499,86 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       thư/bounce qua webhook Resend · sửa nội dung thư cho RIÊNG một ứng viên trước khi gửi (mẫu là
       mẫu; muốn viết riêng thì gửi tay ngoài app).
 
+64. **TUYỂN DỤNG — TD-2c + TD-2d: PHỎNG VẤN THANG 100 + THƯ MỜI NHẬN VIỆC (22/08/2026)** (migration
+    `20260822020000_recruit_td2cd_interview_offer` — 3 cột nullable trên `interview` + 2 bảng MỚI
+    `recruit_offer_template` / `candidate_offer`; **KHÔNG mã quyền mới**). Đợt 3+4/4, khép trọn luồng
+    tuyển dụng chủ dự án mô tả 22/08/2026.
+    - **Prisma tự dùng `ALTER TABLE` lần này** (3 cột nullable, không FK) nên KHÔNG phải viết migration
+      tay — đã kiểm `migrate diff`: 0 DROP TABLE, 0 `defer_foreign_keys`. Đừng mặc định cứ thêm cột là
+      phải viết tay; cứ đọc SQL sinh ra rồi quyết.
+
+    **TD-2c — chấm phỏng vấn thang 100:**
+    - ⚠ **`InterviewScore.score` GIỮ NGUYÊN kiểu Int, chỉ ĐỔI NGHĨA**: trước là 1–5, nay là 0..trọng số
+      của CHÍNH tiêu chí đó. Không cần cột mới. Phiếu chấm TRƯỚC TD-2c có `scope/totalScore/maxScore`
+      = null — màn hình phải đọc được cả hai loại, đừng giả định lúc nào cũng có tổng.
+    - ⚠ **Đọc bộ tiêu chí từ DB RỒI mới nhận điểm, KHÔNG tin mã tiêu chí từ client**: mã lạ bị bỏ, mỗi
+      điểm kẹp vào [0, trọng số]. Đã verify sống: gỡ `max` phía trình duyệt rồi nhét
+      `score__LEADERSHIP=999` ⇒ DB lưu **20** (đúng trọng số), tổng **83/100** khớp cộng tay.
+    - ⚠ **TỔNG DO SERVER CỘNG**; màn hình cũng kẹp bằng ĐÚNG phép đó để hai bên không lệch — người
+      chấm tưởng 85 mà hồ sơ ghi 62 là loại lỗi im lặng tuyệt đối.
+    - **Ô trống ≠ chấm 0**: ô bỏ trống tính 0 khi cộng tổng nhưng KHÔNG lưu dòng `InterviewScore`, để
+      phân biệt "chưa đánh giá tiêu chí này" với "đánh giá và cho 0 điểm".
+    - **TỰ ĐIỀN vào phiếu chấm**: hồ sơ ứng viên (tóm tắt quá trình làm việc / kỹ năng / học vấn) +
+      **điểm AI chấm CV** + phần "AI lưu ý cần làm rõ khi phỏng vấn". ⚠ CỐ Ý **không** đưa lương mong
+      muốn vào khối này: ô đó có cổng riêng theo bản ghi (`canSeeExpectedSalary`), còn khối tự điền
+      hiện cho MỌI người phỏng vấn được phân công.
+    - **Vòng sau thấy vòng trước**: liệt kê các vòng đã chấm (điểm, đề xuất, điểm cần lưu ý) ngay trên
+      phiếu của vòng đang chấm — lọc `p.round < iv.round`.
+    - **Dọn theo §3 CODING-RULES**: `MIN_SCORE` / `MAX_SCORE` / `averageScore` / `RECRUIT_CRITERIA_SET`
+      không còn ai dùng sau khi đổi thang ⇒ đã xoá khỏi `lib/recruit.ts`. `DEFAULT_RECRUIT_CRITERIA`
+      GIỮ LẠI (seed OptionSet cũ để phiếu chấm trước TD-2c còn đọc được nhãn) và đã cập nhật chú thích
+      cho khỏi hiểu nhầm là nơi chấm điểm.
+
+    **TD-2d — thư mời nhận việc:**
+    - **Mẫu theo PHÒNG BAN** (`RecruitOfferTemplate.deptKey` = `Department.code`), `"DEFAULT"` là bản
+      dùng chung. Settings chỉ liệt kê phòng ĐANG CÓ vị trí tuyển — phòng không tuyển ai thì mẫu đó
+      chỉ là rác trên màn hình.
+    - **Một ứng viên MỘT offer** (`candidateId` unique): đàm phán lại thì SỬA, không đẻ bản thứ hai —
+      hai offer cùng lúc thì câu hỏi "ứng viên nhận cái nào" không có đáp án.
+    - **Vòng đời DRAFT → SENT → ACCEPTED | DECLINED.** ⚠ `firstWorkDate` CHỈ điền được khi ACCEPTED
+      (ngày đi làm của người chưa nhận việc là dữ liệu bịa), và báo onboarding CHỈ chạy khi đã có ngày.
+    - ⚠ **NHẬN offer ⇒ hồ sơ chuyển HIRED, TỪ CHỐI ⇒ REJECTED**, cùng ghi `decidedAt/decidedById` như
+      `decideCandidate` — hai đường ghi nhưng MỘT chỗ đọc, không đẻ hai nguồn sự thật về trạng thái.
+    - **Xuất .docx** qua `buildDocx` sẵn có (đợt AI 10.48), route `/api/recruit-offer/[id]` gác
+      `recruit.decide` **vì văn bản chứa LƯƠNG**; chưa đăng nhập → 401. Verify: tải qua trình duyệt ra
+      file 3.310 byte, chữ ký ZIP hợp lệ, tên file có cả bản ASCII lẫn bản UTF-8.
+    - ⚠ **Offer chỉ được NẠP khi người xem có `recruit.decide`** (gate ở TẦNG TRUY VẤN) — không nạp thì
+      không có đường nào lọt vào HTML, đúng bài học KB-H2.
+    - **Cảnh báo MỀM 85%**: lương thử việc dưới 85% thì hiện cảnh báo (luật lao động VN) nhưng KHÔNG
+      chặn lưu — con số là quyết định của HR, app chỉ nhắc. Verify: nhập 80% ⇒ cảnh báo hiện.
+    - **"Đánh dấu đã gửi" tách khỏi "Gửi kèm email"**: HR gửi tay ngoài app là chuyện có thật, chặn ở
+      đây là bắt họ nói dối trạng thái.
+    - ⚠ **Chỉ đánh dấu `onboardingNotifiedAt` SAU KHI gửi thành công** — đánh dấu trước rồi gửi hỏng là
+      trưởng bộ phận không bao giờ biết có người sắp tới, mà màn hình lại báo "đã gửi".
+    - ⚠ **GHI CHÚ CHO NGƯỜI LÀM BƯỚC CHUYỂN ỨNG VIÊN → NHÂN SỰ**: `CandidateOffer.firstWorkDate` lưu
+      **UTC-midnight** (quy ước ngày nghiệp vụ §4.3) còn `Staff.firstWorkDate` lưu **LOCAL midnight**
+      (10.38). Chuyển thẳng giá trị sang là lệch ngày.
+
+    - **Quyền: 0 mã mới.** Chấm phỏng vấn giữ nguyên luật TD-1 (người phỏng vấn của CHÍNH lượt đó,
+      hoặc `recruit.interview.manage`). Offer + mẫu offer + xuất Word dùng `recruit.decide`;
+      soạn/duyệt mẫu dùng `recruit.jd.manage`.
+    - **Verify: 32/32 test thuần** (kẹp điểm theo trọng số ở 6 ca, gồm ca nhét 999 · mọi biến trong mẫu
+      offer mặc định đều được khai · thay biến đủ · thiếu lương thì GIỮ `{{salaryText}}` · dựng .docx
+      rồi **ĐỌC NGƯỢC bằng mammoth**: thấy tên ứng viên, mức lương, mục THỬ VIỆC, không còn `{{` ·
+      mẫu HR viết kiểu khác thì in phẳng, không vỡ) **+ browser end-to-end**: phiếu chấm hiện đúng bộ
+      **MANAGER** 7 tiêu chí tổng 100, khối tự điền có điểm AI 82/100 và phần AI lưu ý, khối "Kết quả
+      các vòng trước" có Vòng 1 · trình duyệt tự chặn điểm vượt `max` (đúng), gỡ chốt đó rồi gửi ⇒
+      **server kẹp 999 → 20**, DB ghi 83/100 khớp cộng tay, `scope=MANAGER` · offer: lập → xem thư (đã
+      thay hết biến, có lương và câu thử việc 80%) → tải Word 200 → đánh dấu đã gửi → ứng viên NHẬN ⇒
+      hồ sơ **HIRED** → ngày đi làm 05/10/2026 → báo onboarding ⇒ **chặn đúng** `NOT_CONFIGURED` (chưa
+      khai Resend), `onboardingNotifiedAt` KHÔNG bị đánh dấu · audit đủ 5 mốc.
+      tsc · eslint · i18n **0/0 (4730 key)** · `next build` sạch có route `/api/recruit-offer/[id]` ·
+      `migrate diff` rỗng · seed no-op.
+    - ⚠ **SƠ SUẤT KHI DỌN DỮ LIỆU TEST — LẶP LẠI LỖI CŨ, GHI ĐỂ KHỎI TÁI DIỄN LẦN BA:** lệnh dọn xoá
+      `AuditLog` theo `action: "interview_scored"` mà **quên lọc theo thời gian**, nên cuốn theo **1
+      dòng audit cũ** của dữ liệu test TD-1 (79 → 78). Đúng lỗi đã ghi ở mục 10.58 (đợt MKT-2a) và vẫn
+      lặp lại. **Dọn audit thì LUÔN kèm `changedAt: { gte: ... }`.** dev.db là sandbox nên production
+      không ảnh hưởng.
+    - **CÒN LẠI CỦA LUỒNG (chưa làm, cố ý):** chuyển hồ sơ ứng viên ĐÃ NHẬN thành `Staff` (tạo tài
+      khoản, gán phòng ban/team, chép ngày đi làm — lưu ý lệch quy ước ngày ở trên) · đính file .docx
+      offer vào thư OFFER (hiện tải về rồi đính tay) · nhắc hạn phản hồi offer qua notification · ký
+      offer điện tử · lịch sử phiên bản offer (sửa là ghi đè, chỉ có AuditLog chung).
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

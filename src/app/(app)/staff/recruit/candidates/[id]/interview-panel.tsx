@@ -6,7 +6,7 @@ import { CalendarPlus, Download, Check, X } from "lucide-react";
 import { DateField } from "@/components/ui/date-field";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
-import { INTERVIEW_ROUNDS, RECOMMENDATIONS, MIN_SCORE, MAX_SCORE, averageScore, nextRound } from "@/lib/recruit";
+import { INTERVIEW_ROUNDS, RECOMMENDATIONS, nextRound } from "@/lib/recruit";
 import {
   scheduleInterview,
   respondInterview,
@@ -62,7 +62,36 @@ export type InterviewData = {
   scores: { criterionCode: string; score: number; note: string }[];
 };
 
-export type Criterion = { code: string; label: string };
+/** TD-2c: tiêu chí có TRỌNG SỐ, tổng bộ = 100. `weight` là điểm tối đa của tiêu chí đó. */
+export type Criterion = { code: string; label: string; weight: number; hint: string | null };
+
+/**
+ * Dữ liệu TỰ ĐIỀN vào phiếu chấm (TD-2c) — người phỏng vấn không phải mở tab khác để tra.
+ * ⚠ Chỉ chứa thứ người phỏng vấn ĐÃ được phép xem (gateCandidate). KHÔNG có lương mong muốn:
+ * ô đó có cổng riêng theo bản ghi (canSeeExpectedSalary) và không được lọt vào đây.
+ */
+export type InterviewContext = {
+  fullName: string;
+  dob: string | null;
+  positionTitle: string;
+  isManagerial: boolean;
+  summaryWork: string;
+  summarySkills: string;
+  summaryOther: string;
+  aiReview: { totalScore: number; maxScore: number; recommendation: string; summary: string | null; concerns: string | null } | null;
+};
+
+/** Kết quả một vòng ĐÃ CHẤM — vòng sau nhìn thấy vòng trước. */
+export type PriorRound = {
+  round: number;
+  interviewerName: string;
+  recommendation: string | null;
+  totalScore: number | null;
+  maxScore: number | null;
+  strengths: string;
+  concerns: string;
+  scoredAt: string | null;
+};
 
 /** Ô đặt lịch một vòng phỏng vấn mới. */
 function ScheduleForm({
@@ -195,8 +224,24 @@ export function RespondForm({ interviewId }: { interviewId: string }) {
   );
 }
 
-/** Phiếu chấm điểm — điểm 1..5 mỗi tiêu chí + đề xuất + nhận xét. */
-function ScoreForm({ interview, criteria }: { interview: InterviewData; criteria: Criterion[] }) {
+/**
+ * Phiếu chấm điểm — thang 100 CÓ TRỌNG SỐ (TD-2c).
+ *
+ * ⚠ Mỗi tiêu chí chấm trong [0, trọng số của CHÍNH nó], không phải thang chung 1–5. Tổng hiện ở đây
+ * chỉ để người chấm nhìn; con số ghi vào DB do SERVER cộng lại (mirror AI chấm CV ở TD-2a) — hai
+ * bên lệch nhau thì người chấm tưởng 85 mà hồ sơ ghi 62, im lặng.
+ */
+function ScoreForm({
+  interview,
+  criteria,
+  context,
+  priorRounds,
+}: {
+  interview: InterviewData;
+  criteria: Criterion[];
+  context: InterviewContext | null;
+  priorRounds: PriorRound[];
+}) {
   const t = useTranslations("recruit");
   const [state, formAction, pending] = useActionState<InterviewState, FormData>(saveInterviewResult, {});
   const byCode = new Map(interview.scores.map((s) => [s.criterionCode, s]));
@@ -212,39 +257,113 @@ function ScoreForm({ interview, criteria }: { interview: InterviewData; criteria
   const [concerns, setConcerns] = useState(interview.concerns);
   const [note, setNote] = useState(interview.note);
 
-  const given = Object.values(scores)
-    .filter((v) => v !== "")
-    .map((v) => ({ score: Number(v) }));
-  const avg = averageScore(given);
+  // Tổng HIỂN THỊ — kẹp theo trọng số y hệt server để hai bên không bao giờ lệch.
+  const maxTotal = criteria.reduce((s, c) => s + c.weight, 0);
+  const runningTotal = criteria.reduce((s, c) => {
+    const n = Number(scores[c.code] ?? "");
+    if (!Number.isFinite(n)) return s;
+    return s + Math.min(c.weight, Math.max(0, Math.round(n)));
+  }, 0);
 
   return (
-    <form action={formAction} className="space-y-3 rounded-lg border border-border bg-surface-2 p-3">
+    <form action={formAction} onReset={(e) => e.preventDefault()} className="space-y-3 rounded-lg border border-border bg-surface-2 p-3">
       <input type="hidden" name="interviewId" value={interview.id} />
+
+      {/* TỰ ĐIỀN: người phỏng vấn có ngay hồ sơ + điểm AI, không phải mở tab khác để tra. */}
+      {context && (
+        <details className="rounded-lg border border-border bg-surface p-3" open>
+          <summary className="cursor-pointer text-xs font-semibold text-foreground">
+            {t("ctxTitle", { name: context.fullName })}
+          </summary>
+          <div className="mt-2 space-y-2 text-xs">
+            <p className="text-muted-foreground">
+              {[context.positionTitle + (context.isManagerial ? " · " + t("managerial") : ""), context.dob].filter(Boolean).join(" · ")}
+            </p>
+            {context.aiReview && (
+              <p className="flex flex-wrap items-center gap-2">
+                <span className="text-muted-foreground">{t("ctxAiScore")}</span>
+                <b className="tabular-nums text-foreground">
+                  {context.aiReview.totalScore}/{context.aiReview.maxScore}
+                </b>
+                <span className="text-muted-foreground">· {t(`rec${context.aiReview.recommendation}` as "recINTERVIEW")}</span>
+              </p>
+            )}
+            {context.aiReview?.concerns && (
+              <div>
+                <p className="font-medium text-warning">{t("ctxAiConcerns")}</p>
+                <p className="whitespace-pre-wrap text-muted-foreground">{context.aiReview.concerns}</p>
+              </div>
+            )}
+            {[
+              { k: "ctxWork", v: context.summaryWork },
+              { k: "ctxSkills", v: context.summarySkills },
+              { k: "ctxOther", v: context.summaryOther },
+            ]
+              .filter((x) => x.v.trim())
+              .map((x) => (
+                <div key={x.k}>
+                  <p className="font-medium text-muted-foreground">{t(x.k as "ctxWork")}</p>
+                  <p className="whitespace-pre-wrap text-foreground">{x.v}</p>
+                </div>
+              ))}
+          </div>
+        </details>
+      )}
+
+      {/* Vòng SAU nhìn thấy kết quả vòng TRƯỚC — đúng yêu cầu "cứ lần sau thì xuất hiện thông tin
+          kết quả của (các) vòng phỏng vấn trước". */}
+      {priorRounds.length > 0 && (
+        <div className="rounded-lg border border-border bg-surface p-3">
+          <p className="text-xs font-semibold text-foreground">{t("priorTitle")}</p>
+          <ul className="mt-1.5 space-y-1.5">
+            {priorRounds.map((p) => (
+              <li key={p.round} className="text-xs">
+                <span className="font-medium text-foreground">
+                  {t("roundLabel", { n: p.round })} · {p.interviewerName}
+                </span>
+                {p.totalScore != null && (
+                  <span className="ml-2 tabular-nums text-foreground">
+                    {p.totalScore}/{p.maxScore ?? 100}
+                  </span>
+                )}
+                {p.recommendation && <span className="ml-2 text-muted-foreground">· {t(`rc${p.recommendation}` as "rcPASS")}</span>}
+                {p.concerns && <p className="text-muted-foreground">⚠ {p.concerns}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold text-foreground">{t("scoreTitle")}</h4>
-        <span className="text-xs text-muted-foreground">
-          {avg == null ? t("noScoreYet") : t("averageScore", { avg, max: MAX_SCORE })}
+        <span className="text-xs">
+          <span className="text-muted-foreground">{t("runningTotal")} </span>
+          <b className="tabular-nums text-foreground">
+            {runningTotal}/{maxTotal}
+          </b>
         </span>
       </div>
 
       {criteria.length === 0 && <p className="text-xs text-muted-foreground">{t("noCriteria")}</p>}
       <div className="space-y-2">
         {criteria.map((c) => (
-          <div key={c.code} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_90px_1fr] sm:items-center">
-            <span className="text-xs font-medium text-foreground">{c.label}</span>
-            <select
+          <div key={c.code} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_1fr] sm:items-center">
+            <span className="text-xs font-medium text-foreground" title={c.hint ?? ""}>
+              {c.label}
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">/{c.weight}</span>
+            </span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={c.weight}
+              step={1}
               name={`score__${c.code}`}
               value={scores[c.code] ?? ""}
               onChange={(e) => setScores({ ...scores, [c.code]: e.target.value })}
               className={input}
-            >
-              <option value="">—</option>
-              {Array.from({ length: MAX_SCORE - MIN_SCORE + 1 }, (_, i) => MIN_SCORE + i).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+              placeholder={`0–${c.weight}`}
+            />
             <input
               name={`note__${c.code}`}
               value={notes[c.code] ?? ""}
@@ -331,6 +450,8 @@ export function InterviewPanel({
   meId,
   canSchedule,
   criteria,
+  context,
+  priorRounds,
   staff,
   interviews,
 }: {
@@ -338,6 +459,8 @@ export function InterviewPanel({
   meId: string;
   canSchedule: boolean;
   criteria: Criterion[];
+  context: InterviewContext | null;
+  priorRounds: PriorRound[];
   staff: { id: string; label: string }[];
   interviews: InterviewData[];
 }) {
@@ -384,7 +507,15 @@ export function InterviewPanel({
             {iv.status === "PENDING" && mine && <RespondForm interviewId={iv.id} />}
             {iv.status === "PENDING" && !mine && <p className="text-xs text-muted-foreground">{t("waitingConfirm")}</p>}
 
-            {canScore && <ScoreForm interview={iv} criteria={criteria} />}
+            {canScore && (
+              <ScoreForm
+                interview={iv}
+                criteria={criteria}
+                context={context}
+                // Vòng SAU thấy vòng TRƯỚC: chỉ những vòng có số nhỏ hơn VÀ đã chấm xong.
+                priorRounds={priorRounds.filter((p) => p.round < iv.round)}
+              />
+            )}
           </div>
         );
       })}

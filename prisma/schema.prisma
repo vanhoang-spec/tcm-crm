@@ -277,6 +277,9 @@ model Staff {
   recruitEmailsSent           RecruitEmailLog[]         @relation("RecruitEmailLogSentBy")
   recruitEmailTplApproved     RecruitEmailTemplate[]    @relation("RecruitEmailTemplateApprovedBy")
   recruitEmailTplUpdated      RecruitEmailTemplate[]    @relation("RecruitEmailTemplateUpdatedBy")
+  recruitOfferTplApproved     RecruitOfferTemplate[]    @relation("RecruitOfferTemplateApprovedBy")
+  recruitOfferTplUpdated      RecruitOfferTemplate[]    @relation("RecruitOfferTemplateUpdatedBy")
+  candidateOffersCreated      CandidateOffer[]          @relation("CandidateOfferCreatedBy")
   interviewsAsInterviewer     Interview[]               @relation("InterviewInterviewer")
   interviewsCreated           Interview[]               @relation("InterviewCreatedBy")
   accountMeetingsCreated      AccountMeeting[]          @relation("AccountMeetingCreatedBy")
@@ -3843,6 +3846,7 @@ model Candidate {
   interviews      Interview[]
   aiReviews       CandidateAiReview[]
   emailLogs       RecruitEmailLog[]
+  offer           CandidateOffer?
 
   @@index([positionId, status])
   @@index([status])
@@ -3872,10 +3876,18 @@ model Interview {
   /// Kết quả — PASS | CONSIDER | FAIL. Đây là đề xuất của NGƯỜI PHỎNG VẤN, khác với quyết định
   /// cuối cùng nằm ở Candidate.status (do người có quyền hr.recruit.decide bấm).
   recommendation String?
-  strengths      String?
-  concerns       String?
-  note           String?
-  scoredAt       DateTime?
+
+  /// TD-2c — chấm theo thang 100 có trọng số.
+  /// `scope` là ẢNH CHỤP bộ tiêu chí đã dùng (STANDARD | MANAGER): vị trí đổi cờ quản lý về sau thì
+  /// phiếu cũ vẫn đọc đúng. `totalScore` do CODE cộng từ InterviewScore, KHÔNG phải người tự khai.
+  /// Null ở cả ba = phiếu chấm trước TD-2c (thang 1–5 cũ) — màn hình phải đọc được cả hai loại.
+  scope      String?
+  totalScore Int?
+  maxScore   Int?
+  strengths  String?
+  concerns   String?
+  note       String?
+  scoredAt   DateTime?
 
   createdById String?
   createdAt   DateTime @default(now())
@@ -4037,6 +4049,74 @@ model RecruitEmailLog {
   @@index([candidateId, sentAt])
   @@index([status, sentAt])
   @@map("recruit_email_log")
+}
+
+/// Mẫu THƯ MỜI NHẬN VIỆC (Job Offer) theo PHÒNG BAN (TD-2d).
+///
+/// ⚠ Khác `RecruitEmailTemplate`: đây là VĂN BẢN đính kèm/in ra, không phải thư điện tử. Mỗi phòng
+/// ban có điều khoản khác nhau (Account có hoa hồng, Creative có điều khoản sở hữu thiết kế…), nên
+/// khoá theo `deptKey` = `Department.code`, và `"DEFAULT"` là bản dùng chung khi phòng chưa khai.
+///
+/// ⚠ Duyệt một lần rồi dùng, sửa là gỡ duyệt — CÙNG luật với mẫu thư (xem RecruitEmailTemplate).
+model RecruitOfferTemplate {
+  id      String @id @default(cuid())
+  deptKey String @unique
+  /// Văn bản thuần, dùng {{bienThayThe}}. Đi vào bộ dựng .docx nên KHÔNG phải HTML.
+  body    String
+
+  approvedAt   DateTime?
+  approvedById String?
+  updatedAt    DateTime  @updatedAt
+  updatedById  String?
+
+  approvedBy Staff? @relation("RecruitOfferTemplateApprovedBy", fields: [approvedById], references: [id])
+  updatedBy  Staff? @relation("RecruitOfferTemplateUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("recruit_offer_template")
+}
+
+/// THƯ MỜI NHẬN VIỆC đã lập cho MỘT ứng viên (TD-2d).
+///
+/// Một ứng viên một offer (`candidateId` unique): đàm phán lại thì SỬA offer đang có chứ không đẻ
+/// bản thứ hai — hai offer cùng lúc thì câu hỏi "ứng viên nhận cái nào" không có đáp án.
+///
+/// ⚠ Vòng đời: DRAFT → SENT → ACCEPTED | DECLINED. `firstWorkDate` CHỈ điền được khi ACCEPTED —
+/// ngày đi làm của người chưa nhận việc là dữ liệu bịa.
+model CandidateOffer {
+  id          String @id @default(cuid())
+  candidateId String @unique
+
+  /// Tiền = BigInt (VND) theo luật chung HANDOVER 4.1.
+  /// ⚠ Ô này nhạy như `Candidate.expectedSalary` — gate ở TẦNG TRUY VẤN, không select là không vào HTML.
+  salaryAmount    BigInt?
+  allowanceText   String?
+  probationMonths Int?
+  /// % lương thử việc (luật lao động VN tối thiểu 85%).
+  probationPct    Int?
+  /// Ngày dự kiến đi làm ghi TRONG thư offer (quy ước UTC-midnight, HANDOVER 4.3).
+  startDate       DateTime?
+  extraTerms      String?
+
+  /// DRAFT | SENT | ACCEPTED | DECLINED
+  status        String    @default("DRAFT")
+  sentAt        DateTime?
+  respondedAt   DateTime?
+  declineReason String?
+
+  /// Ngày đi làm đầu tiên THẬT — HR điền sau khi ứng viên xác nhận nhận việc.
+  firstWorkDate        DateTime?
+  /// Mốc đã báo trưởng bộ phận chuẩn bị onboarding (chống báo hai lần).
+  onboardingNotifiedAt DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  createdBy Staff?    @relation("CandidateOfferCreatedBy", fields: [createdById], references: [id])
+
+  @@index([status])
+  @@map("candidate_offer")
 }
 
 // ─────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { loadCriteria } from "@/lib/recruit-score-server";
+import { computeTotal, scopeForPosition } from "@/lib/recruit-scoring";
 import { getCurrentStaffId } from "@/lib/current-staff";
 import { requirePermission, hasPermission } from "@/lib/permissions";
 import { saveCvFile, deleteCvFile, readCvFile } from "@/lib/recruit-storage";
@@ -14,8 +16,6 @@ import {
   MAX_CV_BYTES,
   MAX_CV_TEXT_CHARS,
   MAX_JD_FIELD_CHARS,
-  MIN_SCORE,
-  MAX_SCORE,
   MIN_DURATION_MIN,
   MAX_DURATION_MIN,
   isInterviewRound,
@@ -397,7 +397,13 @@ export async function saveInterviewResult(_prev: InterviewState, formData: FormD
   const interviewId = str(formData.get("interviewId"));
   const interview = await prisma.interview.findUnique({
     where: { id: interviewId },
-    select: { id: true, candidateId: true, interviewerStaffId: true, status: true },
+    select: {
+      id: true,
+      candidateId: true,
+      interviewerStaffId: true,
+      status: true,
+      candidate: { select: { position: { select: { isManagerial: true } } } },
+    },
   });
   if (!interview) return { error: "NOT_FOUND" };
   if (interview.interviewerStaffId !== meId && !(await hasPermission("recruit.interview.manage"))) {
@@ -408,16 +414,29 @@ export async function saveInterviewResult(_prev: InterviewState, formData: FormD
   const recommendation = str(formData.get("recommendation"));
   if (!isRecommendation(recommendation)) return { error: "NO_RECOMMENDATION" };
 
-  // Điểm gửi lên dạng "score__<mã tiêu chí>" và "note__<mã tiêu chí>". Bỏ trống một tiêu chí là
-  // hợp lệ (không phải tiêu chí nào cũng đánh giá được ở mọi vòng) — chỉ ô nào có điểm mới lưu.
+  // TD-2c — chấm theo THANG 100 CÓ TRỌNG SỐ.
+  //
+  // ⚠ Đọc bộ tiêu chí từ DB rồi mới nhận điểm, KHÔNG tin mã tiêu chí từ client: mã lạ bị bỏ, và mỗi
+  // điểm bị KẸP vào [0, trọng số của CHÍNH mã đó]. Không kẹp thì nhét tay `score__EXPERTISE=999`
+  // vào payload là tổng vọt lên — cùng lớp lỗi đã bịt ở AI chấm CV (TD-2a).
+  // ⚠ TỔNG DO SERVER CỘNG, không nhận con số tổng từ form: màn hình chỉ hiện để người chấm nhìn.
+  const scope = scopeForPosition(interview.candidate.position.isManagerial);
+  const criteria = await loadCriteria("INTERVIEW", scope);
+
+  // Bỏ trống một tiêu chí là hợp lệ (không phải tiêu chí nào cũng đánh giá được ở mọi vòng) — ô
+  // trống tính 0 điểm khi cộng tổng nhưng KHÔNG lưu dòng điểm, để phân biệt "chấm 0" với "bỏ qua".
   const scores: { criterionCode: string; score: number; note: string | null }[] = [];
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("score__")) continue;
-    const code = key.slice("score__".length);
-    const n = Number(str(value));
-    if (!Number.isInteger(n) || n < MIN_SCORE || n > MAX_SCORE) continue;
-    scores.push({ criterionCode: code, score: n, note: textOrNull(formData.get(`note__${code}`), 1000) });
+  const forTotal: { code: string; label: string; weight: number; score: number }[] = [];
+  for (const c of criteria) {
+    const raw = str(formData.get(`score__${c.code}`));
+    const note = textOrNull(formData.get(`note__${c.code}`), 1000);
+    const n = Number(raw);
+    const has = raw !== "" && Number.isFinite(n);
+    const clamped = has ? Math.min(c.weight, Math.max(0, Math.round(n))) : 0;
+    forTotal.push({ code: c.code, label: c.label, weight: c.weight, score: clamped });
+    if (has) scores.push({ criterionCode: c.code, score: clamped, note });
   }
+  const { total, max } = computeTotal(forTotal);
 
   await prisma.$transaction(async (tx) => {
     await tx.interviewScore.deleteMany({ where: { interviewId } });
@@ -431,6 +450,9 @@ export async function saveInterviewResult(_prev: InterviewState, formData: FormD
         strengths: textOrNull(formData.get("strengths"), 2000),
         concerns: textOrNull(formData.get("concerns"), 2000),
         note: textOrNull(formData.get("note"), 2000),
+        scope,
+        totalScore: total,
+        maxScore: max,
         scoredAt: new Date(),
         status: "DONE",
       },

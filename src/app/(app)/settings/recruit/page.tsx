@@ -6,10 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { EMAIL_TEMPLATES } from "@/lib/recruit-email";
 import { loadEmailTemplate } from "@/lib/recruit-email-server";
 import { isResendConfigured } from "@/lib/resend";
+import { loadOfferTemplate } from "@/lib/recruit-offer-server";
+import { OFFER_DEFAULT_KEY } from "@/lib/recruit-offer";
 import { PositionEditor, type Option } from "./position-editor";
 import { JdTemplates } from "./jd-templates";
 import { PositionStatusForm } from "./position-status-form";
 import { EmailTemplates, type EmailTemplateView } from "./email-templates";
+import { OfferTemplates, type OfferTemplateView } from "./offer-templates";
 
 const TONE: Record<string, "success" | "warning" | "neutral"> = {
   OPEN: "success",
@@ -93,6 +96,28 @@ export default async function RecruitSettingsPage() {
     ];
   });
 
+  // Mẫu thư mời nhận việc: bản chung + mỗi phòng ban ĐANG CÓ vị trí tuyển một bản. Không liệt kê
+  // mọi phòng ban trong công ty — phòng không tuyển ai thì mẫu đó chỉ là rác trên màn hình.
+  const offerDepts = await prisma.department.findMany({
+    where: { isActive: true, jobPositions: { some: { status: { not: "CLOSED" } } } },
+    orderBy: { name: "asc" },
+    select: { code: true, name: true },
+  });
+  const offerTemplates: OfferTemplateView[] = await Promise.all(
+    [{ code: OFFER_DEFAULT_KEY, name: "" }, ...offerDepts].map(async (d) => {
+      const tpl = await loadOfferTemplate(d.code === OFFER_DEFAULT_KEY ? null : d.code);
+      const own = tpl.deptKey === d.code;
+      return {
+        deptKey: d.code,
+        label: d.name,
+        // Phòng chưa có mẫu riêng thì ô soạn hiện nội dung mẫu chung làm điểm xuất phát.
+        body: tpl.body,
+        approvedAt: own && tpl.approvedAt ? formatDate(tpl.approvedAt) : null,
+        isDefault: d.code === OFFER_DEFAULT_KEY,
+      };
+    }),
+  );
+
   return (
     <div className="max-w-4xl space-y-4">
       <div>
@@ -151,6 +176,8 @@ export default async function RecruitSettingsPage() {
           />
         </div>
       </details>
+
+      <OfferTemplates templates={offerTemplates} />
 
       <EmailTemplates templates={emailTemplates} resendConfigured={isResendConfigured()} />
 

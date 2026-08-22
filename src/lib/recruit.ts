@@ -76,8 +76,6 @@ export function isRecommendation(v: string): v is Recommendation {
   return (RECOMMENDATIONS as readonly string[]).includes(v);
 }
 
-export const MIN_SCORE = 1;
-export const MAX_SCORE = 5;
 export const MIN_DURATION_MIN = 15;
 export const MAX_DURATION_MIN = 480;
 
@@ -86,13 +84,14 @@ export const MAX_DURATION_MIN = 480;
 // ─────────────────────────────────────────────────────────
 
 /**
- * Tiêu chí chấm điểm nằm ở OptionSet `recruit_criteria` để BGĐ tự thêm/bớt trong Settings mà không
- * cần sửa code (luật "enum mềm", HANDOVER 4.1). Danh sách dưới đây CHỈ là bộ mặc định lúc seed.
+ * ⚠ TỪ TD-2c (22/08/2026) VIỆC CHẤM PHỎNG VẤN KHÔNG CÒN ĐỌC OptionSet NÀY NỮA — nó dùng bảng
+ * `RecruitCriterion` (có TRỌNG SỐ, thang 100, tách bộ thường / bộ quản lý). Danh sách dưới đây chỉ
+ * còn để seed OptionSet `recruit_criteria` cho phiếu đã chấm TRƯỚC TD-2c đọc lại được nhãn tiêu chí.
+ * Sáu mã ở đây CỐ Ý trùng đúng sáu mã của bộ INTERVIEW/STANDARD trong `recruit-scoring.ts`.
  *
  * ⚠ `InterviewScore.criterionCode` lưu CHUỖI, không phải khoá ngoại: tắt một tiêu chí về sau thì
  * phiếu đã chấm vẫn đọc được nguyên vẹn.
  */
-export const RECRUIT_CRITERIA_SET = "recruit_criteria";
 
 export const DEFAULT_RECRUIT_CRITERIA = [
   { code: "EXPERTISE", labelVi: "Chuyên môn & kinh nghiệm phù hợp JD", labelEn: "Expertise & experience vs JD" },
@@ -106,16 +105,6 @@ export const DEFAULT_RECRUIT_CRITERIA = [
 // ─────────────────────────────────────────────────────────
 // Phép tính thuần
 // ─────────────────────────────────────────────────────────
-
-/**
- * Điểm trung bình của một lượt phỏng vấn, làm tròn 1 chữ số thập phân.
- * Chưa chấm tiêu chí nào → null (KHÔNG phải 0: "chưa chấm" khác hẳn "chấm 0 điểm").
- */
-export function averageScore(scores: { score: number }[]): number | null {
-  if (scores.length === 0) return null;
-  const sum = scores.reduce((s, x) => s + x.score, 0);
-  return Math.round((sum / scores.length) * 10) / 10;
-}
 
 /**
  * AI ĐƯỢC XEM LƯƠNG MONG MUỐN? Không — hàm này trả lời "NGƯỜI ĐANG XEM có được nhìn ô lương không".

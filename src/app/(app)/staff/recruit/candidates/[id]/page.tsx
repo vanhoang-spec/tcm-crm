@@ -5,12 +5,16 @@ import { ArrowLeft, FileText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatDate, pickLabel, toNum } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { RECRUIT_CRITERIA_SET } from "@/lib/recruit";
+import { loadCriteria } from "@/lib/recruit-score-server";
+import { scopeForPosition } from "@/lib/recruit-scoring";
 import type { Locale } from "@/i18n/locales";
 import { EMAIL_TEMPLATES } from "@/lib/recruit-email";
 import { loadEmailLog, loadEmailTemplate } from "@/lib/recruit-email-server";
+import { loadOffer } from "@/lib/recruit-offer-server";
+import { probationWarning } from "@/lib/recruit-offer";
 import { getRecruitPerms, gateCandidate } from "../../access";
 import { EmailPanel } from "./email-panel";
+import { OfferPanel } from "./offer-panel";
 import { CandidateForm } from "./candidate-form";
 import { InterviewPanel } from "./interview-panel";
 import { DecisionForm } from "./decision-form";
@@ -56,6 +60,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
       decidedBy: { select: { fullName: true } },
       position: {
         select: {
+          isManagerial: true,
           id: true,
           title: true,
           department: { select: { name: true } },
@@ -66,6 +71,11 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           jdRequirements: true,
           jdBenefits: true,
         },
+      },
+      aiReviews: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { totalScore: true, maxScore: true, recommendation: true, summary: true, concerns: true },
       },
       interviews: {
         orderBy: [{ round: "asc" }, { scheduledAt: "asc" }],
@@ -82,6 +92,9 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           concerns: true,
           note: true,
           interviewerStaffId: true,
+          scoredAt: true,
+          totalScore: true,
+          maxScore: true,
           interviewer: { select: { fullName: true } },
           scores: { select: { criterionCode: true, score: true, note: true } },
         },
@@ -92,19 +105,21 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
 
   // Thư (TD-2b): chỉ liệt kê mẫu ĐÃ DUYỆT — mẫu chưa duyệt bấm vào cũng bị server chặn, đưa vào ô
   // chọn chỉ để người dùng bấm rồi nhận lỗi là thiết kế tồi.
-  const [emailLogs, emailTpls] = await Promise.all([
+  // ⚠ Offer chứa LƯƠNG — chỉ nạp khi người xem có recruit.decide. Không nạp thì không có đường
+  // nào lọt vào HTML (bài học gate ở TẦNG TRUY VẤN, HANDOVER 10.13).
+  const [emailLogs, emailTpls, offerRaw] = await Promise.all([
     loadEmailLog(id),
     Promise.all(EMAIL_TEMPLATES.map((d) => loadEmailTemplate(d.code))),
+    perms.canDecide ? loadOffer(id, perms.meId) : Promise.resolve(null),
   ]);
+  const offerView = offerRaw ? { ...offerRaw, probationBelowLegal: probationWarning(offerRaw.probationPct) } : null;
   const emailChoices = emailTpls.flatMap((tpl) =>
     tpl && tpl.approvedAt ? [{ code: tpl.def.code, label: tpl.def.labelVi, audience: tpl.def.audience }] : [],
   );
 
-  const [criteriaSet, staff] = await Promise.all([
-    prisma.optionSet.findUnique({
-      where: { code: RECRUIT_CRITERIA_SET },
-      select: { items: { where: { isActive: true }, orderBy: { sort: "asc" }, select: { code: true, labelVi: true, labelEn: true } } },
-    }),
+  // TD-2c: bộ tiêu chí PHỎNG VẤN có trọng số, chọn theo cờ quản lý của vị trí.
+  const [interviewCriteria, staff] = await Promise.all([
+    loadCriteria("INTERVIEW", scopeForPosition(candidate.position.isManagerial)),
     // Danh sách người có thể phỏng vấn — chỉ nạp khi có quyền đặt lịch, tránh gửi danh bạ nhân sự
     // xuống trình duyệt của người chỉ vào xem hồ sơ.
     perms.canInterview
@@ -116,7 +131,49 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
       : Promise.resolve([]),
   ]);
 
-  const criteria = (criteriaSet?.items ?? []).map((i) => ({ code: i.code, label: pickLabel(i, locale) }));
+  const criteria = interviewCriteria.map((c) => ({
+    code: c.code,
+    label: pickLabel({ labelVi: c.label, labelEn: c.labelEn }, locale),
+    weight: c.weight,
+    hint: c.hint,
+  }));
+
+  // TỰ ĐIỀN cho phiếu chấm (TD-2c). ⚠ KHÔNG đưa lương mong muốn vào đây: ô đó có cổng riêng theo
+  // bản ghi (canSeeExpectedSalary), còn khối này hiện cho MỌI người phỏng vấn được phân công.
+  const latestAi = candidate.aiReviews[0] ?? null;
+  const interviewContext = {
+    fullName: candidate.fullName,
+    dob: candidate.dob ? formatDate(candidate.dob) : null,
+    positionTitle: candidate.position.title,
+    isManagerial: candidate.position.isManagerial,
+    summaryWork: candidate.summaryWork ?? "",
+    summarySkills: candidate.summarySkills ?? "",
+    summaryOther: candidate.summaryOther ?? "",
+    aiReview: latestAi
+      ? {
+          totalScore: latestAi.totalScore,
+          maxScore: latestAi.maxScore,
+          recommendation: latestAi.recommendation,
+          summary: latestAi.summary,
+          concerns: latestAi.concerns,
+        }
+      : null,
+  };
+
+  // Vòng ĐÃ CHẤM — vòng sau nhìn thấy vòng trước.
+  const priorRounds = candidate.interviews
+    .filter((i) => i.scoredAt)
+    .sort((a, b) => a.round - b.round)
+    .map((i) => ({
+      round: i.round,
+      interviewerName: i.interviewer.fullName,
+      recommendation: i.recommendation,
+      totalScore: i.totalScore,
+      maxScore: i.maxScore,
+      strengths: i.strengths ?? "",
+      concerns: i.concerns ?? "",
+      scoredAt: i.scoredAt ? formatDate(i.scoredAt) : null,
+    }));
   const pos = candidate.position;
   const jdBlocks = [
     { key: "jdSummary" as const, text: pos.jdSummary },
@@ -188,11 +245,15 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
         </details>
       )}
 
+      <OfferPanel candidateId={candidate.id} offer={offerView} canDecide={perms.canDecide} />
+
       <EmailPanel candidateId={candidate.id} choices={emailChoices} logs={emailLogs} canSend={perms.canEmail} />
 
       <InterviewPanel
         candidateId={candidate.id}
         meId={perms.meId}
+        context={interviewContext}
+        priorRounds={priorRounds}
         canSchedule={perms.canInterview && candidate.status !== "HIRED" && candidate.status !== "REJECTED"}
         criteria={criteria}
         staff={staff.map((s) => ({ id: s.id, label: s.title ? `${s.fullName} — ${s.title}` : s.fullName }))}

@@ -4657,7 +4657,19 @@
       "tplApprove": "Duyệt mẫu",
       "tplApproved": "Đã duyệt {at}",
       "tplNotApprovedShort": "Chưa duyệt"
-    }
+    },
+    "delTitle": "Xoá hồ sơ này",
+    "delHint": "Dùng khi tải nhầm CV hoặc nhầm ứng viên. Xoá là VĨNH VIỄN: mất cả hồ sơ, file CV trên máy chủ và các bản AI chấm điểm. Không hoàn tác được.",
+    "delOpen": "Xoá hồ sơ…",
+    "delWarning": "Hồ sơ, file CV và toàn bộ bản AI chấm điểm sẽ bị xoá vĩnh viễn. Sổ thư đã gửi cho ứng viên vẫn được giữ lại làm bằng chứng.",
+    "delTypeName": "Gõ đúng họ tên ứng viên để mở nút xoá: {name}",
+    "delReason": "Lý do xoá (ghi vào nhật ký)",
+    "delReasonPh": "vd: tải nhầm CV của ứng viên khác",
+    "delConfirm": "Xoá vĩnh viễn",
+    "delCancel": "Thôi",
+    "delErrNotFound": "Không tìm thấy hồ sơ.",
+    "delErrHasInterviews": "Hồ sơ đã có lịch phỏng vấn nên không xoá được. Muốn đóng thì dùng “Từ chối” — lịch sử phỏng vấn phải giữ lại.",
+    "delErrHasOffer": "Hồ sơ đã lập thư mời nhận việc nên không xoá được. Đó là cam kết với người ngoài công ty — muốn đóng thì đánh dấu ứng viên từ chối offer."
   },
   "myAdvances": {
     "title": "Tạm ứng của tôi",

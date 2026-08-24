@@ -4657,7 +4657,19 @@
       "tplApprove": "Approve template",
       "tplApproved": "Approved {at}",
       "tplNotApprovedShort": "Not approved"
-    }
+    },
+    "delTitle": "Delete this candidate",
+    "delHint": "Use this when the wrong CV was uploaded or it is the wrong person. Deletion is PERMANENT: the record, the CV file on the server and all AI scorings are removed. No undo.",
+    "delOpen": "Delete candidate…",
+    "delWarning": "The record, the CV file and every AI scoring will be permanently deleted. The sent-mail log is kept as evidence.",
+    "delTypeName": "Type the candidate name exactly to unlock: {name}",
+    "delReason": "Reason (recorded in the audit log)",
+    "delReasonPh": "e.g. uploaded the wrong person CV",
+    "delConfirm": "Delete permanently",
+    "delCancel": "Cancel",
+    "delErrNotFound": "Candidate not found.",
+    "delErrHasInterviews": "This candidate already has interviews and cannot be deleted. Use “Reject” instead — interview history must be kept.",
+    "delErrHasOffer": "A job offer has been created for this candidate. That is a commitment to someone outside the company — mark the offer declined instead."
   },
   "myAdvances": {
     "title": "My advances",

@@ -516,19 +516,66 @@ export async function reopenCandidate(_prev: DecideState, formData: FormData): P
 
 /** Gỡ hồ sơ nhập nhầm — xoá cả file CV trên đĩa để không để lại dữ liệu cá nhân mồ côi. */
 export async function deleteCandidate(_prev: DecideState, formData: FormData): Promise<DecideState> {
+  // ADMIN là sàn cứng trong code nên luôn qua được; ngoài ra là HR_MANAGER + HR_STAFF.
   await requirePermission("recruit.manage");
   const candidateId = str(formData.get("candidateId"));
   const candidate = await prisma.candidate.findUnique({
     where: { id: candidateId },
-    select: { cvFileKey: true, interviews: { select: { id: true } } },
+    select: {
+      fullName: true,
+      email: true,
+      phone: true,
+      status: true,
+      cvFileKey: true,
+      cvFileName: true,
+      createdAt: true,
+      position: { select: { title: true } },
+      interviews: { select: { id: true } },
+      offer: { select: { status: true } },
+      _count: { select: { aiReviews: true, emailLogs: true } },
+    },
   });
   if (!candidate) return { error: "NOT_FOUND" };
   // Đã phỏng vấn thì không xoá — dùng "Từ chối" để giữ lại lịch sử.
   if (candidate.interviews.length > 0) return { error: "HAS_INTERVIEWS" };
+  // ⚠ Đã lập thư mời nhận việc = đã có cam kết với người NGOÀI công ty. Xoá hồ sơ lúc đó là mất dấu
+  // vết của một cam kết đang treo; muốn đóng thì cho ứng viên TỪ CHỐI offer, đừng xoá.
+  if (candidate.offer) return { error: "HAS_OFFER" };
+
+  // ⚠ CHỤP ẢNH TRƯỚC KHI XOÁ — xoá ứng viên là xoá VĨNH VIỄN cả bản ghi lẫn file CV trên đĩa, và
+  // cuốn theo mọi bản AI chấm điểm (cascade). Không có ảnh chụp thì sau này không ai biết đã từng
+  // có hồ sơ nào ở đây, ai xoá, lúc nào. Cùng cách đã làm khi xoá nhân sự nghỉ việc (HANDOVER
+  // 10.18) và xoá người liên hệ phía khách (10.43).
+  // ⚠ `RecruitEmailLog.candidateId` là SetNull nên SỔ THƯ GIỮ NGUYÊN: thư đã gửi ra ngoài là bằng
+  // chứng, không được biến mất theo hồ sơ. Ảnh chụp ghi lại số thư để người đọc audit biết còn dòng
+  // sổ thư mồ côi ở đâu mà tra.
+  const staffId = await getCurrentStaffId();
+  await prisma.auditLog.create({
+    data: {
+      entityType: "candidate",
+      entityId: candidateId,
+      field: "delete_snapshot",
+      action: "DELETE",
+      oldValue: JSON.stringify({
+        fullName: candidate.fullName,
+        email: candidate.email,
+        phone: candidate.phone,
+        position: candidate.position.title,
+        status: candidate.status,
+        cvFileName: candidate.cvFileName,
+        receivedAt: candidate.createdAt.toISOString(),
+        aiReviews: candidate._count.aiReviews,
+        emailsSent: candidate._count.emailLogs,
+      }),
+      reason: textOrNull(formData.get("reason"), 500),
+      changedBy: staffId,
+    },
+  });
 
   await prisma.candidate.delete({ where: { id: candidateId } });
+  // Xoá file SAU khi xoá bản ghi: hỏng ở bước xoá file thì còn lại một file mồ côi trên đĩa (vô
+  // hại, dọn tay được), còn hỏng theo thứ tự ngược lại thì hồ sơ trỏ vào file không tồn tại.
   await deleteCvFile(candidate.cvFileKey);
-  await audit(candidateId, "delete");
   revalidate();
   return { ok: true };
 }

@@ -15,6 +15,7 @@ import { probationWarning } from "@/lib/recruit-offer";
 import { getRecruitPerms, gateCandidate } from "../../access";
 import { EmailPanel } from "./email-panel";
 import { OfferPanel } from "./offer-panel";
+import { DeleteCandidateForm } from "./delete-candidate-form";
 import { CandidateForm } from "./candidate-form";
 import { InterviewPanel } from "./interview-panel";
 import { DecisionForm } from "./decision-form";
@@ -113,6 +114,10 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
     perms.canDecide ? loadOffer(id, perms.meId) : Promise.resolve(null),
   ]);
   const offerView = offerRaw ? { ...offerRaw, probationBelowLegal: probationWarning(offerRaw.probationPct) } : null;
+  // ⚠ Đọc ĐỘC LẬP với offerView: người có quyền XOÁ (recruit.manage) chưa chắc có recruit.decide,
+  // mà offerView chỉ được nạp khi có recruit.decide — dựa vào nó là HR_STAFF luôn thấy "không có
+  // offer" và nút xoá mở ra oan. Chỉ đếm, không đọc số liệu lương.
+  const offerExists = (await prisma.candidateOffer.count({ where: { candidateId: id } })) > 0;
   const emailChoices = emailTpls.flatMap((tpl) =>
     tpl && tpl.approvedAt ? [{ code: tpl.def.code, label: tpl.def.labelVi, audience: tpl.def.audience }] : [],
   );
@@ -282,6 +287,16 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           decisionNote={candidate.decisionNote ?? ""}
           decidedBy={candidate.decidedBy?.fullName ?? null}
           decidedAt={candidate.decidedAt ? formatDate(candidate.decidedAt) : null}
+        />
+      )}
+
+      {/* Xoá vĩnh viễn — chỉ HR (recruit.manage); ADMIN qua được nhờ sàn cứng trong code.
+          Chốt chặn tính Ở SERVER, hai cờ dưới đây chỉ để giải thích cho người dùng vì sao khoá. */}
+      {perms.canManage && (
+        <DeleteCandidateForm
+          candidateId={candidate.id}
+          fullName={candidate.fullName}
+          blocked={candidate.interviews.length > 0 ? "HAS_INTERVIEWS" : offerExists ? "HAS_OFFER" : null}
         />
       )}
     </div>

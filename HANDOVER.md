@@ -3579,6 +3579,50 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       offer vào thư OFFER (hiện tải về rồi đính tay) · nhắc hạn phản hồi offer qua notification · ký
       offer điện tử · lịch sử phiên bản offer (sửa là ghi đè, chỉ có AuditLog chung).
 
+65. **TUYỂN DỤNG — XOÁ HỒ SƠ/CV TẢI NHẦM (24/08/2026)** (KHÔNG migration, **KHÔNG mã quyền mới**).
+    Yêu cầu chủ dự án: admin và HR xoá được một hồ sơ/CV khi tải nhầm hoặc nhầm ứng viên.
+    - ⚠ **Hàm `deleteCandidate` ĐÃ CÓ TỪ TD-1 nhưng CHƯA TỪNG có nút nào gọi — code chết suốt từ
+      06/08/2026.** Việc của đợt này chủ yếu là NỐI NÚT, không phải viết hàm mới. Gỡ nút về sau thì
+      nhớ gỡ luôn action, đừng để lại code chết lần nữa.
+    - **Quyền: dùng lại `recruit.manage`** (HR_MANAGER + HR_STAFF; ADMIN qua được nhờ sàn cứng trong
+      code) — đúng ý "admin và HR", không cần mã mới.
+    - ⚠ **HAI CỔNG CHẶN, tính Ở SERVER** (cờ trên giao diện chỉ để giải thích vì sao nút khoá):
+      · **Đã có lịch phỏng vấn** ⇒ chặn (có sẵn từ TD-1). Muốn đóng thì dùng "Từ chối" — lịch sử
+        phỏng vấn phải giữ lại.
+      · **Đã lập thư mời nhận việc** ⇒ chặn (THÊM ở đợt này). Offer là cam kết với người NGOÀI công
+        ty; xoá hồ sơ lúc đó là mất dấu một cam kết đang treo. Muốn đóng thì đánh dấu ứng viên từ
+        chối offer.
+    - ⚠ **CHỤP ẢNH VÀO `AuditLog` TRƯỚC KHI XOÁ** (`field = "delete_snapshot"`): họ tên, email, điện
+      thoại, vị trí, trạng thái, tên file CV, ngày nhận, **số bản AI đã chấm**, **số thư đã gửi** —
+      cộng LÝ DO người xoá nhập. Xoá ứng viên là xoá VĨNH VIỄN cả bản ghi lẫn file CV trên đĩa và
+      cuốn theo mọi bản AI chấm điểm (cascade); không có ảnh chụp thì sau này không ai biết đã từng
+      có hồ sơ nào ở đây. Cùng cách đã làm khi xoá nhân sự nghỉ việc (10.18) và xoá liên hệ khách
+      (10.43).
+    - ⚠ **`RecruitEmailLog.candidateId` là `SetNull` nên SỔ THƯ GIỮ NGUYÊN** khi xoá hồ sơ — thư đã
+      gửi ra ngoài là bằng chứng, không được biến mất theo hồ sơ. Dòng sổ thư đã lưu ảnh chụp
+      `toEmail/toName/subject/body` nên vẫn đọc lại được dù mất con trỏ; ảnh chụp lúc xoá ghi số thư
+      để người đọc nhật ký biết còn dòng mồ côi ở đâu mà tra.
+    - **Xoá file SAU khi xoá bản ghi**: hỏng ở bước xoá file thì còn một file mồ côi trên đĩa (vô
+      hại, dọn tay được); ngược lại thì hồ sơ trỏ vào file không tồn tại.
+    - ⚠ **Nút đặt ở CUỐI TRANG CHI TIẾT, cố ý KHÔNG đặt ở bảng danh sách**: ở danh sách thì một cú
+      bấm nhầm dòng là mất hồ sơ người khác. **Bắt gõ ĐÚNG HỌ TÊN mới mở nút** — `window.confirm`
+      một dòng là quá nhẹ cho hành động không có đường hoàn tác.
+    - ⚠ **`offerExists` đọc ĐỘC LẬP với `offerView`**: người có quyền XOÁ (`recruit.manage`) chưa
+      chắc có `recruit.decide`, mà `offerView` chỉ được nạp khi có `recruit.decide` — dựa vào nó thì
+      HR_STAFF luôn thấy "không có offer" và nút xoá mở ra oan. Chỉ `count`, không đọc số liệu lương.
+    - **Verify (browser thật, 3 ca + giả mạo + phân quyền):** hồ sơ có phỏng vấn ⇒ **không có nút**,
+      hiện đúng câu giải thích · hồ sơ có offer ⇒ **không có nút**, câu giải thích riêng · hồ sơ sạch
+      ⇒ nút khoá khi chưa gõ tên, **vẫn khoá khi gõ sai tên**, mở khi gõ đúng ⇒ xoá xong: bản ghi
+      mất, bản AI chấm cascade về 0, **file CV biến mất khỏi đĩa**, nhật ký giữ ảnh chụp đầy đủ + lý
+      do "tải nhầm CV của người khác" + tên người xoá · **giả mạo**: lấy form của hồ sơ xoá được, đổi
+      `candidateId` sang hồ sơ ĐÃ CÓ PHỎNG VẤN rồi gửi ⇒ server từ chối, hồ sơ **vẫn còn**, 0 dòng
+      audit DELETE · **act-as BGĐ** (chỉ `recruit.view`): vẫn xem được hồ sơ nhưng **không có khối
+      xoá trong HTML**. tsc · eslint · i18n **0/0 (4742 key)** · `next build` sạch · `migrate diff`
+      rỗng · seed no-op. Dữ liệu test đã dọn sạch.
+    - **CHƯA LÀM (cố ý):** thay file CV mà giữ nguyên hồ sơ (muốn đổi CV thì xoá rồi tải lại) · xoá
+      hàng loạt nhiều hồ sơ một lượt (mỗi hồ sơ một lần gõ tên — đúng tinh thần chống bấm nhầm) ·
+      thùng rác / khôi phục sau khi xoá.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

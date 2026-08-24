@@ -3767,7 +3767,53 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `d4198db`** (24/08/2026 10:50) — gói **7 commit**: MKT-3b chỉ đề xuất tuần tương
+**Production đang chạy `ea5fd0c`** (24/08/2026 18:13) — gói **3 commit**: xoá hồ sơ/CV tải nhầm (mục
+10.65) · chat gửi tối đa 10 file một lượt + **vá lỗi file tên tiếng Việt không mở được** (10.66) ·
+**vá lỗi PDF không đọc được** + thêm định dạng + link web + nhận nhiều CV một lượt (10.67). Deploy
+**bằng nút bấm GitHub Actions** (lần thứ tư), runner `tcm-server` chạy `scripts/deploy-local.sh`,
+xong trong ~3 phút. **1 migration mới** áp sạch (83 → 84: `recruit_cv_url`, `ALTER TABLE` thuần),
+**KHÔNG mã quyền mới** (vẫn 151, grant giữ nguyên 1354). CI XANH trên `ea5fd0c` trước khi deploy.
+
+⚠ **HAI LỖI VỪA VÁ ĐỀU ĐANG CẮN NGƯỜI DÙNG THẬT — có bằng chứng trên chính production:**
+1. **PDF không đọc được**: `~/.pm2/logs/tcm-crm-error.log` ghi `Setting up fake worker failed:
+   "Cannot find module '/home/tcm/tcm-crm/.next/server/chunks/ssr/pdf.worker.mjs'"`, lần cuối lúc
+   **15:40 cùng ngày** — đúng lúc HR tải CV lên (production có 2 hồ sơ ứng viên). Sau deploy: chunk
+   đổi tên từ `node_modules_pdf-parse_dist_...` thành **`[externals]_pdf-parse_...`** (Next để thư
+   viện ngoài bundle), chạy thử `PDFParse` trên chính server đọc ra đúng `"DO THANH HOANG"`, và
+   **không có dòng lỗi mới nào sau 18:13**.
+2. **File chat tên tiếng Việt**: đã đo trước đó trên 3 file PDF thật trong chat production —
+   `CV-HÀ GIA HÂN.pdf` mở được, `CV - ĐỖ THANH HOÀNG.pdf` và `ACCOUNT EXECUTIVE - LƯU NHẬT ANH.pdf`
+   thì không (ký tự `Đ Ư Ậ Ỗ` ngoài Latin-1 làm vỡ header).
+
+Đối chiếu production TRƯỚC/SAU deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | trước | sau |
+|---|---|---|
+| nhân sự / khách / dự án | 37 / 68 / 24 | **37 / 68 / 24** |
+| coTotal + ceTotal 4 bảng CO/CE | (8 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO / NCC / AuditLog | 481 / 30 / 103 | **481 / 30 / 103** |
+| dòng grant quyền | 1354 | **1354 — không đổi** |
+| ứng viên / bản chấm AI / offer | 2 / 0 / 0 | **2 / 0 / 0** |
+| `push_subscription` | 1 | **1** |
+| tin nhắn chat | 140 | 141 *(có người gửi tin trong lúc deploy — dùng thật)* |
+| migration | 83 | **84** |
+| cột `candidate.cvUrl` | — | **có** |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Health check qua nginx: `/login` **200** · `/`, `/staff/recruit`, `/chat` đều **307** về login ·
+`/api/notifications/poll` **401** · `/manifest.webmanifest` + `/offline` **200** · pm2 `tcm-crm` +
+`gh-runner` online, **restart 1** (do deploy) · `[jobs] scheduler bật` · **error log không thêm dòng
+nào sau deploy**. Backup trước deploy: `~/backup/*-20260824-181323`.
+
+⚠ **BẢN VÁ PDF CHỮA CẢ CÁC MODULE KHÁC, KHÔNG CHỈ TUYỂN DỤNG** — kho kiến thức khách (H2/H3), AI bóc
+báo giá NCC (PUR), biên bản họp (MEET-2), file đính kèm AI. Tất cả các đường đọc PDF đó đều đang hỏng
+thầm lặng từ trước, giờ chạy được. Đáng thử lại nếu trước đây ai đó kết luận "AI không đọc được file".
+
+---
+
+### Deploy trước đó — 24/08/2026 lúc 10:50
+
+**Production khi đó chạy `d4198db`** (24/08/2026 10:50) — gói **7 commit**: MKT-3b chỉ đề xuất tuần tương
 lai + AI đọc định hướng tháng + nút chạy lại (mục 10.60) · gắn **API Claude cho module MKT** (10.61) ·
 nút "Khai khoá AI cho production" khai `.env` không cần SSH (§8.1b) · **TD-2a** AI chấm CV thang 100 +
 cổng sàng lọc (10.62) · **TD-2b** hạ tầng Resend + mẫu thư duyệt một lần (10.63) · **TD-2c + TD-2d**

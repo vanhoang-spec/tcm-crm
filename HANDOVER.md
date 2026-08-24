@@ -3671,6 +3671,98 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý):** gộp N file thành MỘT bong bóng tin (đụng mô hình dữ liệu — xem trên) · kéo-thả
       file vào khung chat · thanh tiến trình khi tải file lớn · nén ảnh trước khi gửi.
 
+67. **TUYỂN DỤNG — ĐỌC ĐƯỢC PDF (vá lỗi thật), NHIỀU ĐỊNH DẠNG, LINK WEB, NHẬN NHIỀU CV MỘT LƯỢT
+    (24/08/2026)** (migration `20260824000000_recruit_cv_url` — 1 cột nullable, `ALTER TABLE` thuần,
+    0 DROP; **KHÔNG mã quyền mới**; **KHÔNG thêm dependency**). Ba việc chủ dự án yêu cầu; việc thứ ba
+    ("chọn nhiều CV để AI chấm") **ĐÃ CÓ SẴN từ TD-2a** (mục 10.62) nên đợt này không đụng tới.
+
+    **(a) ⚠ GỐC RỄ CỦA "AI CHỈ ĐỌC ĐƯỢC WORD, KHÔNG ĐỌC ĐƯỢC PDF" — LỖI ĐÓNG GÓI, KHÔNG PHẢI LỖI FILE.**
+    - `pdf-parse` v2 chạy trên `pdfjs-dist`, và pdfjs nạp `pdf.worker.mjs` bằng đường dẫn tính LÚC
+      CHẠY. Next đóng gói thư viện vào `.next/server/chunks` nhưng **không đưa file worker theo** ⇒ mọi
+      lần đọc PDF chết với `Setting up fake worker failed: "Cannot find module '.../pdf.worker.mjs'"`.
+    - ⚠ **Lỗi này SỐNG SÓT LÂU vì mọi cách kiểm đều qua**: `extractTextFromFile` CỐ Ý nuốt lỗi (một
+      file hỏng không được làm sập cả yêu cầu AI), nên không có gì nổi lên; chạy `pdf-parse` NGOÀI Next
+      (script tsx) thì nó hoạt động hoàn hảo — em đã tự dựng PDF và đọc ra đúng 131 ký tự trước khi
+      biết là trong app nó chết. **Chỉ chạy thật trong app mới lộ.** tsc/eslint/build đều sạch.
+    - **Vá: `serverExternalPackages: ["pdf-parse"]` trong `next.config.ts`** — để Node tự phân giải từ
+      `node_modules`, nơi file worker vẫn nằm cạnh thư viện. **ĐỪNG GỠ DÒNG NÀY.**
+    - ⚠ **Ảnh hưởng rộng hơn tuyển dụng**: mọi đường đọc PDF của app đều đang hỏng thầm lặng — kho kiến
+      thức khách (H2/H3) · báo giá NCC (PUR AI bóc file) · biên bản họp (MEET-2) · file đính kèm AI.
+      Bản vá này chữa tất cả cùng lúc.
+    - ⚠ **PDF ẢNH SCAN vẫn KHÔNG đọc được và sẽ không bao giờ đọc được** (repo không có OCR): CV xuất
+      từ Canva/Figma hoặc ảnh chụp. Nhìn từ ngoài giống hệt lỗi trên nên dễ lẫn — phân biệt bằng log:
+      lỗi worker thì có dòng `Setting up fake worker failed`, PDF ảnh thì im lặng trả null. Lối ra cho
+      ca này là ô LINK WEB hoặc nhập tay; app vẫn tạo hồ sơ và vẫn lấy được tên từ TÊN FILE.
+
+    **(b) ĐỊNH DẠNG ĐỌC ĐƯỢC — thêm RTF + ODT** (`extract-text.ts`, thuần THÊM NHÁNH):
+    - RTF bóc bằng chuỗi phép thay thế, không kéo thư viện. ⚠ Đọc buffer bằng **`latin1`, KHÔNG utf-8**:
+      RTF mã hoá ký tự ngoài ASCII bằng escape `\'xx` (một byte) — đọc utf-8 là hỏng byte trước khi kịp
+      giải mã escape.
+    - ODT là ZIP chứa `content.xml`, mở bằng `pizzip` (đã là dependency của `docx-builder.ts`).
+    - `CV_MIME_TYPES` nay 9 loại: PDF · DOCX · DOC · ODT · RTF (2 mime) · TXT · MD · HTML.
+
+    **(c) LINK WEB (portfolio) — `lib/web-page-text.ts`.** Dân thiết kế hay gửi link thay vì file.
+    - ⚠⚠ **ĐÂY LÀ BỀ MẶT SSRF và server đứng TRONG LAN công ty (192.168.1.111)** cạnh dịch vụ nội bộ
+      không xác thực. **BỐN LỚP CHẶN, KHÔNG ĐƯỢC GỠ LỚP NÀO:** (1) chỉ `http:`/`https:` — chặn `file:`
+      đọc đĩa server; (2) **PHÂN GIẢI TÊN MIỀN RA IP rồi chặn dải nội bộ** — chặn theo TÊN là vô dụng vì
+      tên miền công khai trỏ được về 127.0.0.1; (3) **tự đi từng chuyển hướng (`redirect: "manual"`) và
+      kiểm LẠI IP ở MỖI CHẶNG** — trang công khai 302 về `169.254.169.254` là đủ phá lớp 2 nếu để
+      `fetch` tự đi; (4) trần 15s + trần 2MB (kiểm CẢ header lẫn dữ liệu thật vì header nói dối được) +
+      chỉ nhận html/xhtml/plain/markdown/pdf.
+    - ⚠ **HẠN CHẾ ĐÃ BIẾT, CHẤP NHẬN:** còn khe DNS rebinding giữa lúc kiểm IP và lúc kết nối. Bịt hẳn
+      phải tự mở socket theo IP đã kiểm và tự lo TLS SNI — quá nặng cho một ô nhập mà chỉ HR (có
+      `recruit.manage`) dùng được.
+    - **Link KHÔNG cần cột `cvFile*` nullable**: app tải trang, bóc text rồi **lưu ẢNH CHỤP thành file
+      `.txt` trong kho CV** (kèm dòng `Nguồn:` + `Tiêu đề:`), cột `cvUrl` giữ link gốc. Chọn vậy vì (a)
+      đổi 4 cột đó sang nullable là RedefineTables trên bảng có 4 bảng con trỏ tới, và (b) **trang web
+      đổi nội dung hoặc biến mất bất cứ lúc nào** — ảnh chụp lúc nhận hồ sơ mới là bằng chứng dùng được.
+    - Nút "Mở link portfolio" trên trang chi tiết dùng `rel="noopener noreferrer nofollow"` — trang đích
+      là web NGOÀI, `target=_blank` thiếu `noopener` là trang đó điều khiển được tab gốc.
+
+    **(d) NHẬN NHIỀU CV MỘT LƯỢT + TỰ TRÍCH XUẤT tên/email/điện thoại** (`lib/recruit-extract.ts`, THUẦN).
+    - ⚠ **CỐ Ý KHÔNG GỌI AI Ở BƯỚC NÀY.** Tải 10 CV mà tự gọi AI là 10 lượt tính tiền diễn ra SAU LƯNG
+      người dùng — ngược hẳn luật đang áp cho `recruit.ai_parse` / `mkt.generate` / `clients.kb.generate`
+      (tách mã quyền riêng đúng vì "AI tính tiền theo LƯỢT"). Regex làm email/điện thoại gần như tuyệt
+      đối và làm tên đủ tốt. Nút "AI đọc CV" vẫn còn nguyên cho phần sâu hơn (tóm tắt kinh nghiệm, kỹ
+      năng, lương mong muốn).
+    - **Tên lấy từ HAI nguồn, nội dung CV trước, TÊN FILE sau.** Tên file là nguồn cứu ca PDF ảnh scan:
+      người ta gần như luôn đặt `CV - ĐỖ THANH HOÀNG.pdf`. Ghi `nameSource` vào AuditLog để về sau biết
+      tên đó ở đâu ra.
+    - ⚠ **BUG ĐÃ BẮT TRÊN BROWSER, KHÔNG PHẢI TRONG TEST — dấu tách số điện thoại KHÔNG được dùng `\s`.**
+      `\s` gồm cả XUỐNG DÒNG, nên `0912 345 678` ở cuối dòng nuốt luôn chữ số đầu dòng SAU
+      (`5 nam kinh nghiem...`) và cho ra **`09123456785`** — 11 chữ số nên trông vẫn hợp lệ, lọt qua mọi
+      chốt chặn, sai THẦM LẶNG. Nay dùng `[ .\-()]{0,2}` (dấu cách thường, tối đa 2 ký tự để `(028) 3822`
+      vẫn khớp).
+    - ⚠ **Chốt chặn độ dài phải là 10 HOẶC 11**: 10 = di động, 11 = cố định (`0` + mã vùng 2–3 số). Ép
+      đúng 10 là mọi số cố định bị vứt. Dài hơn 11 là số tài khoản/CCCD lọt vào — trả null còn hơn điền
+      số sai vào hồ sơ.
+    - **Trần: 10 file / 25MB mỗi lượt.** ⚠ Trần TỔNG phải nhỏ hơn `serverActions.bodySizeLimit` (30MB):
+      vượt là Next ném 413 TRƯỚC KHI action chạy ⇒ TRANG VỠ, không có thông báo lỗi (10.13).
+    - **Chỉ điều hướng khi MỌI nguồn thành công** (1 nguồn → trang hồ sơ, nhiều nguồn → danh sách). Có
+      nguồn hỏng thì Ở LẠI và hiện bảng "nguồn nào hỏng vì sao" — điều hướng đi là nuốt mất thông tin đó.
+    - Ô "tên ứng viên" **tự khoá khi chọn nhiều nguồn** (một cái tên không thể đúng cho tất cả) thay vì
+      để người dùng gõ rồi bị bỏ qua trong im lặng.
+
+    **(e) LỖI KÈM ĐÃ VÁ:** `parseCvWithAi` gọi `extractTextFromFile` **không truyền `maxChars`** ⇒ dùng
+    mặc định 6.000 ký tự của helper dùng chung, và `.slice(MAX_CV_TEXT_CHARS)` phía dưới KHÔNG cứu được
+    vì chuỗi đã bị cắt trước đó ⇒ **AI chỉ đọc được ~1/4 CV**. Đúng cái bẫy đã trả giá ở PUR-3a (10.46),
+    cùng một helper. Đường AI CHẤM ĐIỂM (`recruit-score-server.ts`) thì truyền đúng từ đầu.
+
+    - **Verify: 30 assertion trích xuất + 35 assertion SSRF + 11 assertion RTF/ODT** (gồm chặn
+      `localhost`, chặn đúng IP LAN `192.168.1.111` của server thật, chặn IP metadata đám mây, chặn 302
+      → `127.0.0.1`, chặn nhị phân, chặn quá cỡ kể cả khi header nói dối) **+ browser end-to-end**:
+      tải 3 CV một lượt (PDF có chữ · PDF KHÔNG có lớp chữ · TXT) ⇒ tạo đúng 3 hồ sơ; **trước bản vá
+      next.config PDF có chữ vẫn không ra email/điện thoại, sau bản vá ra đủ** và nhật ký ghi
+      "tên lấy từ text"; PDF không lớp chữ vẫn tạo được hồ sơ và lấy tên `Lưu Nhật Anh` từ tên file ·
+      link `http://localhost:3000/login` bị **chặn đích danh** "Link trỏ vào địa chỉ nội bộ" và ô link
+      **giữ nguyên giá trị** (bẫy React 19) · link công khai chạy trọn: tải trang → bóc chữ → lưu ảnh
+      chụp có `Nguồn:`/`Tiêu đề:` → tạo hồ sơ có `cvUrl` → trang chi tiết hiện nút "Mở link portfolio"
+      với `rel="noopener noreferrer nofollow"`. tsc · eslint · i18n **0/0 (4765 key)** · `next build`
+      sạch · `migrate diff` rỗng · `db:seed` sạch. Dữ liệu test đã dọn sạch (2 ứng viên, 0 file mồ côi).
+    - **CHƯA LÀM (cố ý):** OCR cho PDF ảnh scan (cần thư viện nặng + máy chủ khoẻ — phải hỏi chủ dự án) ·
+      đọc `.doc` đời cũ · nhiều link web cho một lượt (hiện MỘT link) · tự chấm AI ngay sau khi tải lên
+      (đúng luật "AI do người BẤM") · gộp hồ sơ trùng khi cùng một ứng viên nộp nhiều lần.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

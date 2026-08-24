@@ -60,6 +60,52 @@ function htmlToText(html: string): string {
     .trim();
 }
 
+/**
+ * RTF → text. RTF là văn bản thuần có chèn "control word" (`\b`, `\par`, `\'e1`…), nên bóc bằng
+ * chuỗi phép thay thế là đủ — kéo cả một thư viện RTF về chỉ để đọc CV là không đáng.
+ * ⚠ Đọc buffer bằng `latin1` chứ KHÔNG phải utf-8: RTF mã hoá ký tự ngoài ASCII bằng escape
+ * `\'xx` (một byte), đọc utf-8 là hỏng byte trước khi kịp giải mã escape.
+ */
+function rtfToText(rtf: string): string {
+  return rtf
+    .replace(/\{\\\*[\s\S]*?\}/g, " ")   // nhóm bỏ qua được (font table, colortbl…)
+    .replace(/\\par[d]?\b/g, "\n")
+    .replace(/\\line\b/g, "\n")
+    .replace(/\\tab\b/g, "\t")
+    .replace(/\\'([0-9a-fA-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\u(-?\d+)\s?\??/g, (_m, d) => String.fromCharCode(((Number(d) % 65536) + 65536) % 65536))
+    .replace(/\\[a-zA-Z]+-?\d*\s?/g, " ")   // control word còn lại
+    .replace(/[{}]/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * ODT (LibreOffice/OpenOffice) → text. ODT là file ZIP chứa `content.xml`; `pizzip` vốn đã là
+ * dependency (dùng ở `docx-builder.ts`) nên không thêm phụ thuộc mới.
+ */
+async function odtToText(buffer: Buffer): Promise<string> {
+  const PizZip = (await import("pizzip")).default;
+  const zip = new PizZip(buffer);
+  const xml = zip.file("content.xml")?.asText() ?? "";
+  return xml
+    .replace(/<text:tab\/>/g, "\t")
+    .replace(/<text:line-break\/>/g, "\n")
+    .replace(/<\/text:(p|h)>/g, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function xlsxToText(buffer: Buffer, maxChars: number = MAX_CHARS_PER_FILE): Promise<string> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
@@ -113,6 +159,12 @@ export async function extractTextFromFile(buffer: Buffer, mime: string, opts?: E
     }
     if (mime === "text/plain" || mime === "text/csv" || mime === "text/markdown") {
       return truncate(buffer.toString("utf-8"), maxChars);
+    }
+    if (mime === "application/rtf" || mime === "text/rtf") {
+      return truncate(rtfToText(buffer.toString("latin1")), maxChars);
+    }
+    if (mime === "application/vnd.oasis.opendocument.text") {
+      return truncate(await odtToText(buffer), maxChars);
     }
     if (
       mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||

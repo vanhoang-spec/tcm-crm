@@ -3811,6 +3811,12 @@ model Candidate {
   cvFileName String
   cvFileMime String
   cvFileSize Int
+  /// Link web (portfolio/profile) ứng viên gửi thay cho — hoặc kèm theo — file CV.
+  /// ⚠ Bốn cột cvFile* ở trên VẪN bắt buộc: khi HR chỉ đưa link, app tải trang về, BÓC LẤY TEXT rồi
+  /// lưu thành một file .txt trong kho CV. Cố ý làm vậy thay vì cho cvFile* nullable, vì (a) đổi
+  /// nullable trên bảng này là RedefineTables (4 bảng con trỏ tới), và (b) trang web đổi nội dung
+  /// hoặc biến mất bất cứ lúc nào — ảnh chụp tại thời điểm nhận hồ sơ mới là bằng chứng dùng được.
+  cvUrl      String?
   /// Mốc lần AI đọc CV gần nhất. Null = chưa đọc lần nào (HR nhập tay hoàn toàn).
   aiParsedAt DateTime?
 

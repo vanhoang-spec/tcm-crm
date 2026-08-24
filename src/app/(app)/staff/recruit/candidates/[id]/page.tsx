@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, FileText, Link2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatDate, pickLabel, toNum } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
       decisionNote: true,
       decidedAt: true,
       cvFileName: true,
+      cvUrl: true,
       createdAt: true,
       ...(gate.canSeeSalary ? { expectedSalary: true } : {}),
       decidedBy: { select: { fullName: true } },
@@ -215,6 +216,19 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           {t("openCv")}
           <span className="font-normal text-muted-foreground">({candidate.cvFileName})</span>
         </a>
+        {/* Link portfolio ứng viên gửi. `rel` phải có `noopener noreferrer` — trang đích là web
+            NGOÀI, mở bằng target=_blank mà thiếu noopener là trang đó điều khiển được tab gốc. */}
+        {candidate.cvUrl && (
+          <a
+            href={candidate.cvUrl}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg border border-border-strong px-3 text-xs font-semibold text-foreground hover:bg-surface-2"
+          >
+            <Link2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{t("openCvUrl")}</span>
+          </a>
+        )}
       </div>
 
       <CandidateForm

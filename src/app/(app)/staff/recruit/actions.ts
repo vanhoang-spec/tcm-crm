@@ -14,6 +14,8 @@ import { cvParseMessages, cvParseSchema, type CvParseResult } from "@/lib/ai/rec
 import {
   CV_MIME_TYPES,
   MAX_CV_BYTES,
+  MAX_CV_UPLOAD,
+  MAX_CV_TOTAL_BYTES,
   MAX_CV_TEXT_CHARS,
   MAX_JD_FIELD_CHARS,
   MIN_DURATION_MIN,
@@ -22,6 +24,8 @@ import {
   isRecommendation,
   formatSummaryForNotification,
 } from "@/lib/recruit";
+import { guessCandidateInfo } from "@/lib/recruit-extract";
+import { fetchWebPageText } from "@/lib/web-page-text";
 import { getRecruitPerms, gateCandidate } from "./access";
 
 // ─────────────────────────────────────────────────────────
@@ -64,11 +68,94 @@ async function audit(entityId: string, action: string, field = "*", reason?: str
 // Nhận CV
 // ─────────────────────────────────────────────────────────
 
-export type UploadState = { error?: string };
+export type IntakeRow = {
+  /** Tên file hoặc link — thứ HR nhận ra được trên bảng kết quả. */
+  source: string;
+  ok: boolean;
+  /** ok=true: id hồ sơ vừa tạo. ok=false: mã lỗi. */
+  detail: string;
+  /** Ba trường app tự đọc được — để HR thấy ngay app đọc được gì, không phải mở từng hồ sơ. */
+  guessed?: { fullName: string | null; email: string | null; phone: string | null; nameSource: string | null };
+};
+export type UploadState = { error?: string; rows?: IntakeRow[] };
 
 /**
- * HR nhận CV: chọn vị trí đang tuyển + tải file lên. Hồ sơ tạo ra ở trạng thái NEW, các ô thông
- * tin để trống — bước đọc CV bằng AI làm ở trang chi tiết, tách riêng vì mỗi lượt gọi tốn tiền.
+ * Bóc text của một CV — best-effort, KHÔNG được ném: file không đọc được text vẫn phải tạo được hồ
+ * sơ (đó chính là ca PDF ảnh scan / CV xuất từ Canva).
+ *
+ * ⚠ PHẢI truyền `maxChars`: mặc định của helper dùng chung là 6.000 ký tự, cắt mất phần lớn CV.
+ * Đúng cái bẫy đã trả giá ở PUR-3a (HANDOVER 10.46) — cùng một helper, cùng một chỗ quên.
+ */
+async function cvTextOf(buffer: Buffer, mime: string): Promise<string> {
+  try {
+    const r = await extractTextFromFile(buffer, mime, { maxChars: MAX_CV_TEXT_CHARS });
+    return r?.text ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** Tạo MỘT hồ sơ từ (buffer + tên + mime), tự trích xuất tên/email/điện thoại. */
+async function createCandidateFrom(args: {
+  positionId: string;
+  meId: string | null;
+  buffer: Buffer;
+  fileName: string;
+  mime: string;
+  size: number;
+  cvUrl?: string | null;
+  typedName?: string;
+}): Promise<IntakeRow> {
+  const { positionId, meId, buffer, fileName, mime, size } = args;
+  let fileKey: string;
+  try {
+    fileKey = await saveCvFile(buffer, mime);
+  } catch (e) {
+    console.error("[RECRUIT] lỗi lưu CV:", e);
+    return { source: fileName, ok: false, detail: "SAVE_FAILED" };
+  }
+
+  const text = await cvTextOf(buffer, mime);
+  const guessed = guessCandidateInfo(text, fileName);
+  // Thứ tự: HR gõ tay > app đoán được > tên file bỏ đuôi (để danh sách không có dòng trống).
+  const fullName = (args.typedName || guessed.fullName || fileName.replace(/\.[^.]+$/, "")).slice(0, 120);
+
+  const created = await prisma.candidate.create({
+    data: {
+      positionId,
+      fullName,
+      email: guessed.email,
+      phone: guessed.phone,
+      cvFileKey: fileKey,
+      cvFileName: fileName.slice(0, 200),
+      cvFileMime: mime,
+      cvFileSize: size,
+      cvUrl: args.cvUrl ?? null,
+      createdById: meId,
+    },
+    select: { id: true },
+  });
+  await audit(created.id, "create", "*", guessed.nameSource ? `tên lấy từ ${guessed.nameSource}` : undefined);
+  revalidate(created.id);
+  return {
+    source: fileName,
+    ok: true,
+    detail: created.id,
+    guessed: { fullName: guessed.fullName, email: guessed.email, phone: guessed.phone, nameSource: guessed.nameSource },
+  };
+}
+
+/**
+ * HR nhận CV: chọn vị trí đang tuyển, rồi tải LÊN TỚI `MAX_CV_UPLOAD` file một lượt và/hoặc dán MỘT
+ * link web (portfolio). Mỗi nguồn thành một hồ sơ riêng, trạng thái NEW.
+ *
+ * ⚠ App TỰ trích xuất tên · email · điện thoại ngay lúc nhận, bằng REGEX/heuristic — CỐ Ý KHÔNG gọi
+ * AI. Tải 10 CV mà tự gọi AI là 10 lượt tính tiền diễn ra SAU LƯNG người dùng, ngược hẳn luật đang
+ * áp cho `recruit.ai_parse` / `mkt.generate` / `clients.kb.generate`. Nút "AI đọc CV" ở trang chi
+ * tiết vẫn còn nguyên cho phần sâu hơn (tóm tắt kinh nghiệm, kỹ năng, lương mong muốn).
+ *
+ * ⚠ Chỉ điều hướng khi MỌI nguồn đều thành công. Có nguồn hỏng thì Ở LẠI và trả bảng kết quả —
+ * điều hướng đi là nuốt mất thông tin "nguồn nào không nhận được".
  */
 export async function uploadCandidate(_prev: UploadState, formData: FormData): Promise<UploadState> {
   await requirePermission("recruit.manage");
@@ -80,44 +167,79 @@ export async function uploadCandidate(_prev: UploadState, formData: FormData): P
   if (!position) return { error: "NO_POSITION" };
   if (position.status === "CLOSED") return { error: "POSITION_CLOSED" };
 
-  const file = formData.get("cv");
-  if (!(file instanceof File) || file.size === 0) return { error: "NO_FILE" };
-  if (file.size > MAX_CV_BYTES) return { error: "FILE_TOO_BIG" };
-  if (!(CV_MIME_TYPES as readonly string[]).includes(file.type)) return { error: "FILE_TYPE" };
+  // ⚠ getAll, KHÔNG get — từ 24/08/2026 chọn được nhiều file một lượt.
+  const files = formData.getAll("cv").filter((f): f is File => f instanceof File && f.size > 0);
+  const link = str(formData.get("cvUrl"));
+  if (files.length === 0 && !link) return { error: "NO_FILE" };
+  if (files.length > MAX_CV_UPLOAD) return { error: "TOO_MANY_FILES" };
 
-  // Tên ứng viên chưa biết trước khi đọc CV → mặc định lấy tên file (bỏ đuôi) để danh sách không
-  // có dòng trống. AI đọc xong sẽ ghi đè bằng tên thật, HR sửa lại được.
-  const typed = str(formData.get("fullName"));
-  const fullName = (typed || file.name.replace(/\.[^.]+$/, "")).slice(0, 120);
+  let total = 0;
+  for (const f of files) {
+    if (f.size > MAX_CV_BYTES) return { error: "FILE_TOO_BIG" };
+    if (!(CV_MIME_TYPES as readonly string[]).includes(f.type)) return { error: "FILE_TYPE" };
+    total += f.size;
+  }
+  if (total > MAX_CV_TOTAL_BYTES) return { error: "TOTAL_TOO_BIG" };
 
-  let fileKey: string;
-  try {
-    fileKey = await saveCvFile(Buffer.from(await file.arrayBuffer()), file.type);
-  } catch (e) {
-    console.error("[RECRUIT] lỗi lưu CV:", e);
-    return { error: "SAVE_FAILED" };
+  // Tên gõ tay chỉ áp khi CHỈ CÓ MỘT nguồn — nhiều nguồn thì một cái tên không thể đúng cho tất cả.
+  const single = files.length + (link ? 1 : 0) === 1;
+  const typedName = single ? str(formData.get("fullName")) : "";
+
+  const rows: IntakeRow[] = [];
+  for (const f of files) {
+    rows.push(
+      await createCandidateFrom({
+        positionId,
+        meId,
+        buffer: Buffer.from(await f.arrayBuffer()),
+        fileName: f.name,
+        mime: f.type,
+        size: f.size,
+        typedName,
+      }),
+    );
   }
 
-  const created = await prisma.candidate.create({
-    data: {
-      positionId,
-      fullName,
-      cvFileKey: fileKey,
-      cvFileName: file.name.slice(0, 200),
-      cvFileMime: file.type,
-      cvFileSize: file.size,
-      createdById: meId,
-    },
-    select: { id: true },
-  });
-  await audit(created.id, "create");
-  revalidate(created.id);
+  if (link) {
+    const page = await fetchWebPageText(link, (b, m, n) => extractTextFromFile(b, m, { maxChars: n }), MAX_CV_TEXT_CHARS);
+    if (!page.ok) {
+      rows.push({ source: link, ok: false, detail: "WEB_" + page.error });
+    } else {
+      // Lưu ẢNH CHỤP text của trang thành file .txt trong kho CV: trang web đổi nội dung hoặc biến
+      // mất bất cứ lúc nào, còn hồ sơ tuyển dụng thì phải tra lại được đúng thứ HR đã đọc.
+      let host = "web";
+      try {
+        host = new URL(page.finalUrl).hostname;
+      } catch {
+        host = "web";
+      }
+      const head = `Nguồn: ${page.finalUrl}\n` + (page.title ? `Tiêu đề: ${page.title}\n` : "");
+      const snapshot = Buffer.from(`${head}\n${page.text}`, "utf8");
+      rows.push(
+        await createCandidateFrom({
+          positionId,
+          meId,
+          buffer: snapshot,
+          fileName: `${host}.txt`,
+          mime: "text/plain",
+          size: snapshot.byteLength,
+          cvUrl: page.finalUrl,
+          typedName,
+        }),
+      );
+    }
+  }
+
+  const okRows = rows.filter((r) => r.ok);
+  if (okRows.length === 0) return { error: rows[0]?.detail ?? "SAVE_FAILED", rows };
+  if (okRows.length !== rows.length) return { rows }; // có nguồn hỏng → ở lại cho HR thấy
 
   // ⚠ Điều hướng ở SERVER, không trả id về rồi để client `router.push()`. Gọi router trong lúc
   // render là cập nhật một component khác giữa chừng — React cảnh báo "Cannot update a component
   // while rendering a different component" và hành vi không bảo đảm ở chế độ đồng thời.
   // `redirect()` phải nằm NGOÀI try/catch, nếu không nó bị nuốt (nó hoạt động bằng cách ném lỗi).
-  redirect(`/staff/recruit/candidates/${created.id}`);
+  if (okRows.length === 1) redirect(`/staff/recruit/candidates/${okRows[0].detail}`);
+  redirect("/staff/recruit");
 }
 
 // ─────────────────────────────────────────────────────────
@@ -152,7 +274,10 @@ export async function parseCvWithAi(_prev: ParseState, formData: FormData): Prom
   let text: string;
   try {
     const buffer = await readCvFile(candidate.cvFileKey);
-    const extracted = await extractTextFromFile(buffer, candidate.cvFileMime);
+    // ⚠ PHẢI truyền maxChars: mặc định của helper là 6.000 ký tự, và `.slice(MAX_CV_TEXT_CHARS)`
+    // phía dưới KHÔNG cứu được — chuỗi đã bị cắt trước khi tới đây. Bản trước quên chỗ này nên AI
+    // chỉ đọc được ~1/4 CV, đúng cái bẫy đã trả giá ở PUR-3a (HANDOVER 10.46).
+    const extracted = await extractTextFromFile(buffer, candidate.cvFileMime, { maxChars: MAX_CV_TEXT_CHARS });
     if (!extracted || !extracted.text.trim()) return { error: "CANNOT_READ" };
     text = extracted.text.slice(0, MAX_CV_TEXT_CHARS);
   } catch (e) {

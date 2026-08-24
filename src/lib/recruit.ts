@@ -37,20 +37,39 @@ export function isCandidateStatus(v: string): v is CandidateStatus {
 }
 
 /**
- * File CV. `.pdf` và `.docx` đọc được text nhờ `ai/extract-text.ts` (pdf-parse + mammoth).
+ * File CV — các định dạng văn bản thông dụng (mở rộng 24/08/2026 theo yêu cầu chủ dự án).
  *
- * ⚠ `.doc` đời cũ VẪN cho tải lên nhưng bộ trích text KHÔNG đọc được (mammoth chỉ hiểu định dạng
- * OpenXML) — lúc đó nút "AI đọc CV" sẽ báo không đọc được nội dung và HR nhập tay. Cố ý cho tải
- * lên chứ không chặn: hồ sơ vẫn phải lưu được, việc AI đọc được hay không là chuyện phụ.
+ * ĐỌC ĐƯỢC text (nhờ `ai/extract-text.ts`): `.pdf` (pdf-parse) · `.docx` (mammoth) · `.odt` (pizzip)
+ * · `.rtf` · `.txt` / `.md` / `.html`.
+ *
+ * ⚠ KHÔNG đọc được nội dung (vẫn CHO tải lên để hồ sơ lưu được, chỉ là AI phải nhập tay):
+ *   · `.doc` đời cũ — mammoth chỉ hiểu OpenXML.
+ *   · **PDF không có lớp chữ** — CV xuất từ Canva/Figma hoặc ảnh scan. Đây là ca hay gặp nhất và
+ *     nhìn từ ngoài y hệt "app không đọc được PDF"; repo KHÔNG có OCR. Lối ra: dùng ô LINK WEB
+ *     (portfolio) hoặc nhập tay.
+ *   · ảnh (`.jpg`/`.png`) — không nhận, vì không có gì đọc được và cũng không phải hồ sơ văn bản.
  */
 export const CV_MIME_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/msword",
+  "application/vnd.oasis.opendocument.text",
+  "application/rtf",
+  "text/rtf",
   "text/plain",
+  "text/markdown",
+  "text/html",
 ] as const;
 
 export const MAX_CV_BYTES = 15 * 1024 * 1024;
+
+/**
+ * Số CV tải lên một lượt. ⚠ Trần TỔNG dung lượng phải nhỏ hơn `serverActions.bodySizeLimit` (30MB,
+ * xem next.config.ts): vượt trần đó là Next ném 413 TRƯỚC KHI action chạy ⇒ người dùng thấy TRANG
+ * VỠ chứ không thấy thông báo lỗi (HANDOVER 10.13).
+ */
+export const MAX_CV_UPLOAD = 10;
+export const MAX_CV_TOTAL_BYTES = 25 * 1024 * 1024;
 
 /** Trần ký tự text CV gửi sang DeepSeek — cùng dải với tài liệu KB (24.000). */
 export const MAX_CV_TEXT_CHARS = 24000;

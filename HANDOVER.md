@@ -3583,7 +3583,59 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `7c54b5c`** (21/08/2026 19:32) — gói **3 commit MKT**: MKT-2a master plan tuần +
+**Production đang chạy `d4198db`** (24/08/2026 10:50) — gói **7 commit**: MKT-3b chỉ đề xuất tuần tương
+lai + AI đọc định hướng tháng + nút chạy lại (mục 10.60) · gắn **API Claude cho module MKT** (10.61) ·
+nút "Khai khoá AI cho production" khai `.env` không cần SSH (§8.1b) · **TD-2a** AI chấm CV thang 100 +
+cổng sàng lọc (10.62) · **TD-2b** hạ tầng Resend + mẫu thư duyệt một lần (10.63) · **TD-2c + TD-2d**
+phỏng vấn thang 100 + thư mời nhận việc (10.64). Deploy **bằng nút bấm GitHub Actions** (lần thứ ba),
+runner `tcm-server` chạy `scripts/deploy-local.sh`. **3 migration mới** áp sạch (80 → 83:
+`recruit_td2a_ai_screening`, `recruit_td2b_email`, `recruit_td2cd_interview_offer` — cả ba additive),
+**1 mã quyền mới** (`recruit.email.send`, 150 → 151). CI XANH trên **cả 7 commit** trước khi deploy.
+
+Đối chiếu production SAU deploy với bản chụp TRƯỚC deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | trước | production sau |
+|---|---|---|
+| nhân sự / khách / dự án | 37 / 68 / 24 | **37 / 68 / 24** |
+| coTotal + ceTotal 4 bảng CO/CE | (8 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO / NCC / AuditLog | 481 / 30 / 100 | **481 / 30 / 100** |
+| dòng grant quyền | 1352 | **1354** (+2 = `recruit.email.send` × 2 vai HR) |
+| `push_subscription` | 1 | **1** (thiết bị đã bật push vẫn nguyên) |
+| bảng MKT plan / post | 0 / 0 | **0 / 0** |
+| bảng tuyển dụng MỚI | — | ứng viên 0 · bản chấm AI 0 · offer 0 · mẫu thư 0 · sổ thư 0 · mẫu offer 0 |
+| seed tuyển dụng | — | **26 tiêu chí chấm · 7 vị trí tuyển** (đúng như thiết kế) |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Health check (curl qua nginx): `/login` **200** · `/`, `/staff/recruit`, `/settings/recruit`,
+`/mkt/plan` đều **307** về login · `/api/notifications/poll` **401** · route mới
+`/api/recruit-offer/[id]` **401** khi chưa đăng nhập · pm2 `tcm-crm` + `gh-runner` online,
+**restart 1** (do deploy) · `[jobs] scheduler bật` · **error log không thêm dòng nào** (ghi cuối
+09:32, deploy 10:50) · giờ server `+07` đúng. Backup trước deploy: `~/backup/*-20260824-105057`.
+
+📣 **HAI KHOÁ CHƯA KHAI — code đã lên nhưng nằm im, đúng thiết kế, KHÔNG phải lỗi:**
+1. **`ANTHROPIC_API_KEY`** — chưa khai thì module MKT chạy bằng DeepSeek y như trước. Khai ở
+   `/settings/ai` (xem hướng dẫn ở mục 10.61) hoặc bằng nút "Khai khoá AI cho production" (§8.1b).
+2. **`RESEND_API_KEY` + `RESEND_FROM`** — chưa khai thì mọi nút gửi thư cho ứng viên bị khoá kèm câu
+   giải thích. ⚠ Khai khoá **CHƯA ĐỦ**: phải **xác minh domain `tcmbtl.com` bằng bản ghi DNS (SPF +
+   DKIM)** ở resend.com, không thì thư vào spam hoặc bị chặn thẳng.
+
+**Việc nên làm sớm trên production (sub-module Tuyển dụng vừa lên):**
+1. `/settings/recruit` — rà 7 vị trí seed sẵn (Account Director/Manager/Executive · Senior Designer ·
+   Designer · HR Staff · Accounting Staff), gán **phòng ban + người quản lý trực tiếp** cho từng vị
+   trí. ⚠ Người quản lý trực tiếp là người NGOÀI HR duy nhất nhìn được lương mong muốn của ứng viên,
+   và là người nhận thư báo onboarding.
+2. ⚠ Tick **cờ "vị trí quản lý"** cho đúng vị trí — cờ này quyết định chấm bằng bộ tiêu chí nào
+   (bộ quản lý có leadership / quản lý nhóm / ownership). Seed đã tick sẵn Account Director + Manager.
+3. Duyệt **5 mẫu thư** và **mẫu thư mời nhận việc** ở `/settings/recruit` — chưa duyệt thì không gửi
+   được, kể cả khi đã khai Resend.
+4. Rà **2 ngưỡng đề xuất** (`recruit.ai_interview_pct` 70 · `recruit.ai_consider_pct` 50) nếu muốn
+   siết/nới cổng sàng lọc.
+
+---
+
+### Deploy trước đó — 21/08/2026 lúc 19:32
+
+**Production khi đó chạy `7c54b5c`** (21/08/2026 19:32) — gói **3 commit MKT**: MKT-2a master plan tuần +
 tự dựng bài + brief designer (mục 10.58) · MKT-2b/2c đăng qua API, hẹn giờ, tự kéo số liệu (10.59) ·
 MKT-3 kế hoạch THÁNG → tuần → bài + order thiết kế tự sinh (10.60). Deploy **bằng nút bấm GitHub
 Actions** (lần thứ hai), runner `tcm-server` chạy `scripts/deploy-local.sh`. **3 migration mới** áp sạch

@@ -57,6 +57,8 @@ export async function createPosition(_prev: PositionState, formData: FormData): 
       departmentId: idOrNull(formData.get("departmentId")),
       teamId: idOrNull(formData.get("teamId")),
       hiringManagerStaffId: idOrNull(formData.get("hiringManagerStaffId")),
+      // Người bị thay: không nhìn thấy vị trí này lẫn ứng viên của nó (lib/recruit.ts → isReplacedBySelf).
+      replacesStaffId: idOrNull(formData.get("replacesStaffId")),
       ...jd,
       jdUpdatedAt: hasJd ? new Date() : null,
       jdUpdatedById: hasJd ? meId : null,
@@ -98,6 +100,8 @@ export async function updatePosition(_prev: PositionState, formData: FormData): 
       departmentId: idOrNull(formData.get("departmentId")),
       teamId: idOrNull(formData.get("teamId")),
       hiringManagerStaffId: idOrNull(formData.get("hiringManagerStaffId")),
+      // Người bị thay: không nhìn thấy vị trí này lẫn ứng viên của nó (lib/recruit.ts → isReplacedBySelf).
+      replacesStaffId: idOrNull(formData.get("replacesStaffId")),
       ...jd,
       ...(jdChanged ? { jdUpdatedAt: new Date(), jdUpdatedById: meId } : {}),
     },

@@ -4465,7 +4465,8 @@
       "errNoEmail": "The candidate has no valid email address.",
       "errMissingVars": "The email still has empty variables.",
       "errSendFailed": "Sending failed.",
-      "errGeneric": "Something went wrong, try again."
+      "errGeneric": "Something went wrong, try again.",
+      "errNoOfferPerm": "Only the Senior HR Manager may draft and send job offers."
     },
     "expectedSalary": "Expected salary (VND)",
     "expectedSalaryHint": "Only HR, the department head and the hiring manager of this position can see the salary field.",
@@ -4692,7 +4693,11 @@
     "errWebTooLarge": "That page is too large.",
     "errWebTimeout": "That page took too long to respond.",
     "errWebEmpty": "No text could be read from that page.",
-    "openCvUrl": "Open portfolio link"
+    "openCvUrl": "Open portfolio link",
+    "scopedToOwnPositions": "You are seeing your department's scope: only the positions you own and their candidates. A position opened to replace you (if any) is not shown here.",
+    "fieldReplaces": "Recruiting to replace",
+    "replacesNone": "not replacing anyone",
+    "replacesHint": "Pick a person if this opening replaces a current employee. That person will not see this position or its candidates, even if they lead the department."
   },
   "myAdvances": {
     "title": "My advances",

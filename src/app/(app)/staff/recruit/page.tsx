@@ -8,26 +8,41 @@ import { Badge } from "@/components/ui/badge";
 import { isAiConfigured } from "@/lib/ai/deepseek";
 import { MAX_BATCH_SCORE } from "@/lib/recruit-score-server";
 import { parseScoredCriteria } from "@/lib/recruit-scoring";
-import { getRecruitPerms } from "./access";
+import { getRecruitPerms, ownedPositionWhere, notReplacingWhere } from "./access";
 import { UploadCvForm } from "./upload-cv-form";
 import { ScreeningBoard, type ScreeningRow } from "./screening-board";
 
 /**
  * Trang chính của sub-module Tuyển dụng: vị trí đang tuyển + hồ sơ đang chạy.
  *
- * ⚠ Người KHÔNG có `recruit.view` (người phỏng vấn được mời, trưởng bộ phận) được đưa sang trang
- * "Lịch phỏng vấn của tôi" thay vì đá về /no-access — họ có việc thật trong module này, chỉ là
- * không phải việc quản lý kho hồ sơ.
+ * HAI PHẠM VI, quyết định ở TẦNG TRUY VẤN:
+ *  - có `recruit.view` (HR + hành chính + BGĐ) → thấy toàn bộ kho hồ sơ;
+ *  - KHÔNG có mã đó nhưng là TRƯỞNG BỘ PHẬN / quản lý trực tiếp của vị trí đang tuyển → thấy ĐÚNG
+ *    vị trí của mình và ứng viên của những vị trí đó (quyết định chủ dự án 24/08/2026).
+ *  - không thuộc hai nhóm trên → sang "Lịch phỏng vấn của tôi" thay vì đá về /no-access; họ có
+ *    việc thật trong module này, chỉ là không phải việc quản lý kho hồ sơ.
+ *
+ * ⚠ Phạm vi phải áp ở `where`, KHÔNG lọc sau khi đã nạp: lọc trong JSX thì hồ sơ của phòng khác
+ * vẫn nằm nguyên trong HTML thô (bài học KB-H2, HANDOVER 10.13).
+ * ⚠ Người BỊ THAY bị loại ở CẢ HAI phạm vi — kể cả người có `recruit.view`. Xem ownedPositionWhere
+ * và lib/recruit.ts → isReplacedBySelf.
  */
 export default async function RecruitPage() {
   const perms = await getRecruitPerms();
-  if (!perms.canView) redirect("/staff/recruit/interviews");
+  const scopedToOwn = !perms.canView;
+  if (scopedToOwn && !perms.meId) redirect("/staff/recruit/interviews");
+
+  const positionScope = scopedToOwn
+    ? ownedPositionWhere(perms.meId as string)
+    : perms.meId
+      ? notReplacingWhere(perms.meId)
+      : {};
 
   const t = await getTranslations("recruit");
 
   const [positions, candidates, openPositions] = await Promise.all([
     prisma.jobPosition.findMany({
-      where: { status: { not: "CLOSED" } },
+      where: { status: { not: "CLOSED" }, ...positionScope },
       orderBy: [{ status: "asc" }, { title: "asc" }],
       select: {
         id: true,
@@ -41,7 +56,7 @@ export default async function RecruitPage() {
     }),
     // Hồ sơ ĐANG CHẠY. Hồ sơ đã chốt nằm ở Kho hồ sơ để danh sách này không dài mãi theo năm.
     prisma.candidate.findMany({
-      where: { status: { in: ["NEW", "INTERVIEWING"] } },
+      where: { status: { in: ["NEW", "INTERVIEWING"] }, position: positionScope },
       orderBy: { createdAt: "desc" },
       take: 100,
       // ⚠ KHÔNG select `expectedSalary` ở màn hình danh sách: trang này mở cho mọi người có
@@ -68,11 +83,15 @@ export default async function RecruitPage() {
       },
     }),
     prisma.jobPosition.findMany({
-      where: { status: "OPEN" },
+      where: { status: "OPEN", ...positionScope },
       orderBy: { title: "asc" },
       select: { id: true, title: true },
     }),
   ]);
+
+  // Trưởng bộ phận không phụ trách vị trí nào đang tuyển thì trang này rỗng — đưa họ sang đúng
+  // việc của họ thay vì để nhìn một trang trắng.
+  if (scopedToOwn && positions.length === 0) redirect("/staff/recruit/interviews");
 
   // Dựng dòng cho bảng sàng lọc — format ngày và gom nhãn vòng phỏng vấn Ở SERVER để component
   // client không phải kéo theo bộ định dạng ngày (và giữ đúng chuẩn dd/mm/yyyy của app, 10.19).
@@ -142,6 +161,14 @@ export default async function RecruitPage() {
           )}
         </div>
       </div>
+
+      {/* Nói thẳng phạm vi đang xem — không có dòng này thì trưởng bộ phận tưởng công ty chỉ tuyển
+          đúng mấy vị trí họ nhìn thấy. */}
+      {scopedToOwn && (
+        <p className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-muted-foreground">
+          {t("scopedToOwnPositions")}
+        </p>
+      )}
 
       {perms.canManage && <UploadCvForm positions={openPositions} />}
 

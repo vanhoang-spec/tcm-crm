@@ -8,9 +8,9 @@ import { DEFAULT_OFFER_BODY, OFFER_DEFAULT_KEY, OFFER_VARS, offerBodyToBlocks, p
 /**
  * Dựng THƯ MỜI NHẬN VIỆC từ mẫu của phòng ban + số liệu trên offer (TD-2d).
  *
- * ⚠ Hàm KHÔNG gác quyền — người gọi gác (`recruit.decide`).
+ * ⚠ Hàm KHÔNG gác quyền — người gọi gác (`recruit.offer.manage`).
  * ⚠ Có LƯƠNG: mọi đường đọc phải cân nhắc `canSeeExpectedSalary`-tương-đương. Trang gọi hàm này đã
- * gác bằng `recruit.decide` (HR Manager + BGĐ) nên số lương chỉ tới đúng hai vai đó.
+ * gác bằng `recruit.offer.manage` (chỉ Senior HR Manager) nên số lương chỉ tới đúng vai đó.
  */
 
 /** Mẫu của phòng ban, rơi về bản DEFAULT, rơi tiếp về bản mặc định trong code. */

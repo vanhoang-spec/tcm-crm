@@ -152,6 +152,24 @@ export function emailTemplateDef(code: string): EmailTemplateDef | null {
   return EMAIL_TEMPLATES.find((t) => t.code === code) ?? null;
 }
 
+/**
+ * Hai mẫu thư thuộc KHÂU OFFER — đòi `recruit.offer.manage` (chỉ Senior HR Manager), KHÔNG phải
+ * `recruit.email.send` như ba mẫu còn lại.
+ *
+ * Quyết định chủ dự án 24/08/2026: nhân sự hành chính gửi được thư hẹn lịch và thư từ chối, nhưng
+ * thư mời nhận việc thì "chỉ Senior HR Manager review để sửa cuối cùng và gửi đi".
+ * `ONBOARDING_NOTICE` đi cùng nhóm vì nó chỉ phát sinh SAU KHI ứng viên nhận offer — nó là bước
+ * cuối của chính khâu đó, và nó công bố một quyết định tuyển dụng ra cho trưởng bộ phận.
+ *
+ * ⚠ Đây là danh sách CHO PHÉP NGƯỢC: thêm mẫu thư mới mà quên khai ở đây thì nó rơi vào nhóm
+ * `recruit.email.send` (rộng hơn). Thêm mẫu nào thuộc khâu offer thì phải thêm vào đây.
+ */
+export const OFFER_STAGE_TEMPLATES: readonly string[] = ["OFFER", "ONBOARDING_NOTICE"];
+
+export function isOfferStageTemplate(code: string): boolean {
+  return OFFER_STAGE_TEMPLATES.includes(code);
+}
+
 const VAR_RE = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g;
 
 export type RenderResult = {

@@ -4465,7 +4465,8 @@
       "errNoEmail": "Ứng viên chưa có email hợp lệ.",
       "errMissingVars": "Còn biến chưa có giá trị trong thư.",
       "errSendFailed": "Gửi không thành công.",
-      "errGeneric": "Có lỗi, thử lại."
+      "errGeneric": "Có lỗi, thử lại.",
+      "errNoOfferPerm": "Chỉ Senior HR Manager được soạn và gửi thư mời nhận việc."
     },
     "expectedSalary": "Lương mong muốn (VND)",
     "expectedSalaryHint": "Chỉ HR, trưởng bộ phận và người quản lý trực tiếp của vị trí này nhìn thấy ô lương.",
@@ -4692,7 +4693,11 @@
     "errWebTooLarge": "Trang này quá nặng.",
     "errWebTimeout": "Trang này phản hồi quá lâu.",
     "errWebEmpty": "Không lấy được chữ nào từ trang này.",
-    "openCvUrl": "Mở link portfolio"
+    "openCvUrl": "Mở link portfolio",
+    "scopedToOwnPositions": "Bạn đang xem phạm vi của bộ phận mình: chỉ những vị trí bạn phụ trách và ứng viên của các vị trí đó. Vị trí tuyển để thay chính bạn (nếu có) không hiện ở đây.",
+    "fieldReplaces": "Tuyển để thay nhân sự",
+    "replacesNone": "không thay ai",
+    "replacesHint": "Chọn người nếu vị trí này tuyển để THAY một nhân sự đang làm. Người được chọn sẽ không nhìn thấy vị trí này lẫn ứng viên của nó, kể cả khi họ là trưởng bộ phận."
   },
   "myAdvances": {
     "title": "Tạm ứng của tôi",

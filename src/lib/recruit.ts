@@ -141,17 +141,44 @@ export function canSeeExpectedSalary(opts: {
   viewerStaffId: string | null;
   departmentLeadStaffId: string | null;
   hiringManagerStaffId: string | null;
+  /** Nhân sự mà vị trí này tuyển để THAY THẾ — xem isReplacedBySelf. */
+  replacesStaffId?: string | null;
 }): boolean {
+  // ⚠ Người BỊ THAY không được xem gì của chính vị trí thay mình, kể cả mức lương — và chốt này
+  // phải đứng TRƯỚC mọi cửa khác, gồm cả mã quyền. Đặt sau là trưởng phòng NS bị thay vẫn xem được.
+  if (isReplacedBySelf(opts.viewerStaffId, opts.replacesStaffId ?? null)) return false;
   if (opts.hasSalaryPermission) return true;
   if (!opts.viewerStaffId) return false;
   return opts.viewerStaffId === opts.departmentLeadStaffId || opts.viewerStaffId === opts.hiringManagerStaffId;
 }
 
 /**
+ * Người xem CÓ PHẢI là người mà vị trí này đang tuyển để thay thế không.
+ *
+ * Quyết định chủ dự án 24/08/2026: trưởng bộ phận thấy ứng viên của phòng mình, **TRỪ** tuyển dụng
+ * để thay đúng vị trí của mình. Cách nhận biết là Ô CHỌN TAY trên vị trí (`JobPosition.replacesStaffId`),
+ * KHÔNG đoán theo tên chức danh — chức danh là chữ tự do, lệch một chữ là người bị thay VẪN thấy hồ
+ * sơ thay chính mình, tức sai về phía nguy hiểm và không ai biết.
+ *
+ * ⚠ Chốt này là TUYỆT ĐỐI, thắng cả mã quyền: nếu ngày nào đó tuyển thay chính Trưởng phòng Nhân sự
+ * thì người đó cũng không được thấy, dù họ có `recruit.view`. Người khác trong HR + BGĐ vẫn thấy
+ * bình thường nên luồng không kẹt.
+ */
+export function isReplacedBySelf(viewerStaffId: string | null, replacesStaffId: string | null): boolean {
+  return !!viewerStaffId && !!replacesStaffId && viewerStaffId === replacesStaffId;
+}
+
+/**
  * Người phỏng vấn được mở hồ sơ ứng viên mà mình được phân công, dù không có quyền tuyển dụng.
  * Đây chính là yêu cầu "khi phỏng vấn thì người phỏng vấn nhìn thấy thông tin căn bản và CV".
  */
-export function canOpenCandidate(opts: { hasRecruitView: boolean; isAssignedInterviewer: boolean }): boolean {
+export function canOpenCandidate(opts: {
+  hasRecruitView: boolean;
+  isAssignedInterviewer: boolean;
+  /** true = người xem chính là người vị trí này tuyển để thay — chặn tuyệt đối. */
+  isReplacedBySelf?: boolean;
+}): boolean {
+  if (opts.isReplacedBySelf) return false;
   return opts.hasRecruitView || opts.isAssignedInterviewer;
 }
 

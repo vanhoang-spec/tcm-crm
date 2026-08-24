@@ -59,7 +59,7 @@ const ERR: Record<string, string> = {
  * ⚠ Mỗi bước là MỘT form riêng, không lồng nhau (HTML cấm form lồng form — HANDOVER 10.39/10.60).
  * ⚠ Form chặn `reset` (React 19 xoá cả ô chữ lẫn select sau mỗi lần action chạy — HANDOVER 10.37).
  */
-export function OfferPanel({ candidateId, offer, canDecide }: { candidateId: string; offer: OfferPanelView | null; canDecide: boolean }) {
+export function OfferPanel({ candidateId, offer, canOffer }: { candidateId: string; offer: OfferPanelView | null; canOffer: boolean }) {
   const t = useTranslations("recruit.offer");
   const [saveState, saveAction, saving] = useActionState<OfferState, FormData>(saveOffer, {});
   const [sendState, sendAction, sending] = useActionState<OfferState, FormData>(sendOffer, {});
@@ -73,7 +73,9 @@ export function OfferPanel({ candidateId, offer, canDecide }: { candidateId: str
   const [decline, setDecline] = useState("");
   const [showLetter, setShowLetter] = useState(false);
 
-  if (!canDecide) return null;
+  // ⚠ Cổng THẬT ở server (5 action + route .docx + chỗ nạp dữ liệu) — dòng này chỉ để không vẽ
+  // khối rỗng. Từ 24/08/2026 là `recruit.offer.manage`, KHÔNG còn dùng chung `recruit.decide`.
+  if (!canOffer) return null;
 
   const err = (s: OfferState) => (s.error ? t(ERR[s.error] ?? "errGeneric") : null);
   const st = offer?.status ?? "NONE";

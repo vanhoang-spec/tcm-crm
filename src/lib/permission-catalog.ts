@@ -205,6 +205,12 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "recruit.ai_parse", module: "recruit", labelVi: "Dùng AI đọc CV (tốn phí theo lượt)", labelEn: "Use AI to read CVs (billed per call)" },
   { code: "recruit.salary.view", module: "recruit", labelVi: "Xem lương mong muốn của ứng viên", labelEn: "View candidate expected salary", sensitive: true },
   { code: "recruit.interview.manage", module: "recruit", labelVi: "Đặt lịch phỏng vấn, phân công người phỏng vấn", labelEn: "Schedule interviews & assign interviewers" },
+  // ⚠ TÁCH KHỎI `recruit.decide` ngày 24/08/2026 (quyết định chủ dự án): `decide` là QUYẾT ĐỊNH
+  // cuối nhận/loại (BGĐ + Trưởng phòng NS), còn mã này là THI HÀNH thư mời nhận việc — soạn, sửa
+  // lần cuối, xuất Word, gửi cho ứng viên, và báo onboarding cho trưởng bộ phận. Chỉ Senior HR
+  // Manager. Không gộp lại: nhân sự HR khác vẫn cần làm hết phần sàng lọc + phỏng vấn + thư từ
+  // chối, chỉ riêng offer thì không được chạm.
+  { code: "recruit.offer.manage", module: "recruit", labelVi: "Soạn & gửi thư mời nhận việc (Job Offer)", labelEn: "Draft & send job offers", sensitive: true },
   { code: "recruit.decide", module: "recruit", labelVi: "Chốt kết quả tuyển: Thành công / Từ chối", labelEn: "Decide outcome: hire / reject", sensitive: true },
   // ⚠ Gửi thư RA NGOÀI công ty là mức rủi ro khác hẳn quyết định nội bộ: thư đã đi thì không thu hồi
   // được, và nó mang danh nghĩa công ty. Vì vậy tách mã riêng thay vì dùng chung recruit.interview.manage.

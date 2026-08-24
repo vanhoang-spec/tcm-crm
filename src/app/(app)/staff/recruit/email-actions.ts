@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStaffId } from "@/lib/current-staff";
-import { requirePermission } from "@/lib/permissions";
-import { emailTemplateDef, isRecruitEmailCode, type RecruitEmailCode } from "@/lib/recruit-email";
+import { requirePermission, hasPermission } from "@/lib/permissions";
+import { emailTemplateDef, isRecruitEmailCode, type RecruitEmailCode, isOfferStageTemplate } from "@/lib/recruit-email";
 import { buildEmailPreview, sendRecruitEmail, type EmailPreview } from "@/lib/recruit-email-server";
 
 /**
@@ -103,6 +103,11 @@ export async function previewCandidateEmail(_prev: SendState, formData: FormData
   const candidateId = String(formData.get("candidateId") ?? "");
   const code = String(formData.get("code") ?? "");
   if (!candidateId || !isRecruitEmailCode(code)) return { error: "BAD_INPUT" };
+  // ⚠ Thư khâu OFFER đòi ĐẶC QUYỀN THÊM — kiểm bằng hasPermission BÊN TRONG action đã có
+  // requirePermission ở đầu (mirror mẫu finance.vendor_payment.over_cap / mkt.generate).
+  // Chặn ngay ở BẢN XEM TRƯỚC chứ không chỉ ở bước gửi: bản xem trước là toàn văn thư mời nhận
+  // việc, trong đó có MỨC LƯƠNG.
+  if (isOfferStageTemplate(code) && !(await hasPermission("recruit.offer.manage"))) return { error: "NO_OFFER_PERM" };
 
   const preview = await buildEmailPreview(candidateId, code as RecruitEmailCode, await getCurrentStaffId(), readExtraVars(formData));
   if (!preview) return { error: "NOT_FOUND" };
@@ -121,6 +126,9 @@ export async function sendCandidateEmail(_prev: SendState, formData: FormData): 
   const candidateId = String(formData.get("candidateId") ?? "");
   const code = String(formData.get("code") ?? "");
   if (!candidateId || !isRecruitEmailCode(code)) return { error: "BAD_INPUT" };
+  // ⚠ Kiểm LẠI ở bước gửi, không tin bước xem trước đã kiểm: hai action là hai endpoint độc lập,
+  // gọi thẳng `sendCandidateEmail` mà bỏ qua `previewCandidateEmail` là chuyện làm được.
+  if (isOfferStageTemplate(code) && !(await hasPermission("recruit.offer.manage"))) return { error: "NO_OFFER_PERM" };
 
   const staffId = await getCurrentStaffId();
   const res = await sendRecruitEmail(candidateId, code as RecruitEmailCode, staffId, readExtraVars(formData));

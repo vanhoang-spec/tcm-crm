@@ -3,6 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions";
+import { getCurrentStaffId } from "@/lib/current-staff";
+import { notReplacingWhere } from "../access";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
@@ -22,6 +24,7 @@ export default async function RecruitArchivePage({
   searchParams: Promise<{ dept?: string; position?: string; status?: string }>;
 }) {
   await requirePermission("recruit.view");
+  const meId = await getCurrentStaffId();
   const t = await getTranslations("recruit");
   const sp = await searchParams;
 
@@ -34,7 +37,21 @@ export default async function RecruitArchivePage({
       where: {
         status: status === "ALL" ? { in: ["HIRED", "REJECTED"] } : status,
         ...(sp.position ? { positionId: sp.position } : {}),
-        ...(sp.dept ? { position: { departmentId: sp.dept } } : {}),
+        // ⚠ MỘT khoá `position` duy nhất, gộp cả bộ lọc phòng ban lẫn chốt "người bị thay".
+        // Viết thành hai spread `{ position: ... }` trong cùng object là khoá sau ĐÈ khoá trước và
+        // một trong hai điều kiện biến mất trong im lặng — đúng lỗi đã cắn ở đợt chia sẻ Thu mua
+        // cho phòng Sản xuất (HANDOVER 10.55), tsc/eslint/build đều sạch.
+        //
+        // Chốt "người BỊ THAY không thấy hồ sơ của vị trí thay mình" là TUYỆT ĐỐI (lib/recruit.ts →
+        // isReplacedBySelf): áp cả ở đây, kể cả với người có `recruit.view`.
+        ...(sp.dept || meId
+          ? {
+              position: {
+                ...(sp.dept ? { departmentId: sp.dept } : {}),
+                ...(meId ? notReplacingWhere(meId) : {}),
+              },
+            }
+          : {}),
       },
       orderBy: { decidedAt: "desc" },
       take: 300,

@@ -3763,6 +3763,107 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       đọc `.doc` đời cũ · nhiều link web cho một lượt (hiện MỘT link) · tự chấm AI ngay sau khi tải lên
       (đúng luật "AI do người BẤM") · gộp hồ sơ trùng khi cùng một ứng viên nộp nhiều lần.
 
+68. **TUYỂN DỤNG — PHÂN VAI HR / HÀNH CHÍNH / TRƯỞNG BỘ PHẬN (24/08/2026)** (migration VIẾT TAY
+    `20260824100000_recruit_position_replaces`; **1 mã quyền mới `recruit.offer.manage`, 151 → 152**).
+    Quyết định chủ dự án, ba ý:
+    1. **Nhân sự HÀNH CHÍNH (Châu — role `ADMIN_STAFF`)** vào luồng: nhận CV · chạy AI chấm · đề xuất
+       phỏng vấn và phân công người phỏng vấn · gửi thư hẹn lịch · gửi thư từ chối.
+    2. **Tới khâu OFFER thì CHỈ Senior HR Manager (Yến)** review, sửa lần cuối và gửi cho ứng viên.
+    3. **Trưởng bộ phận** thấy ứng viên của phòng mình, **TRỪ** vị trí tuyển để thay chính mình.
+    Kèm xác nhận: **chấm CV vẫn dùng DeepSeek** (`aiChatJson` từ `lib/ai/deepseek`) — module MKT đổi
+    sang Claude ở 10.61 KHÔNG đụng tuyển dụng.
+
+    **(a) `recruit.offer.manage` — tách khâu THI HÀNH offer khỏi QUYẾT ĐỊNH nhận/loại.**
+    - Trước đây `recruit.decide` gác cả hai. Nay `decide` giữ nguyên (BGĐ + Trưởng phòng NS = quyết
+      định nhận hay loại), còn mã mới gác **5 action offer + route xuất Word + chỗ NẠP dữ liệu offer
+      trên trang chi tiết** — chỉ `HR_MANAGER`.
+    - ⚠ **CỐ Ý KHÔNG cấp cho BGĐ.** "Chỉ có Senior HR Manager" là chữ của chủ dự án; BGĐ vẫn quyết
+      định nhận/loại, còn soạn và bấm gửi thư mời là khâu thi hành của phòng Nhân sự. BGĐ muốn chạm
+      thì tick ở `/settings/roles` — không cần deploy.
+    - ⚠ **Hai mẫu thư `OFFER` + `ONBOARDING_NOTICE` cũng đòi mã này**, không phải `recruit.email.send`
+      (`OFFER_STAGE_TEMPLATES` trong `lib/recruit-email.ts`). Kiểm ở **CẢ bản xem trước LẪN bước gửi**:
+      hai action là hai endpoint độc lập, gọi thẳng `sendCandidateEmail` mà bỏ qua preview là làm được;
+      và bản xem trước thư OFFER có MỨC LƯƠNG nên tự nó đã là thứ phải chặn.
+      ⚠ Danh sách này là **cho phép ngược**: thêm mẫu thư mới mà quên khai thì nó rơi vào nhóm rộng hơn.
+
+    **(b) `JobPosition.replacesStaffId` — ô CHỌN TAY, không đoán theo chức danh.**
+    - Người được chọn không thấy vị trí đó lẫn ứng viên của nó. ⚠ Chốt này **TUYỆT ĐỐI, thắng cả mã
+      quyền**: tuyển thay chính Trưởng phòng Nhân sự thì người đó cũng không thấy, dù có `recruit.view`.
+    - ⚠ **Đoán theo tên chức danh đã bị BÁC** (chủ dự án chọn phương án ô tick): chức danh là chữ tự do,
+      lệch một chữ ("Trưởng phòng Sản xuất" vs "Production Manager") là người bị thay VẪN đọc được hồ sơ
+      thay chính mình — sai về phía nguy hiểm VÀ không ai biết. HR quên tick thì lộ, nhưng đó là lỗi
+      nhìn thấy được.
+    - Migration **viết tay**: bản `migrate diff` sinh ra là RedefineTables (DROP TABLE `job_position`)
+      trong khi `candidate` có FK trỏ tới và production đang có dữ liệu tuyển dụng thật. SQLite CHO PHÉP
+      `ALTER TABLE ... ADD COLUMN ... REFERENCES` miễn mặc định NULL ⇒ 0 lệnh DROP, `migrate diff` rỗng.
+
+    **(c) Trưởng bộ phận nay CÓ danh sách để duyệt — trước đây yêu cầu này chưa dùng được thật.**
+    - `/staff/recruit` cũ đòi `recruit.view` và đá người không có mã đó sang trang lịch phỏng vấn, nên
+      trưởng bộ phận chỉ mở được hồ sơ khi có sẵn link — không có đường nào để tìm. Nay trang có HAI
+      phạm vi, quyết định ở **tầng truy vấn**: có `recruit.view` → toàn bộ; không có nhưng phụ trách vị
+      trí (trưởng phòng hoặc quản lý trực tiếp) → **chỉ vị trí của mình + ứng viên của chúng**; không
+      thuộc hai nhóm → sang lịch phỏng vấn. Có băng nói rõ phạm vi đang xem.
+
+    **(d) ⚠ LỖ HỔNG LƯƠNG ĐÃ VÁ — mở ra đúng lúc Châu được cấp quyền.** `parseCvWithAi` trả nguyên
+    `expectedSalary` về payload bất kể người bấm có `recruit.salary.view` hay không; form chỉ ẩn ô bằng
+    `canSeeSalary` ở **JSX**, nên số vẫn nằm trong phản hồi của server action và mở DevTools là đọc được.
+    Trước 24/08 vô hại vì mọi vai có `ai_parse` đều có `salary.view`; từ khi hành chính chạy AI mà KHÔNG
+    xem lương thì đó là rò thật. Nay cắt khỏi payload. Đúng bài học "gate ở TẦNG DỮ LIỆU" (10.13).
+    - **Hệ quả đã biết và chủ dự án đã chọn:** Châu bấm Lưu thì ô lương bị BỎ QUA ⇒ mức lương AI đọc
+      được từ CV không được ghi lại; Yến (hoặc trưởng bộ phận đang tuyển) tự mở CV nhập tay.
+
+    **(e) ⚠ HAI LỖI `where` ĐÃ BẮT ĐƯỢC TRONG LÚC LÀM — đọc trước khi viết bộ lọc Prisma:**
+    1. **`NOT: { replacesStaffId: meId }` LOẠI SẠCH dòng NULL.** `NOT (cot = 'x')` với `cot IS NULL` cho
+       ra NULL chứ không phải TRUE. Đo trên dev.db: bản `NOT` trả **0/7** vị trí, bản đúng
+       `OR: [{ null }, { not }]` trả **6/7**. Im lặng tuyệt đối — trang vẫn render, chỉ là rỗng; browser
+       bắt được vì ô chọn vị trí tụt từ 7 xuống 1. **Lần thứ hai repo vấp lớp lỗi này** (lần trước:
+       `aiReviewStatus` ở TD-2a, 10.62). Nay gom về `notReplacingWhere()` — MỘT nguồn sự thật cho cả
+       trang chính, tab hiển thị và Kho hồ sơ.
+    2. **Hai khoá trùng trong một object `where`.** `ownedPositionWhere` có `OR` của "phụ trách" và `OR`
+       của "không bị thay" ⇒ khoá sau đè khoá trước (tsc bắt được, TS2783); trang Kho hồ sơ có hai
+       spread `{ position: ... }` ⇒ tsc KHÔNG bắt. Cả hai nay gộp bằng `AND` / một khoá duy nhất. Cùng
+       lỗi đã cắn ở đợt chia sẻ Thu mua cho Sản xuất (10.55).
+
+    **(f) Quyền đo được — GIỐNG HỆT NHAU trên DB dựng-từ-đầu và dev.db:**
+
+    | mã | số vai | vai |
+    |---|---|---|
+    | `recruit.view` | 4 | ADMIN_STAFF · BGĐ · HR_MANAGER · HR_STAFF |
+    | `recruit.manage` | 3 | ADMIN_STAFF · HR_MANAGER · HR_STAFF |
+    | `recruit.ai_parse` | 3 | ADMIN_STAFF · HR_MANAGER · HR_STAFF |
+    | `recruit.interview.manage` | 3 | ADMIN_STAFF · HR_MANAGER · HR_STAFF |
+    | `recruit.email.send` | 3 | ADMIN_STAFF · HR_MANAGER · HR_STAFF |
+    | `recruit.salary.view` | 3 | BGĐ · HR_MANAGER · HR_STAFF *(KHÔNG có hành chính)* |
+    | `recruit.decide` | 2 | BGĐ · HR_MANAGER |
+    | `recruit.jd.manage` | 2 | BGĐ · HR_MANAGER |
+    | **`recruit.offer.manage`** | **1** | **HR_MANAGER** |
+
+    dev.db 1352 → **1358** (+6 = 5 mã cho hành chính + 1 mã offer). Seed lần hai **no-op**.
+    ⚠ Ghi chú cũ trong seed "ADMIN_STAFF không tham gia tuyển dụng" đã hết đúng — đã sửa tại chỗ.
+
+    - **Verify: 11 assertion thuần** (cổng theo bản ghi, gồm ca người có mã quyền vẫn bị chặn khi bị
+      thay) **+ 4 phép đếm trên DB** (admin thấy 7/7 · Hiệp thấy 6/7 · Hiệp phụ trách đúng 1 vị trí ·
+      Hiệp thấy đúng 1 ứng viên) **+ browser với 3 vai**:
+      · **Hiệp (Trưởng phòng Creative, bị vị trí "Designer" thay)**: chỉ thấy "Senior Designer", có băng
+        phạm vi, **HTML thô KHÔNG chứa "UV Designer"**, gõ thẳng URL hồ sơ đó bị chặn (không tên, không
+        lương), hồ sơ vị trí kia mở được 200 và thấy lương (đúng quyền trưởng phòng sẵn có).
+      · **Châu (ADMIN_STAFF)**: mở được hồ sơ, có nút AI + hẹn lịch + xoá hồ sơ; **không có ô lương,
+        HTML không chứa con số lương**; ô chọn mẫu thư CHỈ có thư từ chối và **chuỗi `value="OFFER"`
+        không có trong HTML**; **giả mạo** bằng cách chèn option `OFFER` rồi gửi ⇒ server trả
+        `NO_OFFER_PERM`, **không có bản xem trước nào**; route xuất Word offer trả **403**.
+      · **Yến (HR_MANAGER)**: thấy ô lương, cả 2 mẫu thư gồm OFFER, có khối thư mời trên màn hình, route
+        xuất Word trả 404 (qua cổng quyền, chỉ là chưa có offer nào).
+      tsc · eslint · i18n **0/0 (4770 key)** · `next build` sạch · `migrate diff` rỗng · `db:seed` sạch.
+      Dữ liệu test đã dọn (2 ứng viên · 2 mẫu thư · gỡ `replacesStaffId`), dev.db về 36/68/25 · 1358 grant.
+    - ⚠ **Lỗi i18n bắt được trên browser:** khoá `errNoOfferPerm` đặt ở namespace `recruit` trong khi
+      panel thư đọc `recruit.email` ⇒ màn hình hiện chuỗi thô `recruit.email.errNoOfferPerm`. **Script
+      parity VẪN 0/0** vì cả hai file đều có khoá — đúng lớp mù đã ghi ở 10.19. Đã chuyển đúng namespace.
+    - **CHƯA LÀM (cố ý):** trưởng bộ phận chưa xem được Kho hồ sơ (`/staff/recruit/archive` vẫn đòi
+      `recruit.view`; chốt "người bị thay" thì đã áp cả ở đó) · chưa chặn theo SỐ VÒNG phỏng vấn (Châu
+      phân công được mọi vòng — chủ dự án xác nhận vòng 1 do Yến PHỎNG VẤN, đó là dữ liệu chứ không phải
+      quyền) · chưa tự chọn sẵn Senior HR Manager làm người phỏng vấn vòng 1 · chưa có màn hình liệt kê
+      "những ai đang bị ẩn khỏi vị trí nào".
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

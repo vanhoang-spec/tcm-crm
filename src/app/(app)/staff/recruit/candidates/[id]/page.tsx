@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { loadCriteria } from "@/lib/recruit-score-server";
 import { scopeForPosition } from "@/lib/recruit-scoring";
 import type { Locale } from "@/i18n/locales";
-import { EMAIL_TEMPLATES } from "@/lib/recruit-email";
+import { EMAIL_TEMPLATES, isOfferStageTemplate } from "@/lib/recruit-email";
 import { loadEmailLog, loadEmailTemplate } from "@/lib/recruit-email-server";
 import { loadOffer } from "@/lib/recruit-offer-server";
 import { probationWarning } from "@/lib/recruit-offer";
@@ -107,20 +107,26 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
 
   // Thư (TD-2b): chỉ liệt kê mẫu ĐÃ DUYỆT — mẫu chưa duyệt bấm vào cũng bị server chặn, đưa vào ô
   // chọn chỉ để người dùng bấm rồi nhận lỗi là thiết kế tồi.
-  // ⚠ Offer chứa LƯƠNG — chỉ nạp khi người xem có recruit.decide. Không nạp thì không có đường
-  // nào lọt vào HTML (bài học gate ở TẦNG TRUY VẤN, HANDOVER 10.13).
+  // ⚠ Offer chứa LƯƠNG — chỉ nạp khi người xem có `recruit.offer.manage` (từ 24/08/2026 là mã
+  // riêng, chỉ Senior HR Manager). Không nạp thì không có đường nào lọt vào HTML (bài học gate ở
+  // TẦNG TRUY VẤN, HANDOVER 10.13).
   const [emailLogs, emailTpls, offerRaw] = await Promise.all([
     loadEmailLog(id),
     Promise.all(EMAIL_TEMPLATES.map((d) => loadEmailTemplate(d.code))),
-    perms.canDecide ? loadOffer(id, perms.meId) : Promise.resolve(null),
+    perms.canOffer ? loadOffer(id, perms.meId) : Promise.resolve(null),
   ]);
   const offerView = offerRaw ? { ...offerRaw, probationBelowLegal: probationWarning(offerRaw.probationPct) } : null;
   // ⚠ Đọc ĐỘC LẬP với offerView: người có quyền XOÁ (recruit.manage) chưa chắc có recruit.decide,
   // mà offerView chỉ được nạp khi có recruit.decide — dựa vào nó là HR_STAFF luôn thấy "không có
   // offer" và nút xoá mở ra oan. Chỉ đếm, không đọc số liệu lương.
   const offerExists = (await prisma.candidateOffer.count({ where: { candidateId: id } })) > 0;
+  // ⚠ Ô chọn mẫu thư CHỈ liệt kê mẫu người này gửi được: hai mẫu khâu OFFER đòi `recruit.offer.manage`.
+  // Để chúng trong danh sách rồi để người dùng bấm và nhận lỗi là thiết kế tồi — và bản xem trước
+  // của thư OFFER có MỨC LƯƠNG, nên đây cũng là một lớp chặn chứ không chỉ là dọn giao diện.
   const emailChoices = emailTpls.flatMap((tpl) =>
-    tpl && tpl.approvedAt ? [{ code: tpl.def.code, label: tpl.def.labelVi, audience: tpl.def.audience }] : [],
+    tpl && tpl.approvedAt && (perms.canOffer || !isOfferStageTemplate(tpl.def.code))
+      ? [{ code: tpl.def.code, label: tpl.def.labelVi, audience: tpl.def.audience }]
+      : [],
   );
 
   // TD-2c: bộ tiêu chí PHỎNG VẤN có trọng số, chọn theo cờ quản lý của vị trí.
@@ -264,7 +270,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
         </details>
       )}
 
-      <OfferPanel candidateId={candidate.id} offer={offerView} canDecide={perms.canDecide} />
+      <OfferPanel candidateId={candidate.id} offer={offerView} canOffer={perms.canOffer} />
 
       <EmailPanel candidateId={candidate.id} choices={emailChoices} logs={emailLogs} canSend={perms.canEmail} />
 

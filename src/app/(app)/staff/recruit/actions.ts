@@ -299,6 +299,15 @@ export async function parseCvWithAi(_prev: ParseState, formData: FormData): Prom
 
   await prisma.candidate.update({ where: { id: candidate.id }, data: { aiParsedAt: new Date() } });
   await audit(candidate.id, "ai_parse", "*");
+
+  // ⚠ CẮT MỨC LƯƠNG KHỎI PAYLOAD khi người bấm không được xem — KHÔNG phải phòng xa.
+  // Form ẩn ô lương bằng `canSeeSalary` ở JSX, nhưng giá trị vẫn nằm nguyên trong phản hồi của
+  // server action, tức mở DevTools là đọc được. Trước 24/08/2026 chuyện này vô hại vì mọi vai có
+  // `recruit.ai_parse` đều có `recruit.salary.view`; từ khi nhân sự HÀNH CHÍNH được chạy AI mà
+  // KHÔNG được xem lương thì đây là lỗ hổng thật. Đúng bài học "gate ở TẦNG DỮ LIỆU, không ở JSX"
+  // (HANDOVER 10.13).
+  const gate = await gateCandidate(candidate.id, await getRecruitPerms());
+  if (!gate?.canSeeSalary) return { parsed: { ...parsed.data, expectedSalary: null } };
   return { parsed: parsed.data };
 }
 

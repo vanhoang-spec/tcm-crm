@@ -2412,19 +2412,31 @@ async function main() {
    * nhóm là lặp lại đúng bẫy SECURITY_GUARD-trong-nhóm-WAREHOUSE đã phải vá (mục 10.15).
    */
   const RECRUIT_POLICY: Record<string, string[]> = {
-    "recruit.view": ["HR_MANAGER", "HR_STAFF", "BOARD_OF_MANAGEMENT"],
-    "recruit.manage": ["HR_MANAGER", "HR_STAFF"],
+    "recruit.view": ["HR_MANAGER", "HR_STAFF", "ADMIN_STAFF", "BOARD_OF_MANAGEMENT"],
+    "recruit.manage": ["HR_MANAGER", "HR_STAFF", "ADMIN_STAFF"],
     // JD gắn với cơ cấu tổ chức → sửa ở Settings, giữ ở cấp trưởng phòng.
     "recruit.jd.manage": ["HR_MANAGER", "BOARD_OF_MANAGEMENT"],
     // AI đọc CV tốn tiền theo LƯỢT — cùng lý do tách mã với clients.kb.generate / mkt.generate.
-    "recruit.ai_parse": ["HR_MANAGER", "HR_STAFF"],
+    "recruit.ai_parse": ["HR_MANAGER", "HR_STAFF", "ADMIN_STAFF"],
+    // ⚠ CỐ Ý KHÔNG có ADMIN_STAFF (quyết định chủ dự án 24/08/2026): nhân sự hành chính làm phần
+    // tiếp nhận + sàng lọc + hẹn lịch, nhưng KHÔNG nhìn mức lương ứng viên mong muốn.
+    // Hệ quả đã biết và đã chấp nhận: người không có mã này bấm Lưu thì ô lương bị BỎ QUA, nên mức
+    // lương AI đọc được từ CV sẽ không được ghi lại — Senior HR Manager tự mở CV nhập tay.
     "recruit.salary.view": ["HR_MANAGER", "HR_STAFF", "BOARD_OF_MANAGEMENT"],
-    "recruit.interview.manage": ["HR_MANAGER", "HR_STAFF"],
+    "recruit.interview.manage": ["HR_MANAGER", "HR_STAFF", "ADMIN_STAFF"],
     // Chốt nhận/loại là quyết định nhân sự — giữ ở trưởng phòng NS + BGĐ.
     "recruit.decide": ["HR_MANAGER", "BOARD_OF_MANAGEMENT"],
     // TD-2b: gửi thư ra ngoài — giữ trong phòng NS, KHÔNG mở cho BGĐ theo mặc định (BGĐ quyết định
     // nhận/loại, còn việc soạn và bấm gửi thư cho ứng viên là việc của HR).
-    "recruit.email.send": ["HR_MANAGER", "HR_STAFF"],
+    // ⚠ Mã này KHÔNG bao thư OFFER và thư báo onboarding — hai loại đó đòi `recruit.offer.manage`
+    // (xem lib/recruit-email.ts → OFFER_STAGE_TEMPLATES). Nhân sự hành chính gửi được thư hẹn lịch
+    // và thư từ chối, KHÔNG gửi được thư mời nhận việc.
+    "recruit.email.send": ["HR_MANAGER", "HR_STAFF", "ADMIN_STAFF"],
+    // ⚠ CHỈ Senior HR Manager (quyết định chủ dự án 24/08/2026: "chỉ có Senior HR Manager có quyền
+    // review Job Offer để sửa cuối cùng và gửi đi cho ứng viên"). CỐ Ý không có BGĐ: BGĐ QUYẾT ĐỊNH
+    // nhận/loại qua `recruit.decide`, còn soạn và gửi thư mời là khâu THI HÀNH của phòng Nhân sự.
+    // BGĐ muốn chạm vào thì tick ở /settings/roles — không cần deploy.
+    "recruit.offer.manage": ["HR_MANAGER"],
   };
 
   /**
@@ -2976,8 +2988,12 @@ async function main() {
     // 06/08/2026 TUYỂN DỤNG (TD-1) — 7 mã mới. Nguồn sự thật là RECRUIT_POLICY ở trên; mấy dòng
     // dưới CHỈ dịch bảng đó sang đường backfill cho DB ĐANG CHẠY (Vòng 4 bỏ qua role đã có grant).
     //
-    // ⚠ Lọc theo MÃ ROLE, không theo nhóm `HR` — nhóm đó còn có `ADMIN_STAFF` (hành chính), người
-    // không tham gia tuyển dụng. Sửa RECRUIT_POLICY thì phải sửa cả mấy dòng này cho khớp.
+    // ⚠ Lọc theo MÃ ROLE, không theo nhóm `HR`. Sửa RECRUIT_POLICY thì phải sửa cả mấy dòng này cho
+    // khớp — hai đường phải ra CÙNG một kết quả, và cách duy nhất biết là ĐO cả hai (mục 10.15).
+    // ⚠ Ghi chú cũ ở đây nói "ADMIN_STAFF không tham gia tuyển dụng" — KHÔNG còn đúng từ 24/08/2026:
+    // nhân sự hành chính nay làm phần tiếp nhận CV + AI chấm + hẹn lịch + thư từ chối (xem backfill
+    // `20260824_recruit_admin_staff` phía dưới). Bốn dòng roleFilter cũ giữ nguyên vì chúng là
+    // one-shot đã chạy rồi; phần mở thêm đi bằng marker MỚI.
     {
       key: "20260806_recruit_view",
       codes: ["recruit.view", "recruit.salary.view"],
@@ -2998,6 +3014,23 @@ async function main() {
       key: "20260822_recruit_email",
       codes: ["recruit.email.send"],
       roleFilter: (r) => r.code === "HR_MANAGER" || r.code === "HR_STAFF",
+    },
+    // 24/08/2026 — PHÂN VAI LẠI TUYỂN DỤNG (quyết định chủ dự án).
+    //
+    // (a) Nhân sự HÀNH CHÍNH (ADMIN_STAFF) vào luồng: nhận CV, chạy AI chấm, hẹn lịch phỏng vấn và
+    //     phân công người phỏng vấn, gửi thư hẹn lịch + thư từ chối.
+    //     ⚠ CỐ Ý KHÔNG có `recruit.salary.view` — không nhìn lương ứng viên mong muốn.
+    //     ⚠ CỐ Ý KHÔNG có `recruit.decide` / `recruit.offer.manage` — không chạm khâu offer.
+    {
+      key: "20260824_recruit_admin_staff",
+      codes: ["recruit.view", "recruit.manage", "recruit.ai_parse", "recruit.interview.manage", "recruit.email.send"],
+      roleFilter: (r) => r.code === "ADMIN_STAFF",
+    },
+    // (b) Thư mời nhận việc TÁCH khỏi `recruit.decide` — chỉ Senior HR Manager soạn/sửa/gửi.
+    {
+      key: "20260824_recruit_offer",
+      codes: ["recruit.offer.manage"],
+      roleFilter: (r) => RECRUIT_POLICY["recruit.offer.manage"].includes(r.code),
     },
 
     // 16/08/2026 THU MUA (PUR-1) — 4 mã mới, dịch từ PUR_POLICY sang đường backfill (DB đang chạy).

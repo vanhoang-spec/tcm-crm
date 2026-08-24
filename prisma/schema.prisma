@@ -269,6 +269,7 @@ model Staff {
   mktInsightFilesUploaded     MktInsightFile[]          @relation("MktInsightFileUploadedBy")
   creativeSquadsLed           CreativeSquad[]           @relation("CreativeSquadLead")
   jobPositionsManaged         JobPosition[]             @relation("JobPositionHiringManager")
+  jobPositionsReplacing       JobPosition[]             @relation("JobPositionReplaces")
   jobPositionsJdUpdated       JobPosition[]             @relation("JobPositionJdUpdatedBy")
   candidatesCreated           Candidate[]               @relation("CandidateCreatedBy")
   candidatesDecided           Candidate[]               @relation("CandidateDecidedBy")
@@ -3745,6 +3746,14 @@ model JobPosition {
   /// nhìn thấy lương mong muốn của ứng viên (xem lib/recruit.ts → canSeeExpectedSalary).
   hiringManagerStaffId String?
 
+  /// Nhân sự mà vị trí này tuyển để THAY THẾ. Người đó KHÔNG nhìn thấy vị trí này lẫn ứng viên
+  /// của nó — kể cả khi họ là trưởng bộ phận (quyết định chủ dự án 24/08/2026: "trưởng bộ phận thấy
+  /// ứng viên của phòng mình, TRỪ tuyển dụng để thay đúng vị trí của mình").
+  /// ⚠ Là Ô CHỌN TAY, cố ý không đoán theo tên chức danh: chức danh là chữ tự do, lệch một chữ
+  /// ("Trưởng phòng Sản xuất" vs "Production Manager") là người bị thay VẪN thấy hồ sơ thay chính
+  /// mình — sai về phía nguy hiểm. HR quên tick thì lộ, nhưng đoán sai thì lộ mà không ai biết.
+  replacesStaffId String?
+
   /// Vị trí quản lý ⇒ chấm bằng BỘ TIÊU CHÍ MANAGER (có leadership / quản lý nhóm / ownership).
   /// ⚠ Là CỜ TICK, cố ý không đoán từ tên vị trí: "Account Executive" không phải quản lý, nhưng
   /// "Trưởng nhóm Thiết kế" thì có — đoán theo chữ "Manager" trong tên là sai cả hai chiều.
@@ -3763,6 +3772,7 @@ model JobPosition {
   department    Department? @relation(fields: [departmentId], references: [id])
   team          Team?       @relation(fields: [teamId], references: [id])
   hiringManager Staff?      @relation("JobPositionHiringManager", fields: [hiringManagerStaffId], references: [id])
+  replaces      Staff?      @relation("JobPositionReplaces", fields: [replacesStaffId], references: [id])
   jdUpdatedBy   Staff?      @relation("JobPositionJdUpdatedBy", fields: [jdUpdatedById], references: [id])
   candidates    Candidate[]
 

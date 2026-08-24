@@ -22,6 +22,7 @@ export type PositionData = JdBlock & {
   departmentId: string;
   teamId: string;
   hiringManagerStaffId: string;
+  replacesStaffId: string;
 };
 
 const EMPTY_JD: JdBlock = { jdSummary: "", jdResponsibilities: "", jdRequirements: "", jdBenefits: "" };
@@ -68,6 +69,7 @@ export function PositionEditor({
   const [departmentId, setDepartmentId] = useState(position?.departmentId ?? "");
   const [teamId, setTeamId] = useState(position?.teamId ?? "");
   const [managerId, setManagerId] = useState(position?.hiringManagerStaffId ?? "");
+  const [replacesId, setReplacesId] = useState(position?.replacesStaffId ?? "");
   const [jd, setJd] = useState<JdBlock>(position ?? EMPTY_JD);
 
   function applyTemplate(templateId: string) {
@@ -144,6 +146,25 @@ export function PositionEditor({
             ))}
           </select>
           <span className="mt-1 block text-xs text-muted-foreground">{t("hiringManagerHint")}</span>
+        </label>
+
+        {/*
+          Vị trí tuyển để THAY một nhân sự đang làm. Người được chọn sẽ không nhìn thấy vị trí này
+          lẫn ứng viên của nó — kể cả khi họ là trưởng bộ phận của chính phòng đó.
+          ⚠ Là ô CHỌN TAY: app cố ý KHÔNG đoán theo tên chức danh, vì chức danh là chữ tự do và
+          lệch một chữ là người bị thay VẪN đọc được hồ sơ thay chính mình.
+        */}
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("fieldReplaces")}</span>
+          <select name="replacesStaffId" value={replacesId} onChange={(e) => setReplacesId(e.target.value)} className={input}>
+            <option value="">— {t("replacesNone")} —</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-warning">{t("replacesHint")}</span>
         </label>
       </div>
 

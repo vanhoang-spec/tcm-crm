@@ -8,14 +8,14 @@ import { buildOfferDoc } from "@/lib/recruit-offer-server";
 /**
  * Tải THƯ MỜI NHẬN VIỆC dạng .docx (TD-2d).
  *
- * ⚠ Gác bằng `recruit.decide` — văn bản này chứa LƯƠNG. Route API dùng `hasPermission()` rồi trả
+ * ⚠ Gác bằng `recruit.offer.manage` (chỉ Senior HR Manager) — văn bản này chứa LƯƠNG. Route API dùng `hasPermission()` rồi trả
  * 403 (không `requirePermission`, vì route không redirect được) — đúng khuôn 9 route API sẵn có.
  * ⚠ KHÔNG nhận nội dung từ client: dựng lại từ mẫu + số liệu trong DB.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const staffId = await getCurrentStaffId();
   if (!staffId) return new NextResponse("Unauthorized", { status: 401 });
-  if (!(await hasPermission("recruit.decide"))) return new NextResponse("Forbidden", { status: 403 });
+  if (!(await hasPermission("recruit.offer.manage"))) return new NextResponse("Forbidden", { status: 403 });
 
   const { id } = await params;
   const doc = await buildOfferDoc(id, staffId);

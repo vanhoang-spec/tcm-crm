@@ -10,7 +10,8 @@ import { DEFAULT_OFFER_BODY, OFFER_DEFAULT_KEY } from "@/lib/recruit-offer";
 /**
  * TD-2d — THƯ MỜI NHẬN VIỆC: lập → gửi → ứng viên phản hồi → HR điền ngày đi làm → báo onboarding.
  *
- * ⚠ Gác bằng `recruit.decide` (HR Manager + BGĐ) — offer chứa LƯƠNG và là cam kết của công ty với
+ * ⚠ Gác bằng `recruit.offer.manage` (CHỈ Senior HR Manager, tách khỏi `recruit.decide` ngày
+ * 24/08/2026) — offer chứa LƯƠNG và là cam kết của công ty với
  * người ngoài. Không dùng `recruit.interview.manage` (đó là đặt lịch).
  * ⚠ Chỉ dùng `export type Foo = ...` dạng khai báo trong file "use server" (HANDOVER 10.23).
  */
@@ -44,7 +45,7 @@ async function audit(candidateId: string, action: string, payload: unknown) {
 
 /** Lập hoặc sửa offer. Đã GỬI rồi thì vẫn sửa được (đàm phán lại) nhưng phải gửi lại bản mới. */
 export async function saveOffer(_prev: OfferState, formData: FormData): Promise<OfferState> {
-  await requirePermission("recruit.decide");
+  await requirePermission("recruit.offer.manage");
   const candidateId = str(formData.get("candidateId"), 40);
   if (!candidateId) return { error: "BAD_INPUT" };
 
@@ -81,7 +82,7 @@ export async function saveOffer(_prev: OfferState, formData: FormData): Promise<
  * ở đây là bắt họ nói dối trạng thái.
  */
 export async function sendOffer(_prev: OfferState, formData: FormData): Promise<OfferState> {
-  await requirePermission("recruit.decide");
+  await requirePermission("recruit.offer.manage");
   const candidateId = str(formData.get("candidateId"), 40);
   const alsoEmail = String(formData.get("alsoEmail") ?? "") === "1";
   const offer = await prisma.candidateOffer.findUnique({ where: { candidateId }, select: { status: true } });
@@ -111,7 +112,7 @@ export async function sendOffer(_prev: OfferState, formData: FormData): Promise<
  * đổi — nên cả hai cùng ghi `decidedAt/decidedById` để màn hình đọc một chỗ.
  */
 export async function respondOffer(_prev: OfferState, formData: FormData): Promise<OfferState> {
-  await requirePermission("recruit.decide");
+  await requirePermission("recruit.offer.manage");
   const candidateId = str(formData.get("candidateId"), 40);
   const accepted = String(formData.get("accepted") ?? "") === "1";
   const reason = str(formData.get("declineReason"), 500);
@@ -151,7 +152,7 @@ export async function respondOffer(_prev: OfferState, formData: FormData): Promi
  * nó là mốc quyết định phép năm + thâm niên khi hồ sơ chuyển thành nhân sự (HANDOVER 10.38).
  */
 export async function setFirstWorkDate(_prev: OfferState, formData: FormData): Promise<OfferState> {
-  await requirePermission("recruit.decide");
+  await requirePermission("recruit.offer.manage");
   const candidateId = str(formData.get("candidateId"), 40);
   const date = dateOrNull(str(formData.get("firstWorkDate"), 10));
   if (!date) return { error: "BAD_DATE" };
@@ -173,7 +174,7 @@ export async function setFirstWorkDate(_prev: OfferState, formData: FormData): P
  * `JobPosition.hiringManager`). Chặn gửi hai lần bằng `onboardingNotifiedAt`.
  */
 export async function notifyOnboarding(_prev: OfferState, formData: FormData): Promise<OfferState> {
-  await requirePermission("recruit.decide");
+  await requirePermission("recruit.offer.manage");
   const candidateId = str(formData.get("candidateId"), 40);
   const offer = await prisma.candidateOffer.findUnique({
     where: { candidateId },

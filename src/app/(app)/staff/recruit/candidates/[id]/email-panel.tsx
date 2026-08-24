@@ -28,6 +28,7 @@ const ERR: Record<string, string> = {
   NO_EMAIL: "errNoEmail",
   MISSING_VARS: "errMissingVars",
   SEND_FAILED: "errSendFailed",
+  NO_OFFER_PERM: "errNoOfferPerm",
 };
 
 /**

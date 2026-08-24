@@ -37,6 +37,25 @@ export const MAX_MEDIA_BYTES = 10 * 1024 * 1024; // 10MB — hình/video/file (�
 export const MAX_VOICE_BYTES = 20 * 1024 * 1024; // dư dả cho 5 phút thoại nén
 export const MAX_VOICE_SECONDS = 300; // 5 phút
 
+/**
+ * Số file tối đa đính kèm trong MỘT lần gửi (yêu cầu chủ dự án 24/08/2026).
+ * Mỗi file vẫn là MỘT tin nhắn riêng — mô hình dữ liệu là 1 tin = 1 file, không đổi.
+ */
+export const MAX_CHAT_FILES = 10;
+
+/**
+ * ⚠ TRẦN TỔNG DUNG LƯỢNG cho một lần gửi nhiều file — KHÔNG phải phòng xa.
+ *
+ * `next.config.ts` khai `serverActions.bodySizeLimit: "30mb"`. 10 file × 10MB = 100MB thì Next ném
+ * **413 TRƯỚC KHI code của mình chạy**, nên người dùng thấy TRANG VỠ chứ không thấy thông báo lỗi
+ * tử tế (đúng bẫy đã ghi ở HANDOVER 10.13). Vì vậy phải chặn TỔNG, không chỉ từng file.
+ *
+ * Để 25MB chứ không phải đúng 30MB vì trần của Next tính trên RAW body (gồm đệm multipart) — chừa
+ * dư để guard trong code là chỗ báo lỗi, không phải Next.
+ * ⚠ Nâng số này thì phải nâng `bodySizeLimit` TRƯỚC.
+ */
+export const MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024;
+
 const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",

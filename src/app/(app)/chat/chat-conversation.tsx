@@ -57,6 +57,10 @@ import { QUICK_REACTIONS, EMOJI_CATEGORIES } from "@/lib/emoji-data";
 
 const MAX_VOICE_SECONDS = 300; // 5 phút — khớp src/lib/chat-storage.ts (server-side re-check)
 const MAX_MEDIA_MB = 10; // hình/video/file — khớp src/lib/chat-storage.ts
+const MAX_CHAT_FILES = 10; // số file tối đa MỘT lần gửi — khớp src/lib/chat-storage.ts
+// ⚠ Khớp MAX_TOTAL_UPLOAD_BYTES ở chat-storage.ts, và phải NHỎ HƠN bodySizeLimit (30MB) trong
+// next.config.ts: vượt trần đó là Next ném 413 trước khi code chạy ⇒ người dùng thấy TRANG VỠ.
+const MAX_TOTAL_UPLOAD_MB = 25;
 
 type ForwardTarget = { id: string; type: string; title: string };
 
@@ -1290,7 +1294,8 @@ function Composer({
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 
   const [plusOpen, setPlusOpen] = useState(false);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  /** Nhiều file cùng lúc (tối đa MAX_CHAT_FILES) — mỗi file sẽ thành MỘT tin nhắn. */
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
   const [finalDuration, setFinalDuration] = useState(0);
@@ -1359,7 +1364,7 @@ function Composer({
   }, []);
 
   function clearAttachmentState() {
-    setPendingFile(null);
+    setPendingFiles([]);
     setFileError(null);
     if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
     setVoicePreviewUrl(null);
@@ -1392,31 +1397,70 @@ function Composer({
   }
 
   /**
-   * Áp 1 file đã chọn/dán vào state đính kèm — dùng chung cho input "+" và paste ảnh (Ctrl+V).
-   * Luôn đồng bộ lại `fileInputRef.files` bằng DataTransfer (mirror voice-recording ở dưới) —
-   * paste KHÔNG đi qua `<input type=file>` thật nên submit sẽ gửi rỗng nếu bỏ bước này.
+   * Áp danh sách file đã chọn/dán vào state đính kèm — dùng chung cho input "+" và paste ảnh (Ctrl+V).
+   *
+   * ⚠ Luôn đồng bộ lại `fileInputRef.files` bằng DataTransfer (mirror voice-recording ở dưới) —
+   * paste KHÔNG đi qua `<input type=file>` thật nên submit sẽ gửi rỗng nếu bỏ bước này. Đây cũng là
+   * cách bỏ MỘT file khỏi danh sách mà không phải bắt người dùng chọn lại từ đầu.
+   *
+   * ⚠ Chặn TỔNG dung lượng ở đây là BẮT BUỘC, không phải phòng xa: `bodySizeLimit` của Next là 30MB
+   * và nó ném 413 TRƯỚC KHI server action chạy, nên vượt trần là người dùng thấy TRANG VỠ chứ không
+   * thấy thông báo lỗi (HANDOVER 10.13).
    */
-  function applyPickedFile(file: File, kind: "IMAGE" | "VIDEO" | "FILE") {
-    if (file.size > MAX_MEDIA_MB * 1024 * 1024) {
-      setFileError(t("errFileTooLarge"));
+  function applyPickedFiles(picked: File[], kind: "IMAGE" | "VIDEO" | "FILE", append = false) {
+    const base = append ? pendingFiles : [];
+    const next = [...base];
+    for (const f of picked) {
+      if (f.size > MAX_MEDIA_MB * 1024 * 1024) {
+        setFileError(t("errFileTooLarge"));
+        return;
+      }
+      // Trùng tên + trùng cỡ = cùng một file được chọn hai lần; bỏ qua thay vì gửi hai lần.
+      if (next.some((x) => x.name === f.name && x.size === f.size)) continue;
+      next.push(f);
+    }
+    if (next.length === 0) return;
+    if (next.length > MAX_CHAT_FILES) {
+      setFileError(t("errTooManyFiles", { max: MAX_CHAT_FILES }));
+      return;
+    }
+    const total = next.reduce((s, f) => s + f.size, 0);
+    if (total > MAX_TOTAL_UPLOAD_MB * 1024 * 1024) {
+      setFileError(t("errTotalTooLarge", { mb: MAX_TOTAL_UPLOAD_MB }));
       return;
     }
     setFileError(null);
-    if (fileInputRef.current) {
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      fileInputRef.current.files = dt.files;
-      fileInputRef.current.dataset.kind = kind;
-    }
-    setPendingFile(file);
+    syncFileInput(next, kind);
+    setPendingFiles(next);
     setMode(kind === "IMAGE" ? "image" : kind === "VIDEO" ? "video" : "file");
   }
 
+  /** Ghi lại danh sách file vào chính `<input type=file>` để submit gửi đúng những file này. */
+  function syncFileInput(files: File[], kind: "IMAGE" | "VIDEO" | "FILE") {
+    if (!fileInputRef.current) return;
+    const dt = new DataTransfer();
+    for (const f of files) dt.items.add(f);
+    fileInputRef.current.files = dt.files;
+    fileInputRef.current.dataset.kind = kind;
+  }
+
+  function removePendingFile(index: number) {
+    const kind = (fileInputRef.current?.dataset.kind as "IMAGE" | "VIDEO" | "FILE") ?? "FILE";
+    const next = pendingFiles.filter((_, i) => i !== index);
+    setFileError(null);
+    if (next.length === 0) {
+      cancelAttachment();
+      return;
+    }
+    syncFileInput(next, kind);
+    setPendingFiles(next);
+  }
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const files = [...(e.target.files ?? [])];
     const kind = e.target.dataset.kind as "IMAGE" | "VIDEO" | "FILE" | undefined;
-    if (!file || !kind) return;
-    applyPickedFile(file, kind);
+    if (files.length === 0 || !kind) return;
+    applyPickedFiles(files, kind);
   }
 
   /** Ctrl+V dán ảnh screenshot trực tiếp vào ô soạn tin — gửi như đính kèm hình, không cần qua nút "+". */
@@ -1428,8 +1472,9 @@ function Composer({
         const file = item.getAsFile();
         if (!file) continue;
         e.preventDefault();
-        clearAttachmentState();
-        applyPickedFile(file, "IMAGE");
+        // Dán ảnh khi đang có ảnh khác chờ gửi ⇒ CỘNG THÊM (append), không thay thế: người dùng dán
+        // nhiều ảnh liên tiếp là ca thật, xoá sạch mỗi lần dán là mất việc họ vừa làm.
+        applyPickedFiles([file], "IMAGE", mode === "image");
         return;
       }
     }
@@ -1673,7 +1718,7 @@ function Composer({
       : mode === "link"
         ? linkUrl.trim().length > 0
         : mode === "image" || mode === "video" || mode === "file"
-          ? !!pendingFile
+          ? pendingFiles.length > 0
           : mode === "voice-preview"
             ? !!voicePreviewUrl
             : false;
@@ -1685,7 +1730,7 @@ function Composer({
       <input type="hidden" name="mentionIds" value={mentionIds.join(",")} />
       <input type="hidden" name="durationSec" value={mode === "voice-preview" ? String(finalDuration) : ""} />
       <input type="hidden" name="replyToId" value={replyTarget?.id ?? ""} />
-      <input ref={fileInputRef} type="file" name="file" className="hidden" onChange={handleFileChange} />
+      <input ref={fileInputRef} type="file" name="file" multiple className="hidden" onChange={handleFileChange} />
 
       {replyTarget && (
         <div className="mb-2 flex items-start gap-2 rounded-lg border-l-2 border-brand-400 bg-surface-2 px-2 py-1.5">
@@ -1712,14 +1757,32 @@ function Composer({
         </div>
       )}
 
-      {(mode === "image" || mode === "video" || mode === "file") && pendingFile && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-2 p-2">
-          {mode === "image" ? <ImageIcon className="h-4 w-4 flex-none text-muted-foreground" /> : mode === "video" ? <Video className="h-4 w-4 flex-none text-muted-foreground" /> : <FileIcon className="h-4 w-4 flex-none text-muted-foreground" />}
-          <span className="min-w-0 flex-1 truncate text-xs text-foreground">{pendingFile.name}</span>
-          <span className="flex-none text-[10px] text-muted-foreground">{(pendingFile.size / 1024 / 1024).toFixed(1)} MB</span>
-          <button type="button" onClick={cancelAttachment} className="flex-none rounded p-0.5 text-muted-foreground hover:bg-surface">
-            <X className="h-3.5 w-3.5" />
-          </button>
+      {(mode === "image" || mode === "video" || mode === "file") && pendingFiles.length > 0 && (
+        <div className="mb-2 space-y-1 rounded-lg border border-border bg-surface-2 p-2">
+          {pendingFiles.length > 1 && (
+            <div className="flex items-center justify-between px-0.5 pb-1">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {t("filesPicked", {
+                  n: pendingFiles.length,
+                  max: MAX_CHAT_FILES,
+                  mb: (pendingFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1),
+                })}
+              </span>
+              <button type="button" onClick={cancelAttachment} className="rounded px-1 text-[11px] text-muted-foreground hover:bg-surface">
+                {t("clearAllFiles")}
+              </button>
+            </div>
+          )}
+          {pendingFiles.map((f, i) => (
+            <div key={`${f.name}-${f.size}-${i}`} className="flex items-center gap-2">
+              {mode === "image" ? <ImageIcon className="h-4 w-4 flex-none text-muted-foreground" /> : mode === "video" ? <Video className="h-4 w-4 flex-none text-muted-foreground" /> : <FileIcon className="h-4 w-4 flex-none text-muted-foreground" />}
+              <span className="min-w-0 flex-1 truncate text-xs text-foreground">{f.name}</span>
+              <span className="flex-none text-[10px] text-muted-foreground">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+              <button type="button" onClick={() => removePendingFile(i)} className="flex-none rounded p-0.5 text-muted-foreground hover:bg-surface" aria-label={f.name}>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 

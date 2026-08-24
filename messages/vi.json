@@ -3089,7 +3089,12 @@
     "dissolveDirectConfirm": "Giải tán hội thoại 1-1 này? Toàn bộ tin nhắn sẽ bị xóa vĩnh viễn với cả 2 người và không thể khôi phục.",
     "removeMember": "Xóa khỏi nhóm",
     "removeMemberConfirm": "Xóa {name} khỏi nhóm này?",
-    "sysRemoved": "{actor} đã xóa {name} khỏi nhóm"
+    "sysRemoved": "{actor} đã xóa {name} khỏi nhóm",
+    "previewFiles": "đã gửi {n} tệp",
+    "filesPicked": "{n}/{max} tệp · {mb} MB",
+    "clearAllFiles": "Bỏ hết",
+    "errTooManyFiles": "Chọn tối đa {max} tệp mỗi lần gửi.",
+    "errTotalTooLarge": "Tổng dung lượng vượt {mb} MB. Bớt bớt tệp rồi gửi làm nhiều lượt."
   },
   "kb": {
     "title": "Cơ sở tri thức",

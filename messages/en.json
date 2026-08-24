@@ -3089,7 +3089,12 @@
     "dissolveDirectConfirm": "Dissolve this 1-1 conversation? All messages will be permanently deleted for both people and cannot be recovered.",
     "removeMember": "Remove from group",
     "removeMemberConfirm": "Remove {name} from this group?",
-    "sysRemoved": "{actor} removed {name} from the group"
+    "sysRemoved": "{actor} removed {name} from the group",
+    "previewFiles": "sent {n} files",
+    "filesPicked": "{n}/{max} files · {mb} MB",
+    "clearAllFiles": "Clear all",
+    "errTooManyFiles": "You can attach at most {max} files per message.",
+    "errTotalTooLarge": "Total size exceeds {mb} MB. Remove some files and send in batches."
   },
   "kb": {
     "title": "Knowledge Base",

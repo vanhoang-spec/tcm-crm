@@ -3623,6 +3623,54 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       hàng loạt nhiều hồ sơ một lượt (mỗi hồ sơ một lần gõ tên — đúng tinh thần chống bấm nhầm) ·
       thùng rác / khôi phục sau khi xoá.
 
+66. **CHAT — GỬI NHIỀU FILE MỘT LÚC + VÁ LỖI "FILE KHÔNG MỞ ĐƯỢC" (24/08/2026)** (KHÔNG migration,
+    KHÔNG mã quyền mới). Hai việc theo yêu cầu chủ dự án, đi cùng một commit vì cùng đụng đường đính kèm.
+
+    **(a) LỖI FILE KHÔNG MỞ ĐƯỢC — nguyên nhân là HEADER, không phải file hỏng.**
+    - ⚠ **Header HTTP chỉ nhận Latin-1 (ByteString).** `api/chat/attachments/[id]/route.ts` ghép thẳng
+      `attachmentName` vào `Content-Disposition`, nên tên file có ký tự tiếng Việt NGOÀI Latin-1 làm
+      Next ném `Cannot convert argument to a ByteString` ⇒ route trả **500** ⇒ người dùng thấy "file
+      không mở được". Đây là lý do lỗi trông NGẪU NHIÊN: `À(U+C0) Â(U+C2) É Ô` nằm trong Latin-1 nên
+      lọt, còn `Đ(U+110) Ư(U+1AF) Ậ(U+1EAC) Ỗ(U+1ED6)` thì vỡ.
+    - **Đo trên chính production**: 3 file PDF trong chat — `CV-HÀ GIA HÂN.pdf` (0 ký tự >255) mở được;
+      `CV - ĐỖ THANH HOÀNG.pdf` và `ACCOUNT EXECUTIVE - LƯU NHẬT ANH.pdf` thì không. Khớp tuyệt đối
+      triệu chứng chủ dự án báo.
+    - **Vá bằng đúng khuôn `contentDisposition()` mà 18 route xuất file khác của repo đã dùng** (RFC
+      6266): `filename` chỉ ASCII + `filename*=UTF-8''<percent-encode>`. Trình duyệt hiện đại đọc
+      `filename*` nên người dùng VẪN tải về đúng tên có dấu. **Chat là route CUỐI CÙNG còn ghép chuỗi
+      tay** — đã rà cả repo, giờ không còn chỗ nào.
+    - ⚠ **`api/interview-ics/[id]` KHÔNG dính** dù cũng dựng tên từ tên ứng viên tiếng Việt: `icsFilename()`
+      đã bỏ dấu + `Đ→D` + lọc về `[A-Za-z0-9 _-]` từ trước. Đừng "dọn" hàm đó cho gọn.
+    - ⚠ Đổi `??` thành `||` cho Content-Type: mime **rỗng** (`""`) là giá trị CÓ THẬT khi trình duyệt
+      không nhận ra loại file, mà `??` chỉ bắt null/undefined ⇒ Content-Type rỗng, trình duyệt đoán bừa.
+    - **Verify quyết định (browser thật, cùng một hội thoại, cùng một lúc):** với code CŨ →
+      file `ĐỖ` **500**, file `HÀ GIA HÂN` **200**; sau khi vá → **cả hai 200**, `filename*` giải mã
+      ra đúng `CV - ĐỖ THANH HOÀNG.txt`.
+
+    **(b) GỬI NHIỀU FILE — tối đa 10 file / 25MB mỗi lượt.**
+    - ⚠ **MÔ HÌNH DỮ LIỆU GIỮ NGUYÊN 1 TIN = 1 FILE.** Nhiều file thì tạo NHIỀU tin trong cùng một lần
+      gửi (`extraData`), KHÔNG thêm bảng đính kèm. Đổi mô hình là phải sửa mọi chỗ render bong bóng
+      tin, xem trước, route tải file, tìm kiếm — đổi lấy một tính năng thuần tiện lợi. Đánh đổi đã
+      chấp nhận: 10 file thì dòng chat có 10 bong bóng.
+    - ⚠ **Tin thứ 2 trở đi KHÔNG mang `replyToId` và KHÔNG bắn mention**: trả lời một tin mà đính 5
+      file thì chỉ tin ĐẦU là câu trả lời; gắn hết là khung "đang trả lời" hiện 5 lần và `@tên` nổ 5
+      lần vào mặt người nhận. Thông báo cũng GỘP một lần (preview `previewFiles`).
+    - ⚠ **Chặn TỔNG dung lượng ở CẢ client LẪN server là BẮT BUỘC**, không phải phòng xa:
+      `bodySizeLimit` của Next là 30MB và nó ném **413 TRƯỚC KHI** server action chạy ⇒ vượt trần là
+      người dùng thấy TRANG VỠ chứ không thấy thông báo lỗi (10.13). Trần 25MB chừa dư cho đệm multipart.
+    - ⚠ **Lưu file TRƯỚC, ghi DB SAU** — SQLite single-writer; mở transaction rồi mới ghi đĩa 25MB là
+      giữ writer suốt thời gian đó và treo cả app.
+    - ⚠ **Bỏ một file khỏi danh sách phải ghi lại `input.files` bằng DataTransfer** (`syncFileInput`),
+      không chỉ sửa state: FormData đọc từ DOM, nên sửa mỗi state là **server vẫn nhận đủ file cũ**.
+      Verify: bỏ 1/3 file ⇒ cả xem trước lẫn `input.files` đều còn đúng 2, DB tạo đúng 2 tin.
+    - VOICE cố ý vẫn đúng 1 file (thu âm), không đi đường nhiều file. Paste ảnh (Ctrl+V) khi đang ở chế
+      độ ảnh thì CỘNG THÊM vào danh sách thay vì thay thế.
+    - **Verify:** tsc · eslint · i18n **0/0 (4747 key)** · `next build` sạch. Browser: chọn 3 file
+      → xem trước "3/10 tệp" + nút X từng dòng → bỏ 1 → gửi ⇒ DB tạo **đúng 2 tin đúng thứ tự**, tên
+      tiếng Việt giữ nguyên, 45 → 47 tin. Dữ liệu test đã dọn sạch (45 tin, 0 file thừa trên đĩa).
+    - **CHƯA LÀM (cố ý):** gộp N file thành MỘT bong bóng tin (đụng mô hình dữ liệu — xem trên) · kéo-thả
+      file vào khung chat · thanh tiến trình khi tải file lớn · nén ảnh trước khi gửi.
+
 ---
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao

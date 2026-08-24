@@ -32,6 +32,8 @@ import {
   MAX_MEDIA_BYTES,
   MAX_VOICE_BYTES,
   MAX_VOICE_SECONDS,
+  MAX_CHAT_FILES,
+  MAX_TOTAL_UPLOAD_BYTES,
 } from "@/lib/chat-storage";
 import { formatDuration } from "@/lib/utils";
 import { fetchLinkPreview } from "@/lib/link-preview";
@@ -111,6 +113,8 @@ export async function sendMessage(conversationId: string, _prev: SendState, form
     attachmentSize?: number | null;
     attachmentDurationSec?: number | null;
   };
+  /** File thứ 2 trở đi khi gửi nhiều file — mỗi phần tử thành MỘT tin nhắn nữa. */
+  let extraData: typeof data[] = [];
 
   if (kind === "LINK") {
     const linkUrl = String(formData.get("linkUrl") ?? "").trim();
@@ -130,16 +134,30 @@ export async function sendMessage(conversationId: string, _prev: SendState, form
     };
     preview = linkText || linkUrl;
   } else if (kind === "IMAGE" || kind === "VIDEO" || kind === "VOICE" || kind === "FILE") {
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) return { error: t("errFileRequired") };
+    // ⚠ getAll, KHÔNG get: từ 24/08/2026 người dùng chọn được tối đa MAX_CHAT_FILES file một lần.
+    // Mô hình dữ liệu GIỮ NGUYÊN 1 tin = 1 file — nhiều file thì tạo NHIỀU tin trong cùng một lần
+    // gửi. Chọn vậy để không phải đụng bảng mới và không phải sửa mọi chỗ render bong bóng tin,
+    // preview, route tải file, tìm kiếm. Đổi lại: thông báo phải GỘP một lần (xem cuối hàm), nếu
+    // không thì gửi 10 file là 10 thông báo + 10 push bắn vào mặt người nhận.
+    const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
+    if (files.length === 0) return { error: t("errFileRequired") };
+    // VOICE luôn đúng 1 file (thu âm), không đi đường nhiều file.
+    const maxCount = kind === "VOICE" ? 1 : MAX_CHAT_FILES;
+    if (files.length > maxCount) return { error: t("errTooManyFiles", { max: maxCount }) };
 
     // FILE = gửi mọi loại file (không giới hạn theo allowlist) — chỉ IMAGE/VIDEO/VOICE (chọn qua picker
     // riêng, accept="image/*"...) mới kiểm mime chặt để phòng client giả mạo kind.
     const allowedMime = kind === "IMAGE" ? IMAGE_MIME_TYPES : kind === "VIDEO" ? VIDEO_MIME_TYPES : kind === "VOICE" ? VOICE_MIME_TYPES : null;
-    if (allowedMime && !allowedMime.includes(file.type)) return { error: t("errFileType") };
-
     const maxBytes = kind === "VOICE" ? MAX_VOICE_BYTES : MAX_MEDIA_BYTES;
-    if (file.size > maxBytes) return { error: t("errFileTooLarge") };
+    let totalBytes = 0;
+    for (const f of files) {
+      if (allowedMime && !allowedMime.includes(f.type)) return { error: t("errFileType") };
+      if (f.size > maxBytes) return { error: t("errFileTooLarge") };
+      totalBytes += f.size;
+    }
+    // ⚠ Kiểm lại TỔNG ở server dù client đã chặn: request vượt bodySizeLimit thì Next ném 413 trước
+    // khi tới đây, nhưng người gọi bằng công cụ khác (hoặc client bị sửa) vẫn phải bị chặn tử tế.
+    if (totalBytes > MAX_TOTAL_UPLOAD_BYTES) return { error: t("errTotalTooLarge", { mb: Math.round(MAX_TOTAL_UPLOAD_BYTES / 1024 / 1024) }) };
 
     let durationSec: number | null = null;
     if (kind === "VOICE") {
@@ -148,21 +166,30 @@ export async function sendMessage(conversationId: string, _prev: SendState, form
       if (durationSec && durationSec > MAX_VOICE_SECONDS) return { error: t("errVoiceTooLong") };
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const attachmentKey = await saveChatAttachment(buffer, file.type);
-    data = {
-      type: kind,
-      body: null,
-      attachmentKey,
-      attachmentName: file.name || null,
-      attachmentMime: file.type,
-      attachmentSize: file.size,
-      attachmentDurationSec: durationSec,
-    };
+    // ⚠ Lưu file TRƯỚC, ghi DB SAU: lưu file là IO chậm (10 file tới 25MB), mà SQLite là
+    // single-writer — mở transaction rồi mới ghi đĩa là giữ writer suốt thời gian đó và treo cả app.
+    const saved: typeof data[] = [];
+    for (const f of files) {
+      const buffer = Buffer.from(await f.arrayBuffer());
+      const attachmentKey = await saveChatAttachment(buffer, f.type);
+      saved.push({
+        type: kind,
+        body: null,
+        attachmentKey,
+        attachmentName: f.name || null,
+        attachmentMime: f.type,
+        attachmentSize: f.size,
+        attachmentDurationSec: durationSec,
+      });
+    }
+    data = saved[0];
+    extraData = saved.slice(1);
+    const firstName = files[0].name || "";
     preview =
+      files.length > 1 ? t("previewFiles", { n: files.length }) :
       kind === "IMAGE" ? t("previewImage") :
       kind === "VIDEO" ? t("previewVideo") :
-      kind === "FILE" ? t("previewFile", { name: file.name || "" }) :
+      kind === "FILE" ? t("previewFile", { name: firstName }) :
       t("previewVoice", { duration: formatDuration(durationSec ?? 0) });
   } else {
     const body = String(formData.get("body") ?? "").trim();
@@ -184,6 +211,13 @@ export async function sendMessage(conversationId: string, _prev: SendState, form
   }
 
   const msg = await prisma.message.create({ data: { conversationId, senderId: meId, replyToId, ...data } });
+  // Các file còn lại: mỗi file MỘT tin nhắn nữa, theo đúng thứ tự người dùng chọn.
+  // ⚠ KHÔNG gắn `replyToId` cho các tin sau — trả lời một tin mà đính 5 file thì chỉ tin ĐẦU là
+  // câu trả lời, 4 tin sau là file kèm theo; gắn hết là khung "đang trả lời" hiện 5 lần.
+  // ⚠ KHÔNG gắn mention cho các tin sau (xem khối mention ngay dưới) — nếu không thì @tên nổ N lần.
+  for (const d of extraData) {
+    await prisma.message.create({ data: { conversationId, senderId: meId, ...d } });
+  }
   if (mentionAll) {
     await prisma.messageMention.create({ data: { messageId: msg.id, isAll: true } });
   } else if (mentionStaffIds.length > 0) {

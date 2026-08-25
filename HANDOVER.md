@@ -3868,7 +3868,64 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `ea5fd0c`** (24/08/2026 18:13) — gói **3 commit**: xoá hồ sơ/CV tải nhầm (mục
+**Production đang chạy `7c1b283`** (25/08/2026 12:16) — **phân vai lại sub-module Tuyển dụng** (mục
+10.68): nhân sự hành chính vào luồng (nhận CV · AI chấm · hẹn lịch · thư từ chối) · khâu OFFER tách
+hẳn thành mã riêng chỉ Senior HR Manager · trưởng bộ phận thấy ứng viên phòng mình trừ vị trí tuyển
+thay chính mình. Deploy **bằng nút bấm GitHub Actions** (lần thứ năm), runner `tcm-server`, xong
+trong ~90 giây. **1 migration mới** áp sạch (84 → 85: `recruit_position_replaces`, `ALTER TABLE`
+viết tay, 0 lệnh DROP), **1 mã quyền mới** (`recruit.offer.manage`, 151 → 152). CI XANH trên
+`7c1b283` trước khi deploy.
+
+**Phân quyền tuyển dụng đo trên CHÍNH production — khớp tuyệt đối với DB dựng-từ-đầu và dev.db
+(ba đường nhất trí):**
+
+| mã | vai |
+|---|---|
+| `recruit.view` | ADMIN_STAFF · BGĐ · HR_MANAGER · HR_STAFF |
+| `recruit.manage` · `.ai_parse` · `.interview.manage` · `.email.send` | ADMIN_STAFF · HR_MANAGER · HR_STAFF |
+| `recruit.salary.view` | BGĐ · HR_MANAGER · HR_STAFF — **KHÔNG có hành chính** |
+| `recruit.decide` · `recruit.jd.manage` | BGĐ · HR_MANAGER |
+| **`recruit.offer.manage`** | **HR_MANAGER (1 vai)** |
+
+Xác nhận trên production: `LÊ NGỌC CHÂU` đúng là role `ADMIN_STAFF` ⇒ đã nhận đủ 5 mã. Đủ 2 marker
+seed `20260824_recruit_admin_staff` + `20260824_recruit_offer`.
+
+Đối chiếu production TRƯỚC/SAU deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | trước | sau |
+|---|---|---|
+| nhân sự / khách / dự án | 37 / 68 / 24 | **37 / 68 / 24** |
+| coTotal + ceTotal 4 bảng CO/CE | (8 số) | **không đổi MỘT ĐỒNG** |
+| dòng CO / NCC / AuditLog | 481 / 30 / 103 | **481 / 30 / 103** |
+| ứng viên / bản chấm AI / offer / mẫu thư | 2 / 0 / 0 / 0 | **2 / 0 / 0 / 0** |
+| tin nhắn chat / `push_subscription` | 159 / 1 | **159 / 1** |
+| dòng grant quyền | 1354 | **1360** (+6 = 5 mã cho hành chính + 1 mã offer) |
+| migration | 84 | **85** |
+| cột `job_position.replacesStaffId` | — | **có** |
+| `integrity_check` / `foreign_key_check` | — | **ok** / 0 dòng |
+
+Health check qua nginx: `/login` **200** · `/staff/recruit`, `/settings/recruit`,
+`/staff/recruit/archive` đều **307** về login · `/api/recruit-offer/x` và
+`/api/notifications/poll` **401** · pm2 `tcm-crm` + `gh-runner` online, **restart 1** (do deploy) ·
+`[jobs] scheduler bật` · **error log không thêm dòng nào sau deploy** (ghi cuối 12:14, deploy 12:16).
+Backup trước deploy: `~/backup/*-20260825-121653`.
+
+⚠ **HAI VIỆC PHẢI LÀM TRÊN GIAO DIỆN, APP KHÔNG TỰ LÀM ĐƯỢC:**
+1. **`/settings/recruit` → mỗi vị trí đang tuyển, tick ô "Tuyển để thay nhân sự"** nếu đó là tuyển
+   thay người đang làm. App **CỐ Ý KHÔNG đoán** theo tên chức danh (xem 10.68b) — chưa tick thì
+   trưởng bộ phận VẪN thấy hồ sơ thay chính mình. Hiện production có **0 vị trí** khai ô này.
+2. **Duyệt 5 mẫu thư** ở cùng trang — production đang có **0 mẫu**, nên hôm nay chưa ai gửi được thư
+   nào cho ứng viên, kể cả thư từ chối.
+
+⚠ **Hai khoá vẫn chưa khai** (không phải lỗi, code tự tắt): `ANTHROPIC_API_KEY` (chưa khai thì MKT
+chạy bằng DeepSeek) · `RESEND_API_KEY` + `RESEND_FROM` **kèm xác minh domain `tcmbtl.com` bằng bản
+ghi DNS SPF + DKIM** — khai khoá không thôi là chưa đủ.
+
+---
+
+### Deploy trước đó — 24/08/2026 lúc 18:13
+
+**Production khi đó chạy `ea5fd0c`** (24/08/2026 18:13) — gói **3 commit**: xoá hồ sơ/CV tải nhầm (mục
 10.65) · chat gửi tối đa 10 file một lượt + **vá lỗi file tên tiếng Việt không mở được** (10.66) ·
 **vá lỗi PDF không đọc được** + thêm định dạng + link web + nhận nhiều CV một lượt (10.67). Deploy
 **bằng nút bấm GitHub Actions** (lần thứ tư), runner `tcm-server` chạy `scripts/deploy-local.sh`,

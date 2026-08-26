@@ -61,6 +61,11 @@ jobs:
             console.log("task Creative:", await p.creativeTask.count(), "| tin chat:", await p.message.count());
             console.log("ứng viên:", await p.candidate.count(), "| NCC:", await p.vendor.count());
             console.log("AuditLog:", await p.auditLog.count());
+            const dep = await p.department.findUnique({ where: { code: "CREATIVE" }, select: { lead: { select: { fullName: true } } } });
+            console.log("  truong phong Creative:", dep?.lead?.fullName ?? "(trong)");
+            for (const q of await p.creativeSquad.findMany({ select: { code: true, lead: { select: { fullName: true } } } }))
+              console.log("  squad", q.code, "lead:", q.lead?.fullName ?? "(trong)");
+            console.log("  con tro manager mo coi:", await p.staff.count({ where: { manager: { is: null }, managerId: { not: null } } }));
             const cre = await p.staff.findMany({ where: { department: { code: "CREATIVE" } }, select: { fullName: true, title: true, isActive: true }, orderBy: { fullName: "asc" } });
             for (const s2 of cre) console.log("  CREATIVE:", s2.fullName, "|", s2.title, "|", s2.isActive ? "active" : "TAT");
           }

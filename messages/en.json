@@ -951,7 +951,10 @@
       "payrollExemptShort": "Unpaid by TCM",
       "dobLabel": "Date of birth",
       "firstWorkDateLabel": "First working day",
-      "datesOptionalHint": "Date of birth and first working day use DD/MM/YYYY and may be left blank — the employee fills them in on their profile; corrections are made by HR via \"Edit account\". Without a first working day, annual leave is provisionally counted from the start of the year."
+      "datesOptionalHint": "Date of birth and first working day use DD/MM/YYYY and may be left blank — the employee fills them in on their profile; corrections are made by HR via \"Edit account\". Without a first working day, annual leave is provisionally counted from the start of the year.",
+      "isExternalLabel": "External partner",
+      "legalNameLabel": "Legal full name",
+      "legalNamePlaceholder": "only if different from display name"
     },
     "warehouses": {
       "title": "Warehouses & locations",

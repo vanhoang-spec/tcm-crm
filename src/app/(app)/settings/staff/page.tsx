@@ -162,6 +162,8 @@ export default async function SettingsStaffPage({
                   isPlanningStaff: s.isPlanningStaff,
                   isActive: s.isActive,
                   payrollExempt: s.payrollExempt,
+                  legalName: s.legalName,
+                  isExternal: s.isExternal,
                   dateOfBirth: s.dateOfBirth,
                   firstWorkDate: s.firstWorkDate,
                   createdAt: s.createdAt,

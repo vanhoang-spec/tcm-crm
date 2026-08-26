@@ -21,6 +21,8 @@ export type StaffRowData = {
   isPlanningStaff: boolean;
   isActive: boolean;
   payrollExempt: boolean;
+  legalName: string | null;
+  isExternal: boolean;
   dateOfBirth: Date | null;
   firstWorkDate: Date | null;
   createdAt: Date;
@@ -97,6 +99,21 @@ export function StaffRow({
             <label className="flex items-center gap-1.5 text-[11px]">
               <input type="checkbox" name="payrollExempt" defaultChecked={staff.payrollExempt} className="h-3.5 w-3.5 rounded border-border-strong" />
               {t("payrollExemptLabel")}
+            </label>
+            {/* Người NGOÀI công ty (đối tác) — có tài khoản TCM nhưng KHÔNG tự vào nhóm chat chung. */}
+            <label className="flex items-center gap-1.5 text-[11px]">
+              <input type="checkbox" name="isExternal" defaultChecked={staff.isExternal} className="h-3.5 w-3.5 rounded border-border-strong" />
+              {t("isExternalLabel")}
+            </label>
+            {/* Tên đầy đủ theo giấy tờ — chỉ điền khi KHÁC tên hiển thị; hợp đồng và bảng lương đọc ô này. */}
+            <label className="flex items-center gap-1.5 text-[11px]">
+              <span className="w-28 shrink-0">{t("legalNameLabel")}</span>
+              <input
+                name="legalName"
+                defaultValue={staff.legalName ?? ""}
+                placeholder={t("legalNamePlaceholder")}
+                className="h-7 w-48 rounded-md border border-border-strong bg-surface px-2 text-xs"
+              />
             </label>
             {/* HR là đường SỬA duy nhất của 2 ngày này (nhân sự chỉ tự điền khi còn trống ở /profile). Để trống = xoá. */}
             <label className="flex items-center gap-1.5 text-[11px]">

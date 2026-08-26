@@ -97,6 +97,12 @@ export async function updateStaffLogin(staffId: string, _prev: StaffFormState, f
   const email = normalizeLoginId(String(formData.get("email") ?? ""));
   const payrollExempt = formData.get("payrollExempt") === "on";
   const dobRaw = String(formData.get("dateOfBirth") ?? "").trim();
+  // Tên đầy đủ theo giấy tờ — nguồn tên cho hợp đồng lao động và bảng lương khi khác tên hiển thị.
+  // Rỗng = tên hiển thị cũng chính là tên giấy tờ (đa số), lưu null chứ không lưu chuỗi rỗng.
+  const legalNameRaw = String(formData.get("legalName") ?? "").trim();
+  const legalName = legalNameRaw ? legalNameRaw.slice(0, 160) : null;
+  // Người NGOÀI công ty có tài khoản TCM — chặn tự thêm vào nhóm chat chung (lib/chat.ts).
+  const isExternal = formData.get("isExternal") === "on";
   const firstWorkDateRaw = String(formData.get("firstWorkDate") ?? "").trim();
   if (!email) return { error: t("errorRequired") };
   if (!isAllowedLoginDomain(email)) return { error: t("errorLoginDomain") };
@@ -109,7 +115,7 @@ export async function updateStaffLogin(staffId: string, _prev: StaffFormState, f
 
   const target = await prisma.staff.findUnique({
     where: { id: staffId },
-    select: { email: true, payrollExempt: true, dateOfBirth: true, firstWorkDate: true },
+    select: { email: true, payrollExempt: true, dateOfBirth: true, firstWorkDate: true, legalName: true, isExternal: true },
   });
   if (!target) return { error: t("errorRequired") };
   if (email !== target.email) {
@@ -117,16 +123,16 @@ export async function updateStaffLogin(staffId: string, _prev: StaffFormState, f
     if (clash && clash.id !== staffId) return { error: t("errorEmailExists", { email }) };
   }
 
-  await prisma.staff.update({ where: { id: staffId }, data: { email, payrollExempt, dateOfBirth: dob, firstWorkDate } });
+  await prisma.staff.update({ where: { id: staffId }, data: { email, payrollExempt, dateOfBirth: dob, firstWorkDate, legalName, isExternal } });
   // Audit ghi dd/mm/yyyy ĐỊA PHƯƠNG — cột lưu local-midnight nên toISOString() sẽ lùi 1 ngày (07:00 UTC hôm trước).
   const iso = (d: Date | null) => (d ? formatDate(d) : null);
   await prisma.auditLog.create({
     data: {
       entityType: "staff",
       entityId: staffId,
-      field: "email,payrollExempt,dateOfBirth,firstWorkDate",
-      oldValue: JSON.stringify({ email: target.email, payrollExempt: target.payrollExempt, dateOfBirth: iso(target.dateOfBirth), firstWorkDate: iso(target.firstWorkDate) }),
-      newValue: JSON.stringify({ email, payrollExempt, dateOfBirth: iso(dob), firstWorkDate: iso(firstWorkDate) }),
+      field: "email,payrollExempt,dateOfBirth,firstWorkDate,legalName,isExternal",
+      oldValue: JSON.stringify({ email: target.email, payrollExempt: target.payrollExempt, dateOfBirth: iso(target.dateOfBirth), firstWorkDate: iso(target.firstWorkDate), legalName: target.legalName, isExternal: target.isExternal }),
+      newValue: JSON.stringify({ email, payrollExempt, dateOfBirth: iso(dob), firstWorkDate: iso(firstWorkDate), legalName, isExternal }),
       action: "UPDATE",
       changedBy: await getCurrentStaffId(),
     },

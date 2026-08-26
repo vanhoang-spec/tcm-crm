@@ -121,6 +121,19 @@ model Staff {
   /// ⚠ ĐỪNG thay bằng cách nhập lương 0 ở PositionSalary: 0 ≠ null nên người đó vẫn nằm trong
   /// nhóm đủ điều kiện và VẪN ĂN share thật của quỹ KPI (xem kpi.ts, nhánh `salary == null`).
   payrollExempt   Boolean   @default(false)
+  /// TÊN ĐẦY ĐỦ theo giấy tờ, khi khác tên hiển thị trên hệ thống. Ví dụ "Lâm Du" là tên gọi dùng
+  /// trong công ty, còn hợp đồng và bảng lương ghi "Nguyễn Chung Quốc Dũng".
+  /// Null = tên hiển thị cũng chính là tên giấy tờ (đa số nhân sự). Cùng khuôn Vendor.legalName (PUR-2).
+  /// ⚠ Đây là nguồn tên cho HỢP ĐỒNG LAO ĐỘNG và BẢNG LƯƠNG — module ⑦ khi làm phải đọc cột này
+  /// trước, chỉ rơi về fullName khi nó rỗng.
+  legalName       String?
+  /// NGƯỜI NGOÀI công ty nhưng có tài khoản TCM (đối tác, agency phối hợp) — quyết định chủ dự án
+  /// 26/08/2026.
+  /// ⚠ Hệ quả DUY NHẤT đang cài: KHÔNG bao giờ bị tự thêm vào nhóm chat chung "GIA ĐÌNH TCM"
+  /// (lib/chat.ts → ensureTcmFamilyMembership). Nhóm riêng với team Account vẫn add tay bình thường.
+  /// ⚠ Cờ này KHÔNG phải hàng rào quyền — phạm vi nhìn thấy do NHÓM QUYỀN quyết định (role
+  /// CREATIVE_PARTNER). Đừng dùng nó thay cho việc gán role đúng.
+  isExternal      Boolean   @default(false)
   /// Người này LÀM function Planning (viết proposal, research, design brief) — quyết định chủ dự án
   /// 01/08/2026: bộ phận Planning độc lập giải thể, nhân sự Planning về thẳng các team Account, nên
   /// "ai là người Planning" KHÔNG còn suy được từ `departmentId` nữa.

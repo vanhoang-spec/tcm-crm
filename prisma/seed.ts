@@ -2216,6 +2216,11 @@ async function main() {
     { code: "ACCOUNT_STAFF", name: "Account Staff", groupCode: "ACCOUNT", parentCode: "ACCOUNT_MANAGER", sort: 32 },
     { code: "CREATIVE_DIRECTOR", name: "Creative Director", groupCode: "CREATIVE", parentCode: null, sort: 40 },
     { code: "CREATIVE_STAFF", name: "Creative Staff", groupCode: "CREATIVE", parentCode: "CREATIVE_DIRECTOR", sort: 41 },
+    // 26/08/2026 — ĐỐI TÁC NGOÀI công ty tham gia điều hành Creative (quyết định chủ dự án).
+    // ⚠ KHÔNG dùng lại CREATIVE_STAFF: role đó có 54 quyền trải 13 module (dự án, khách hàng, đấu
+    // thầu, tài chính, kho…) — quá rộng cho người ngoài. Role này giữ ĐÚNG phần Creative + chat.
+    // Danh sách quyền ở CREATIVE_PARTNER_CODES bên dưới; xem cả `Staff.isExternal`.
+    { code: "CREATIVE_PARTNER", name: "Creative Partner (đối tác ngoài)", groupCode: "CREATIVE", parentCode: null, sort: 42 },
     { code: "PLANNING_MANAGER", name: "Planning Manager", groupCode: "PLANNING", parentCode: null, sort: 50 },
     { code: "PLANNING_STAFF", name: "Planning Staff", groupCode: "PLANNING", parentCode: "PLANNING_MANAGER", sort: 51 },
     { code: "OPERATIONS_MANAGER", name: "Operations Manager", groupCode: "OPERATIONS", parentCode: null, sort: 60 },
@@ -2686,6 +2691,21 @@ async function main() {
       // CỐ Ý KHÔNG có inventory.request.approve*: Account duyệt đề xuất — tách vai của Kho v2 K2.
     ],
     SECURITY_GUARD: ["chat.use", "kb.view"],
+    // 26/08/2026 — ĐỐI TÁC NGOÀI điều hành Creative. Đúng 5 mã: đủ để điều phối và duyệt bài, đủ
+    // để trao đổi với team Account trong nhóm chat được add vào, KHÔNG hơn.
+    // ⚠ CỐ Ý KHÔNG có `creative.cost.view`: mã đó mở bảng chi phí theo task, mà chi phí ấy suy từ
+    //   LƯƠNG THEO VỊ TRÍ (lib/creative-cost.ts) — người ngoài công ty không được thấy.
+    // ⚠ CỐ Ý KHÔNG có `creative.task.submit`: nộp bài là việc của designer, không phải người duyệt.
+    // ⚠ CỐ Ý KHÔNG có `chat.moderate`: giải tán nhóm / gỡ tin người khác là quyền nội bộ.
+    // ⚠ Đi kèm cờ `Staff.isExternal` để không bị tự thêm vào nhóm "GIA ĐÌNH TCM" — hai thứ này phải
+    //   đặt CÙNG NHAU cho một đối tác; role thôi thì vẫn lọt vào nhóm chat chung.
+    CREATIVE_PARTNER: [
+      "creative.view",
+      "creative.task.manage",
+      "creative.task.assign",
+      "creative.task.approve",
+      "chat.use",
+    ],
   };
 
   const baseGrantCodes = PERMISSION_CODES.filter((c) => !isRestricted(c));

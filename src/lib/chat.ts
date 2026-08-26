@@ -349,8 +349,13 @@ const AUTO_JOIN_EMAIL_DOMAIN = "@tcmbtl.com";
  * src/app/(app)/act-as/actions.ts). Idempotent: đã là thành viên rồi thì bỏ qua, an toàn gọi lại.
  */
 export async function ensureTcmFamilyMembership(staffId: string): Promise<void> {
-  const staff = await prisma.staff.findUnique({ where: { id: staffId }, select: { id: true, fullName: true, email: true } });
+  const staff = await prisma.staff.findUnique({ where: { id: staffId }, select: { id: true, fullName: true, email: true, isExternal: true } });
   if (!staff || !staff.email.toLowerCase().endsWith(AUTO_JOIN_EMAIL_DOMAIN)) return;
+  // ⚠ NGƯỜI NGOÀI công ty (đối tác, agency phối hợp) có email @tcmbtl.com nhưng KHÔNG vào nhóm
+  // chat chung — quyết định chủ dự án 26/08/2026. Chặn ở ĐÂY chứ không phải ở chỗ gọi: hàm này là
+  // đường tự-thêm DUY NHẤT, và nó idempotent nên gỡ tay ở nhóm sẽ bị thêm lại ở lần chạy kế tiếp.
+  // Nhóm RIÊNG với team Account thì vẫn add tay bình thường — cờ này chỉ chặn đúng nhóm chung.
+  if (staff.isExternal) return;
 
   const group = await prisma.conversation.findFirst({ where: { type: "GROUP", name: TCM_FAMILY_GROUP_NAME } });
   if (!group) return; // chưa seed nhóm — bỏ qua, không tự tạo ở đây để tránh tạo trùng khi có nhiều request đồng thời

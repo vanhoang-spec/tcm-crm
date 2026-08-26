@@ -951,7 +951,10 @@
       "payrollExemptShort": "Không tính lương",
       "dobLabel": "Ngày sinh",
       "firstWorkDateLabel": "Ngày đi làm đầu tiên",
-      "datesOptionalHint": "Ngày sinh và ngày đi làm đầu tiên nhập theo DD/MM/YYYY, có thể để trống — nhân sự tự bổ sung ở Hồ sơ cá nhân; sửa sai thì HR sửa ở nút \"Sửa tài khoản\". Chưa có ngày đi làm đầu tiên thì phép năm tạm tính từ đầu năm."
+      "datesOptionalHint": "Ngày sinh và ngày đi làm đầu tiên nhập theo DD/MM/YYYY, có thể để trống — nhân sự tự bổ sung ở Hồ sơ cá nhân; sửa sai thì HR sửa ở nút \"Sửa tài khoản\". Chưa có ngày đi làm đầu tiên thì phép năm tạm tính từ đầu năm.",
+      "isExternalLabel": "Người ngoài công ty (đối tác)",
+      "legalNameLabel": "Tên đầy đủ",
+      "legalNamePlaceholder": "chỉ điền khi khác tên hiển thị"
     },
     "warehouses": {
       "title": "Kho & địa điểm",

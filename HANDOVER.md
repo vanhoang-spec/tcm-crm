@@ -1547,11 +1547,25 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       · Đo diễn tập trên bản dựng lại đúng trạng thái production hỏng: **xoá đúng 3 người**, trưởng phòng
         → Chiến, lead 2 team nhỏ → Lâm Du, task → Lâm Du, **0 con trỏ mồ côi**, 3 ảnh chụp
         `offboard_snapshot`; seed lần hai no-op. DB dựng-từ-đầu: 33 nhân sự, không còn ai trong ba người.
-      · ⚠ **BA MÃ CREATIVE CÒN LẠI VẪN 21/21 VAI — CỐ Ý CHƯA ĐỤNG**, vì chủ dự án chỉ yêu cầu mã
-        `assign`: `creative.task.manage` (tạo/xoá task) · `creative.task.approve` (duyệt / trả bài
-        sửa) · `creative.view`. Hai mã đầu là cùng lớp rủi ro với `assign` — hôm nay kế toán vẫn
-        duyệt được bài thiết kế. Siết hay không là quyết định chính sách, và siết được bằng cách
-        thêm hằng + vòng one-shot y hệt khuôn này.
+      · ⚠ **26/08/2026 — SIẾT TIẾP `creative.task.manage` + `creative.task.approve` xuống 3 vai**
+        (quyết định chủ dự án). Ba mã nay dùng CHUNG hằng `CREATIVE_TASK_POLICY`, marker
+        `20260826_creative_task_narrow` (marker `..._assign_narrow` cũ đã chạy, giữ nguyên trong DB).
+      · ⚠⚠ **`creative.task.approve` KHÔNG GIỐNG `assign` — phải biết trước khi đổi.**
+        `approveCreativeTask`/`rejectCreativeTask` gác **THUẦN bằng mã quyền**, KHÔNG có phép kiểm
+        theo bản ghi nào. Nên gỡ khỏi CREATIVE_STAFF là **trưởng team nhỏ MẤT quyền duyệt bài của
+        chính team mình** — hôm nay là Trần Song Huyền (lead Graphic 2D): bài của team đó phải chờ
+        Creative Director hoặc Creative Partner duyệt. Đánh đổi đã báo và chủ dự án chấp nhận.
+        Hai đường mở lại nếu thấy kẹt: tick `creative.task.approve` cho CREATIVE_STAFF ở
+        `/settings/roles` (nhưng thế là MỌI designer duyệt được bài của nhau), hoặc thêm
+        record-check `isSquadLeadOf` vào hai action đó y khuôn `assignCreativeTask` (sửa code).
+      · `creative.task.manage` (tạo/xoá task LẺ ngoài checklist) siết không chặn luồng chính: task
+        thường sinh TỰ ĐỘNG từ Order của Account. Account cần tạo task lẻ thì tick thêm ở ma trận.
+      · ⚠ **`creative.view` CỐ Ý GIỮ RỘNG 21 vai** — ai cũng nên xem được tiến độ thiết kế của dự án
+        mình. `creative.task.submit` giữ 20 vai (CREATIVE_PARTNER cố ý không có — nộp bài là việc
+        của designer, không phải người duyệt).
+      · Đo hai đường **khớp nhau**: DB dựng-từ-đầu ra 3/3/3 vai và Vòng 4f báo "xoá 0 · cấp 0";
+        diễn tập trên bản mô phỏng đúng trạng thái đang chạy ra **xoá đúng 40 dòng** (2 mã × 20 vai
+        thừa), seed lần hai no-op.
     - ⚠ **TRƯỞNG TEAM ĐÃ NGHỈ — vá 07/08/2026 (CR-1c).** `CreativeSquad.leadStaffId` là CON TRỎ,
       KHÔNG tự rỗng khi người đó nghỉ (nghỉ chỉ set `isActive = false`). Trước bản vá, cả **ba** chỗ
       gửi thông báo cho trưởng team đều chỉ kiểm `leadStaffId != null` ⇒ tin bay vào tài khoản đã

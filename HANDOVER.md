@@ -3906,7 +3906,7 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
-**Production đang chạy `5283d7d`** (26/08/2026 12:16) — **siết quyền giao việc Creative** (mục 10.32:
+**Production đang chạy `1acf51f`** (26/08/2026 19:24, = `5283d7d` + workflow soi số liệu + ghi chú HANDOVER) — **siết quyền giao việc Creative** (mục 10.32:
 `creative.task.assign` từ 21 vai xuống 3) + **vá lỗi seed dựng lại nhân sự đã nghỉ**. Deploy bằng nút
 bấm GitHub Actions (lần thứ bảy và tám trong ngày), runner `tcm-server`. **KHÔNG migration mới** (85),
 **KHÔNG mã quyền mới** (152). CI XANH trên cả hai commit trước khi deploy.

@@ -238,7 +238,12 @@ function blankSection(isProxy = false, parentKey: string | null = null, nameVi =
     departmentCode: "",
     proxyFeeType: isProxy ? "PCT" : null,
     proxyFeeVal: isProxy ? 0 : null,
-    clientFeePct: null,
+    // Mặc định 10% cho mục GỐC dịch vụ (quyết định chủ dự án 26/08/2026): bảng bình thường chỉ có
+    // MỘT dòng phí quản lý 10%, ai cần mức khác thì sửa ở panel phí — thay vì phải áp thủ công
+    // từng mục rồi mới xuất được báo giá.
+    // ⚠ CHỈ mục gốc không Chi hộ. Validator CHẶN mục con / mục Chi hộ mang phí (costsheet.ts:136)
+    // — để `10` ở đây cho mọi loại là mọi lần thêm mục con đều không lưu được bảng.
+    clientFeePct: isProxy || parentKey ? null : 10,
   };
 }
 

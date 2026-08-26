@@ -1,0 +1,68 @@
+# Soi số liệu production — CHỈ ĐỌC, không ghi một dòng nào.
+#
+# Vì sao cần: cổng SSH 2222 thi thoảng tắc từ ngoài công ty trong khi web vẫn chạy bình thường
+# (đã gặp 04/08 · 16/08 · 21/08 · 26/08/2026 — xem HANDOVER §8.1b). Lúc đó không có đường nào
+# đối chiếu số liệu trước/sau deploy như quy trình §11 đòi hỏi. Runner nằm SẴN trên server và tự
+# gọi RA GitHub qua HTTPS nên không phụ thuộc NAT.
+#
+# Cách dùng: GitHub → Actions → "Soi số liệu production" → Run workflow → chọn phép đo.
+#
+# ⚠ BẤT BIẾN: mọi lệnh ở đây phải CHỈ ĐỌC. Không migrate, không seed, không ghi .env, không
+#   restart pm2. Muốn thay đổi gì trên production thì đi đường deploy.yml.
+# ⚠ KHÔNG in giá trị bí mật (khoá API, token, mật khẩu) và KHÔNG in dữ liệu cá nhân (email,
+#   điện thoại, lương). Log của Actions đọc được bởi mọi người có quyền vào repo.
+name: Soi số liệu production
+
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "Phép đo"
+        required: true
+        type: choice
+        options:
+          - permissions
+          - data
+
+concurrency:
+  group: inspect-production
+  cancel-in-progress: true
+
+jobs:
+  inspect:
+    runs-on: [self-hosted]
+    timeout-minutes: 10
+    steps:
+      - name: Đo
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+          cd "$HOME/tcm-crm"
+          echo "commit đang chạy: $(cat .deployed-commit 2>/dev/null || echo '?')"
+          # ⚠ Script phải nằm TRONG ~/tcm-crm mới resolve được @prisma/client (HANDOVER §11),
+          #   và phải là .mts vì repo không khai type:module nên .ts bị dịch sang CJS.
+          cat > .inspect-tmp.mts <<'JSEOF'
+          const { PrismaClient } = await import("@prisma/client");
+          const p = new PrismaClient();
+          const what = process.env.WHAT;
+          if (what === "permissions") {
+            const rows = await p.rolePermission.findMany({ select: { permissionCode: true, role: { select: { code: true } } } });
+            const by = new Map<string, string[]>();
+            for (const r of rows) by.set(r.permissionCode, [...(by.get(r.permissionCode) ?? []), r.role.code]);
+            for (const code of [...by.keys()].filter((c) => c.startsWith("creative.")).sort())
+              console.log(`${code.padEnd(24)} ${String(by.get(code)!.length).padStart(2)} vai  ${by.get(code)!.sort().join(" ")}`);
+            console.log("tổng dòng grant:", rows.length);
+            const marks = await p.setting.findMany({ where: { module: "seed" }, select: { key: true, value: true }, orderBy: { key: "desc" }, take: 4 });
+            for (const m of marks) console.log(`marker ${m.key} = ${m.value}`);
+          } else {
+            console.log("nhân sự(active):", await p.staff.count({ where: { isActive: true } }));
+            console.log("khách:", await p.client.count(), "| dự án:", await p.project.count());
+            console.log("CO/CE:", await p.costSheet.count(), "| dòng CO:", await p.costLine.count());
+            console.log("task Creative:", await p.creativeTask.count(), "| tin chat:", await p.chatMessage.count());
+            console.log("ứng viên:", await p.candidate.count(), "| NCC:", await p.vendor.count());
+            console.log("AuditLog:", await p.auditLog.count());
+          }
+          await p.$disconnect();
+          JSEOF
+          WHAT="${{ inputs.what }}" npx tsx .inspect-tmp.mts
+          rm -f .inspect-tmp.mts

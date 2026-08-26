@@ -3906,6 +3906,53 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
+**Production đang chạy `5283d7d`** (26/08/2026 12:16) — **siết quyền giao việc Creative** (mục 10.32:
+`creative.task.assign` từ 21 vai xuống 3) + **vá lỗi seed dựng lại nhân sự đã nghỉ**. Deploy bằng nút
+bấm GitHub Actions (lần thứ bảy và tám trong ngày), runner `tcm-server`. **KHÔNG migration mới** (85),
+**KHÔNG mã quyền mới** (152). CI XANH trên cả hai commit trước khi deploy.
+
+⚠ **LỖI ĐÃ PHÁT HIỆN VÀ VÁ NGAY TRONG NGÀY — đọc mục 10.32 trước khi xoá nhân sự lần sau.** Ba nhân
+sự Creative nghỉ cuối T8 bị xoá bằng script tay nhưng KHÔNG gỡ khỏi `STAFF_ROWS` và KHÔNG có khối
+one-shot; `db:seed` là bước BẮT BUỘC sau `migrate deploy` nên lần deploy kế tiếp **dựng lại cả ba**
+(36 → 39) và trả trưởng phòng Creative về người đã nghỉ. Vòng 4g đã dọn; nay production đúng cơ cấu
+chủ dự án duyệt.
+
+Đo trên CHÍNH production sau khi vá:
+
+| | trước đợt | production sau |
+|---|---|---|
+| nhân sự | 36 → (seed dựng lại) 39 | **36** |
+| phòng Creative | 8 người (còn 3 người đã nghỉ) | **5**: Chiến · Lâm Du · Huyền · Quang · Trúc |
+| trưởng phòng Creative | bị trả về NGUYỄN HOÀNG HIỆP | **TRƯƠNG LẬP CHIẾN** |
+| lead team nhỏ | — | CREATIVE + MULTIMEDIA **Lâm Du** · GRAPHIC_2D **Trần Song Huyền** |
+| `creative.task.assign` | 21 vai | **3 vai** — BGĐ · Creative Director · Creative Partner |
+| dòng grant | 1365 | **1347** (−18) |
+| con trỏ manager mồ côi | — | **0** |
+| khách / dự án / CO-CE / dòng CO | 70 / 29 / 9 / 897 | **không đổi** |
+| tin chat / ứng viên / NCC | 179 / 2 / 30 | **không đổi** |
+| AuditLog | 119 | **122** (+3 ảnh chụp `offboard_snapshot`) |
+
+Đủ 2 marker `20260826_creative_assign_narrow` = `{removed:18, added:0}` và `20260826_creative_offboard`
+= `{removed:3}`. Health check qua nginx: `/login` **200** · `/creative`, `/settings/roles` **307** về
+login. Backup trước deploy: `~/backup/*-20260826-185921` và `*-20260826-1216*`.
+
+⚠ **BA MÃ CREATIVE CÒN LẠI VẪN 21/21 VAI, CỐ Ý CHƯA ĐỤNG** (chủ dự án chỉ yêu cầu mã `assign`):
+`creative.task.manage` · `creative.task.approve` · `creative.view`. Hai mã đầu cùng lớp rủi ro —
+hôm nay kế toán vẫn duyệt được bài thiết kế. Siết được bằng khuôn y hệt Vòng 4f.
+
+⚠ **Cổng SSH 2222 tắc suốt ngày 26/08** trong khi web chạy bình thường (ca §8.1b, lần thứ tư). Vì vậy
+thêm workflow **"Soi số liệu production"** (`.github/workflows/inspect.yml`) — CHỈ ĐỌC, chạy trên
+runner sẵn có, dùng để đối chiếu số liệu trước/sau deploy khi không SSH được.
+
+⚠ **Hai khoá vẫn chưa khai** (không phải lỗi, code tự tắt): `ANTHROPIC_API_KEY` (chưa khai thì MKT
+chạy bằng DeepSeek) · `RESEND_API_KEY` + `RESEND_FROM` **kèm xác minh domain `tcmbtl.com` bằng bản
+ghi DNS SPF + DKIM**.
+
+---
+
+### Deploy trước đó — 25/08/2026 lúc 12:16
+
+
 **Production đang chạy `7c1b283`** (25/08/2026 12:16) — **phân vai lại sub-module Tuyển dụng** (mục
 10.68): nhân sự hành chính vào luồng (nhận CV · AI chấm · hẹn lịch · thư từ chối) · khâu OFFER tách
 hẳn thành mã riêng chỉ Senior HR Manager · trưởng bộ phận thấy ứng viên phòng mình trừ vị trí tuyển
@@ -3958,6 +4005,9 @@ Backup trước deploy: `~/backup/*-20260825-121653`.
 ⚠ **Hai khoá vẫn chưa khai** (không phải lỗi, code tự tắt): `ANTHROPIC_API_KEY` (chưa khai thì MKT
 chạy bằng DeepSeek) · `RESEND_API_KEY` + `RESEND_FROM` **kèm xác minh domain `tcmbtl.com` bằng bản
 ghi DNS SPF + DKIM** — khai khoá không thôi là chưa đủ.
+
+---
+
 
 ---
 

@@ -2551,6 +2551,10 @@ async function main() {
     // bằng EXPLICIT_GRANTS. Thiếu hai dòng dưới thì seed MỚI cấp quyền đính hồ sơ cho cả 20 role.
     code === "iso.manage" ||
     code === "iso.export" ||
+    // GIAO VIỆC CHO DESIGNER (siết 26/08/2026) — xem CREATIVE_ASSIGN_ROLES ngay dưới. Thiếu dòng
+    // này thì mã rơi vào baseGrantCodes và một lần dựng lại DB là cấp cho cả 20 role, ngược hẳn
+    // chính sách mà Vòng 4f đang thực thi trên DB đang chạy.
+    code === "creative.task.assign" ||
     code.startsWith("ai."); // (3)
 
   /**
@@ -2574,6 +2578,27 @@ async function main() {
    * ⚠ KHÔNG thêm mã này vào AI_LEGACY_ALL — xem cảnh báo ở hằng đó.
    */
   const AI_BANK_RECON_ROLES = ["CFO", "ACCOUNTANT_STAFF"];
+  /**
+   * ── GIAO VIỆC CHO DESIGNER — siết 26/08/2026 (quyết định chủ dự án) ──────────────────────────
+   *
+   * `creative.task.assign` nằm trong grant mặc định rộng từ ngày bật ma trận ⇒ đo được **21/21 vai**
+   * giao được việc cho designer, kể cả kế toán, thủ kho, thu mua. Nay đúng ba vai: người điều hành
+   * phòng (đối tác ngoài), người điều phối phòng, và BGĐ.
+   *
+   * ⚠ CỐ Ý KHÔNG có CREATIVE_STAFF. Trưởng team nhỏ giao việc bằng PHÉP KIỂM THEO BẢN GHI
+   * (`assignCreativeTask`: `canAssignAll || isSquadLeadOf(task, me)`), KHÔNG qua mã quyền — gỡ mã
+   * này không làm họ mất khả năng giao người trong team mình. CR-1 đã verify đúng ca đó bằng cách
+   * tạm gỡ mã khỏi CREATIVE_STAFF rồi đóng vai trưởng team (mục 10.32).
+   *
+   * ⚠ MỘT NGUỒN SỰ THẬT cho cả ba đường: `isRestricted` (chặn rơi vào grant rộng ở DB dựng-từ-đầu)
+   * · `extraByRole` (cấp lại đúng vai ở DB dựng-từ-đầu) · **Vòng 4f** (xoá grant thừa ở DB đang
+   * chạy). Sửa danh sách là cả ba đổi theo — ĐỪNG cấp mã này ở chỗ nào khác, chính việc có hai
+   * đường cấp mâu thuẫn là nguồn của 5 lỗ hổng ở mục 10.15.
+   *
+   * CREATIVE_PARTNER lấy mã này qua EXPLICIT_GRANTS (grantCodesFor short-circuit ở role đó) nên
+   * KHÔNG cần dòng trong extraByRole — nhưng VẪN phải có tên ở đây để Vòng 4f không xoá của họ.
+   */
+  const CREATIVE_ASSIGN_ROLES = ["CREATIVE_PARTNER", "CREATIVE_DIRECTOR", "BOARD_OF_MANAGEMENT"];
   /** Kho v2 K2 — quyền của THỦ KHO: người duy nhất chốt số thực xuất/thực nhập, chuyển lô, xuất hủy. */
   const WAREHOUSE_EXTRA = ["inventory.issue.confirm", "inventory.intake.confirm", "inventory.lot.convert", "inventory.destroy"];
   /**
@@ -2663,6 +2688,9 @@ async function main() {
     // (đúng nguyên tắc "grant mặc định = quyền mọi người đang có"). Giao người thật xong thì BGĐ bỏ tick.
     // Duyệt điều chuyển kho là việc của chủ vận hành kho; Thủ kho KHÔNG tự duyệt đề xuất của mình.
     OPERATIONS_MANAGER: [...WAREHOUSE_EXTRA, "inventory.transfer.approve"],
+    // Điều phối phòng Creative — người chia việc về team nhỏ rồi giao designer (xem CREATIVE_ASSIGN_ROLES).
+    CREATIVE_DIRECTOR: ["creative.task.assign"],
+    BOARD_OF_MANAGEMENT: ["creative.task.assign"],
   };
 
   /**
@@ -3216,6 +3244,52 @@ async function main() {
       },
     });
     console.log(`🔓 Mở lại KPI + Cài đặt: cấp ${granted} dòng`);
+  }
+
+  /*
+    ── Vòng 4f: SIẾT quyền GIAO VIỆC CREATIVE theo CREATIVE_ASSIGN_ROLES — chạy đúng MỘT lần ──
+
+    ⚠ Vòng thứ HAI trong seed XOÁ grant của role đang hoạt động (vòng kia là 4d — quyền chạm tiền).
+    Mọi vòng khác chỉ THÊM. Lý do phải có: `creative.task.assign` đã nằm trong grant mặc định rộng
+    của 21 role từ ngày bật ma trận; `isRestricted` chỉ chặn DB dựng-từ-đầu, KHÔNG siết lại DB đang
+    chạy vì Vòng 4 bỏ qua role đã có grant.
+
+    ⚠ ĐẶT SAU toàn bộ backfill (Vòng 4b) là BẮT BUỘC — đặt trước thì backfill nào cấp lại mã này sẽ
+    ghi đè trong im lặng. Cùng lý do Vòng 4d ghi "chạy SAU backfill để có tiếng nói cuối cùng".
+
+    ADMIN không có dòng grant nào (sàn cứng trong code) nên không bị đụng. Sau vòng này BGĐ toàn
+    quyền tick lại ở /settings/roles mà re-seed không đè (marker bảo đảm chỉ một lần).
+  */
+  const CREATIVE_ASSIGN_KEY = "20260826_creative_assign_narrow";
+  const assignMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: CREATIVE_ASSIGN_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!assignMarker) {
+    const del = await prisma.rolePermission.deleteMany({
+      where: { permissionCode: "creative.task.assign", role: { code: { notIn: [...CREATIVE_ASSIGN_ROLES, "ADMIN"] } } },
+    });
+    // Cấp cho role trong chính sách mà chưa có — để vòng này tự nó là bức tranh đầy đủ, không phụ
+    // thuộc việc Vòng 4 đã chạy hay chưa (đúng khuôn Vòng 4d).
+    let added = 0;
+    for (const roleCode of CREATIVE_ASSIGN_ROLES) {
+      const role = roleByCode[roleCode];
+      if (!role) continue;
+      const has = await prisma.rolePermission.count({ where: { roleId: role.id, permissionCode: "creative.task.assign" } });
+      if (has === 0) {
+        await prisma.rolePermission.create({ data: { roleId: role.id, permissionCode: "creative.task.assign" } });
+        added++;
+      }
+    }
+    await prisma.setting.create({
+      data: {
+        module: "seed",
+        key: CREATIVE_ASSIGN_KEY,
+        scope: "GLOBAL",
+        scopeRef: "",
+        value: JSON.stringify({ at: new Date().toISOString(), removed: del.count, added }),
+      },
+    });
+    console.log(`🔒 Siết giao việc Creative: xoá ${del.count} dòng, cấp ${added} dòng`);
   }
 
   // ── Module ⑥ KPI — tiêu chí đánh giá + lương vị trí + điểm mẫu ──

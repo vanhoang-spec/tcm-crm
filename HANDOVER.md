@@ -1509,11 +1509,31 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
         `/settings/creative-squads`. Đổi tên hiển thị không đụng một dòng code nào.
       · **Brainstorm vẫn tick sẵn lead 3 team nhỏ** (B1) — đúng ý "Account raise cho các team liên
         quan"; chỉ là gợi ý, Account bỏ tick được.
-    - ⚠ **HẠN CHẾ PHẢI NÓI RÕ: `creative.task.assign` vẫn đang cấp RỘNG** (nằm trong grant mặc định,
-      ~20 vai có). Đường "trưởng team" của CR-1 là **MỞ THÊM một lối**, chưa phải siết lại — hôm nay
-      gần như ai cũng giao việc Creative được. Muốn đúng tinh thần "CD điều phối, trưởng team giao
-      người" thì phải gỡ mã đó khỏi các vai không liên quan; đó là quyết định chính sách của BGĐ,
-      cố ý không tự làm trong đợt này.
+    - ⚠ **NỢ CŨ ĐÃ TRẢ 26/08/2026 — `creative.task.assign` siết từ 21 vai xuống 3** (quyết định chủ
+      dự án). Trước đó mã này nằm trong grant mặc định rộng nên **21/21 vai** giao được việc cho
+      designer, kể cả kế toán, thủ kho, thu mua. Nay đúng ba vai: `CREATIVE_PARTNER` (đối tác ngoài
+      điều hành phòng) · `CREATIVE_DIRECTOR` (điều phối) · `BOARD_OF_MANAGEMENT`.
+      · ⚠ **CREATIVE_STAFF KHÔNG có mã này và đó là ĐÚNG.** Trưởng team nhỏ giao việc bằng PHÉP KIỂM
+        THEO BẢN GHI (`assignCreativeTask`: `canAssignAll || isSquadLeadOf(task, me)`), không qua mã
+        quyền — chính CR-1 đã verify bằng cách tạm gỡ mã khỏi CREATIVE_STAFF rồi đóng vai trưởng
+        team. Đừng "sửa" bằng cách cấp lại mã cho họ.
+      · `CREATIVE_ASSIGN_ROLES` trong seed là **MỘT nguồn sự thật** cho cả ba đường: `isRestricted`
+        (chặn rơi vào grant rộng ở DB dựng-từ-đầu) · `extraByRole` (cấp lại đúng vai ở DB dựng mới;
+        CREATIVE_PARTNER đi qua `EXPLICIT_GRANTS` nên không cần dòng ở đây, nhưng VẪN phải có tên
+        trong hằng để Vòng 4f không xoá của họ) · **Vòng 4f** (xoá grant thừa ở DB đang chạy).
+      · ⚠ **Vòng 4f là vòng thứ HAI trong seed XOÁ grant của role đang hoạt động** (vòng kia là 4d,
+        siết quyền chạm tiền). Phải đặt **SAU toàn bộ backfill** — đặt trước thì backfill nào cấp
+        lại mã này sẽ ghi đè trong im lặng. Marker `20260826_creative_assign_narrow`, chạy một lần;
+        sau đó BGĐ toàn quyền tick lại ở `/settings/roles` mà re-seed không đè.
+      · Đo được **GIỐNG HỆT NHAU** hai đường: DB dựng-từ-đầu ra 3 vai và Vòng 4f báo "xoá 0 · cấp 0"
+        (tức `isRestricted` + `extraByRole` đã cho kết quả đúng trước khi vòng siết chạy); diễn tập
+        trên BẢN SAO DB đang chạy ra **21 → 3, xoá đúng 18 dòng**, tổng grant 1363 → 1345, seed lần
+        hai no-op, dữ liệu không đổi (36 nhân sự · 68 khách · 25 dự án · 483 dòng CO).
+      · ⚠ **BA MÃ CREATIVE CÒN LẠI VẪN 21/21 VAI — CỐ Ý CHƯA ĐỤNG**, vì chủ dự án chỉ yêu cầu mã
+        `assign`: `creative.task.manage` (tạo/xoá task) · `creative.task.approve` (duyệt / trả bài
+        sửa) · `creative.view`. Hai mã đầu là cùng lớp rủi ro với `assign` — hôm nay kế toán vẫn
+        duyệt được bài thiết kế. Siết hay không là quyết định chính sách, và siết được bằng cách
+        thêm hằng + vòng one-shot y hệt khuôn này.
     - ⚠ **TRƯỞNG TEAM ĐÃ NGHỈ — vá 07/08/2026 (CR-1c).** `CreativeSquad.leadStaffId` là CON TRỎ,
       KHÔNG tự rỗng khi người đó nghỉ (nghỉ chỉ set `isActive = false`). Trước bản vá, cả **ba** chỗ
       gửi thông báo cho trưởng team đều chỉ kiểm `leadStaffId != null` ⇒ tin bay vào tài khoản đã

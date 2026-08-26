@@ -55,12 +55,14 @@ jobs:
             const marks = await p.setting.findMany({ where: { module: "seed" }, select: { key: true, value: true }, orderBy: { key: "desc" }, take: 4 });
             for (const m of marks) console.log(`marker ${m.key} = ${m.value}`);
           } else {
-            console.log("nhân sự(active):", await p.staff.count({ where: { isActive: true } }));
+            console.log("nhân sự:", await p.staff.count(), "(active:", await p.staff.count({ where: { isActive: true } }), ")");
             console.log("khách:", await p.client.count(), "| dự án:", await p.project.count());
             console.log("CO/CE:", await p.costSheet.count(), "| dòng CO:", await p.costLine.count());
-            console.log("task Creative:", await p.creativeTask.count(), "| tin chat:", await p.chatMessage.count());
+            console.log("task Creative:", await p.creativeTask.count(), "| tin chat:", await p.message.count());
             console.log("ứng viên:", await p.candidate.count(), "| NCC:", await p.vendor.count());
             console.log("AuditLog:", await p.auditLog.count());
+            const cre = await p.staff.findMany({ where: { department: { code: "CREATIVE" } }, select: { fullName: true, title: true, isActive: true }, orderBy: { fullName: "asc" } });
+            for (const s2 of cre) console.log("  CREATIVE:", s2.fullName, "|", s2.title, "|", s2.isActive ? "active" : "TAT");
           }
           await p.$disconnect();
           JSEOF

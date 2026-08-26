@@ -81,12 +81,9 @@ async function main() {
     { code: null, fullName: "TRẦN THỊ BẢO NGỌC", location: "TPHCM", deptExcel: "Account 3", title: "Senior Account Executive", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0965812575", dob: [19, 2, 1999], email: "ttbngoc@tcmbtl.com", firstWorkDate: [10, 6, 2025], roleText: "Account Staff" },
     { code: null, fullName: "NGUYỄN KHÁNH LY", location: "TPHCM", deptExcel: "Account 3", title: "Account Executive", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0868778976", dob: [25, 12, 2001], email: "nkly@tcmbtl.com", firstWorkDate: [21, 10, 2025], roleText: "Account Staff" },
     { code: null, fullName: "LÊ HUỲNH KIM YẾN", location: "TPHCM", deptExcel: "Account 3", title: "Account Manager", managerName: "TRẦN THU HÀ", gender: "Nữ", phone: "0908587937", dob: [18, 5, 1988], email: "lhkyen@tcmbtl.com", firstWorkDate: [2, 12, 2025], roleText: "Account Staff" },
-    { code: "TCM-0054", fullName: "TRẦN NGUYỄN THÙY AN", location: "TPHCM", deptExcel: "Creative", title: "2D Designer", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nữ", phone: "0932640910", dob: [9, 10, 2001], email: "tntan@tcmbtl.com", firstWorkDate: [1, 6, 2024], roleText: "Creative Staff" },
-    { code: null, fullName: "NGUYỄN HOÀNG HIỆP", location: "TPHCM", deptExcel: "Creative", title: "Creative Director", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nam", phone: "0394966100", dob: [17, 8, 1989], email: "nhhiep@tcmbtl.com", firstWorkDate: [9, 7, 2025], roleText: "Creative Director" },
-    { code: null, fullName: "TRẦN SONG HUYỀN", location: "TPHCM", deptExcel: "Creative", title: "Art Manager", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nữ", phone: "0905582681", dob: [3, 1, 1996], email: "tshuyen@tcmbtl.com", firstWorkDate: [18, 8, 2025], roleText: "Creative Staff" },
-    { code: null, fullName: "LÊ MINH QUANG", location: "TPHCM", deptExcel: "Creative", title: "Design Manager", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nam", phone: "0903342341", dob: [5, 1, 1977], email: "lmquang@tcmbtl.com", firstWorkDate: [1, 10, 2025], roleText: "Creative Staff" },
-    { code: null, fullName: "HÀ CÔNG THANH TRÚC", location: "TPHCM", deptExcel: "Creative", title: "Designer", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nữ", phone: "0366880372", dob: [5, 5, 1995], email: "hcttruc@tcmbtl.com", firstWorkDate: [5, 1, 2026], roleText: "Creative Staff" },
-    { code: null, fullName: "NGUYỄN THANH CẦM", location: "TPHCM", deptExcel: "Creative", title: "3D Designer", managerName: "NGUYỄN HOÀNG HIỆP", gender: "Nam", phone: "0353283918", dob: [12, 10, 1994], email: "ntcam@tcmbtl.com", firstWorkDate: [13, 4, 2026], roleText: "Creative Staff" },
+    { code: null, fullName: "TRẦN SONG HUYỀN", location: "TPHCM", deptExcel: "Creative", title: "Art Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0905582681", dob: [3, 1, 1996], email: "tshuyen@tcmbtl.com", firstWorkDate: [18, 8, 2025], roleText: "Creative Staff" },
+    { code: null, fullName: "LÊ MINH QUANG", location: "TPHCM", deptExcel: "Creative", title: "Design Manager", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nam", phone: "0903342341", dob: [5, 1, 1977], email: "lmquang@tcmbtl.com", firstWorkDate: [1, 10, 2025], roleText: "Creative Staff" },
+    { code: null, fullName: "HÀ CÔNG THANH TRÚC", location: "TPHCM", deptExcel: "Creative", title: "Designer", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0366880372", dob: [5, 5, 1995], email: "hcttruc@tcmbtl.com", firstWorkDate: [5, 1, 2026], roleText: "Creative Staff" },
     { code: null, fullName: "PHẠM THU HUYỀN", location: "TPHCM", deptExcel: "Finance", title: "Chief Financial Officer (CFO)", managerName: "NGUYỄN VĂN HOÀNG", gender: "Nữ", phone: "0918554996", dob: [23, 1, 1977], email: "pthuyen@tcmbtl.com", firstWorkDate: [10, 8, 2026], roleText: "CFO" },
     { code: "TCM-0039", fullName: "LÊ THỊ PHƯƠNG ANH", location: "TPHCM", deptExcel: "Finance", title: "General Accountant", managerName: "PHẠM THU HUYỀN", gender: "Nữ", phone: "0398389191", dob: [21, 4, 1998], email: "ltpanh@tcmbtl.com", firstWorkDate: [12, 10, 2023], roleText: "Accounting Staff" },
     { code: null, fullName: "TRẦN THỊ MỸ ÁI", location: "TPHCM", deptExcel: "Finance", title: "General Accountant", managerName: "PHẠM THU HUYỀN", gender: "Nữ", phone: "0961176795", dob: [12, 2, 1997], email: "ttmai@tcmbtl.com", firstWorkDate: [22, 4, 2026], roleText: "Accounting Staff" },
@@ -201,9 +198,9 @@ async function main() {
   const accountant = staffByFullName.get("LÊ THỊ PHƯƠNG ANH")!; // General Accountant, MSNV TCM-0039
   const cfo = staffByFullName.get("PHẠM THU HUYỀN")!;
   const seniorDesigner = staffByFullName.get("LÊ MINH QUANG")!; // Design Manager
-  const artist3d = staffByFullName.get("NGUYỄN THANH CẦM")!; // 3D Designer
+  const artist3d = staffByFullName.get("HÀ CÔNG THANH TRÚC")!; // Designer — thay 3D Designer đã nghỉ 08/2026
   const creativeDept = deptByCode["CREATIVE"]; // dùng lại ở khối seed Project Team phía dưới
-  const creativeLead = staffByFullName.get("NGUYỄN HOÀNG HIỆP")!; // Creative Director
+  const creativeLead = staffByFullName.get("TRẦN SONG HUYỀN")!; // Art Manager — Creative Director cũ nghỉ 08/2026
 
   // ── Nhân sự trưởng các phòng ban nhận Order (Planning/Creative/Purchasing/Operation/Production) ──
   // KHÔNG tạo mới — trỏ thẳng vào người thật tương ứng đã import ở Vòng 1.
@@ -2116,8 +2113,14 @@ async function main() {
     CEO: ceo.id,
     // IT: để trống — 0 nhân sự phòng IT thật (Trương Đình Vũ nằm phòng HR theo Excel), không gán ép.
   };
+  // ⚠ CHỈ gán khi phòng đang TRỐNG trưởng phòng. Trước 26/08/2026 vòng này ghi đè VÔ ĐIỀU KIỆN
+  // mỗi lần seed, mà seed là bước BẮT BUỘC sau migrate deploy — nên mọi lần đổi trưởng phòng trong
+  // app đều bị dồn ngược lại lặng lẽ ở lần deploy kế tiếp. Đã cắn thật: phòng Creative đổi trưởng
+  // sang đối tác ngoài, deploy xong quay về người cũ (đã nghỉ). Cùng họ với khối tái cơ cấu A2 phải
+  // thay ở mục 10.18 vì "chạy vô điều kiện, không marker".
   for (const [code, leadStaffId] of Object.entries(deptLeads)) {
-    await prisma.department.update({ where: { code }, data: { leadStaffId } });
+    const dep = await prisma.department.findUnique({ where: { code }, select: { leadStaffId: true } });
+    if (dep && dep.leadStaffId === null) await prisma.department.update({ where: { code }, data: { leadStaffId } });
   }
 
   const shiftSeed = [
@@ -3260,6 +3263,75 @@ async function main() {
     ADMIN không có dòng grant nào (sàn cứng trong code) nên không bị đụng. Sau vòng này BGĐ toàn
     quyền tick lại ở /settings/roles mà re-seed không đè (marker bảo đảm chỉ một lần).
   */
+  /*
+    ── Vòng 4g: XOÁ 3 nhân sự Creative nghỉ cuối T8/2026 — chạy đúng MỘT lần ──
+
+    ⚠ ĐÂY LÀ BẢN VÁ CHO MỘT LỖI CÓ THẬT, đọc trước khi "dọn cho gọn". Ba người này bị xoá bằng
+    script tay ngày 26/08/2026 nhưng KHÔNG có khối one-shot trong seed, mà `db:seed` là bước BẮT
+    BUỘC sau `migrate deploy` (mục 10.1) — nên lần deploy ngay sau đó khối STAFF_ROWS "tạo khi
+    thiếu" DỰNG LẠI cả ba (production 36 → 39), và vòng deptLeads trả trưởng phòng Creative về
+    người đã nghỉ. Đúng bài học đã ghi ở mục 10.18: xoá nhân sự thì phải gỡ khỏi STAFF_ROWS **và**
+    có khối one-shot có marker, nếu không seed sẽ hoàn tác trong im lặng.
+
+    ⚠ THỨ TỰ LÀ BẤT BIẾN: trỏ lại mọi con trỏ TRƯỚC, xoá SAU. Xoá trước thì FK optional bị SET NULL
+    ở tầng DB và luồng Creative kẹt: order gửi đi không ai nhận, task quá hạn không nhắc được ai.
+
+    ⚠ Chụp ảnh vào AuditLog TRƯỚC KHI xoá — xoá nhân sự cuốn theo điểm KPI và ca làm, không để lại
+    dấu vết nào ở tầng DB.
+
+    Trên DB dựng-từ-đầu khối này không tìm thấy ai (đã gỡ khỏi STAFF_ROWS) nên chạy rỗng và vẫn ghi
+    marker — đúng như Vòng 4f báo "xoá 0" trên bản dựng mới.
+  */
+  const CREATIVE_OFFBOARD_KEY = "20260826_creative_offboard";
+  const creativeOffboardMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: CREATIVE_OFFBOARD_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!creativeOffboardMarker) {
+    const leaverNames = ["NGUYỄN HOÀNG HIỆP", "NGUYỄN THANH CẦM", "TRẦN NGUYỄN THÙY AN"];
+    const leavers = await prisma.staff.findMany({ where: { fullName: { in: leaverNames } }, select: { id: true, fullName: true, email: true, title: true } });
+    const ids = leavers.map((l) => l.id);
+    let removed = 0;
+    if (ids.length > 0) {
+      // Người thay: Lâm Du (điều phối) và Trương Lập Chiến (trưởng phòng). Cả hai KHÔNG nằm trong
+      // STAFF_ROWS (nhân sự nhập thẳng trên production), nên bản dựng-từ-đầu không có — tra theo
+      // email và bỏ qua êm nếu vắng thay vì ném lỗi.
+      const du = await prisma.staff.findFirst({ where: { email: "ncqdung@tcmbtl.com" }, select: { id: true } });
+      const chien = await prisma.staff.findFirst({ where: { email: "tlchien@tcmbtl.com" }, select: { id: true } });
+      if (chien) await prisma.department.updateMany({ where: { code: "CREATIVE", leadStaffId: { in: ids } }, data: { leadStaffId: chien.id } });
+      if (du) {
+        await prisma.creativeSquad.updateMany({ where: { leadStaffId: { in: ids } }, data: { leadStaffId: du.id } });
+        await prisma.staff.updateMany({ where: { managerId: { in: ids } }, data: { managerId: du.id } });
+        await prisma.creativeTask.updateMany({ where: { assigneeId: { in: ids } }, data: { assigneeId: du.id } });
+        await prisma.creativeTask.updateMany({ where: { assignedById: { in: ids } }, data: { assignedById: du.id } });
+      }
+      for (const l of leavers) {
+        const kpi = await prisma.kpiScore.count({ where: { staffId: l.id } });
+        const shifts = await prisma.shiftAssignment.count({ where: { staffId: l.id } });
+        const chats = await prisma.conversationMember.count({ where: { staffId: l.id } });
+        const notis = await prisma.notification.count({ where: { recipientStaffId: l.id } });
+        const had = await prisma.auditLog.count({ where: { entityType: "staff", entityId: l.id, field: "offboard_snapshot" } });
+        if (had === 0) {
+          await prisma.auditLog.create({ data: {
+            entityType: "staff", entityId: l.id, field: "offboard_snapshot", action: "delete",
+            reason: "Tái cơ cấu Creative 26/08/2026 — nghỉ cuối T8 (khối one-shot trong seed)",
+            oldValue: JSON.stringify({ fullName: l.fullName, email: l.email, title: l.title, kpiScores: kpi, shiftAssignments: shifts, notifications: notis, conversations: chats }),
+          } });
+        }
+        // ⚠ BA bảng này là quan hệ BẮT BUỘC (Prisma mặc định Restrict) nên phải dọn TRƯỚC, nếu
+        //   không `staff.delete` ném P2003. Số lượng đã nằm trong ảnh chụp ở trên.
+        await prisma.conversationMember.deleteMany({ where: { staffId: l.id } });
+        await prisma.notification.deleteMany({ where: { recipientStaffId: l.id } });
+        await prisma.shiftAssignment.deleteMany({ where: { staffId: l.id } });
+        await prisma.staff.delete({ where: { id: l.id } });
+        removed++;
+      }
+    }
+    await prisma.setting.create({
+      data: { module: "seed", key: CREATIVE_OFFBOARD_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ at: new Date().toISOString(), removed }) },
+    });
+    if (removed > 0) console.log(`👋 Offboard Creative: xoá ${removed} nhân sự đã nghỉ`);
+  }
+
   const CREATIVE_ASSIGN_KEY = "20260826_creative_assign_narrow";
   const assignMarker = await prisma.setting.findUnique({
     where: { module_key_scope_scopeRef: { module: "seed", key: CREATIVE_ASSIGN_KEY, scope: "GLOBAL", scopeRef: "" } },

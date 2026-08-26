@@ -1529,6 +1529,24 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
         (tức `isRestricted` + `extraByRole` đã cho kết quả đúng trước khi vòng siết chạy); diễn tập
         trên BẢN SAO DB đang chạy ra **21 → 3, xoá đúng 18 dòng**, tổng grant 1363 → 1345, seed lần
         hai no-op, dữ liệu không đổi (36 nhân sự · 68 khách · 25 dự án · 483 dòng CO).
+      · ⚠⚠ **SEED DỰNG LẠI NGƯỜI ĐÃ XOÁ — LỖI CÓ THẬT, ĐÃ VÁ CÙNG ĐỢT (Vòng 4g).** Ba nhân sự Creative
+        nghỉ cuối T8 bị xoá bằng script tay ngày 26/08 nhưng KHÔNG gỡ khỏi `STAFF_ROWS` và KHÔNG có
+        khối one-shot trong seed. `db:seed` là bước **BẮT BUỘC** sau `migrate deploy` (mục 10.1), nên
+        lần deploy ngay sau đó khối "tạo khi thiếu" **dựng lại cả ba** — đo được production **36 → 39**.
+        Đúng bài học đã ghi ở mục 10.18 mà vẫn lặp lại: **xoá nhân sự thì phải làm CẢ HAI — gỡ khỏi
+        `STAFF_ROWS` VÀ thêm khối one-shot có marker.** Chỉ làm một nửa là seed hoàn tác trong im lặng.
+      · ⚠ **Vòng deptLeads TRƯỚC 26/08 GHI ĐÈ trưởng phòng VÔ ĐIỀU KIỆN mỗi lần seed** ⇒ trưởng phòng
+        Creative vừa đổi sang đối tác ngoài đã bị trả về người cũ (đã nghỉ) ngay lần deploy kế tiếp.
+        Nay **chỉ gán khi phòng đang TRỐNG**. Cùng họ với khối tái cơ cấu A2 phải thay ở mục 10.18
+        ("chạy vô điều kiện, không marker"). Đổi trưởng phòng trong app từ nay không bị seed dồn lại.
+      · ⚠ Gỡ người khỏi `STAFF_ROWS` thì phải **trỏ lại mọi alias dùng họ** (mục 10.18): `creativeLead`
+        → Trần Song Huyền, `artist3d` → Hà Công Thanh Trúc, và 3 dòng `managerName` trỏ về CEO. Bỏ sót
+        là seed ném `undefined` ở dữ liệu mẫu. **Lâm Du và Trương Lập Chiến CỐ Ý không nằm trong
+        `STAFF_ROWS`** (nhập thẳng trên production) — Vòng 4g tra họ theo email và bỏ qua êm nếu vắng,
+        nên DB dựng-từ-đầu KHÔNG có hai người này và trưởng phòng Creative ở đó là Trần Song Huyền.
+      · Đo diễn tập trên bản dựng lại đúng trạng thái production hỏng: **xoá đúng 3 người**, trưởng phòng
+        → Chiến, lead 2 team nhỏ → Lâm Du, task → Lâm Du, **0 con trỏ mồ côi**, 3 ảnh chụp
+        `offboard_snapshot`; seed lần hai no-op. DB dựng-từ-đầu: 33 nhân sự, không còn ai trong ba người.
       · ⚠ **BA MÃ CREATIVE CÒN LẠI VẪN 21/21 VAI — CỐ Ý CHƯA ĐỤNG**, vì chủ dự án chỉ yêu cầu mã
         `assign`: `creative.task.manage` (tạo/xoá task) · `creative.task.approve` (duyệt / trả bài
         sửa) · `creative.view`. Hai mã đầu là cùng lớp rủi ro với `assign` — hôm nay kế toán vẫn

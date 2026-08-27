@@ -4019,6 +4019,46 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
 
 ## 11. Trạng thái ngay tại thời điểm bàn giao
 
+**Production đang chạy `2816d79`** (27/08/2026 12:40) — **module Tasks** (giao việc nội bộ, mục 10.69)
++ **tạo việc từ tin nhắn chat**. Deploy bằng nút bấm GitHub Actions, runner `tcm-server`. **1 migration
+mới** áp sạch (85 → 86: `tasks_module`, 6 bảng MỚI, 0 lệnh DROP), **2 mã quyền mới** (152 → 154).
+CI XANH trên `2816d79` trước khi deploy.
+
+Đối chiếu production TRƯỚC/SAU deploy — **dữ liệu cũ không đổi một dòng nào**:
+
+| | trước | sau |
+|---|---|---|
+| nhân sự / khách / dự án | 36 / 70 / 29 | **36 / 70 / 29** |
+| CO/CE / dòng CO | 9 / 897 | **9 / 897** |
+| task Creative / tin chat | 4 / 180 | **4 / 180** |
+| ứng viên / NCC / AuditLog | 2 / 30 / 122 | **2 / 30 / 122** |
+| trưởng phòng Creative | TRƯƠNG LẬP CHIẾN | **không đổi** |
+| lead 3 team nhỏ · con trỏ mồ côi | Lâm Du ×2 · Huyền · 0 | **không đổi** |
+| dòng grant | 1311 | **1334** (+23 = `tasks.use` 22 vai + `tasks.view_all` 1 vai) |
+| migration | 85 | **86** |
+
+Đủ 2 marker `20260827_tasks_use` + `20260827_tasks_view_all`. Backup trước deploy:
+`~/backup/dev.db.bak-20260827-124014`. Health check qua nginx: `/login` **200** · `/tasks`,
+`/tasks/recurring`, `/chat`, `/reminders` đều **307** về login · `/api/task-file/x` **401** ·
+`[jobs] scheduler bật` · không có file mồ côi, lockfile không đổi.
+
+⚠ **Bảng `task` trên production đang RỖNG** — đúng như mong đợi, chưa ai giao việc. Danh mục
+**Loại việc nội bộ** (OptionSet `task_type`, 6 mục) do seed tạo; sửa ở `/settings/options/task_type`.
+
+📣 **Cách dùng cho người mới:** mục **"Công việc"** trên thanh bên (ngay dưới Trợ lý AI) — tab mặc
+định là "Tôi nhận". Giao việc bằng form bên phải; **chọn nhiều người thì hệ tự tách 1 việc tổng +
+mỗi người 1 việc con**. Việc lặp định kỳ khai ở `/tasks/recurring`. Trong chat, menu "…" của mỗi tin
+nhắn có mục **"Tạo việc"**.
+
+⚠ **Hai khoá vẫn chưa khai** (không phải lỗi, code tự tắt): `ANTHROPIC_API_KEY` (chưa khai thì MKT
+chạy bằng DeepSeek) · `RESEND_API_KEY` + `RESEND_FROM` **kèm xác minh domain `tcmbtl.com` bằng bản
+ghi DNS SPF + DKIM**.
+
+---
+
+### Deploy trước đó — 26/08/2026 lúc 19:24
+
+
 **Production đang chạy `1acf51f`** (26/08/2026 19:24, = `5283d7d` + workflow soi số liệu + ghi chú HANDOVER) — **siết quyền giao việc Creative** (mục 10.32:
 `creative.task.assign` từ 21 vai xuống 3) + **vá lỗi seed dựng lại nhân sự đã nghỉ**. Deploy bằng nút
 bấm GitHub Actions (lần thứ bảy và tám trong ngày), runner `tcm-server`. **KHÔNG migration mới** (85),
@@ -4062,6 +4102,7 @@ chạy bằng DeepSeek) · `RESEND_API_KEY` + `RESEND_FROM` **kèm xác minh dom
 ghi DNS SPF + DKIM**.
 
 ---
+
 
 ### Deploy trước đó — 25/08/2026 lúc 12:16
 

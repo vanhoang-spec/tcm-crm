@@ -97,6 +97,22 @@ Khi viết script nhập liệu, **phải** dựng ngày bằng `Date.UTC(y, m, 
 - Mobile: `sm:hidden` card song song với bảng desktop; bảng rộng thì cuộn ngang trong wrapper riêng, **body không bao giờ cuộn ngang**.
 - Dùng lại component có sẵn: `DateField` (nhập dd/mm/yyyy), `SearchableSelect`, `StaffAvatar`, `Badge`, `StatRatio`.
 - **Drawer/dialog `position: fixed` không được đặt bên trong phần tử có `backdrop-blur`/`transform`/`filter`** — sẽ bị nhốt trong khung cha (đã từng làm vỡ menu mobile toàn app).
+- **VÙNG CHẠM 44px (27/08/2026)** — một quy tắc CSS duy nhất ở cuối `globals.css`, gác bằng
+  `@media (pointer: coarse)`. ⚠ Gác theo **NGÓN TAY, không theo bề rộng màn hình**: desktop dùng
+  chuột giữ nguyên nút nhỏ (44px trên desktop làm vỡ 25 bảng inline-edit, lưới CO/CE và bảng kho);
+  iPad ngang vẫn được vùng chạm lớn vì vẫn chạm tay. Dùng `min-height`/`min-width` chứ KHÔNG đặt
+  `height` — nút chỉ NỞ cho đủ 44px, không ép co nút vốn cao hơn.
+  ⚠ **CỐ Ý làm ở MỘT chỗ** thay vì sửa 148 chỗ khai `h-8`/`h-9` rải trong 68 file: app có **634**
+  thẻ `<button>`, phần lớn lấy chiều cao từ padding nên sửa tay chắc chắn bỏ sót.
+  ⚠ **Nút icon: phải nhắm NÚT bằng `:has(> svg:only-child)`, KHÔNG đặt `min-width` lên chính
+  `<svg>`** — làm vậy icon 20px nở thành 44px và đẩy thanh header **TRÀN NGANG** (đã vấp, đo được
+  `scrollWidth` 417 > 375). Nút `.absolute` (icon lịch trong `DateField`…) CỐ Ý loại trừ: nở ra sẽ
+  tràn khỏi khung ô nhập, và vùng chạm của chúng đã theo ô nhập cao 36–40px.
+  Đo sau khi áp, khổ 375px: `/tasks` 9/10 · **CO/CE builder 118/118** · chat 16/16 · kho 7/7 nút
+  đạt ≥44px, **không trang nào tràn ngang**; desktop 119 nút giữ nguyên phân bố chiều cao 12–48px.
+- **Ô NHẬP PHẢI ≥16px TRÊN MOBILE** (`text-base sm:text-xs`): iOS Safari tự phóng to trang khi
+  focus ô nhập dưới 16px, làm nút trôi khỏi mép màn hình. Đã phải vá hai lần (Chat mục 10.52,
+  module Tasks mục 10.69) — thêm form mới thì áp sẵn.
 
 ### 4.5 Migration
 Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Không reset DB** khi đã có dữ liệu thật; migration mới phải additive (cột nullable hoặc có default).

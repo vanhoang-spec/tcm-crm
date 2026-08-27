@@ -207,3 +207,34 @@ body {
     page-break-inside: avoid;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   VÙNG CHẠM 44px TRÊN THIẾT BỊ CẢM ỨNG (27/08/2026, yêu cầu chủ dự án)
+
+   ⚠ Gác bằng `pointer: coarse` — NGÓN TAY, không phải bề rộng màn hình. Desktop dùng chuột giữ
+   nguyên nút nhỏ: 44px trên desktop làm vỡ 25 bảng inline-edit dày đặc, lưới CO/CE và bảng kho.
+   Máy cảm ứng màn to (iPad ngang) vẫn được vùng chạm lớn — đúng, vì vẫn chạm bằng tay.
+
+   ⚠ Dùng `min-height`/`min-width` chứ KHÔNG đặt `height`: nút chỉ NỞ RA cho đủ 44px, không ép co
+   nút vốn cao hơn. Phần lớn nút trong app đã `inline-flex items-center` nên nội dung tự căn giữa.
+
+   ⚠ CỐ Ý làm ở MỘT chỗ thay vì sửa 148 chỗ khai `h-8`/`h-9` rải trong 68 file: một quy tắc thì
+   đọc được, gỡ được, và không bỏ sót ~486 nút khác vốn lấy chiều cao từ padding.
+
+   Loại trừ: nút trong ô nhập (DateField…) neo bằng `position:absolute` — nở ra sẽ tràn khỏi khung
+   ô. Chúng vốn chỉ có icon, vùng chạm đã theo ô nhập cao 36–40px.
+   ───────────────────────────────────────────────────────────────────────────── */
+@media (pointer: coarse) {
+  button:not(.absolute),
+  [role="button"]:not(.absolute),
+  input[type="submit"],
+  input[type="button"] {
+    min-height: 44px;
+  }
+  /* Nút chỉ có icon: nở cả bề ngang để vùng chạm là ô vuông, không phải dải dẹt.
+     ⚠ Phải nhắm NÚT bằng :has(), KHÔNG đặt min-width lên chính <svg> — làm vậy icon 20px nở
+     thành 44px và đẩy thanh header TRÀN NGANG (đã vấp và đo được: scrollWidth 417 > 375). */
+  button:not(.absolute):has(> svg:only-child) {
+    min-width: 44px;
+  }
+}

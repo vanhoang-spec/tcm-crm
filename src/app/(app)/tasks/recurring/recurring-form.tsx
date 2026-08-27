@@ -30,8 +30,11 @@ export type RecurrenceRow = {
 };
 type Opt = { id: string; label: string; sublabel?: string };
 
+// ⚠ text-base (16px) trên MOBILE: iOS Safari TỰ PHÓNG TO trang khi focus ô nhập có cỡ chữ dưới
+// 16px, làm nút trôi khỏi mép màn hình (bài học HANDOVER 10.52 — đã phải vá cho chat). Từ sm trở
+// lên mới về text-xs cho gọn lưới.
 const input =
-  "h-8 rounded-lg border border-border-strong bg-surface px-2 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
+  "h-8 rounded-lg border border-border-strong bg-surface px-2 text-base sm:text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 function RuleForm({
   rule,
@@ -113,14 +116,14 @@ function RuleForm({
         maxLength={4000}
         defaultValue={rule?.description ?? ""}
         placeholder={t("descriptionPlaceholder")}
-        className="w-full rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+        className="w-full rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-base sm:text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
       />
       <textarea
         name="checklist"
         rows={3}
         defaultValue={rule ? parseChecklistJson(rule.checklistJson).join("\n") : ""}
         placeholder={t("recurChecklistPlaceholder")}
-        className="w-full rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+        className="w-full rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-base sm:text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
       />
       {state?.error && <p className="text-xs text-danger">{t(`err${state.error}`)}</p>}
       <button className="h-8 rounded-lg bg-brand-600 px-4 text-xs font-medium text-white hover:bg-brand-700">{t("btnSave")}</button>

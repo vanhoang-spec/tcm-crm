@@ -38,8 +38,11 @@ export type Opt = { id: string; label: string; sublabel?: string };
 
 const STATUS_ORDER = ["AWAIT_CONFIRM", "IN_PROGRESS", "OPEN", "DONE", "CANCELED"] as const;
 const PRIORITY_TONE: Record<string, "danger" | "neutral" | "brand"> = { HIGH: "danger", NORMAL: "neutral", LOW: "brand" };
+// ⚠ text-base (16px) trên MOBILE: iOS Safari TỰ PHÓNG TO trang khi focus ô nhập có cỡ chữ dưới
+// 16px, làm nút trôi khỏi mép màn hình (bài học HANDOVER 10.52 — đã phải vá cho chat). Từ sm trở
+// lên mới về text-xs cho gọn lưới.
 const input =
-  "h-8 rounded-lg border border-border-strong bg-surface px-2 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
+  "h-8 rounded-lg border border-border-strong bg-surface px-2 text-base sm:text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 function sortByUrgency(tasks: TaskItem[]): TaskItem[] {
   return [...tasks].sort((a, b) => {
@@ -173,7 +176,7 @@ export function CreateTaskForm({ staff, taskTypes, projects }: { staff: Opt[]; t
         </select>
       </div>
       <SearchableSelect name="projectId" options={projects.map((p) => ({ value: p.id, label: p.label }))} placeholder={t("projectPlaceholder")} allowClear />
-      <textarea name="description" rows={2} maxLength={4000} placeholder={t("descriptionPlaceholder")} className="w-full rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
+      <textarea name="description" rows={2} maxLength={4000} placeholder={t("descriptionPlaceholder")} className="w-full rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-base sm:text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
       {state?.error && <p className="text-xs text-danger">{t(`err${state.error}`)}</p>}
       <button type="submit" className="h-8 rounded-lg bg-brand-600 px-4 text-xs font-medium text-white hover:bg-brand-700">
         {t("btnCreate")}

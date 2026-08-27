@@ -61,8 +61,11 @@ const STATUS_TONE: Record<string, "brand" | "warning" | "success" | "danger" | "
   CANCELED: "neutral",
 };
 const PRIORITY_TONE: Record<string, "danger" | "neutral" | "brand"> = { HIGH: "danger", NORMAL: "neutral", LOW: "brand" };
+// ⚠ text-base (16px) trên MOBILE: iOS Safari TỰ PHÓNG TO trang khi focus ô nhập có cỡ chữ dưới
+// 16px, làm nút trôi khỏi mép màn hình (bài học HANDOVER 10.52 — đã phải vá cho chat). Từ sm trở
+// lên mới về text-xs cho gọn lưới.
 const input =
-  "h-8 rounded-lg border border-border-strong bg-surface px-2 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
+  "h-8 rounded-lg border border-border-strong bg-surface px-2 text-base sm:text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
 
 function fmtSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;

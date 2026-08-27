@@ -4009,6 +4009,11 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
         người nhận với "Tôi" đứng đầu · tạo thật ⇒ DB đúng người/ưu tiên/hạn, mô tả chép nội dung tin
         kèm tên người gửi, **1 tin hệ thống** hiện trong nhóm, **1 notification**, việc xuất hiện ở
         tab "Tôi giao" của `/tasks`.
+    - ⚠ **CỠ CHỮ Ô NHẬP PHẢI ≥16px TRÊN MOBILE — bắt được khi soi giao diện điện thoại.** Ba file UI
+      của module ban đầu dùng `text-xs` (12px) cho mọi ô nhập ⇒ **iOS Safari TỰ PHÓNG TO trang khi
+      chạm vào ô**, làm nút trôi khỏi mép màn hình — đúng lỗi đã phải vá cho Chat (mục 10.52). Nay là
+      `text-base sm:text-xs`. Đo lại trên khung 375px: **0/7 ô dưới 16px, không tràn ngang**.
+      **Thêm form mới trong app thì áp cùng quy tắc này.**
     - **CHƯA LÀM (cố ý — muốn thêm phải chốt lại):** kéo-thả kanban · sub-task sâu hơn 1 cấp ·
       multi-assignee trên cùng một task · lịch lặp sinh cây cha-con (chỉ sinh task đơn + checklist) ·
       @mention trong bình luận · gắn nhiều dự án · chuyển 8 hệ việc cũ (hoặc AccountMeetingAction) thành

@@ -26,6 +26,7 @@ import {
   Pin,
   PinOff,
   Trash2,
+  ListTodo,
   Clock,
   BarChart3,
   Repeat,
@@ -46,11 +47,13 @@ import {
   pinMessage,
   unpinMessage,
   createReminder,
+  createTaskFromMessage,
   createPoll,
   votePollOption,
   addPollOption,
   type SendState,
   type ReminderState,
+  type TaskFromChatState,
   type PollState,
 } from "./actions";
 import { QUICK_REACTIONS, EMOJI_CATEGORIES } from "@/lib/emoji-data";
@@ -187,6 +190,8 @@ export function ChatConversation({
   const [seenByFlipDownId, setSeenByFlipDownId] = useState<string | null>(null);
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
   const [pollModalOpen, setPollModalOpen] = useState(false);
+  /** Tin đang được chuyển thành việc (module Tasks) — null = không mở hộp thoại. */
+  const [taskFromMessage, setTaskFromMessage] = useState<ChatMessage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
   useEffect(() => {
@@ -641,6 +646,9 @@ export function ChatConversation({
                           <MenuButton icon={ForwardIcon} label={t("forward")} onClick={() => { setForwardMessageId(m.id); setOpenMenuMessageId(null); }} />
                         )}
                         <MenuButton icon={Copy} label={t("copyMessage")} onClick={() => handleCopy(m)} />
+                        {m.type !== "REMINDER" && m.type !== "POLL" && (
+                          <MenuButton icon={ListTodo} label={t("createTask")} onClick={() => { setTaskFromMessage(m); setOpenMenuMessageId(null); }} />
+                        )}
                         <MenuButton icon={Eye} label={t("seenBy")} onClick={() => openSeenBy(m)} />
                         {m.pinned ? (
                           <MenuButton icon={PinOff} label={t("unpin")} onClick={() => handleUnpin(m.id)} />
@@ -687,6 +695,16 @@ export function ChatConversation({
       )}
       {reminderModalOpen && (
         <ReminderModal conversationId={conversationId} onClose={() => setReminderModalOpen(false)} onCreated={refreshNow} />
+      )}
+      {taskFromMessage && (
+        <TaskFromChatModal
+          conversationId={conversationId}
+          message={taskFromMessage}
+          members={members}
+          meId={meId}
+          onClose={() => setTaskFromMessage(null)}
+          onCreated={refreshNow}
+        />
       )}
       {pollModalOpen && <PollModal conversationId={conversationId} onClose={() => setPollModalOpen(false)} onCreated={refreshNow} />}
     </div>
@@ -754,6 +772,112 @@ function SeenByModal({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Chuyển một tin nhắn thành VIỆC (module Tasks). Tiêu đề điền sẵn từ nội dung tin (cắt 1 dòng);
+ * NGƯỜI NHẬN cố ý để trống, người tạo tự chọn (quyết định chủ dự án).
+ * ⚠ Ô chọn chỉ liệt kê THÀNH VIÊN cuộc trò chuyện — đúng ngữ cảnh "việc phát sinh từ trao đổi này".
+ * Server KHÔNG giới hạn theo thành viên (chỉ đòi nhân sự đang hoạt động), nên muốn mở rộng về sau
+ * chỉ phải đổi ô chọn này.
+ */
+function TaskFromChatModal({
+  conversationId,
+  message,
+  members,
+  meId,
+  onClose,
+  onCreated,
+}: {
+  conversationId: string;
+  message: ChatMessage;
+  members: ChatStaff[];
+  meId: string | null;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const t = useTranslations("chat");
+  const [state, formAction, pending] = useActionState<TaskFromChatState, FormData>(
+    createTaskFromMessage.bind(null, conversationId, message.id),
+    {},
+  );
+  const okRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (state.ok && state.ok !== okRef.current) {
+      okRef.current = state.ok;
+      onCreated();
+      onClose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onCreated/onClose đọc giá trị mới nhất qua closure
+  }, [state.ok]);
+
+  // Tiêu đề gợi ý: dòng đầu của tin, cắt 120 ký tự. Tin không phải chữ thì lấy tên file.
+  const suggested = ((message.body ?? message.attachmentName ?? "").split(String.fromCharCode(10))[0] ?? "").trim().slice(0, 120);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form action={formAction} onReset={(e) => e.preventDefault()} className="w-full max-w-sm space-y-3 rounded-xl border border-border bg-surface p-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <ListTodo className="h-4 w-4" />
+            {t("taskModalTitle")}
+          </h3>
+          <button type="button" onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-surface-2">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">{t("taskTitleLabel")}</label>
+          <input name="title" required defaultValue={suggested} maxLength={200} placeholder={t("taskTitlePlaceholder")} className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-brand-400" />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">{t("taskAssigneeLabel")}</label>
+          <select name="assigneeId" required defaultValue="" className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-brand-400">
+            <option value="" disabled>{t("taskAssigneePlaceholder")}</option>
+            {/* ⚠ `members` = mentionMembers, CỐ Ý loại chính mình (nguồn gợi ý @mention) — phải tự
+                thêm "Tôi" vào đây, nếu không thì đọc chat thấy việc của mình mà không tự nhận được. */}
+            {meId && <option value={meId}>{t("taskAssigneeMe")}</option>}
+            {members.map((mem) => (
+              <option key={mem.id} value={mem.id}>
+                {mem.fullName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex gap-2">
+          <div className="flex-1 space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">{t("taskDueLabel")}</label>
+            <input name="dueDate" type="date" className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-brand-400" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">{t("taskPriorityLabel")}</label>
+            <select name="priority" defaultValue="NORMAL" className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-brand-400">
+              <option value="LOW">{t("taskPriorityLow")}</option>
+              <option value="NORMAL">{t("taskPriorityNormal")}</option>
+              <option value="HIGH">{t("taskPriorityHigh")}</option>
+            </select>
+          </div>
+        </div>
+
+        <p className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-[11px] text-muted-foreground">{t("taskFromChatHint")}</p>
+
+        {state.error && <p className="text-xs text-danger">{state.error}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-2">
+            {t("cancel")}
+          </button>
+          <button type="submit" disabled={pending} className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+            {t("taskCreate")}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -1078,6 +1202,8 @@ function SystemLine({ m, t }: { m: ChatMessage; t: ReturnType<typeof useTranslat
     case "ROLE_PROMOTED": text = t("sysPromoted", { actor, name }); break;
     case "MEMBER_REMOVED": text = t("sysRemoved", { actor, name }); break;
     case "REMINDER_DUE": text = t("sysReminderDue", { title: name }); break;
+    // body gộp "tiêu đề — người nhận" vì SYSTEM chỉ có MỘT ô biến (xem createTaskFromMessage).
+    case "TASK_CREATED": text = t("sysTaskCreated", { actor, name }); break;
     default: text = "";
   }
   return (

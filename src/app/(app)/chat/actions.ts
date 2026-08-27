@@ -868,3 +868,103 @@ export async function loadChatPanel(conversationId: string): Promise<Conversatio
   const meId = await getCurrentStaffId();
   return buildConversationView(conversationId, meId);
 }
+
+export type TaskFromChatState = { error?: string; ok?: number };
+
+/**
+ * TẠO VIỆC TỪ MỘT TIN NHẮN (27/08/2026) — cầu nối Chat → module Tasks.
+ *
+ * ⚠ CỐ Ý KHÔNG lưu link ngược về tin nhắn (quyết định chủ dự án): nội dung tin được CHÉP vào ô mô
+ * tả của việc, không thêm cột nào vào `Task`. Muốn truy lại ngữ cảnh thì mở chat tìm — đổi lại
+ * module Tasks không phụ thuộc Chat, và không có con trỏ mồ côi khi tin bị xoá.
+ *
+ * ⚠ Gác CẢ HAI mã: `chat.use` (đang trong cuộc trao đổi) và `tasks.use` (được dùng module việc) —
+ * bảo vệ dùng chat được nhưng KHÔNG có tasks.use nên không tạo việc từ chat được.
+ * Người nhận CỐ Ý không điền sẵn (quyết định chủ dự án): người tạo tự chọn mỗi lần.
+ */
+export async function createTaskFromMessage(
+  conversationId: string,
+  messageId: string,
+  _prev: TaskFromChatState,
+  formData: FormData,
+): Promise<TaskFromChatState> {
+  await requirePermission("chat.use");
+  await requirePermission("tasks.use");
+  const t = await getTranslations("chat");
+  const meId = await getCurrentStaffId();
+  if (!meId) return { error: t("errNotMember") };
+  const membership = await getMembership(conversationId, meId);
+  if (!membership) return { error: t("errNotMember") };
+
+  // Tin phải thuộc ĐÚNG cuộc trò chuyện đang mở — id đoán mò không kéo được nội dung tin khác vào việc.
+  const source = await prisma.message.findFirst({
+    where: { id: messageId, conversationId },
+    select: { body: true, type: true, attachmentName: true, sender: { select: { fullName: true } } },
+  });
+  if (!source) return { error: t("errNotMember") };
+
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return { error: t("errTaskTitleRequired") };
+  const assigneeId = String(formData.get("assigneeId") ?? "").trim();
+  if (!assigneeId) return { error: t("errTaskAssigneeRequired") };
+  // Người nhận phải là nhân sự ĐANG hoạt động — đọc lại ở server, không tin payload.
+  if ((await prisma.staff.count({ where: { id: assigneeId, isActive: true } })) === 0) {
+    return { error: t("errTaskAssigneeRequired") };
+  }
+
+  const dueRaw = String(formData.get("dueDate") ?? "").trim();
+  const dueDate = dueRaw ? new Date(dueRaw) : null;
+  const priorityRaw = String(formData.get("priority") ?? "NORMAL");
+  const priority = ["LOW", "NORMAL", "HIGH"].includes(priorityRaw) ? priorityRaw : "NORMAL";
+
+  // Mô tả = nội dung tin gốc + ai nói. Tin không phải chữ (ảnh/file/voice) thì lấy tên file.
+  const quoted = (source.body ?? source.attachmentName ?? "").trim();
+  const description = quoted
+    ? t("taskFromChatDescription", { sender: source.sender?.fullName ?? "—", body: quoted.slice(0, 2000) })
+    : null;
+
+  const task = await prisma.task.create({
+    data: { title: title.slice(0, 200), description, priority, creatorId: meId, assigneeId, dueDate },
+    select: { id: true },
+  });
+
+  const [me, assignee, conv] = await Promise.all([
+    prisma.staff.findUnique({ where: { id: meId }, select: { fullName: true } }),
+    prisma.staff.findUnique({ where: { id: assigneeId }, select: { fullName: true } }),
+    prisma.conversation.findUnique({ where: { id: conversationId }, select: { type: true, name: true } }),
+  ]);
+
+  // Thông báo riêng cho người nhận (trừ khi tự giao) — cùng type với mọi việc khác của module Tasks.
+  if (assigneeId !== meId) {
+    await prisma.notification.create({
+      data: { recipientStaffId: assigneeId, type: "TASK_ASSIGNED", title: `Bạn được giao việc: ${title}`, body: description },
+    });
+  }
+
+  // Tin hệ thống trong nhóm để cả nhóm biết việc đã được chốt (khỏi ai đó tạo trùng) — đúng khuôn
+  // nhắc hẹn/bình chọn. `body` gộp "tiêu đề — người nhận" vì Message chỉ có MỘT ô biến cho SYSTEM.
+  await prisma.message.create({
+    data: {
+      conversationId,
+      senderId: meId,
+      type: "SYSTEM",
+      systemEvent: "TASK_CREATED",
+      body: `${title} — ${assignee?.fullName ?? "—"}`,
+    },
+  });
+  await markConversationRead(conversationId, meId);
+  await notifyNewMessage({
+    conversationId,
+    senderId: meId,
+    senderName: me?.fullName ?? "—",
+    convType: conv?.type ?? "GROUP",
+    convName: conv?.name ?? null,
+    preview: t("taskCreatedPreview", { title }),
+    mentionStaffIds: [],
+    mentionAll: false,
+  });
+
+  revalidateConv(conversationId);
+  revalidatePath("/tasks");
+  return { ok: Date.now() };
+}

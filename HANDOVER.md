@@ -3988,6 +3988,27 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - ⚠ **Ghi chú dev.db:** mật khẩu tài khoản admin trên **dev.db** đã đặt lại thành `TCM123456` để verify
       trên browser. dev.db là SANDBOX (mục 8.2) — production KHÔNG bị đụng. Seed chạy trên dev.db cũng đã
       xoá 2/3 nhân sự Creative đã nghỉ (Hiệp còn vướng `project_member` của dữ liệu mẫu).
+    - **TẠO VIỆC TỪ TIN NHẮN CHAT (27/08/2026)** — cầu nối Chat → Tasks, **KHÔNG migration**
+      (chỉ thêm giá trị `systemEvent = "TASK_CREATED"` vào cột có sẵn). Menu "…" của mỗi tin có mục
+      **"Tạo việc"**; hộp thoại mirror `ReminderModal` sẵn có: tiêu đề điền sẵn từ dòng đầu của tin,
+      hạn, ưu tiên, người nhận.
+      · ⚠ **CỐ Ý KHÔNG lưu link ngược về tin nhắn** (quyết định chủ dự án): nội dung tin được CHÉP
+        vào ô mô tả, KHÔNG thêm cột nào vào `Task`. Đổi lại module Tasks không phụ thuộc Chat và
+        không có con trỏ mồ côi khi tin bị xoá. Muốn truy ngữ cảnh thì mở chat tìm.
+      · ⚠ **Người nhận CỐ Ý để trống, bắt chọn** (quyết định chủ dự án) — không đoán người gửi.
+      · ⚠ **Ô chọn phải TỰ THÊM "Tôi (tự nhận việc)"**: prop `members` là `mentionMembers` =
+        thành viên **TRỪ CHÍNH MÌNH** (nguồn gợi ý @mention). Không thêm thì đọc chat thấy việc của
+        mình mà **không tự nhận được** — bắt được lúc verify trên browser.
+      · Gác **CẢ HAI** mã `chat.use` + `tasks.use`: bảo vệ dùng chat được nhưng không có `tasks.use`
+        nên không tạo việc từ chat được. Tin phải thuộc ĐÚNG cuộc trò chuyện đang mở (chống đoán id),
+        người nhận đọc lại ở server (phải đang hoạt động).
+      · **Tin hệ thống trong nhóm** `TASK_CREATED` để cả nhóm biết việc đã chốt, khỏi tạo trùng (đúng
+        khuôn nhắc hẹn/bình chọn). `body` gộp `"tiêu đề — người nhận"` vì Message chỉ có **MỘT** ô
+        biến cho SYSTEM — đừng đi tìm trường thứ hai.
+      · Verify browser: menu hiện đúng mục · hộp thoại điền sẵn tiêu đề từ nội dung tin · 34 lựa chọn
+        người nhận với "Tôi" đứng đầu · tạo thật ⇒ DB đúng người/ưu tiên/hạn, mô tả chép nội dung tin
+        kèm tên người gửi, **1 tin hệ thống** hiện trong nhóm, **1 notification**, việc xuất hiện ở
+        tab "Tôi giao" của `/tasks`.
     - **CHƯA LÀM (cố ý — muốn thêm phải chốt lại):** kéo-thả kanban · sub-task sâu hơn 1 cấp ·
       multi-assignee trên cùng một task · lịch lặp sinh cây cha-con (chỉ sinh task đơn + checklist) ·
       @mention trong bình luận · gắn nhiều dự án · chuyển 8 hệ việc cũ (hoặc AccountMeetingAction) thành

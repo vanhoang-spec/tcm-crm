@@ -2342,14 +2342,14 @@ model ConversationMember {
 
 /// Tin nhắn. senderId null cho SYSTEM. type=LINK dùng linkUrl+linkText (2 ô).
 /// systemEvent điều khiển render i18n (KHÔNG hardcode text như notification): GROUP_CREATED |
-/// MEMBER_ADDED | MEMBER_LEFT | MEMBER_REMOVED | GROUP_RENAMED | ROLE_PROMOTED.
+/// MEMBER_ADDED | MEMBER_LEFT | MEMBER_REMOVED | GROUP_RENAMED | ROLE_PROMOTED | REMINDER_DUE | TASK_CREATED.
 model Message {
   id                     String    @id @default(cuid())
   conversationId         String
   senderId               String? // null cho SYSTEM
   type                   String    @default("TEXT") // TEXT | LINK | SYSTEM | IMAGE | VIDEO | VOICE | FILE | REMINDER | POLL (Phase 2 còn lại: CONTACT)
   body                   String? // nội dung text; với SYSTEM = biến phụ (tên người bị thêm / tên nhóm mới)
-  systemEvent            String? // GROUP_CREATED | MEMBER_ADDED | MEMBER_LEFT | MEMBER_REMOVED | GROUP_RENAMED | ROLE_PROMOTED
+  systemEvent            String? // GROUP_CREATED | MEMBER_ADDED | MEMBER_LEFT | MEMBER_REMOVED | GROUP_RENAMED | ROLE_PROMOTED | REMINDER_DUE | TASK_CREATED
   linkUrl                String? // type=LINK
   linkText               String? // type=LINK
   linkPreviewTitle       String? // type=LINK — og:title (unfurl server-side lúc gửi, xem lib/link-preview.ts)

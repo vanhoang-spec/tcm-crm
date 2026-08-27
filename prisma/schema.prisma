@@ -306,6 +306,7 @@ model Staff {
   taskFiles                   TaskFile[]                @relation("TaskFileUploadedBy")
   taskRecurrencesCreated      TaskRecurrence[]          @relation("TaskRecurrenceCreator")
   taskRecurrencesAssigned     TaskRecurrence[]          @relation("TaskRecurrenceAssignee")
+  creativeDraftsCreated       CreativeDraftProject[]    @relation("CreativeDraftCreatedBy")
 
   @@map("staff")
 }
@@ -1888,13 +1889,46 @@ model CreativeSquad {
 /// Vòng đời: UNASSIGNED → ASSIGNED → SUBMITTED → (REVISION ↺) → DELIVERED · CANCELED = bị khóa theo project.
 /// CR-1: `squadId` = task đã ĐIỀU PHỐI về team nhỏ nào ("đã về team" là THUỘC TÍNH, không phải
 /// status mới — CD re-route được bất kỳ lúc nào và vẫn giao thẳng người được như cũ).
+/// CR-2 (27/08/2026) — DỰ ÁN NHÁP của phòng Creative: chỗ neo tạm cho task khi Account chưa kịp
+/// nhập khách hàng + dự án vào app. Chỉ là NHÃN GOM NHÓM (tên + tên khách free-text + giai đoạn),
+/// KHÔNG phải Project — phương án "project giữ chỗ thật" đã bị loại vì generateProjectCode đếm
+/// count(fiscalYear): dự án giả ăn số thứ tự thật, xoá đi là mã trùng P2002 (xem plan CR-2).
+/// Mapping về dự án thật bằng applyDraftMapping: task chuyển projectId, bản ghi nháp GIỮ LẠI làm
+/// dấu vết (mappedToProjectId + mappedAt) và ẩn khỏi mọi ô chọn. KHÔNG có đường xoá.
+model CreativeDraftProject {
+  id                String    @id @default(cuid())
+  name              String // tên dự án tạm — "theo tên trước", đợi dự án thật
+  clientName        String? // tên khách hàng tạm, free-text — chưa phải bản ghi Client
+  /// Giai đoạn TỰ CHỌN lúc tạo (sửa được): BIDDING | WORKING — task nháp đếm vào đúng nhánh này
+  /// trên thẻ thống kê /creative + dashboard, nên KHÔNG phải đục nhánh thống kê thứ ba.
+  phase             String    @default("BIDDING")
+  createdById       String
+  /// Đã mapping về dự án nào (CON TRỎ THAM CHIẾU, không FK — khuôn doneInMeetingId). null = đang mở.
+  mappedToProjectId String?
+  mappedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  createdBy Staff          @relation("CreativeDraftCreatedBy", fields: [createdById], references: [id])
+  tasks     CreativeTask[]
+
+  @@index([mappedAt])
+  @@map("creative_draft_project")
+}
+
 model CreativeTask {
   id                     String    @id @default(cuid())
-  projectId              String
+  /// CR-2 (27/08/2026): NULLABLE — task NHÁP tạo trước khi dự án tồn tại trong app (Account chưa
+  /// kịp nhập). ⚠ BẤT BIẾN: đúng MỘT trong (projectId, draftId) có giá trị — SQLite không tự ép
+  /// được, ép ở đường ghi createCreativeTask + applyDraftMapping (khuôn XOR của KB-H2).
+  /// Task sinh từ ORDER vẫn LUÔN có projectId (spawn đi từ order.projectId).
+  projectId              String?
   orderId                String? // ProjectOrder(CREATIVE) nguồn
   orderItemId            String? // ProjectOrderItem gốc (chỉ task sinh từ Master Timeline) — để đẩy status→DONE khi DELIVERED
   orderedById            String? // snapshot người ORDER (order.sentById ?? project.ownerId) — nơi trả thành phẩm
   sourceItemLabel        String? // nhãn ProjectOrderCreativeItem gốc (dedupe khi tự sinh)
+  /// CR-2: dự án NHÁP mà task treo vào khi chưa có dự án thật (xem CreativeDraftProject).
+  draftId                String?
   squadId                String? // CR-1: team nhỏ được điều phối — spawn gợi ý theo nhãn, CD sửa được
   taskTypeId             String? // option_set "creative_task_type" — CD chọn lúc giao
   title                  String
@@ -1916,7 +1950,8 @@ model CreativeTask {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project    Project?             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  draft      CreativeDraftProject? @relation(fields: [draftId], references: [id], onDelete: SetNull)
   squad      CreativeSquad?    @relation(fields: [squadId], references: [id], onDelete: SetNull)
   order      ProjectOrder?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
   orderItem  ProjectOrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
@@ -1930,6 +1965,7 @@ model CreativeTask {
   @@index([projectId, status])
   @@index([assigneeId, status])
   @@index([orderItemId])
+  @@index([draftId])
   @@map("creative_task")
 }
 

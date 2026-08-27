@@ -25,9 +25,13 @@ export type TaskData = {
   title: string;
   detail: string | null;
   status: CreativeTaskStatus;
-  projectId: string;
-  projectCode: string;
-  projectName: string;
+  // CR-2: task NHÁP chưa gắn dự án thật ⇒ ba trường này null, dùng draft* thay thế.
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  draftId: string | null;
+  draftName: string | null;
+  draftClientName: string | null;
   teamCode: string | null;
   phase: "BIDDING" | "WORKING";
   taskTypeId: string | null;
@@ -82,6 +86,7 @@ export function TaskBoard({
   teams,
   orderers,
   squads,
+  drafts,
   hideCreate,
   hideFilters,
 }: {
@@ -92,6 +97,8 @@ export function TaskBoard({
   teams: Opt[];
   orderers: Opt[];
   squads: Opt[];
+  /** CR-2: dự án NHÁP đang mở — ô chọn thứ hai trong form tạo task lẻ. */
+  drafts: Opt[];
   /** Màn "Việc của tôi" ẩn form tạo task lẻ + dàn filter — 2 prop thay vì tách component. */
   hideCreate?: boolean;
   hideFilters?: boolean;
@@ -230,13 +237,24 @@ export function TaskBoard({
         <details className="rounded-lg border border-dashed border-border-strong p-3">
           <summary className="cursor-pointer text-xs font-medium text-brand-600">{t("task.createTitle")}</summary>
           <form action={createCreativeTask} className="mt-2 flex flex-wrap items-end gap-2">
+            {/* CR-2: treo vào dự án THẬT hoặc DỰ ÁN NHÁP — đúng một ô (server ép XOR, không tin form). */}
             <SearchableSelect
               name="projectId"
-              required
               placeholder={t("task.selectProject")}
               className="min-w-[160px]"
+              allowClear
               options={projects.map((p) => ({ value: p.id, label: p.label }))}
             />
+            {drafts.length > 0 && (
+              <SearchableSelect
+                name="draftId"
+                placeholder={t("draft.selectDraft")}
+                className="min-w-[160px]"
+                allowClear
+                options={drafts.map((d) => ({ value: d.id, label: d.label }))}
+              />
+            )}
+            <DateField name="deadline" title={t("task.deadline")} />
             <select name="taskTypeId" className={input}>
               <option value="">{t("task.selectTaskType")}</option>
               {taskTypes.map((tt) => (
@@ -244,10 +262,12 @@ export function TaskBoard({
               ))}
             </select>
             <input name="title" placeholder={t("task.taskTitle")} className={input + " min-w-[160px] flex-1"} required />
+            <input name="detail" placeholder={t("task.detailPlaceholder")} className={input + " min-w-[160px] flex-1"} />
             <button type="submit" className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">
               {t("task.createTask")}
             </button>
           </form>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">{t("draft.createHint")}</p>
         </details>
       )}
     </div>
@@ -373,10 +393,15 @@ function TaskCard({
             {t("task.overdueDays", { days: task.overdueDays ?? 0 })}
           </Badge>
         )}
-        <span className="font-mono text-xs text-muted-foreground">{task.projectCode}</span>
+        {/* CR-2: task chưa gắn dự án thật ⇒ badge VÀNG mang tên nháp, để nhìn phát biết là còn chờ mapping. */}
+        {task.projectCode ? (
+          <span className="font-mono text-xs text-muted-foreground">{task.projectCode}</span>
+        ) : (
+          <Badge tone="warning">{t("draft.taskBadge", { name: task.draftName ?? "—" })}</Badge>
+        )}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-        <span>{task.projectName}</span>
+        <span>{task.projectName ?? [task.draftName, task.draftClientName].filter(Boolean).join(" · ")}</span>
         {task.ordererName && <span>· {t("task.orderer")}: {task.ordererName}</span>}
         {task.assigneeName && <span>· {t("task.assignedTo", { name: task.assigneeName })}</span>}
         {task.deadline && <span>· {t("task.deadline")}: {formatDate(task.deadline)}</span>}

@@ -22,19 +22,25 @@ function dateOrNull(v: FormDataEntryValue | null): Date | null {
 async function loadUnlocked(taskId: string) {
   const task = await prisma.creativeTask.findUnique({
     where: { id: taskId },
-    include: { project: { include: { status: true } }, squad: true },
+    include: { project: { include: { status: true } }, draft: true, squad: true },
   });
   if (!task) return null;
-  if (isTaskLocked(task.project.status.code, task.project.finishedAt)) return null;
+  // CR-2: task NHÁP (chưa gắn dự án thật) KHÔNG có trạng thái dự án để kéo theo ⇒ không bao giờ khoá.
+  if (task.project && isTaskLocked(task.project.status.code, task.project.finishedAt)) return null;
   return task;
 }
 
-async function notify(recipientStaffId: string, type: string, title: string, body: string | null, projectId: string) {
+async function notify(recipientStaffId: string, type: string, title: string, body: string | null, projectId: string | null) {
   await prisma.notification.create({ data: { recipientStaffId, type, title, body, projectId } });
 }
 
+/** CR-2: nhãn "thuộc về đâu" của task — dự án thật, hoặc tên dự án NHÁP. Dùng cho MỌI tiêu đề thông báo. */
+function taskOwnerLabel(task: { project: { code: string } | null; draft: { name: string } | null }): string {
+  return task.project ? `dự án ${task.project.code}` : `nháp ${task.draft?.name ?? "—"}`;
+}
+
 /** Revalidate /creative + /reminders, và (nếu biết dự án) tab ORDER — nơi hiện tín hiệu DONE của dòng timeline. */
-function done(projectId?: string) {
+function done(projectId?: string | null) {
   revalidatePath("/creative");
   revalidatePath("/creative/my");
   revalidatePath("/reminders");
@@ -92,7 +98,7 @@ export async function routeCreativeTask(taskId: string, formData: FormData) {
     await notify(
       squad.leadStaffId,
       "CREATIVE_TASK_ROUTED",
-      `Task Creative về team ${squad.name} — dự án ${task.project.code}`,
+      `Task Creative về team ${squad.name} — ${taskOwnerLabel(task)}`,
       task.title,
       task.projectId,
     );
@@ -146,7 +152,7 @@ export async function assignCreativeTask(taskId: string, formData: FormData) {
     },
   });
 
-  await notify(assigneeId, "CREATIVE_TASK_ASSIGNED", `Bạn được giao task Creative — dự án ${task.project.code}`, task.title, task.projectId);
+  await notify(assigneeId, "CREATIVE_TASK_ASSIGNED", `Bạn được giao task Creative — ${taskOwnerLabel(task)}`, task.title, task.projectId);
   done(task.projectId);
 }
 
@@ -175,9 +181,9 @@ export async function submitCreativeTask(taskId: string, formData: FormData) {
 
   if (deliverStraight) {
     await markOrderItemDone(task.orderItemId); // trả thẳng → đóng dòng timeline gốc
-    if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, link, task.projectId);
+    if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — ${taskOwnerLabel(task)}`, link, task.projectId);
   } else if (task.assignedById) {
-    await notify(task.assignedById, "CREATIVE_TASK_NEEDS_APPROVAL", `Task Creative chờ duyệt — dự án ${task.project.code}`, task.title, task.projectId);
+    await notify(task.assignedById, "CREATIVE_TASK_NEEDS_APPROVAL", `Task Creative chờ duyệt — ${taskOwnerLabel(task)}`, task.title, task.projectId);
   }
   done(task.projectId);
 }
@@ -201,7 +207,7 @@ export async function approveCreativeTask(taskId: string) {
     data: { status: "DELIVERED", reviewedById: staffId, reviewedAt: new Date(), deliveredAt: new Date() },
   });
   await markOrderItemDone(task.orderItemId); // duyệt → đóng dòng timeline gốc
-  if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — dự án ${task.project.code}`, task.deliverableLinkUrl, task.projectId);
+  if (task.orderedById) await notify(task.orderedById, "CREATIVE_TASK_DELIVERED", `Thành phẩm Creative đã gửi — ${taskOwnerLabel(task)}`, task.deliverableLinkUrl, task.projectId);
   done(task.projectId);
 }
 
@@ -217,27 +223,129 @@ export async function rejectCreativeTask(taskId: string, formData: FormData) {
     where: { id: taskId },
     data: { status: "REVISION", revisionCount: { increment: 1 }, reviewedById: staffId, reviewedAt: new Date() },
   });
-  if (task.assigneeId) await notify(task.assigneeId, "CREATIVE_TASK_REVISION", `Task Creative cần sửa lại — dự án ${task.project.code}`, note ?? task.title, task.projectId);
+  if (task.assigneeId) await notify(task.assigneeId, "CREATIVE_TASK_REVISION", `Task Creative cần sửa lại — ${taskOwnerLabel(task)}`, note ?? task.title, task.projectId);
   done(task.projectId);
 }
 
-/** CD tạo task lẻ (ngoài checklist) — chọn dự án + loại task + tên. Task idea đi đường này. */
+/**
+ * CD tạo task lẻ (ngoài checklist) — treo vào dự án THẬT hoặc (CR-2) một DỰ ÁN NHÁP khi Account
+ * chưa kịp nhập dự án vào app. Task idea đi đường này.
+ * ⚠ BẤT BIẾN XOR: đúng MỘT trong (projectId, draftId). SQLite không ép được, ép ở đây.
+ */
 export async function createCreativeTask(formData: FormData) {
   await requirePermission("creative.task.manage");
+  const meId = await getCurrentStaffId();
   const projectId = nullable(formData.get("projectId"));
+  const draftId = nullable(formData.get("draftId"));
   const title = str(formData.get("title"));
-  if (!projectId || !title) return;
-  const project = await prisma.project.findUnique({ where: { id: projectId }, include: { status: true } });
-  if (!project) return;
-  if (isTaskLocked(project.status.code, project.finishedAt)) return; // không thêm task vào dự án đã khóa (hủy/thua/hết grace)
+  if (!title) return;
+  if (!projectId === !draftId) return; // thiếu cả hai, hoặc khai cả hai → từ chối
+
+  let orderedById: string | null = null;
+  if (projectId) {
+    const project = await prisma.project.findUnique({ where: { id: projectId }, include: { status: true } });
+    if (!project) return;
+    if (isTaskLocked(project.status.code, project.finishedAt)) return; // không thêm task vào dự án đã khóa (hủy/thua/hết grace)
+    orderedById = project.ownerId;
+  } else {
+    // Nháp phải đang MỞ (chưa mapping) — nháp đã gán về dự án thật thì không nhận task mới nữa.
+    const draft = await prisma.creativeDraftProject.findFirst({ where: { id: draftId!, mappedAt: null }, select: { id: true } });
+    if (!draft) return;
+    // ⚠ Task nháp KHÔNG có project.ownerId để suy người nhận thành phẩm ⇒ lấy NGƯỜI TẠO. Thiếu
+    // bước này thì submit/approve (`if (task.orderedById)`) không báo cho ai — im lặng.
+    orderedById = meId;
+  }
+
   await prisma.creativeTask.create({
     data: {
       projectId,
+      draftId,
       title,
       detail: nullable(formData.get("detail")),
       taskTypeId: nullable(formData.get("taskTypeId")),
-      orderedById: project.ownerId,
+      deadline: dateOrNull(formData.get("deadline")),
+      orderedById,
       status: "UNASSIGNED",
+    },
+  });
+  done(projectId);
+}
+
+// ── CR-2: DỰ ÁN NHÁP — tạo / sửa / gán về dự án thật ────────────────────────────────────────
+
+/** Tạo dự án nháp. Giai đoạn (BIDDING|WORKING) do người tạo chọn — quyết định chủ dự án 27/08/2026. */
+export async function createDraftProject(formData: FormData) {
+  await requirePermission("creative.task.manage");
+  const meId = await getCurrentStaffId();
+  if (!meId) return;
+  const name = str(formData.get("name"));
+  if (!name) return;
+  await prisma.creativeDraftProject.create({
+    data: {
+      name: name.slice(0, 200),
+      clientName: nullable(formData.get("clientName")),
+      phase: str(formData.get("phase")) === "WORKING" ? "WORKING" : "BIDDING",
+      createdById: meId,
+    },
+  });
+  done();
+}
+
+/** Sửa nháp (nháp thắng thầu thì đổi giai đoạn sang Đang thực hiện). Nháp đã mapping thì khoá. */
+export async function updateDraftProject(draftId: string, formData: FormData) {
+  await requirePermission("creative.task.manage");
+  const draft = await prisma.creativeDraftProject.findUnique({ where: { id: draftId }, select: { mappedAt: true } });
+  if (!draft || draft.mappedAt) return;
+  const name = str(formData.get("name"));
+  if (!name) return;
+  await prisma.creativeDraftProject.update({
+    where: { id: draftId },
+    data: {
+      name: name.slice(0, 200),
+      clientName: nullable(formData.get("clientName")),
+      phase: str(formData.get("phase")) === "WORKING" ? "WORKING" : "BIDDING",
+    },
+  });
+  done();
+}
+
+/**
+ * GÁN nháp về dự án THẬT — chuyển mọi task của nháp sang projectId thật trong MỘT transaction.
+ * ⚠ Bản ghi nháp GIỮ LẠI (mappedToProjectId + mappedAt) làm dấu vết và để ẩn khỏi ô chọn — KHÔNG
+ * xoá, đúng khuôn ClientGroup. Sau bước này task tự thừa hưởng khoá/phase/thống kê theo dự án
+ * thật, không phải sửa gì thêm.
+ */
+export async function applyDraftMapping(draftId: string, formData: FormData) {
+  await requirePermission("creative.task.manage");
+  const meId = await getCurrentStaffId();
+  const projectId = str(formData.get("projectId"));
+  if (!projectId) return;
+
+  const [draft, project] = await Promise.all([
+    prisma.creativeDraftProject.findUnique({ where: { id: draftId }, select: { id: true, name: true, mappedAt: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { id: true, code: true, ownerId: true } }),
+  ]);
+  if (!draft || draft.mappedAt || !project) return;
+
+  const moved = await prisma.$transaction(async (tx) => {
+    const res = await tx.creativeTask.updateMany({
+      where: { draftId },
+      // Task nháp chưa có người đặt thật; sau mapping thì người nhận thành phẩm là PIC dự án —
+      // chỉ điền khi dự án có PIC, không ghi đè người tạo bằng null.
+      data: { projectId, draftId: null, ...(project.ownerId ? { orderedById: project.ownerId } : {}) },
+    });
+    await tx.creativeDraftProject.update({ where: { id: draftId }, data: { mappedToProjectId: projectId, mappedAt: new Date() } });
+    return res.count;
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      entityType: "creative_draft_project",
+      entityId: draftId,
+      field: "*",
+      action: "UPDATE",
+      changedBy: meId,
+      reason: `Gán nháp "${draft.name}" về dự án ${project.code} — chuyển ${moved} task`,
     },
   });
   done(projectId);

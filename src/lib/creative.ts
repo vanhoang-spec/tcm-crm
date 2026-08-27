@@ -172,6 +172,11 @@ export async function lockCreativeTasksForProject(projectId: string): Promise<vo
   });
 }
 
+/** CR-2: phase của dự án NHÁP — người tạo tự chọn; giá trị lạ/thiếu rơi về BIDDING. */
+export function draftPhase(phase: string | null | undefined): "BIDDING" | "WORKING" {
+  return phase === "WORKING" ? "WORKING" : "BIDDING";
+}
+
 export type CreativeDashboardStats = {
   totalActive: { bidding: number; working: number };
   projectsActive: { bidding: number; working: number };
@@ -194,7 +199,7 @@ export async function getCreativeDashboardStats(): Promise<CreativeDashboardStat
     prisma.staff.findMany({ where: { department: { code: "CREATIVE" }, isActive: true }, orderBy: { fullName: "asc" } }),
     prisma.creativeTask.findMany({
       where: { status: { in: [...ACTIVE_TASK_STATUSES] } },
-      include: { project: { include: { status: true } }, taskType: true },
+      include: { project: { include: { status: true } }, draft: true, taskType: true },
     }),
     prisma.creativeTask.findMany({
       where: { status: "DELIVERED" },
@@ -204,7 +209,8 @@ export async function getCreativeDashboardStats(): Promise<CreativeDashboardStat
 
   // Lọc bỏ task của dự án ĐÃ KHÓA (FINISHED hết grace) — không query được ở Prisma vì lock là phép tính
   // thời gian trên finishedAt. Task còn "active" nhưng dự án đóng lâu rồi KHÔNG được tính vào "đang làm".
-  const activeTasks = activeTasksRaw.filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt));
+  // CR-2: task NHÁP (project null) không bao giờ khoá — không có trạng thái dự án để kéo theo.
+  const activeTasks = activeTasksRaw.filter((t) => !t.project || !isTaskLocked(t.project.status.code, t.project.finishedAt));
   const staleLocked = activeTasksRaw.length - activeTasks.length;
 
   const totalActive = { bidding: 0, working: 0 };
@@ -212,10 +218,14 @@ export async function getCreativeDashboardStats(): Promise<CreativeDashboardStat
   const typeCount = new Map<string, { labelVi: string; labelEn: string | null; count: number }>();
 
   for (const t of activeTasks) {
-    const phase = taskPhase(t.project.status.code);
+    // CR-2: phase của task nháp lấy TỪ DRAFT (người tạo tự chọn Đấu thầu / Đang thực hiện) —
+    // nhờ vậy không phải đục nhánh thống kê thứ ba.
+    const phase = t.project ? taskPhase(t.project.status.code) : draftPhase(t.draft?.phase);
     if (phase === "WORKING") totalActive.working++;
     else totalActive.bidding++;
-    projectPhase.set(t.projectId, phase);
+    // Mỗi dự án NHÁP đếm là MỘT "dự án" riêng trong thẻ "Dự án đang chạy" (đúng mental model
+    // "tạm có tên project") — key null sẽ gộp mọi task nháp thành 1, sai.
+    projectPhase.set(t.projectId ?? `draft:${t.draftId ?? t.id}`, phase);
     if (t.taskType) {
       const key = t.taskType.id;
       const cur = typeCount.get(key) ?? { labelVi: t.taskType.labelVi, labelEn: t.taskType.labelEn, count: 0 };
@@ -232,7 +242,7 @@ export async function getCreativeDashboardStats(): Promise<CreativeDashboardStat
 
   const byMember = creativeStaff.map((s) => {
     const mine = activeTasks.filter((t) => t.assigneeId === s.id);
-    const activeWorking = mine.filter((t) => taskPhase(t.project.status.code) === "WORKING").length;
+    const activeWorking = mine.filter((t) => (t.project ? taskPhase(t.project.status.code) : draftPhase(t.draft?.phase)) === "WORKING").length;
     const activeBidding = mine.length - activeWorking;
     const delivered = deliveredTasks.filter((t) => t.assigneeId === s.id);
     const withHours = delivered.filter((t) => t.hoursSpent != null);

@@ -4,19 +4,21 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber, formatDecimal, formatPercent, pickLabel } from "@/lib/utils";
 import type { Locale } from "@/i18n/locales";
-import { getCreativeDashboardStats, isTaskLocked, taskPhase, finishedGraceDaysLeft, taskOverdueDays, type CreativeTaskStatus } from "@/lib/creative";
+import { draftPhase, getCreativeDashboardStats, isTaskLocked, taskPhase, finishedGraceDaysLeft, taskOverdueDays, type CreativeTaskStatus } from "@/lib/creative";
 import { TaskBoard, type TaskData } from "./task-board";
-import { requirePermission } from "@/lib/permissions";
+import { DraftPanel, type DraftRow } from "./draft-panel";
+import { requirePermission, hasPermission } from "@/lib/permissions";
 
 export default async function CreativePage() {
   await requirePermission("creative.view");
-  const [t, locale, stats, tasks, creativeStaff, taskTypeSet, projects, teams, squads] = await Promise.all([
+  const [t, locale, stats, tasks, creativeStaff, taskTypeSet, projects, teams, squads, draftsRaw, canManage] = await Promise.all([
     getTranslations("creative"),
     getLocale() as Promise<Locale>,
     getCreativeDashboardStats(),
     prisma.creativeTask.findMany({
       include: {
         project: { include: { status: true, ownerTeam: true } },
+        draft: true,
         taskType: true,
         assignee: true,
         orderedBy: true,
@@ -39,22 +41,33 @@ export default async function CreativePage() {
       where: { isActive: true },
       orderBy: { sort: "asc" },
     }),
+    // CR-2: chỉ nháp ĐANG MỞ (chưa gán về dự án thật) — nháp đã mapping giữ lại làm dấu vết nhưng ẩn.
+    prisma.creativeDraftProject.findMany({
+      where: { mappedAt: null },
+      include: { _count: { select: { tasks: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    hasPermission("creative.task.manage"),
   ]);
 
   const taskData: TaskData[] = tasks.map((task) => {
-    const statusCode = task.project.status.code;
-    const locked = isTaskLocked(statusCode, task.project.finishedAt);
-    const graceDaysLeft = locked ? null : finishedGraceDaysLeft(statusCode, task.project.finishedAt);
+    // CR-2: task NHÁP không có dự án ⇒ không có trạng thái để khoá; phase lấy từ draft.
+    const statusCode = task.project?.status.code ?? null;
+    const locked = statusCode ? isTaskLocked(statusCode, task.project!.finishedAt) : false;
+    const graceDaysLeft = locked || !statusCode ? null : finishedGraceDaysLeft(statusCode, task.project!.finishedAt);
     return {
       id: task.id,
       title: task.title,
       detail: task.detail,
       status: task.status as CreativeTaskStatus, // cột DB là String; danh sách trạng thái chuẩn ở CREATIVE_TASK_STATUSES
       projectId: task.projectId,
-      projectCode: task.project.code,
-      projectName: task.project.name,
-      teamCode: task.project.ownerTeam?.code ?? null,
-      phase: taskPhase(statusCode),
+      projectCode: task.project?.code ?? null,
+      projectName: task.project?.name ?? null,
+      draftId: task.draftId,
+      draftName: task.draft?.name ?? null,
+      draftClientName: task.draft?.clientName ?? null,
+      teamCode: task.project?.ownerTeam?.code ?? null,
+      phase: statusCode ? taskPhase(statusCode) : draftPhase(task.draft?.phase),
       taskTypeId: task.taskTypeId,
       taskTypeCode: task.taskType?.code ?? null,
       taskTypeLabel: task.taskType ? pickLabel(task.taskType, locale) : null,
@@ -84,6 +97,14 @@ export default async function CreativePage() {
     .filter((p) => !isTaskLocked(p.status.code, p.finishedAt))
     .map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` }));
   const teamOptions = teams.map((tm) => ({ id: tm.code, label: tm.code }));
+  const draftRows: DraftRow[] = draftsRaw.map((d) => ({
+    id: d.id,
+    name: d.name,
+    clientName: d.clientName,
+    phase: d.phase,
+    taskCount: d._count.tasks,
+  }));
+  const draftOptions = draftRows.map((d) => ({ id: d.id, label: d.clientName ? `${d.name} — ${d.clientName}` : d.name }));
   const ordererOptions = Array.from(
     new Map(tasks.filter((t) => t.orderedBy).map((t) => [t.orderedBy!.id, t.orderedBy!.fullName])).entries(),
   )
@@ -175,6 +196,10 @@ export default async function CreativePage() {
       </section>
 
       {/* Task board */}
+      {/* CR-2: khối dự án nháp chỉ hiện với người điều phối (creative.task.manage) — hàng rào thật
+          nằm ở requirePermission trong từng action. */}
+      {canManage && <DraftPanel drafts={draftRows} projects={projectOptions} />}
+
       <section className="rounded-xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("board.title")}</h2>
         <div className="mt-3">
@@ -186,6 +211,7 @@ export default async function CreativePage() {
             teams={teamOptions}
             orderers={ordererOptions}
             squads={squadOptions}
+            drafts={canManage ? draftOptions : []}
           />
         </div>
       </section>

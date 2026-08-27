@@ -9,6 +9,7 @@ import {
   taskPhase,
   finishedGraceDaysLeft,
   taskOverdueDays,
+  draftPhase,
   ACTIVE_TASK_STATUSES,
   type CreativeTaskStatus,
 } from "@/lib/creative";
@@ -38,6 +39,7 @@ export default async function MyCreativeTasksPage() {
       },
       include: {
         project: { include: { status: true, ownerTeam: true } },
+        draft: true,
         taskType: true,
         assignee: true,
         orderedBy: true,
@@ -54,18 +56,22 @@ export default async function MyCreativeTasksPage() {
   ]);
 
   const taskData: TaskData[] = tasks.map((task) => {
-    const statusCode = task.project.status.code;
-    const locked = isTaskLocked(statusCode, task.project.finishedAt);
+    // CR-2: task NHÁP không có dự án ⇒ không có trạng thái để khoá; phase lấy từ draft.
+    const statusCode = task.project?.status.code ?? null;
+    const locked = statusCode ? isTaskLocked(statusCode, task.project!.finishedAt) : false;
     return {
       id: task.id,
       title: task.title,
       detail: task.detail,
       status: task.status as CreativeTaskStatus,
       projectId: task.projectId,
-      projectCode: task.project.code,
-      projectName: task.project.name,
-      teamCode: task.project.ownerTeam?.code ?? null,
-      phase: taskPhase(statusCode),
+      projectCode: task.project?.code ?? null,
+      projectName: task.project?.name ?? null,
+      draftId: task.draftId,
+      draftName: task.draft?.name ?? null,
+      draftClientName: task.draft?.clientName ?? null,
+      teamCode: task.project?.ownerTeam?.code ?? null,
+      phase: statusCode ? taskPhase(statusCode) : draftPhase(task.draft?.phase),
       taskTypeId: task.taskTypeId,
       taskTypeCode: task.taskType?.code ?? null,
       taskTypeLabel: task.taskType ? pickLabel(task.taskType, locale) : null,
@@ -83,7 +89,7 @@ export default async function MyCreativeTasksPage() {
       revisionCount: task.revisionCount,
       deliveredAt: task.deliveredAt,
       locked,
-      graceDaysLeft: locked ? null : finishedGraceDaysLeft(statusCode, task.project.finishedAt),
+      graceDaysLeft: locked || !statusCode ? null : finishedGraceDaysLeft(statusCode, task.project!.finishedAt),
     };
   });
 
@@ -116,6 +122,7 @@ export default async function MyCreativeTasksPage() {
             teams={[]}
             orderers={[]}
             squads={squads.map((s) => ({ id: s.id, label: s.name }))}
+            drafts={[]}
             hideCreate
             hideFilters
           />

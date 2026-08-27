@@ -123,7 +123,17 @@ export async function checkPendingPush(): Promise<{ sent: number; marked: number
       title: n.title,
       body: n.body,
       // TASK_*: việc giao nội bộ sống ở /tasks, không phải trang dự án — kể cả khi có projectId.
-      url: n.conversationId ? `/chat/${n.conversationId}` : n.type.startsWith("TASK_") ? "/tasks" : n.projectId ? `/projects/${n.projectId}` : "/reminders",
+      // CREATIVE_TASK_*: board Creative; task NHÁP (CR-2) không có projectId nên nếu không có
+      // nhánh này thì rơi về /reminders — bấm vào không tới được chỗ xử lý.
+      url: n.conversationId
+        ? `/chat/${n.conversationId}`
+        : n.type.startsWith("TASK_")
+          ? "/tasks"
+          : n.type.startsWith("CREATIVE_TASK_")
+            ? "/creative"
+            : n.projectId
+              ? `/projects/${n.projectId}`
+              : "/reminders",
       tag: n.conversationId ? `chat-${n.conversationId}` : n.type,
     });
   }

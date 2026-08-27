@@ -2664,13 +2664,33 @@
       "reroute": "Điều phối lại team khác",
       "routeSquad": "Giao về team",
       "directAssign": "Giao thẳng cho người (bỏ qua điều phối)",
-      "overdueDays": "Trễ {days} ngày"
+      "overdueDays": "Trễ {days} ngày",
+      "detailPlaceholder": "Mô tả ngắn (tuỳ chọn)"
     },
     "my": {
       "title": "Việc của tôi",
       "subtitle": "Task Creative đang gắn tên bạn — việc trễ hạn xếp lên đầu.",
       "empty": "Bạn chưa được giao task Creative nào.",
       "overdueBanner": "Bạn đang có {count} việc trễ hạn."
+    },
+    "draft": {
+      "panelTitle": "Dự án nháp đang mở ({count})",
+      "panelSubtitle": "Chỗ neo tạm cho task khi Account chưa kịp nhập dự án vào app. Khi có dự án thật, bấm “Gán về dự án thật” để chuyển cả nhóm task sang.",
+      "empty": "Chưa có dự án nháp nào.",
+      "btnNew": "+ Nháp mới",
+      "btnCreate": "Tạo nháp",
+      "btnEdit": "Sửa",
+      "btnSave": "Lưu",
+      "btnMap": "Gán về dự án thật",
+      "btnMapConfirm": "Chuyển {count} task sang dự án này",
+      "namePlaceholder": "Tên dự án tạm",
+      "clientPlaceholder": "Tên khách hàng (tạm)",
+      "selectDraft": "— hoặc chọn dự án nháp —",
+      "selectRealProject": "Chọn dự án thật để gán",
+      "taskCount": "{count} task",
+      "taskBadge": "Nháp: {name}",
+      "mapHint": "Sau khi gán, task sẽ theo trạng thái và giai đoạn của dự án thật. Bản ghi nháp được giữ lại làm dấu vết nhưng không nhận task mới nữa.",
+      "createHint": "Chọn dự án thật HOẶC dự án nháp — đúng một ô. Chưa có dự án trong app thì tạo nháp ở khối “Dự án nháp đang mở”."
     }
   },
   "finance": {

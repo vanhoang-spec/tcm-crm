@@ -1583,6 +1583,57 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       · Đo hai đường **khớp nhau**: DB dựng-từ-đầu ra 3/3/3 vai và Vòng 4f báo "xoá 0 · cấp 0";
         diễn tập trên bản mô phỏng đúng trạng thái đang chạy ra **xoá đúng 40 dòng** (2 mã × 20 vai
         thừa), seed lần hai no-op.
+    - **CR-2 (27/08/2026): CREATIVE LÀM VIỆC TRƯỚC KHI DỰ ÁN TỒN TẠI — dự án NHÁP + mapping sau**
+      (migration `20260827100000_creative_draft_project`; **KHÔNG mã quyền mới**). Bối cảnh: team
+      Account chưa kịp nhập khách + dự án vào app nhưng task Creative vẫn về liên tục — phòng
+      Creative cần vào app tracking NGAY.
+      · **`CreativeTask.projectId` nay NULLABLE** + cột `draftId` → bảng MỚI `CreativeDraftProject`
+        (tên dự án tạm · tên khách tạm free-text · **giai đoạn BIDDING|WORKING do người tạo chọn**).
+        ⚠ **BẤT BIẾN XOR: đúng MỘT trong (projectId, draftId)** — SQLite không ép được, ép ở đường
+        ghi `createCreativeTask` (`if (!projectId === !draftId) return`) và `applyDraftMapping`.
+      · ⚠ **PHƯƠNG ÁN "DỰ ÁN GIỮ CHỖ THẬT" ĐÃ BỊ LOẠI — đừng đề xuất lại.** `generateProjectCode`
+        đếm `count(fiscalYear)` nên dự án giả **ăn số thứ tự của dự án thật** (mã đi vào báo giá
+        BM02 + hợp đồng), và **xoá nó về sau làm mã TRÙNG ⇒ tạo dự án mới FAIL P2002**. Kèm theo nó
+        lộ ra ≥7 chỗ: danh sách bidding + badge "chờ giao team" + notification CEO/BD · funnel
+        pitching · 2 thẻ dashboard + vòng tròn stage-mix · **dòng ISO trống rỗng** (chỗ kiểm toán
+        mở ra xem) · gói họp tuần Account · 8 ô chọn dự án toàn app · audit log.
+      · **8 chỗ NỔ đã vá** (khảo sát đích danh trước khi sửa): `lib/creative.ts` ×3 (+ `projectPhase`
+        Map — key `projectId ?? "draft:"+id`, không có bước này thì **mọi task nháp gộp thành 1 "dự
+        án"** trong thẻ đếm) · `creative/page.tsx` + `my/page.tsx` · **`loadUnlocked`** (6/7 action
+        đi qua — task nháp không có trạng thái dự án để khoá ⇒ **không bao giờ khoá**) · 6 chuỗi
+        thông báo (gom về helper `taskOwnerLabel`) · **`reminders.ts` ×2 — trong đó có job
+        scheduler 5 phút: nổ ở đó là hỏng CẢ chu kỳ, không chỉ một trang**.
+        KHÔNG phải sửa: `creative-cost.ts` (không join project — 0 dòng), `iso-data.ts`/`kpi.ts`
+        (groupBy/where tự loại null).
+      · ⚠ **`orderedById` của task nháp = NGƯỜI TẠO** (task có dự án vẫn = `project.ownerId`).
+        Thiếu bước này thì `submitCreativeTask`/`approveCreativeTask` (`if (task.orderedById)`)
+        **không báo cho ai** khi trả thành phẩm — im lặng hoàn toàn. Sau mapping, `applyDraftMapping`
+        điền lại PIC dự án thật (chỉ khi dự án CÓ PIC — không ghi đè bằng null).
+      · **Mapping** (`applyDraftMapping`): transaction chuyển mọi task của nháp sang `projectId`
+        thật + `draftId = null`; bản ghi nháp **GIỮ LẠI** (`mappedToProjectId` + `mappedAt`) làm dấu
+        vết và ẩn khỏi mọi ô chọn — **KHÔNG có đường xoá** (khuôn ClientGroup). Sau mapping task tự
+        thừa hưởng khoá/phase/thống kê theo dự án thật, không phải sửa gì thêm. Audit ghi số task
+        đã chuyển. Nháp đã mapping **không nhận task mới**.
+      · **Giai đoạn nháp thay cho phase dự án** (`draftPhase`) — nhờ vậy KHÔNG phải đục nhánh thống
+        kê thứ ba: đã cân nhắc và bỏ (≥8 chỗ sửa, gồm component thẻ đếm hard-code đúng 2 ô).
+      · Panel "Dự án nháp đang mở" trên `/creative` chỉ render với `creative.task.manage`
+        (3 vai: Creative Partner · Creative Director · BGĐ) — **hàng rào thật là `requirePermission`
+        trong từng action**, panel chỉ là trang trí. Form tạo task lẻ nay có thêm ô nháp, ô `deadline`,
+        và ô `detail` (**trường CHẾT từ trước**: action đọc `detail` mà form không có ô nào — nối lại).
+      · `push.ts`: thêm nhánh `CREATIVE_TASK_*` → deep-link `/creative` (task nháp không có
+        projectId nên trước đó notification rơi về `/reminders`).
+      · **Verify:** tsc · eslint · i18n **0/0 (4927 key)** · build sạch · `migrate diff` rỗng ·
+        **đọc SQL migration: RedefineTables có `INSERT…SELECT` đủ 26 cột, chỉ đụng `creative_task`**,
+        5 task cũ nguyên vẹn sau khi áp, `foreign_key_check` 0 dòng · browser: tạo nháp → tạo task
+        nháp (`projectId` null, người nhận thành phẩm = người tạo, có hạn + mô tả) → board hiện
+        **badge vàng "Nháp: …" + dòng "tên · khách"**, phase BIDDING theo nháp, thẻ đếm 4→5 task và
+        nháp đếm là **1 dự án riêng** · job nhắc quá hạn **KHÔNG nổ**, tiêu đề "Quá hạn task
+        Creative — nháp TVC Tết 2027", lọc theo team thì task nháp tự rơi ra · mapping chuyển đúng
+        task, giữ nguyên trạng thái, nháp ẩn khỏi panel · **act-as designer (CREATIVE_STAFF): không
+        thấy panel/nút/ô chọn nháp trong DOM, POST giả mạo → server chặn, 0 nháp được tạo**.
+      · **CẮT (cố ý):** tự gợi ý mapping khi Account tạo dự án trùng tên · Account tạo task nháp
+        (tick ma trận khi cần, không sửa code) · nháp cho DepartmentTask/PCC/OPE/PRO · gộp 2 nháp
+        trùng · xoá nháp.
     - ⚠ **TRƯỞNG TEAM ĐÃ NGHỈ — vá 07/08/2026 (CR-1c).** `CreativeSquad.leadStaffId` là CON TRỎ,
       KHÔNG tự rỗng khi người đó nghỉ (nghỉ chỉ set `isActive = false`). Trước bản vá, cả **ba** chỗ
       gửi thông báo cho trưởng team đều chỉ kiểm `leadStaffId != null` ⇒ tin bay vào tài khoản đã

@@ -256,9 +256,11 @@ export async function checkOrderDeadlineReminders(): Promise<void> {
 export type CreativeOverdueTask = {
   taskId: string;
   title: string;
-  projectId: string;
-  projectCode: string;
-  projectName: string;
+  // CR-2: task NHÁP (chưa gắn dự án thật) có project* null — hiện tên nháp thay thế.
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  draftName: string | null;
   teamCode: string | null;
   deadline: Date;
   daysOverdue: number;
@@ -273,18 +275,20 @@ export async function getCreativeOverdueTasks(teamCode?: string): Promise<Creati
       status: { in: [...ACTIVE_TASK_STATUSES] },
       ...(teamCode ? { project: { ownerTeam: { code: teamCode } } } : {}),
     },
-    include: { project: { include: { status: true, ownerTeam: true } } },
+    include: { project: { include: { status: true, ownerTeam: true } }, draft: true },
   });
 
   return tasks
-    .filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt)) // lock là phép tính thời gian → lọc ở JS
+    // CR-2: task nháp không có dự án để khoá; lọc theo team thì Prisma đã tự loại nó (where join project).
+    .filter((t) => !t.project || !isTaskLocked(t.project.status.code, t.project.finishedAt)) // lock là phép tính thời gian → lọc ở JS
     .map((t) => ({
       taskId: t.id,
       title: t.title,
       projectId: t.projectId,
-      projectCode: t.project.code,
-      projectName: t.project.name,
-      teamCode: t.project.ownerTeam?.code ?? null,
+      projectCode: t.project?.code ?? null,
+      projectName: t.project?.name ?? null,
+      draftName: t.draft?.name ?? null,
+      teamCode: t.project?.ownerTeam?.code ?? null,
       deadline: t.deadline as Date,
       daysOverdue: daysBetween(t.deadline as Date, now),
     }))
@@ -306,10 +310,12 @@ export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
     },
     include: {
       project: { include: { status: true } },
+      draft: { select: { name: true } },
       squad: { select: { leadStaffId: true, lead: { select: { isActive: true, department: { select: { code: true } } } } } },
     },
   });
-  const actionable = overdue.filter((t) => !isTaskLocked(t.project.status.code, t.project.finishedAt));
+  // CR-2: task nháp (project null) không bao giờ khoá — nổ ở đây là hỏng CẢ chu kỳ scheduler.
+  const actionable = overdue.filter((t) => !t.project || !isTaskLocked(t.project.status.code, t.project.finishedAt));
   if (actionable.length === 0) return;
 
   for (const task of actionable) {
@@ -334,7 +340,7 @@ export async function checkCreativeTaskDeadlineReminders(): Promise<void> {
         data: Array.from(recipientIds).map((recipientStaffId) => ({
           recipientStaffId,
           type: "CREATIVE_TASK_DEADLINE_REMINDER",
-          title: `Quá hạn task Creative — dự án ${task.project.code}`,
+          title: `Quá hạn task Creative — ${task.project ? `dự án ${task.project.code}` : `nháp ${task.draft?.name ?? "—"}`}`,
           body: task.title,
           projectId: task.projectId,
         })),

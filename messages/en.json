@@ -2664,13 +2664,33 @@
       "reroute": "Route to another squad",
       "routeSquad": "Route to squad",
       "directAssign": "Assign directly (skip routing)",
-      "overdueDays": "{days} days overdue"
+      "overdueDays": "{days} days overdue",
+      "detailPlaceholder": "Short description (optional)"
     },
     "my": {
       "title": "My tasks",
       "subtitle": "Creative tasks assigned to you — overdue ones come first.",
       "empty": "No Creative task is assigned to you.",
       "overdueBanner": "You have {count} overdue tasks."
+    },
+    "draft": {
+      "panelTitle": "Open draft projects ({count})",
+      "panelSubtitle": "A temporary anchor for tasks while Account hasn't entered the project yet. Once the real project exists, use “Map to real project” to move the whole group of tasks.",
+      "empty": "No draft projects yet.",
+      "btnNew": "+ New draft",
+      "btnCreate": "Create draft",
+      "btnEdit": "Edit",
+      "btnSave": "Save",
+      "btnMap": "Map to real project",
+      "btnMapConfirm": "Move {count} task(s) to this project",
+      "namePlaceholder": "Temporary project name",
+      "clientPlaceholder": "Client name (temporary)",
+      "selectDraft": "— or pick a draft project —",
+      "selectRealProject": "Pick the real project",
+      "taskCount": "{count} task(s)",
+      "taskBadge": "Draft: {name}",
+      "mapHint": "After mapping, tasks follow the real project's status and phase. The draft record is kept as a trace but no longer accepts new tasks.",
+      "createHint": "Pick a real project OR a draft — exactly one. If the project isn't in the app yet, create a draft in “Open draft projects”."
     }
   },
   "finance": {

@@ -37,6 +37,7 @@ import {
   Award,
   Megaphone,
   Share2,
+  ListTodo,
 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { requirePermission } from "@/lib/permissions";
@@ -73,6 +74,7 @@ export default async function SettingsPage() {
     { href: "/settings/options/project_status", icon: ClipboardList, title: t("projectStatusTitle"), desc: t("projectStatusDesc") },
     { href: "/settings/options/timeline_status", icon: ListFilter, title: t("timelineStatusTitle"), desc: t("timelineStatusDesc") },
     { href: "/settings/options/creative_task_type", icon: Palette, title: t("creativeTaskTypeTitle"), desc: t("creativeTaskTypeDesc") },
+    { href: "/settings/options/task_type", icon: ListTodo, title: t("taskTypeTitle"), desc: t("taskTypeDesc") },
     { href: "/settings/costsheet-templates", icon: FileSpreadsheet, title: t("costsheetTemplatesTitle"), desc: t("costsheetTemplatesDesc") },
     { href: "/settings/timeline-templates", icon: CalendarClock, title: t("timelineTemplatesTitle"), desc: t("timelineTemplatesDesc") },
     { href: "/settings/bidding", icon: SlidersHorizontal, title: t("biddingParamsTitle"), desc: t("biddingParamsDesc") },

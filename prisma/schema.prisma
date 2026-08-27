@@ -299,6 +299,13 @@ model Staff {
   accountMeetingsCreated      AccountMeeting[]          @relation("AccountMeetingCreatedBy")
   accountMeetingsFinalized    AccountMeeting[]          @relation("AccountMeetingFinalizedBy")
   accountMeetingActions       AccountMeetingAction[]    @relation("AccountMeetingActionAssignee")
+  tasksCreated                Task[]                    @relation("TaskCreator")
+  tasksAssigned               Task[]                    @relation("TaskAssignee")
+  taskFollows                 TaskFollower[]
+  taskComments                TaskComment[]             @relation("TaskCommentAuthor")
+  taskFiles                   TaskFile[]                @relation("TaskFileUploadedBy")
+  taskRecurrencesCreated      TaskRecurrence[]          @relation("TaskRecurrenceCreator")
+  taskRecurrencesAssigned     TaskRecurrence[]          @relation("TaskRecurrenceAssignee")
 
   @@map("staff")
 }
@@ -338,6 +345,8 @@ model OptionItem {
   projectsAsStatus            Project[]                 @relation("ProjectStatus")
   templatesAsContractType     CostsheetTemplate[]       @relation("TemplateContractType")
   templatesAsProjectType      CostsheetTemplate[]       @relation("TemplateProjectType")
+  tasksAsType                 Task[]                    @relation("TaskType")
+  taskRecurrencesAsType       TaskRecurrence[]          @relation("TaskRecurrenceType")
   timelineTemplatesAsType     TimelineTemplate[]        @relation("TimelineTemplateProjectType")
   timelineItemsAsStatus       TimelineItem[]            @relation("TimelineItemStatus")
   creativeTasksAsType         CreativeTask[]            @relation("CreativeTaskType")
@@ -426,7 +435,7 @@ model AuditLog {
 model Notification {
   id               String    @id @default(cuid())
   recipientStaffId String
-  type             String // TEAM_ASSIGNMENT_NEEDED | COSTSHEET_REJECTED | BRAINSTORM_MEETING_INVITE | DEPARTMENT_ORDER_RECEIVED | ORDER_RESULT_RECEIVED | ORDER_DEADLINE_REMINDER | EXTERNAL_TIMELINE_UPDATED | TIMELINE_DEADLINE_REMINDER | CREATIVE_TASK_ASSIGNED | CREATIVE_TASK_NEEDS_APPROVAL | CREATIVE_TASK_DELIVERED | CREATIVE_TASK_REVISION | CREATIVE_TASK_DEADLINE_REMINDER | CREATIVE_TASK_ROUTED | ACCEPTANCE_SIGN_REMINDER | ADVANCE_REQUESTED | ADVANCE_DISBURSED | ADVANCE_SETTLED | AR_OVERDUE_REMINDER | CHAT_MESSAGE | CHAT_MENTION | REMINDER_DUE | POLL_CREATED | CTV_CONTRACTS_GENERATED | INVENTORY_TRANSFER_INCOMING | INVENTORY_RETURN_OVERDUE | SCHEDULE_CONFIRMED | SCHEDULE_UPDATED | PLANNING_STAGE_ASSIGNED | PLANNING_RESULT_SUBMITTED | PLANNING_REVISION_REQUESTED | PLANNING_FINAL_CONFIRMED | DEPT_TASK_ASSIGNED | DEPT_TASK_NEEDS_APPROVAL | DEPT_TASK_DELIVERED | DEPT_TASK_REVISION | DEPT_TASK_DEADLINE_REMINDER | INTERVIEW_REQUESTED | INTERVIEW_CONFIRMED | INTERVIEW_DECLINED
+  type             String // TEAM_ASSIGNMENT_NEEDED | COSTSHEET_REJECTED | BRAINSTORM_MEETING_INVITE | DEPARTMENT_ORDER_RECEIVED | ORDER_RESULT_RECEIVED | ORDER_DEADLINE_REMINDER | EXTERNAL_TIMELINE_UPDATED | TIMELINE_DEADLINE_REMINDER | CREATIVE_TASK_ASSIGNED | CREATIVE_TASK_NEEDS_APPROVAL | CREATIVE_TASK_DELIVERED | CREATIVE_TASK_REVISION | CREATIVE_TASK_DEADLINE_REMINDER | CREATIVE_TASK_ROUTED | ACCEPTANCE_SIGN_REMINDER | ADVANCE_REQUESTED | ADVANCE_DISBURSED | ADVANCE_SETTLED | AR_OVERDUE_REMINDER | CHAT_MESSAGE | CHAT_MENTION | REMINDER_DUE | POLL_CREATED | CTV_CONTRACTS_GENERATED | INVENTORY_TRANSFER_INCOMING | INVENTORY_RETURN_OVERDUE | SCHEDULE_CONFIRMED | SCHEDULE_UPDATED | PLANNING_STAGE_ASSIGNED | PLANNING_RESULT_SUBMITTED | PLANNING_REVISION_REQUESTED | PLANNING_FINAL_CONFIRMED | DEPT_TASK_ASSIGNED | DEPT_TASK_NEEDS_APPROVAL | DEPT_TASK_DELIVERED | DEPT_TASK_REVISION | DEPT_TASK_DEADLINE_REMINDER | INTERVIEW_REQUESTED | INTERVIEW_CONFIRMED | INTERVIEW_DECLINED | TASK_ASSIGNED | TASK_SUBMITTED | TASK_CONFIRMED | TASK_RETURNED | TASK_REASSIGNED | TASK_COMMENT | TASK_CANCELED | TASK_DEADLINE_REMINDER
   title            String
   body             String?
   projectId        String?
@@ -1090,6 +1099,8 @@ model Project {
   isoDocs             ProjectIsoDoc[]
   mktPosts            MktPost[]
   mktPlanItems        MktPlanItem[]
+  tasks               Task[]
+  taskRecurrences     TaskRecurrence[]
   group               ProjectGroup?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
   meetingRows         AccountMeetingRow[]
 
@@ -4224,4 +4235,163 @@ model AccountMeetingAction {
   @@index([meetingId])
   @@index([assigneeStaffId, status])
   @@map("account_meeting_action")
+}
+
+// ─────────────────────────────────────────────────────────
+// MODULE TASKS — giao việc nội bộ TỰ DO (27/08/2026)
+// ⚠ RANH GIỚI: đây là hệ cho việc KHÔNG thuộc luồng chuyên biệt nào. Việc sinh từ ORDER của dự
+//   án vẫn đi CreativeTask/DepartmentTask; việc họp tuần vẫn đi AccountMeetingAction. KHÔNG trộn,
+//   KHÔNG đồng bộ hai chiều với 8 hệ "việc" có sẵn (xem HANDOVER — module Tasks).
+// ─────────────────────────────────────────────────────────
+
+/// Một việc giao nội bộ. Vòng đời CỐ ĐỊNH trong code (không tuỳ biến trạng thái — bài học từ
+/// monday/ClickUp): OPEN → IN_PROGRESS → AWAIT_CONFIRM → DONE | CANCELED.
+/// 2 bước khi giao người khác (người làm Hoàn thành → người giao xác nhận); việc TỰ giao cho
+/// mình thì Hoàn thành = DONE luôn (quyết định chủ dự án 27/08/2026).
+model Task {
+  id          String  @id @default(cuid())
+  /// Sub-task ĐÚNG 1 CẤP: server chặn tạo sub dưới task đã có parentId (lib/tasks.ts).
+  /// Task cha CHỈ đóng được khi mọi sub đã DONE/CANCELED; huỷ cha ⇒ huỷ mọi sub chưa xong.
+  parentId    String?
+  title       String
+  description String?
+  status      String  @default("OPEN") // OPEN | IN_PROGRESS | AWAIT_CONFIRM | DONE | CANCELED
+  priority    String  @default("NORMAL") // LOW | NORMAL | HIGH
+  typeId      String? // option_set "task_type" — admin sửa ở /settings/options
+  /// Người GIAO việc — người duy nhất xác nhận/trả lại/huỷ/đổi người nhận (kiểm theo bản ghi,
+  /// không mã quyền riêng cho từng nút — khuôn assignCreativeTask).
+  creatorId   String
+  /// Người NHẬN — BẮT BUỘC đúng một người (triết lý Asana: mỗi việc một người chịu trách nhiệm).
+  /// Giao N người = tự tách N sub-task. Việc cá nhân = tự giao cho mình.
+  /// ⚠ Quan hệ BẮT BUỘC ⇒ Restrict: offboard nhân sự phải chuyển giao task của họ TRƯỚC khi xoá
+  /// (cùng họ conversation_member/notification/shift_assignment — HANDOVER 10.32).
+  assigneeId  String
+  /// Tham chiếu/lọc theo dự án — KHÔNG lock theo trạng thái dự án (khác CreativeTask).
+  projectId   String?
+  dueDate     DateTime? // UTC-midnight (quy ước HANDOVER 4.3)
+  startedAt   DateTime?
+  submittedAt DateTime? // lần bấm "Hoàn thành" gần nhất (chờ xác nhận)
+  completedAt DateTime?
+  canceledAt  DateTime?
+  returnNote  String? // ghi chú lần TRẢ LẠI gần nhất của người giao
+  /// Việc sinh từ lịch lặp nào (null = tạo tay).
+  recurrenceId String?
+  /// Đã nhắc quá hạn (idempotent — RESET khi đổi dueDate, khuôn CreativeTask).
+  deadlineReminderSentAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  parent     Task?           @relation("TaskParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Task[]          @relation("TaskParent")
+  type       OptionItem?     @relation("TaskType", fields: [typeId], references: [id])
+  creator    Staff           @relation("TaskCreator", fields: [creatorId], references: [id])
+  assignee   Staff           @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  project    Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  recurrence TaskRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+
+  followers TaskFollower[]
+  checklist TaskChecklistItem[]
+  comments  TaskComment[]
+  files     TaskFile[]
+
+  @@index([assigneeId, status])
+  @@index([creatorId])
+  @@index([projectId])
+  @@index([parentId])
+  @@map("task")
+}
+
+/// Người theo dõi — nhận notification diễn biến, được xem việc. Không phải người làm.
+model TaskFollower {
+  id      String @id @default(cuid())
+  taskId  String
+  staffId String
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, staffId])
+  @@map("task_follower")
+}
+
+/// Checklist PHẲNG trong một việc (tick xong/chưa) — cho mấy ý nhỏ không đáng một sub-task.
+model TaskChecklistItem {
+  id     String  @id @default(cuid())
+  taskId String
+  label  String
+  isDone Boolean @default(false)
+  sort   Int     @default(0)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, sort])
+  @@map("task_checklist_item")
+}
+
+/// Bình luận theo việc (khuôn TimelineComment — nhẹ, không membership; KHÔNG dùng Chat module).
+model TaskComment {
+  id            String   @id @default(cuid())
+  taskId        String
+  authorStaffId String? // SetNull khi nhân sự bị xoá — giữ nội dung, mất con trỏ (khuôn TimelineComment)
+  body          String
+  createdAt     DateTime @default(now())
+
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author Staff? @relation("TaskCommentAuthor", fields: [authorStaffId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@map("task_comment")
+}
+
+/// File đính kèm theo việc (khuôn ProjectFile; tải về qua /api/task-file/[id] — route kiểm
+/// belongs-to + phạm vi nhìn thấy, KHÔNG lặp lại lỗ /api/client-kb/[id]).
+model TaskFile {
+  id           String   @id @default(cuid())
+  taskId       String
+  fileKey      String // storageKey trong storage/task-files/YYYY/MM/...
+  fileMime     String
+  fileName     String
+  fileSize     Int
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  task       Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy Staff? @relation("TaskFileUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([taskId])
+  @@map("task_file")
+}
+
+/// Lịch lặp — MẪU sinh việc định kỳ, không phải việc. Job `tasks-recur` (tick 5 phút) sinh Task
+/// mới khi ngày ĐỊA PHƯƠNG khớp rule (server TZ=Asia/Ho_Chi_Minh — bài học bug 0–7h Kho K4).
+/// Chỉ bật/tắt, KHÔNG xoá (khuôn ClientGroup/JobPosition/VendorFieldDef).
+model TaskRecurrence {
+  id            String  @id @default(cuid())
+  title         String
+  description   String?
+  priority      String  @default("NORMAL")
+  typeId        String?
+  projectId     String?
+  creatorId     String
+  assigneeId    String
+  freq          String // DAILY | WEEKLY | MONTHLY
+  dayOfWeek     Int? // 0=CN..6=T7, cho WEEKLY
+  dayOfMonth    Int? // 1..31 cho MONTHLY — tháng ngắn thì KẸP về ngày cuối tháng (lib/tasks.ts)
+  dueOffsetDays Int     @default(0) // hạn = ngày sinh việc + N ngày
+  checklistJson String? // JSON mảng label — chép vào TaskChecklistItem mỗi lần sinh
+  isActive      Boolean @default(true)
+  /// Chuỗi ngày ĐỊA PHƯƠNG "YYYY-MM-DD" của lần sinh gần nhất — chống sinh trùng tuyệt đối
+  /// (job chạy nhiều lần trong ngày chỉ sinh đúng một việc).
+  lastSpawnKey  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  type     OptionItem? @relation("TaskRecurrenceType", fields: [typeId], references: [id])
+  project  Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  creator  Staff       @relation("TaskRecurrenceCreator", fields: [creatorId], references: [id])
+  assignee Staff       @relation("TaskRecurrenceAssignee", fields: [assigneeId], references: [id])
+  tasks    Task[]
+
+  @@index([isActive])
+  @@map("task_recurrence")
 }

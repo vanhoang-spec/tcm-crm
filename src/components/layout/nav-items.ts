@@ -21,6 +21,7 @@ import {
   HandCoins,
   ShoppingCart,
   CalendarCheck,
+  ListTodo,
 } from "lucide-react";
 
 export type NavItem = {
@@ -47,6 +48,8 @@ export const NAV_ITEMS: NavItem[] = [
   // Trợ lý AI — đặt ngay dưới Trao đổi: cả hai đều là công cụ dùng chung mọi lúc, không thuộc
   // luồng nghiệp vụ tuần tự bên dưới.
   { module: null, labelKey: "ai", href: "/ai", icon: Sparkles, status: "active", accent: true },
+  // Công việc — giao việc nội bộ TỰ DO (ngoài 8 luồng chuyên biệt), công cụ dùng chung như Chat/AI.
+  { module: null, labelKey: "tasks", href: "/tasks", icon: ListTodo, status: "active", permission: "tasks.use" },
   { module: "①", labelKey: "clients", href: "/clients", icon: Users, status: "active", permission: "clients.view" },
   // Họp Account team — BGĐ có mã meetings.view; TRƯỞNG TEAM không có mã nào (kiểm theo bản ghi
   // Team.leadStaffId) nên layout tự nối "meetings.view" vào mảng quyền của Sidebar cho họ. Trang trí:

@@ -41,6 +41,7 @@ export const PERMISSION_MODULES = [
   "staff",
   "recruit",
   "meetings",
+  "tasks",
   "kpi",
   "payroll",
   "chat",
@@ -68,6 +69,7 @@ export const PERMISSION_MODULE_LABELS: Record<string, { labelVi: string; labelEn
   // trong DB — ma trận lặp theo PERMISSION_MODULES. Thêm module mới thì phải thêm cả hai chỗ.
   recruit: { labelVi: "⑤ Tuyển dụng", labelEn: "⑤ Recruitment" },
   meetings: { labelVi: "Họp Account team", labelEn: "Account team meetings" },
+  tasks: { labelVi: "Công việc (giao việc nội bộ)", labelEn: "Tasks (internal)" },
   kpi: { labelVi: "⑥ KPI", labelEn: "⑥ KPI" },
   payroll: { labelVi: "⑦ Lương (chưa làm)", labelEn: "⑦ Payroll (not built)" },
   chat: { labelVi: "⑨ Trao đổi", labelEn: "⑨ Chat" },
@@ -232,6 +234,12 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── ⑦ Lương (module chưa làm — mã đặt sẵn để không phải sửa ma trận sau) ──
   { code: "payroll.view", module: "payroll", labelVi: "Xem bảng lương", labelEn: "View payroll", sensitive: true },
   { code: "payroll.manage", module: "payroll", labelVi: "Lập & chốt bảng lương", labelEn: "Prepare & close payroll", sensitive: true },
+
+  // ── Công việc — giao việc nội bộ TỰ DO (ngoài 8 luồng chuyên biệt) ──
+  // Ai được bấm gì trên MỘT việc là phép kiểm THEO BẢN GHI trong action (người giao/người nhận/
+  // người theo dõi) — không đẻ mã quyền riêng cho từng nút. Hai mã dưới chỉ là cửa module + phạm vi.
+  { code: "tasks.use", module: "tasks", labelVi: "Dùng module Công việc (tạo / nhận / trao đổi)", labelEn: "Use tasks module" },
+  { code: "tasks.view_all", module: "tasks", labelVi: "Xem MỌI việc của công ty", labelEn: "View all tasks", sensitive: true },
 
   // ── ⑨ Chat nội bộ ──
   { code: "chat.use", module: "chat", labelVi: "Dùng chat (nhắn, tạo nhóm, thả cảm xúc)", labelEn: "Use chat" },

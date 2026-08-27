@@ -489,6 +489,16 @@ async function main() {
     { code: "DONE", labelVi: "Hoàn thành", labelEn: "Done" },
   ]);
 
+  // ── MODULE Tasks — Loại việc nội bộ (giao việc TỰ DO ngoài 8 luồng chuyên biệt) ──
+  await seedOptionSet("task_type", "Loại việc nội bộ", [
+    { code: "ADMIN_WORK", labelVi: "Hành chính", labelEn: "Administrative" },
+    { code: "REPORT", labelVi: "Báo cáo", labelEn: "Report" },
+    { code: "EVENT_PREP", labelVi: "Chuẩn bị event", labelEn: "Event preparation" },
+    { code: "RECONCILE", labelVi: "Đối soát", labelEn: "Reconciliation" },
+    { code: "FOLLOW_UP", labelVi: "Theo dõi / nhắc việc", labelEn: "Follow-up" },
+    { code: "OTHER", labelVi: "Khác", labelEn: "Other" },
+  ]);
+
   // ── MODULE Creative — Loại task (admin thêm/bớt/xóa; sẽ dùng cho matrix cost đợt sau) ──
   const creativeTaskTypes = await seedOptionSet("creative_task_type", "Loại task Creative", [
     { code: "KV_2D", labelVi: "2D Key visual", labelEn: "2D Key visual" },
@@ -2560,6 +2570,9 @@ async function main() {
     code === "creative.task.assign" ||
     code === "creative.task.manage" ||
     code === "creative.task.approve" ||
+    // Tasks: thấy MỌI việc của công ty là đặc quyền giám sát — chỉ BGĐ (TASKS_VIEW_ALL_ROLES).
+    // `tasks.use` CỐ Ý ở base: giao việc nội bộ là công cụ của mọi người.
+    code === "tasks.view_all" ||
     code.startsWith("ai."); // (3)
 
   /**
@@ -2614,6 +2627,12 @@ async function main() {
    * CREATIVE_PARTNER lấy cả ba mã qua EXPLICIT_GRANTS (grantCodesFor short-circuit ở role đó) nên
    * KHÔNG cần dòng trong extraByRole — nhưng VẪN phải có tên ở đây để Vòng 4f không xoá của họ.
    */
+  /**
+   * Tasks — ai thấy MỌI việc của công ty (mã `tasks.view_all`). Chỉ BGĐ; vai khác BGĐ tick thêm
+   * ở /settings/roles. Nuôi cả extraByRole (DB dựng-từ-đầu) lẫn backfill 20260827_tasks_view_all
+   * (DB đang chạy) — sửa danh sách là hai đường đổi theo.
+   */
+  const TASKS_VIEW_ALL_ROLES = ["BOARD_OF_MANAGEMENT"];
   const CREATIVE_TASK_POLICY: Record<string, string[]> = {
     "creative.task.assign": ["CREATIVE_PARTNER", "CREATIVE_DIRECTOR", "BOARD_OF_MANAGEMENT"],
     "creative.task.manage": ["CREATIVE_PARTNER", "CREATIVE_DIRECTOR", "BOARD_OF_MANAGEMENT"],
@@ -2715,7 +2734,7 @@ async function main() {
     OPERATIONS_MANAGER: [...WAREHOUSE_EXTRA, "inventory.transfer.approve"],
     // Điều phối phòng Creative — chia việc về team nhỏ, giao designer, duyệt bài (CREATIVE_TASK_POLICY).
     CREATIVE_DIRECTOR: Object.keys(CREATIVE_TASK_POLICY),
-    BOARD_OF_MANAGEMENT: Object.keys(CREATIVE_TASK_POLICY),
+    BOARD_OF_MANAGEMENT: [...Object.keys(CREATIVE_TASK_POLICY), "tasks.view_all"],
   };
 
   /**
@@ -2741,6 +2760,7 @@ async function main() {
       "inventory.lot.convert",
       "inventory.destroy",
       "chat.use", // liên lạc với OPE/Account khi soạn hàng
+      "tasks.use", // nhận việc giao nội bộ (module Tasks) — bảo vệ CỐ Ý không có
       // CỐ Ý KHÔNG có inventory.request.approve*: Account duyệt đề xuất — tách vai của Kho v2 K2.
     ],
     SECURITY_GUARD: ["chat.use", "kb.view"],
@@ -3158,6 +3178,20 @@ async function main() {
       codes: ["inventory.request.approve", "inventory.request.approve_overhead"],
       roleFilter: (r) => r.code === "HR_MANAGER",
     },
+
+    // 27/08/2026 MODULE TASKS — giao việc nội bộ. `tasks.use` cho MỌI vai trừ bảo vệ (thủ kho
+    // nhận qua EXPLICIT_GRANTS nhưng vẫn cần dòng backfill vì role đó ĐÃ có grant nên Vòng 4 bỏ
+    // qua); `tasks.view_all` theo TASKS_VIEW_ALL_ROLES — sửa hằng thì sửa cả roleFilter dưới.
+    {
+      key: "20260827_tasks_use",
+      codes: ["tasks.use"],
+      roleFilter: (r) => r.code !== "SECURITY_GUARD",
+    },
+    {
+      key: "20260827_tasks_view_all",
+      codes: ["tasks.view_all"],
+      roleFilter: (r) => TASKS_VIEW_ALL_ROLES.includes(r.code),
+    },
   ];
   for (const bf of backfills) {
     const marker = await prisma.setting.findUnique({
@@ -3314,6 +3348,7 @@ async function main() {
     const leavers = await prisma.staff.findMany({ where: { fullName: { in: leaverNames } }, select: { id: true, fullName: true, email: true, title: true } });
     const ids = leavers.map((l) => l.id);
     let removed = 0;
+    const blocked: string[] = [];
     if (ids.length > 0) {
       // Người thay: Lâm Du (điều phối) và Trương Lập Chiến (trưởng phòng). Cả hai KHÔNG nằm trong
       // STAFF_ROWS (nhân sự nhập thẳng trên production), nên bản dựng-từ-đầu không có — tra theo
@@ -3326,6 +3361,13 @@ async function main() {
         await prisma.staff.updateMany({ where: { managerId: { in: ids } }, data: { managerId: du.id } });
         await prisma.creativeTask.updateMany({ where: { assigneeId: { in: ids } }, data: { assigneeId: du.id } });
         await prisma.creativeTask.updateMany({ where: { assignedById: { in: ids } }, data: { assignedById: du.id } });
+        // MODULE TASKS: `task.creatorId`/`assigneeId` là quan hệ BẮT BUỘC (Restrict) — không
+        // chuyển giao thì `staff.delete` ném P2003. Chuyển chứ KHÔNG xoá: việc giao nội bộ là
+        // dữ liệu thật, người thay tiếp nhận.
+        await prisma.task.updateMany({ where: { assigneeId: { in: ids } }, data: { assigneeId: du.id } });
+        await prisma.task.updateMany({ where: { creatorId: { in: ids } }, data: { creatorId: du.id } });
+        await prisma.taskRecurrence.updateMany({ where: { assigneeId: { in: ids } }, data: { assigneeId: du.id } });
+        await prisma.taskRecurrence.updateMany({ where: { creatorId: { in: ids } }, data: { creatorId: du.id } });
       }
       for (const l of leavers) {
         const kpi = await prisma.kpiScore.count({ where: { staffId: l.id } });
@@ -3345,13 +3387,27 @@ async function main() {
         await prisma.conversationMember.deleteMany({ where: { staffId: l.id } });
         await prisma.notification.deleteMany({ where: { recipientStaffId: l.id } });
         await prisma.shiftAssignment.deleteMany({ where: { staffId: l.id } });
-        await prisma.staff.delete({ where: { id: l.id } });
-        removed++;
+        // ⚠ 12 bảng khai FK Restrict tới `staff` (đo bằng PRAGMA foreign_key_list). Ba bảng trên là
+        // ba bảng gặp trên production; DB khác có thể còn vướng project_member / project_order_attendee
+        // / client_transfer / interview... — xoá mù mấy bảng đó là XOÁ LỊCH SỬ, không được làm.
+        // ⚠ SEED KHÔNG ĐƯỢC PHÉP CHẾT Ở ĐÂY: `db:seed` là bước BẮT BUỘC sau `migrate deploy`
+        // (mục 10.1), một exception là hỏng cả lần deploy. Vướng thì bỏ qua NGƯỜI ĐÓ, in cảnh báo,
+        // và KHÔNG ghi marker để lần chạy sau còn thử lại.
+        try {
+          await prisma.staff.delete({ where: { id: l.id } });
+          removed++;
+        } catch {
+          blocked.push(l.fullName);
+        }
       }
     }
-    await prisma.setting.create({
-      data: { module: "seed", key: CREATIVE_OFFBOARD_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ at: new Date().toISOString(), removed }) },
-    });
+    if (blocked.length > 0) {
+      console.log(`⚠ Offboard Creative: chưa xoá được ${blocked.join(", ")} — còn dữ liệu tham chiếu (FK Restrict). Chuyển giao rồi chạy lại seed.`);
+    } else {
+      await prisma.setting.create({
+        data: { module: "seed", key: CREATIVE_OFFBOARD_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ at: new Date().toISOString(), removed }) },
+      });
+    }
     if (removed > 0) console.log(`👋 Offboard Creative: xoá ${removed} nhân sự đã nghỉ`);
   }
 

@@ -122,7 +122,8 @@ export async function checkPendingPush(): Promise<{ sent: number; marked: number
     sent += await sendPushToStaff([n.recipientStaffId], {
       title: n.title,
       body: n.body,
-      url: n.conversationId ? `/chat/${n.conversationId}` : n.projectId ? `/projects/${n.projectId}` : "/reminders",
+      // TASK_*: việc giao nội bộ sống ở /tasks, không phải trang dự án — kể cả khi có projectId.
+      url: n.conversationId ? `/chat/${n.conversationId}` : n.type.startsWith("TASK_") ? "/tasks" : n.projectId ? `/projects/${n.projectId}` : "/reminders",
       tag: n.conversationId ? `chat-${n.conversationId}` : n.type,
     });
   }

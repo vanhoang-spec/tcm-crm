@@ -5,6 +5,7 @@ import { ORDER_DEPARTMENT_LABELS } from "./bidding";
 import { ACTIVE_TASK_STATUSES, isTaskLocked } from "./creative";
 import { ACTIVE_DEPARTMENT_TASK_STATUSES } from "./department-tasks";
 import { expiryLevel, shouldWarnExpiry, utcDayDiff, type ExpiryLevel } from "./inventory-lot";
+import { localDayKey, recurMatchesToday, recurDueDate, parseChecklistJson } from "./tasks";
 
 function daysBetween(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
@@ -763,5 +764,122 @@ export async function checkArOverdueReminders(): Promise<void> {
       })),
     });
     await prisma.clientInvoice.update({ where: { id: item.invoiceId }, data: { arReminderSentAt: now } });
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// MODULE TASKS — nhắc quá hạn + sinh việc theo lịch lặp (27/08/2026)
+// ─────────────────────────────────────────────────────────
+
+export type TaskOverdueItem = {
+  taskId: string;
+  title: string;
+  assigneeName: string;
+  creatorName: string;
+  dueDate: Date;
+  daysOverdue: number;
+};
+
+/** Việc giao nội bộ quá hạn của TÔI (nhận hoặc giao) — thuần computed cho /reminders. */
+export async function getTaskOverdueItems(meId: string): Promise<TaskOverdueItem[]> {
+  const now = new Date();
+  const rows = await prisma.task.findMany({
+    where: {
+      dueDate: { lte: now },
+      status: { in: ["OPEN", "IN_PROGRESS", "AWAIT_CONFIRM"] },
+      OR: [{ assigneeId: meId }, { creatorId: meId }],
+    },
+    include: { assignee: { select: { fullName: true } }, creator: { select: { fullName: true } } },
+    orderBy: { dueDate: "asc" },
+    take: 50,
+  });
+  return rows.map((task) => ({
+    taskId: task.id,
+    title: task.title,
+    assigneeName: task.assignee.fullName,
+    creatorName: task.creator.fullName,
+    dueDate: task.dueDate!,
+    daysOverdue: Math.max(1, Math.floor((now.getTime() - task.dueDate!.getTime()) / 86_400_000)),
+  }));
+}
+
+/**
+ * Job: nhắc việc giao nội bộ quá hạn — cờ `deadlineReminderSentAt` idempotent (reset khi đổi hạn,
+ * khuôn CreativeTask). Task LUÔN có assignee nên không dính bẫy "không người nhận → không set cờ".
+ */
+export async function checkTaskDeadlineReminders(): Promise<void> {
+  const overdue = await prisma.task.findMany({
+    where: {
+      dueDate: { lte: new Date() },
+      status: { in: ["OPEN", "IN_PROGRESS", "AWAIT_CONFIRM"] },
+      deadlineReminderSentAt: null,
+    },
+    select: { id: true, title: true, projectId: true, creatorId: true, assigneeId: true },
+  });
+  for (const task of overdue) {
+    const recipients = [...new Set([task.assigneeId, task.creatorId])];
+    await prisma.notification.createMany({
+      data: recipients.map((recipientStaffId) => ({
+        recipientStaffId,
+        type: "TASK_DEADLINE_REMINDER",
+        title: "Quá hạn việc được giao",
+        body: task.title,
+        projectId: task.projectId,
+      })),
+    });
+    await prisma.task.update({ where: { id: task.id }, data: { deadlineReminderSentAt: new Date() } });
+  }
+}
+
+/**
+ * Job: sinh việc từ lịch lặp (TaskRecurrence). Idempotent tuyệt đối bằng `lastSpawnKey` = chuỗi
+ * ngày ĐỊA PHƯƠNG — job tick 5 phút, chỉ lượt đầu trong ngày khớp rule mới sinh. Claim bằng
+ * updateMany có lastSpawnKey cũ trong WHERE: hai instance chạy song song chỉ MỘT bên sinh việc.
+ */
+export async function spawnRecurringTasks(): Promise<void> {
+  const now = new Date();
+  const todayKey = localDayKey(now);
+  // ⚠ KHÔNG dùng `NOT: { lastSpawnKey: todayKey }`: `NULL != giá_trị` cho ra NULL chứ không phải
+  //   TRUE, nên rule MỚI (lastSpawnKey null) bị loại sạch và không bao giờ sinh việc lần đầu.
+  //   Repo đã cắn đúng lớp lỗi này hai lần (aiReviewStatus TD-2a, replacesStaffId 10.68).
+  const rules = await prisma.taskRecurrence.findMany({
+    where: { isActive: true, OR: [{ lastSpawnKey: null }, { lastSpawnKey: { not: todayKey } }] },
+  });
+  for (const rule of rules) {
+    if (!recurMatchesToday(rule, now)) continue;
+    // Người nhận đã nghỉ thì rule nằm im (không sinh việc mồ côi) — người tạo sửa rule sang người khác.
+    const assigneeAlive = await prisma.staff.count({ where: { id: rule.assigneeId, isActive: true } });
+    if (assigneeAlive === 0) continue;
+    const claimed = await prisma.taskRecurrence.updateMany({
+      where: { id: rule.id, lastSpawnKey: rule.lastSpawnKey },
+      data: { lastSpawnKey: todayKey },
+    });
+    if (claimed.count === 0) continue; // instance khác vừa sinh — thua race, bỏ qua
+    const task = await prisma.task.create({
+      data: {
+        title: rule.title,
+        description: rule.description,
+        priority: rule.priority,
+        typeId: rule.typeId,
+        projectId: rule.projectId,
+        creatorId: rule.creatorId,
+        assigneeId: rule.assigneeId,
+        dueDate: recurDueDate(rule.dueOffsetDays, now),
+        recurrenceId: rule.id,
+      },
+    });
+    const labels = parseChecklistJson(rule.checklistJson);
+    if (labels.length > 0) {
+      await prisma.taskChecklistItem.createMany({ data: labels.map((label, i) => ({ taskId: task.id, label, sort: i + 1 })) });
+    }
+    await prisma.notification.create({
+      data: {
+        recipientStaffId: rule.assigneeId,
+        type: "TASK_ASSIGNED",
+        title: `Việc định kỳ: ${rule.title}`,
+        body: rule.description,
+        projectId: rule.projectId,
+      },
+    });
   }
 }

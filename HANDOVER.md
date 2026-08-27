@@ -123,6 +123,7 @@ Dev DB là SQLite. Thêm cột → `npx prisma migrate dev --name <tên>`. **Kh�
 | — | KB / Org chart | `/kb`, `/orgchart` | Xong |
 | — | Hồ sơ ISO | `/iso` | Xong (sổ đăng ký 25 loại hồ sơ / dự án, 8 loại app tự chấm, tab `/projects/[id]/iso`, xuất Excel 33 cột — xem mục 10.20) |
 | — | Bài đăng MKT | `/mkt` | Xong (bài LinkedIn/Fanpage: Account nộp ý chính + ảnh → AI DeepSeek viết riêng từng kênh → HR duyệt, copy đăng tay; banner nhịp tuần; phân tích insights quý — xem mục 10.23) |
+| — | Công việc | `/tasks` | Xong (giao việc nội bộ TỰ DO ngoài 8 luồng chuyên biệt: 2 bước xác nhận, sub-task 1 cấp, giao N người tự tách, checklist, bình luận, file, việc lặp định kỳ — xem mục 10.69) |
 | — | Họp Account tuần | `/meetings` | Xong (biên bản tuần theo từng team Account: dòng theo dự án gom nhóm theo khách + RAG + việc có người/hạn tự mang sang tuần sau; đồng bộ hai chiều với buổi họp trên Claude Project — dán/tải biên bản cho AI bóc, xuất gói họp tuần; CHỈ BGĐ + trưởng team — xem mục 10.39) |
 | — | Chi phí văn phòng | `/overhead` | Xong (ngân sách năm import/nhân bản + duyệt CFO→CEO, thực chi 3 làn, xuất Excel — xem mục 10.21) |
 | — | Settings | `/settings` | Xong (~18 trang con) |
@@ -3915,6 +3916,83 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       phân công được mọi vòng — chủ dự án xác nhận vòng 1 do Yến PHỎNG VẤN, đó là dữ liệu chứ không phải
       quyền) · chưa tự chọn sẵn Senior HR Manager làm người phỏng vấn vòng 1 · chưa có màn hình liệt kê
       "những ai đang bị ẩn khỏi vị trí nào".
+
+69. **MODULE TASKS — GIAO VIỆC NỘI BỘ (27/08/2026)** (migration `20260827000000_tasks_module` — 6 bảng
+    MỚI, 0 lệnh DROP; **2 mã quyền mới, 152 → 154**; KHÔNG thêm dependency). Yêu cầu chủ dự án: module
+    giao việc nội bộ theo benchmark SaaS (Asana / monday / ClickUp / Jira), chốt cấu trúc trước khi code.
+    - ⚠ **RANH GIỚI LÀ THỨ QUAN TRỌNG NHẤT.** App đã có **8 hệ "việc"** (CreativeTask · DepartmentTask ·
+      ProjectOrder · TimelineItem · AccountMeetingAction · PlanningJob · StockRequest · MktDesignOrder).
+      Tasks là hệ cho việc **TỰ DO không thuộc luồng chuyên biệt nào** — KHÔNG thay thế, KHÔNG trộn,
+      KHÔNG đồng bộ hai chiều với 8 hệ kia. `Task.projectId` chỉ để THAM CHIẾU/lọc và **KHÔNG khoá theo
+      trạng thái dự án** (khác hẳn CreativeTask). Đừng "gộp cho gọn" — hai hệ kia có duyệt bài, đo giờ,
+      cost-per-task và vòng đời riêng.
+    - **6 quyết định chủ dự án đã chốt:** (1) ai cũng giao được cho bất kỳ ai · (2) **2 BƯỚC khi giao
+      người khác** (làm xong → người giao xác nhận), việc TỰ giao đóng 1 bước · (3) phạm vi thấy = người
+      tham gia + sếp trực tiếp + trưởng phòng của NGƯỜI NHẬN + `tasks.view_all` · (4) có việc lặp định kỳ
+      ngay bản đầu · (5) **sub-task ĐÚNG 1 CẤP**, cha chỉ đóng khi mọi sub xong · (6) **giao N người =
+      tự tách 1 cha + N sub**, KHÔNG multi-assignee trên một task (triết lý Asana: mỗi việc một người
+      chịu trách nhiệm; ClickUp/monday cho nhiều người nhưng không ai biết ai phải bấm Xong).
+    - **CỐ Ý BỎ (benchmark có, ta không lấy):** trạng thái tuỳ biến (state machine CỐ ĐỊNH trong code —
+      nguồn hỗn loạn số 1 của monday/ClickUp) · kéo-thả kanban (repo không có lib DnD; board nhóm-theo-
+      trạng-thái + nút, đúng khuôn `creative/task-board.tsx` đang chạy) · phụ thuộc trước-sau · custom
+      fields · automation · time tracking (Creative đã có `hoursSpent` riêng cho cost — đừng trộn) ·
+      sprint/story point.
+    - ⚠ **`taskVisibleWhere(meId)` (lib/tasks.ts) là MỘT NGUỒN SỰ THẬT** cho phạm vi nhìn thấy — dùng ở
+      MỌI câu truy vấn danh sách, trang chi tiết, `loadVisible` của action, và route tải file. Phạm vi
+      quyết định ở **TẦNG TRUY VẤN**, không lọc bằng JSX (bài học KB-H2). Có 3 nhánh: trực tiếp (5 điều
+      kiện) + **thấy CHA ⇒ thấy sub** + **tham gia SUB ⇒ xem được cha** (cần ngữ cảnh việc tổng).
+    - ⚠ **BUG ĐÃ BẮT TRONG LÚC TEST — LẦN THỨ BA CỦA CÙNG MỘT LỚP LỖI.** Job sinh việc lặp lọc bằng
+      `NOT: { lastSpawnKey: todayKey }` ⇒ **loại sạch rule MỚI** (`lastSpawnKey` null), vì `NULL != 'x'`
+      cho ra NULL chứ không phải TRUE — rule vừa tạo KHÔNG BAO GIỜ sinh việc lần đầu. Đã đổi sang
+      `OR: [{ null }, { not }]`. Repo đã cắn đúng lớp này ở `aiReviewStatus` (10.62) và `replacesStaffId`
+      (10.68). **Viết bộ lọc `not` trên cột nullable thì LUÔN kèm nhánh null.**
+    - ⚠ **MODULE NÀY THÊM 4 FK `Restrict` TỚI `staff`** (`task.creatorId/assigneeId`,
+      `task_recurrence.creatorId/assigneeId`) — nâng tổng số bảng chặn `staff.delete` lên **12** (đo bằng
+      `PRAGMA foreign_key_list`). Hệ quả: **offboard nhân sự phải CHUYỂN GIAO task trước khi xoá.** Vòng 4g
+      (offboard Creative) đã được vá để (a) chuyển task/lịch lặp sang người thay, và (b) **bọc `staff.delete`
+      trong try/catch**: vướng FK khác thì bỏ qua NGƯỜI ĐÓ, in cảnh báo, **KHÔNG ghi marker** để lần sau
+      chạy lại. Lý do bắt buộc: `db:seed` là bước BẮT BUỘC sau `migrate deploy` (mục 10.1) — một exception
+      ở đây là **hỏng cả lần deploy**. (Lỗi này lộ ra khi chạy seed trên dev.db: Hiệp còn `project_member`.)
+    - **Quyền: 2 mã.** `tasks.use` ở **base grant** (mọi vai) + thêm vào `EXPLICIT_GRANTS` của
+      `WAREHOUSE_KEEPER` (thủ kho cũng nhận việc); **SECURITY_GUARD cố ý không có**. `tasks.view_all`
+      trong `isRestricted` + `TASKS_VIEW_ALL_ROLES` = BGĐ. 2 backfill `20260827_tasks_*`. Đo **GIỐNG HỆT
+      NHAU** hai đường (DB dựng-từ-đầu và diễn tập bản sao dev.db): **use 22 vai · view_all 1 vai**.
+      ⚠ "Ai được bấm gì" trên MỘT việc là phép kiểm THEO BẢN GHI trong action (creator/assignee/follower)
+      — **đừng đi tìm mã quyền cho từng nút**, khuôn `assignCreativeTask`/`canConfirmRfq`.
+    - **Vòng đời:** `OPEN → IN_PROGRESS → AWAIT_CONFIRM → DONE | CANCELED`. Mọi phép đổi trạng thái dùng
+      `updateMany` có status trong WHERE (chống double-click/race — khuôn `moveBudget`). Huỷ cha ⇒ huỷ mọi
+      sub chưa xong + notify từng người nhận sub (không huỷ ngầm); sub ĐÃ XONG giữ nguyên.
+    - **Lịch lặp** (`TaskRecurrence`): job `tasks-recur` + `tasks-deadline` đặt **TRƯỚC `push-dispatch`**
+      để notification vừa sinh được đẩy trong cùng chu kỳ. Idempotent bằng `lastSpawnKey` = chuỗi ngày
+      **ĐỊA PHƯƠNG** (`localDayKey`, KHÔNG `getUTC*` — bug 0–7h sáng của Kho K4), claim bằng `updateMany`
+      nên hai instance song song chỉ MỘT bên sinh việc. Rule MONTHLY ngày 29/30/31 **kẹp về ngày cuối
+      tháng ngắn** (rule "ngày 31" chạy đúng 28/2). Người nhận đã nghỉ ⇒ rule nằm im, không sinh việc mồ côi.
+    - **Web push tự ăn theo** (job `push-dispatch` quét Notification chưa đẩy); chỉ sửa 1 nhánh ở
+      `lib/push.ts`: type bắt đầu `TASK_` → deep-link `/tasks` **kể cả khi có projectId** (việc sống ở
+      /tasks, không phải trang dự án). 8 type mới đã thêm vào comment model `Notification`.
+    - **Route `/api/task-file/[id]`** mirror `/api/project-file/[id]`: kiểm belongs-to + **đúng
+      `taskVisibleWhere`** + `contentDisposition()` RFC 6266 (tên file tiếng Việt — bài học 10.66) +
+      `nosniff`. **KHÔNG mirror `/api/client-kb/[id]`** (lỗ đã ghi ở 10.13).
+    - **Verify:** tsc · eslint · i18n **0/0 (4890 key)** · `next build` sạch (4 route mới) · `migrate diff`
+      **rỗng** · **42/42 test thuần** (ngày địa phương 02:41 sáng · kẹp cuối tháng · overdue · 3 nhánh
+      phạm vi) · **28/28 test luồng** gọi ĐÚNG job của app (2 bước · tự giao 1 bước · chặn đóng cha ·
+      huỷ cha kéo sub · 7 ca phạm vi · nhắc quá hạn idempotent · lặp không sinh trùng).
+      **Browser (dev.db):** giao 1 việc cho **3 người** ⇒ DB ra **đúng 1 cha + 3 sub**, hạn đúng, **3
+      notification** (không tự báo mình), dòng nhắc "hệ thống tạo 1 việc tổng + mỗi người 1 việc con" hiện
+      đúng · trang chi tiết hiện "Việc con · 0/3" · bấm Hoàn thành cha ⇒ **server chặn** "Còn 3 việc con
+      chưa xong", DB không đổi · **act-as người ngoài cuộc** ⇒ trang việc trả **404** và **HTML thô từ
+      server KHÔNG chứa tiêu đề việc**, thanh tab chỉ còn 3 mục (mất "Quản lý" và "Tất cả") · lịch lặp
+      WEEKLY tạo được, job sinh **đúng 1 việc** hạn +2 ngày kèm 2 mục checklist, chạy lần 2 **không trùng**
+      · `/reminders` hiện đúng section "Việc giao nội bộ quá hạn". Dữ liệu test đã dọn sạch (0 task / 0 rule
+      / 0 notification / 0 audit).
+    - ⚠ **Ghi chú dev.db:** mật khẩu tài khoản admin trên **dev.db** đã đặt lại thành `TCM123456` để verify
+      trên browser. dev.db là SANDBOX (mục 8.2) — production KHÔNG bị đụng. Seed chạy trên dev.db cũng đã
+      xoá 2/3 nhân sự Creative đã nghỉ (Hiệp còn vướng `project_member` của dữ liệu mẫu).
+    - **CHƯA LÀM (cố ý — muốn thêm phải chốt lại):** kéo-thả kanban · sub-task sâu hơn 1 cấp ·
+      multi-assignee trên cùng một task · lịch lặp sinh cây cha-con (chỉ sinh task đơn + checklist) ·
+      @mention trong bình luận · gắn nhiều dự án · chuyển 8 hệ việc cũ (hoặc AccountMeetingAction) thành
+      Task · thống kê/dashboard task (chờ dữ liệu thật) · chế độ riêng tư tuyệt đối (sếp + BGĐ luôn thấy)
+      · liên thông KPI.
 
 ---
 

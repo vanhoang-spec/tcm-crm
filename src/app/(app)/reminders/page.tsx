@@ -11,6 +11,7 @@ import {
   getPendingCostSheetApprovals,
   getTimelineOverdueItems,
   getCreativeOverdueTasks,
+  getTaskOverdueItems,
   getDepartmentTaskOverdueTasks,
   getExpiringLots,
   getInventoryReturnReminders,
@@ -55,8 +56,9 @@ export default async function RemindersPage({
     creative: perms.has("creative.view"),
     finance: perms.has("finance.view"),
     inventory: perms.has("inventory.view"),
+    tasks: perms.has("tasks.use"),
   };
-  const [t, tClients, tInv, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, stockRequestItems, expiringLots, notifications] = await Promise.all([
+  const [t, tClients, tInv, locale, teams, careItems, biddingItems, pendingApprovals, timelineItems, acceptanceItems, creativeItems, deptTaskItems, arItems, inventoryItems, stockRequestItems, expiringLots, taskItems, notifications] = await Promise.all([
     getTranslations("reminders"),
     getTranslations("clients.list"),
     getTranslations("inventory.requests"),
@@ -74,6 +76,8 @@ export default async function RemindersPage({
     can.inventory ? getStockRequestReminders(team) : [],
     // Hạn dùng KHÔNG lọc theo team: lô hàng nằm ở kho, không thuộc dự án nào.
     can.inventory ? getExpiringLots() : [],
+    // Việc giao nội bộ (module Tasks) — chỉ việc CỦA MÌNH (nhận hoặc giao), phạm vi ở chính getter.
+    can.tasks && meId ? getTaskOverdueItems(meId) : [],
     // Chỉ thông báo CỦA người đang đăng nhập (body có thể chứa preview chat/nội dung riêng tư).
     // CHAT_MESSAGE có badge riêng trong module Chat — không lặp lại ở đây (khớp công thức chuông layout.tsx).
     prisma.notification.findMany({
@@ -217,6 +221,29 @@ export default async function RemindersPage({
             </li>
           ))}
           {timelineItems.length === 0 && <li className="py-3 text-sm text-muted-foreground">{t("timelineEmpty")}</li>}
+        </ul>
+      </section>
+      )}
+
+      {can.tasks && taskItems.length > 0 && (
+      <section className="rounded-xl border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t("tasksSection")}</h2>
+        <ul className="mt-3 divide-y divide-border">
+          {taskItems.map((item) => (
+            <li key={item.taskId} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <Link href={`/tasks/${item.taskId}`} className="text-sm font-medium text-foreground hover:text-brand-600">
+                  {item.title}
+                </Link>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {t("tasksItem", { assignee: item.assigneeName, creator: item.creatorName, days: formatNumber(item.daysOverdue, locale) })}
+                </div>
+              </div>
+              <Link href={`/tasks/${item.taskId}`} className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {t("goToTasks")}
+              </Link>
+            </li>
+          ))}
         </ul>
       </section>
       )}

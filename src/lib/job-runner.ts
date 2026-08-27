@@ -7,6 +7,8 @@ import {
   checkInventoryReturnReminders,
   checkArOverdueReminders,
   checkExpiryWarnings,
+  checkTaskDeadlineReminders,
+  spawnRecurringTasks,
 } from "./reminders";
 import { checkSpecialOccasions } from "./occasions";
 import { checkChatReminders } from "./chat-reminders";
@@ -69,6 +71,10 @@ const JOBS: [string, () => Promise<unknown>][] = [
   ["mkt-scheduled-publish", runMktScheduledPublish],
   ["mkt-metrics-pull", runMktMetricsPull],
   ["mkt-token-expiry", checkMktTokenExpiry],
+  // MODULE TASKS (27/08/2026): sinh việc theo lịch lặp + nhắc việc quá hạn. Đặt TRƯỚC
+  // push-dispatch để notification vừa sinh được đẩy ngay trong cùng chu kỳ.
+  ["tasks-recur", spawnRecurringTasks],
+  ["tasks-deadline", checkTaskDeadlineReminders],
   // ⚠ ĐẶT CUỐI DANH SÁCH: các job trên có thể vừa tạo thông báo mới, chạy sau thì đẩy luôn trong
   // cùng một chu kỳ thay vì đợi thêm 5 phút nữa.
   ["push-dispatch", checkPendingPush],

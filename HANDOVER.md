@@ -678,6 +678,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
         siết ở mục 10.16. Cấp mã này là vô hiệu hoá toàn bộ chính sách tiền, âm thầm.
       · `settings.roles.manage` — đổi được nhóm quyền của bất kỳ ai, gồm chính mình.
       · `settings.security.manage` — đổi mật khẩu chung của công ty.
+    - **29/08/2026 — `settings.staff.manage` + `settings.view` cấp thêm cho `IT_STAFF`** (quyết
+      định chủ dự án: giao việc tạo tài khoản cho Vũ — IT). Khai ở ADMIN_POLICY + backfill
+      `20260829_it_staff_accounts`; đo hai đường khớp (view 9 vai · staff.manage 3 vai). Danh sách
+      người giữ quyền tạo tài khoản nay: BGĐ, Trưởng phòng NS, Vũ IT — vẫn ngắn và có tên.
     - ⚠ **Giới hạn phải nói thẳng:** `settings.staff.manage` (cấp cho HR Manager để hết cảnh một
       người duy nhất tạo tài khoản) vốn đã cho phép TẠO tài khoản mới KÈM chọn nhóm quyền và đặt mật
       khẩu — nên người giữ nó về lý thuyết vẫn dựng được tài khoản quyền cao. Đây là bản chất của
@@ -3630,6 +3634,10 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
       còn biến chưa thay**, sổ thư hiện đúng trên màn hình.
       tsc · eslint · i18n **0/0 (4666 key)** · `next build` sạch · `migrate diff` rỗng · seed no-op.
       Dữ liệu test đã dọn sạch, `.env` máy dev đã khôi phục (không còn khoá giả).
+    - **29/08/2026 — "QUÊN MẬT KHẨU" CÙNG ĐI QUA RESEND**: `lib/mailer.ts` (đường gửi link đặt lại
+      mật khẩu) nay rơi về `lib/resend.ts` khi chưa khai SMTP — khai MỘT bộ khoá Resend là cả thư
+      ứng viên LẪN quên-mật-khẩu tự phục vụ cùng chạy. SMTP vẫn được ƯU TIÊN nếu khai cả hai. Đã
+      test với khoá giả: request đi thật tới api.resend.com, khoá không rò vào thông báo lỗi.
     - ⚠ **CHƯA GỬI ĐƯỢC THƯ THẬT — và đó là việc của chủ dự án, không phải thiếu sót của code.** Cần:
       (a) tài khoản resend.com + `RESEND_API_KEY`; (b) `RESEND_FROM` dạng `TCM Careers
       <careers@tcmbtl.com>`; (c) ⚠ **XÁC MINH DOMAIN `tcmbtl.com` bằng bản ghi DNS (SPF + DKIM)** —

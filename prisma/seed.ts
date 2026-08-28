@@ -2384,10 +2384,16 @@ async function main() {
       "BOARD_OF_MANAGEMENT", "CFO", "HR_MANAGER",
       "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER",
       "CREATIVE_DIRECTOR", "OPERATIONS_MANAGER", "PURCHASING_MANAGER",
+      "IT_STAFF", // 29/08/2026 — IT quản trị tài khoản (xem settings.staff.manage dưới)
     ],
 
     // — nhân sự & tổ chức: HR —
-    "settings.staff.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
+    // ⚠ IT_STAFF THÊM 29/08/2026 (quyết định chủ dự án: giao việc tạo tài khoản cho Vũ — IT).
+    //   Nhắc lại giới hạn đã ghi ở HANDOVER 10.17: mã này cho phép TẠO tài khoản KÈM chọn nhóm
+    //   quyền và đặt mật khẩu — người giữ nó về lý thuyết dựng được tài khoản quyền cao. Đây là
+    //   bản chất của "người quản trị tài khoản", không phải lỗ hổng; chốt chặn thật là audit log
+    //   + danh sách người giữ mã NGẮN và có tên (hiện: BGĐ, Trưởng phòng NS, Vũ IT).
+    "settings.staff.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER", "IT_STAFF"],
     "settings.departments.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
     "settings.teams.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
     "settings.timekeeping.manage": ["BOARD_OF_MANAGEMENT", "HR_MANAGER"],
@@ -3190,6 +3196,14 @@ async function main() {
       key: "20260818_kho_k6_approve_overhead",
       codes: ["inventory.request.approve", "inventory.request.approve_overhead"],
       roleFilter: (r) => r.code === "HR_MANAGER",
+    },
+
+    // 29/08/2026 — IT quản trị tài khoản (quyết định chủ dự án: giao cho Vũ). Hai mã đi CÙNG NHAU:
+    // thiếu settings.view thì có quyền tạo tài khoản mà không vào được trang Cài đặt.
+    {
+      key: "20260829_it_staff_accounts",
+      codes: ["settings.view", "settings.staff.manage"],
+      roleFilter: (r) => r.code === "IT_STAFF",
     },
 
     // 27/08/2026 — mở `creative.task.submit` cho ĐỐI TÁC ngoài điều hành Creative (quyết định chủ

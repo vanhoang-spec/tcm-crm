@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { isResendConfigured, sendEmail as sendViaResend } from "@/lib/resend";
 import { appBaseUrl } from "@/lib/auth-session";
 
 /**
@@ -18,13 +19,24 @@ import { appBaseUrl } from "@/lib/auth-session";
  */
 
 export function isMailConfigured(): boolean {
-  return !!process.env.SMTP_HOST;
+  // 29/08/2026 — "Quên mật khẩu" tự phục vụ (yêu cầu chủ dự án): thêm đường RESEND làm phương án
+  // gửi khi chưa có SMTP. Resend vốn đã dựng cho thư tuyển dụng (lib/resend.ts) — khai MỘT bộ khoá
+  // (RESEND_API_KEY + RESEND_FROM, kèm xác minh DNS domain) là CẢ thư ứng viên LẪN quên-mật-khẩu
+  // cùng chạy, không phải cấu hình hai hệ.
+  return !!process.env.SMTP_HOST || isResendConfigured();
 }
 
 export type MailResult = { sent: boolean; error?: string };
 
 async function sendMail(to: string, subject: string, text: string, html: string): Promise<MailResult> {
   if (!isMailConfigured()) return { sent: false };
+  // SMTP được ƯU TIÊN khi khai cả hai (thư nội bộ đi máy chủ công ty là chuẩn hơn); Resend là
+  // phương án khi chưa có SMTP. sendViaResend tự bọc text thành HTML an toàn + làm sạch khoá khỏi
+  // thông báo lỗi — không dùng bản html dựng ở đây (một nguồn dựng thư cho mỗi đường).
+  if (!process.env.SMTP_HOST) {
+    const r = await sendViaResend({ to, subject, text });
+    return r.ok ? { sent: true } : { sent: false, error: r.error };
+  }
   try {
     const port = Number(process.env.SMTP_PORT ?? 587);
     const transporter = nodemailer.createTransport({

@@ -2764,20 +2764,27 @@ async function main() {
       // CỐ Ý KHÔNG có inventory.request.approve*: Account duyệt đề xuất — tách vai của Kho v2 K2.
     ],
     SECURITY_GUARD: ["chat.use", "kb.view"],
-    // 26/08/2026 — ĐỐI TÁC NGOÀI điều hành Creative. Đúng 5 mã: đủ để điều phối và duyệt bài, đủ
-    // để trao đổi với team Account trong nhóm chat được add vào, KHÔNG hơn.
+    // 26/08/2026 — ĐỐI TÁC NGOÀI điều hành Creative. Đúng 6 mã: đủ để điều phối, nộp bài và duyệt
+    // bài, đủ để trao đổi với team Account trong nhóm chat được add vào, KHÔNG hơn.
     // ⚠ CỐ Ý KHÔNG có `creative.cost.view`: mã đó mở bảng chi phí theo task, mà chi phí ấy suy từ
     //   LƯƠNG THEO VỊ TRÍ (lib/creative-cost.ts) — người ngoài công ty không được thấy.
-    // ⚠ CỐ Ý KHÔNG có `creative.task.submit`: nộp bài là việc của designer, không phải người duyệt.
     // ⚠ CỐ Ý KHÔNG có `chat.moderate`: giải tán nhóm / gỡ tin người khác là quyền nội bộ.
     // ⚠ Đi kèm cờ `Staff.isExternal` để không bị tự thêm vào nhóm "GIA ĐÌNH TCM" — hai thứ này phải
     //   đặt CÙNG NHAU cho một đối tác; role thôi thì vẫn lọt vào nhóm chat chung.
+    // ⚠ `creative.task.submit` THÊM 27/08/2026 (quyết định chủ dự án) — trước đó cố ý không có với
+    //   lý do "nộp bài là việc của designer". Thực tế đối tác điều hành cũng trực tiếp giao nộp sản
+    //   phẩm, nên mở. Người này vừa nộp vừa duyệt được: đó là chủ đích, không phải sót.
     CREATIVE_PARTNER: [
       "creative.view",
       "creative.task.manage",
       "creative.task.assign",
+      "creative.task.submit",
       "creative.task.approve",
       "chat.use",
+      // Module Tasks (27/08/2026) — nhận/giao việc nội bộ. Phải khai Ở ĐÂY chứ không trông vào
+      // backfill "20260827_tasks_use": role trong EXPLICIT_GRANTS không ăn theo backfill chung
+      // (xem chốt trong vòng lặp backfill).
+      "tasks.use",
     ],
   };
 
@@ -2864,7 +2871,13 @@ async function main() {
   // (đúng chuyện đã xảy ra với finance.vendor_payment.over_cap: 0 grant suốt một đợt).
   // Đánh dấu từng đợt vào bảng setting (module "seed"): re-seed KHÔNG chạy lại đợt đã xong, để
   // không đè lên việc admin đã cố tình BỎ tick sau đó.
-  const backfills: { key: string; codes: string[]; roleFilter?: (r: (typeof roleSeeds)[number]) => boolean }[] = [
+  const backfills: {
+    key: string;
+    codes: string[];
+    roleFilter?: (r: (typeof roleSeeds)[number]) => boolean;
+    /** Đợt này CỐ Ý nhắm role có EXPLICIT_GRANTS (thủ kho / bảo vệ / đối tác ngoài) — xem chốt dưới. */
+    narrow?: boolean;
+  }[] = [
     // 27/07/2026 — gác 10 action ORDER + task bộ phận (trước đó KHÔNG gác, ai đăng nhập cũng làm
     // được): grant cho MỌI role đúng nguyên tắc "grant mặc định = quyền mọi người có trước khi bật
     // ma trận"; BGĐ siết dần ở /settings/roles.
@@ -3179,6 +3192,17 @@ async function main() {
       roleFilter: (r) => r.code === "HR_MANAGER",
     },
 
+    // 27/08/2026 — mở `creative.task.submit` cho ĐỐI TÁC ngoài điều hành Creative (quyết định chủ
+    // dự án). EXPLICIT_GRANTS ở trên chỉ có tác dụng trên DB dựng-từ-đầu; DB đang chạy phải đi
+    // đường backfill vì Vòng 4 bỏ qua role đã có grant. Sửa một chỗ mà quên chỗ kia là hai đường
+    // lệch nhau — đúng lớp lỗi ở HANDOVER mục 10.15.
+    {
+      key: "20260827_creative_partner_submit",
+      codes: ["creative.task.submit"],
+      roleFilter: (r) => r.code === "CREATIVE_PARTNER",
+      narrow: true, // nhắm ĐÍCH DANH role có EXPLICIT_GRANTS — không thì chốt ở vòng lặp chặn mất
+    },
+
     // 27/08/2026 MODULE TASKS — giao việc nội bộ. `tasks.use` cho MỌI vai trừ bảo vệ (thủ kho
     // nhận qua EXPLICIT_GRANTS nhưng vẫn cần dòng backfill vì role đó ĐÃ có grant nên Vòng 4 bỏ
     // qua); `tasks.view_all` theo TASKS_VIEW_ALL_ROLES — sửa hằng thì sửa cả roleFilter dưới.
@@ -3200,6 +3224,24 @@ async function main() {
     if (marker) continue;
     for (const r of roleSeeds) {
       if (r.code === "ADMIN") continue;
+      /**
+       * ⚠ ROLE CÓ DANH SÁCH CỐ ĐỊNH (EXPLICIT_GRANTS) KHÔNG ĂN THEO BACKFILL CHUNG.
+       *
+       * Đo được 27/08/2026: `CREATIVE_PARTNER` (đối tác NGOÀI công ty, tạo 26/08) có đúng 6 mã trên
+       * DB đang chạy nhưng **17 mã** trên DB dựng-từ-đầu — chênh 11 mã gồm duyệt task dự án, đề xuất
+       * kho, hồ sơ ISO, khung ảnh MKT, kho kiến thức khách. Lý do: mọi backfill CŨ đã chạy xong
+       * (có marker) TRƯỚC khi role này ra đời nên production không bị; còn bản dựng-từ-đầu thì
+       * chúng chạy lại và cấp cho nó, vì roleFilter của chúng chỉ loại đích danh hai role hẹp có
+       * SẴN lúc đó (thủ kho, bảo vệ). Thêm role hẹp thứ ba là lỗ hổng tự mở — cùng họ với 4 lỗ đã
+       * phải vá ở HANDOVER mục 10.15.
+       *
+       * Chặn theo TÍNH CHẤT thay vì liệt kê tên: có mặt trong EXPLICIT_GRANTS nghĩa là "grant của
+       * role này là đúng danh sách kia, không hơn". Muốn cấp thêm cho role hẹp thì khai thẳng vào
+       * EXPLICIT_GRANTS — chỗ người đọc seed nhìn phát thấy ngay ai được gì.
+       * Đã đo: thủ kho và bảo vệ KHÔNG đổi (14 và 2 mã ở cả hai đường) vì mã của họ vốn nằm trọn
+       * trong EXPLICIT_GRANTS.
+       */
+      if (EXPLICIT_GRANTS[r.code] && !bf.narrow) continue;
       if (bf.roleFilter && !bf.roleFilter(r)) continue;
       const roleId = roleByCode[r.code].id;
       if ((await prisma.rolePermission.count({ where: { roleId } })) === 0) continue; // role trống — Vòng 4 đã/sẽ lo trọn bộ

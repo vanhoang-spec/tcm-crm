@@ -1577,6 +1577,27 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
         record-check `isSquadLeadOf` vào hai action đó y khuôn `assignCreativeTask` (sửa code).
       · `creative.task.manage` (tạo/xoá task LẺ ngoài checklist) siết không chặn luồng chính: task
         thường sinh TỰ ĐỘNG từ Order của Account. Account cần tạo task lẻ thì tick thêm ở ma trận.
+      · ⚠ **`creative.task.submit` MỞ cho `CREATIVE_PARTNER` — 27/08/2026** (quyết định chủ dự án,
+        đảo lại ghi chú cũ "nộp bài là việc của designer"): đối tác điều hành cũng trực tiếp giao
+        nộp sản phẩm. Người này nay **vừa nộp vừa duyệt được** — đó là chủ đích, không phải sót.
+        Khai ở `EXPLICIT_GRANTS.CREATIVE_PARTNER` (7 mã) + backfill `20260827_creative_partner_submit`.
+      · ⚠⚠ **LỖ HỔNG THỨ NĂM CỦA LỚP "DỰNG LẠI DB" — VÁ CÙNG ĐỢT.** Đo 27/08/2026:
+        `CREATIVE_PARTNER` (đối tác NGOÀI công ty) có đúng 6 mã trên DB đang chạy nhưng **17 mã**
+        trên DB dựng-từ-đầu — chênh 11 mã gồm `projects.task.approve/manage`, `projects.order.respond`,
+        `inventory.request.create`, `iso.view`, `mkt.frames.manage`, `clients.kb.view/quiz`.
+        Lý do: mọi backfill CŨ đã chạy xong (có marker) TRƯỚC khi role này ra đời 26/08 nên
+        production không dính; bản dựng-từ-đầu thì chúng chạy lại và cấp cho nó, vì `roleFilter`
+        của chúng chỉ loại ĐÍCH DANH hai role hẹp có sẵn lúc đó (thủ kho, bảo vệ).
+        **Thêm role hẹp thứ ba là lỗ hổng tự mở** — cùng họ với 4 lỗ ở mục 10.15.
+      · **Vá theo TÍNH CHẤT, không theo tên**: vòng lặp backfill nay bỏ qua mọi role có mặt trong
+        `EXPLICIT_GRANTS` (nghĩa là "grant của role này đúng bằng danh sách kia, không hơn"). Backfill
+        cần nhắm chính role hẹp thì khai cờ `narrow: true` — không có cờ đó thì chốt chặn mất, đúng
+        cái bẫy đã vấp ngay trong đợt này (backfill cấp `submit` bị chính chốt vừa thêm chặn).
+        ⚠ Hệ quả: **muốn cấp thêm mã cho role hẹp thì khai thẳng vào `EXPLICIT_GRANTS`**, đừng trông
+        vào backfill chung. `tasks.use` của CREATIVE_PARTNER cũng phải chuyển vào đó vì lý do này.
+      · Đo **GIỐNG HỆT NHAU** hai đường sau khi vá: DB dựng-từ-đầu và bản sao DB đang chạy đều ra
+        **CREATIVE_PARTNER 7 mã** cùng danh sách; thủ kho **14** và bảo vệ **2** KHÔNG đổi (mã của
+        họ vốn nằm trọn trong EXPLICIT_GRANTS); seed lần hai no-op ở cả hai.
       · ⚠ **`creative.view` CỐ Ý GIỮ RỘNG 21 vai** — ai cũng nên xem được tiến độ thiết kế của dự án
         mình. `creative.task.submit` giữ 20 vai (CREATIVE_PARTNER cố ý không có — nộp bài là việc
         của designer, không phải người duyệt).

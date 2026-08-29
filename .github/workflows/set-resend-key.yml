@@ -1,0 +1,96 @@
+# Khai khoá RESEND (gửi email) cho production — NÚT BẤM trên web GitHub, KHÔNG cần SSH.
+#
+# Một bộ khoá này mở CẢ HAI tính năng đang chờ:
+#   · Thư tuyển dụng (mời phỏng vấn / từ chối / offer — HANDOVER §10.63)
+#   · "Quên mật khẩu" tự phục vụ trên trang đăng nhập (§ mailer 29/08/2026)
+#
+# CÁCH DÙNG (không cần biết code):
+#   1. Tạo tài khoản resend.com → Domains → thêm `tcmbtl.com` → làm theo hướng dẫn thêm bản ghi
+#      DNS (SPF + DKIM) ở nhà cung cấp tên miền. ⚠ CHƯA XÁC MINH DOMAIN thì thư vào spam hoặc bị
+#      chặn thẳng — khai khoá KHÔNG đủ.
+#   2. Resend → API Keys → tạo khoá (bắt đầu bằng `re_`).
+#   3. GitHub → Settings → Secrets and variables → Actions → New repository secret, tạo HAI cái:
+#      Name: RESEND_API_KEY   Secret: khoá re_... vừa tạo
+#      Name: RESEND_FROM      Secret: TCM CRM <crm@tcmbtl.com>   (địa chỉ thuộc domain đã xác minh)
+#      (tuỳ chọn) RESEND_REPLY_TO: hộp thư nhận phản hồi, vd hr@tcmbtl.com
+#   4. GitHub → Actions → "Khai khoá Resend cho production" → Run workflow → gõ: set
+#
+# ⚠ Khoá KHÔNG BAO GIỜ được in ra log: script chỉ báo "đã ghi, độ dài N ký tự".
+# ⚠ Đổi khoá về sau: sửa secret rồi bấm lại — script gỡ dòng cũ trước khi ghi, .env luôn đúng 1 dòng.
+# ⚠ Workflow này KHÔNG deploy code.
+name: Khai khoá Resend cho production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Gõ "set" để xác nhận (chống bấm nhầm)'
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-production # dùng chung nhóm với deploy: không sửa .env lúc đang deploy
+  cancel-in-progress: false
+
+jobs:
+  set-key:
+    runs-on: [self-hosted]
+    timeout-minutes: 10
+    if: inputs.confirm == 'set'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Kiểm secret đã khai chưa
+        env:
+          KEY: ${{ secrets.RESEND_API_KEY }}
+          FROM: ${{ secrets.RESEND_FROM }}
+        run: |
+          FAIL=0
+          if [ -z "$KEY" ]; then
+            echo "❌ Chưa có secret RESEND_API_KEY (Settings → Secrets and variables → Actions)."; FAIL=1
+          else
+            case "$KEY" in
+              re_*) echo "✅ RESEND_API_KEY: đúng dạng khoá Resend (độ dài ${#KEY})" ;;
+              *) echo "❌ RESEND_API_KEY không bắt đầu bằng 're_' — dán nhầm chuỗi khác?"; FAIL=1 ;;
+            esac
+          fi
+          if [ -z "$FROM" ]; then
+            echo "❌ Chưa có secret RESEND_FROM (vd: TCM CRM <crm@tcmbtl.com>)."; FAIL=1
+          else
+            case "$FROM" in
+              *@tcmbtl.com*) echo "✅ RESEND_FROM: thuộc domain tcmbtl.com" ;;
+              *@*) echo "⚠ RESEND_FROM không thuộc tcmbtl.com — chỉ hợp lệ nếu domain đó CŨNG đã xác minh ở Resend" ;;
+              *) echo "❌ RESEND_FROM không có dạng địa chỉ email"; FAIL=1 ;;
+            esac
+          fi
+          [ "$FAIL" = "0" ] || exit 1
+
+      - name: Ghi RESEND_API_KEY vào .env trên server
+        env:
+          KEY_NAME: RESEND_API_KEY
+          KEY_VALUE: ${{ secrets.RESEND_API_KEY }}
+        run: bash scripts/set-env-key.sh
+
+      - name: Ghi RESEND_FROM vào .env trên server
+        env:
+          KEY_NAME: RESEND_FROM
+          KEY_VALUE: ${{ secrets.RESEND_FROM }}
+        run: bash scripts/set-env-key.sh
+
+      # Tuỳ chọn — chỉ ghi khi secret tồn tại; không có thì bỏ qua êm.
+      - name: Ghi RESEND_REPLY_TO (nếu khai)
+        env:
+          KEY_NAME: RESEND_REPLY_TO
+          KEY_VALUE: ${{ secrets.RESEND_REPLY_TO }}
+        run: |
+          if [ -z "$KEY_VALUE" ]; then echo "— RESEND_REPLY_TO không khai, bỏ qua"; exit 0; fi
+          bash scripts/set-env-key.sh
+
+      - name: Xong
+        run: |
+          echo "🎉 Đã khai khoá Resend. Hai thứ bắt đầu chạy:"
+          echo "   · Thư tuyển dụng: /settings/recruit — duyệt mẫu thư rồi gửi thử cho một địa chỉ nội bộ"
+          echo "   · Quên mật khẩu: app.tcmbtl.com/login → 'Quên mật khẩu' → nhập email → nhận link đặt lại"
+          echo "⚠ Nếu thư không tới hoặc vào spam: kiểm domain tcmbtl.com đã VERIFIED trên resend.com chưa (SPF + DKIM)."

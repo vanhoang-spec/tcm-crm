@@ -240,7 +240,7 @@ Chạy `scripts/set-env-key.sh` trên server. ⚠ Ba tính chất phải giữ n
 `[A-Z_][A-Z0-9_]*)` và **không chặn được gì**: trong glob `*` là "mọi ký tự", không phải "lặp lại lớp
 ký tự đứng trước" như regex — chuỗi `FOO"; rm -rf /` khớp và bị ghi thẳng vào `.env` (test bắt được).
 
-Hiện chỉ khai được 2 biến của Claude. Cần khai biến khác thì thêm step vào workflow, script đã tổng quát.
+Hiện có HAI nút: "Khai khoá AI cho production" (2 biến Claude) và "Khai khoá Resend cho production" (29/08/2026 — RESEND_API_KEY + RESEND_FROM + RESEND_REPLY_TO tuỳ chọn; mở cả thư tuyển dụng lẫn quên-mật-khẩu tự phục vụ). Cần biến khác thì thêm step, script đã tổng quát.
 
 ### 8.2 Quy trình deploy
 

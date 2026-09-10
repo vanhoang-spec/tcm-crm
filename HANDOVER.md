@@ -2353,6 +2353,18 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** duyệt hủy cho hàng TCM mua từ chi phí dự án (chỉ hàng khách
       qua cổng DH — đúng câu chốt) · duyệt hủy / giữ chỗ (RESERVE) cho hàng overhead qua HR (K6-4 chỉ định tuyến đề
       xuất XUẤT KHO; hủy hàng overhead thủ kho vẫn làm thẳng, giữ chỗ K3 vẫn Kế toán/HR theo mã cũ) · gộp cờ
+      · ✅ **10/09/2026 — CHỊ YẾN (Senior HR Manager) KIÊM VIỆC THỦ KHO** (quyết định chủ dự án).
+        Role `WAREHOUSE_KEEPER` vẫn TRỐNG người; thay vì tạo tài khoản thủ kho riêng, 4 mã xác nhận
+        thực tế (`issue.confirm` · `intake.confirm` · `lot.convert` · `destroy`) cấp thẳng cho vai
+        HR Manager — `extraByRole.HR_MANAGER += WAREHOUSE_EXTRA` + backfill
+        `20260910_hr_warehouse_confirm`. Đo hai đường khớp: **3 vai** (HR_MANAGER · OPE Manager ·
+        Thủ kho) trên cả DB dựng-từ-đầu lẫn bản sao DB đang chạy; seed lần hai no-op.
+        ⚠ **HỆ QUẢ VỀ TÁCH VAI — biết và chấp nhận:** K2 tách "đề xuất ≠ duyệt ≠ xác nhận thực tế",
+        mà HR Manager ĐANG giữ cả nhánh duyệt (`request.approve` + `approve_overhead` +
+        `reservation.approve`). Nay thêm nhánh xác nhận ⇒ với phiếu hàng **OVERHEAD** chị Yến vừa
+        duyệt vừa tự chốt số thực xuất, **không còn ai kiểm chéo**. Chủ đích, không phải sót.
+        Có người làm Thủ kho thật thì chuyển 4 mã về role đó và bỏ tick ở HR Manager.
+        ⚠ OPE Manager VẪN GIỮ 4 mã (giao tạm từ 28/07) — cố ý không gỡ, chủ dự án chưa yêu cầu.
       · ✅ **ĐÃ SIẾT 10/09/2026 — `inventory.item.manage` + `inventory.import_csv` từ 21 vai xuống 4**
         (quyết định chủ dự án): Thủ kho · Trưởng phòng Vận hành · Trưởng phòng Nhân sự · Hành chính
         (HR/Admin đang hỗ trợ OPE phần quản lý kho). Nguồn sự thật `INVENTORY_ITEM_POLICY` trong

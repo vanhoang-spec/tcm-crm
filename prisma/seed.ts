@@ -2755,7 +2755,7 @@ async function main() {
     // K6-4 (18/08/2026): Senior HR Manager DUYỆT đề xuất dùng hàng OVERHEAD công ty (mua từ ngân sách chung). Cần CẢ
     // gate `inventory.request.approve` (câu đầu action) lẫn mã phạm vi `approve_overhead`; với phiếu của dự án thì
     // canApproveIssue vẫn đòi PIC/Leader/trưởng team nên HR không duyệt lấn được.
-    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "mkt.channel.manage", "inventory.request.approve", "inventory.request.approve_overhead", ...inventoryItemCodesFor("HR_MANAGER")],
+    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "mkt.channel.manage", "inventory.request.approve", "inventory.request.approve_overhead", ...inventoryItemCodesFor("HR_MANAGER"), ...WAREHOUSE_EXTRA],
     HR_STAFF: ["mkt.review", "mkt.generate"], // CỐ Ý không có mã kho: hiện KHÔNG ai giữ role này (đo 10/09/2026)
     // Hành chính hỗ trợ OPE phần quản lý kho (quyết định chủ dự án 10/09/2026) — xem INVENTORY_ITEM_POLICY.
     ADMIN_STAFF: inventoryItemCodesFor("ADMIN_STAFF"),
@@ -3225,6 +3225,21 @@ async function main() {
     {
       key: "20260818_kho_k6_approve_overhead",
       codes: ["inventory.request.approve", "inventory.request.approve_overhead"],
+      roleFilter: (r) => r.code === "HR_MANAGER",
+    },
+
+    // 10/09/2026 — CHỊ YẾN (Senior HR Manager) KIÊM VIỆC THỦ KHO (quyết định chủ dự án). Role
+    // WAREHOUSE_KEEPER vẫn TRỐNG người; thay vì tạo tài khoản thủ kho riêng, 4 mã xác nhận thực
+    // tế được cấp thẳng cho vai HR Manager.
+    // ⚠ HỆ QUẢ VỀ TÁCH VAI — biết và chấp nhận: Kho v2 K2 tách "đề xuất ≠ duyệt ≠ xác nhận thực
+    //   tế", mà HR Manager ĐANG giữ cả nhánh duyệt (request.approve + approve_overhead +
+    //   reservation.approve). Cấp thêm nhánh xác nhận nghĩa là với phiếu hàng OVERHEAD chị Yến vừa
+    //   duyệt vừa tự chốt số thực xuất — không còn ai kiểm chéo. Đây là chủ đích, không phải sót;
+    //   có người làm Thủ kho thật thì chuyển 4 mã này về role đó và bỏ tick ở đây.
+    // ⚠ OPE Manager VẪN GIỮ 4 mã (giao tạm từ 28/07) — cố ý không gỡ, chủ dự án chưa yêu cầu.
+    {
+      key: "20260910_hr_warehouse_confirm",
+      codes: WAREHOUSE_EXTRA,
       roleFilter: (r) => r.code === "HR_MANAGER",
     },
 

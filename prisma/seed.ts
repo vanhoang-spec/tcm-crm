@@ -2504,8 +2504,36 @@ async function main() {
     "meetings.ai_import": ["BOARD_OF_MANAGEMENT", "ACCOUNT_DIRECTOR", "ACCOUNT_MANAGER"],
   };
 
+  /**
+   * Kho — TẠO/SỬA LÔ và NHẬP CSV (siết 10/09/2026, quyết định chủ dự án).
+   *
+   * Trước đó hai mã này nằm trong grant mặc định rộng nên **21/21 vai** có: kế toán, designer,
+   * thu mua đều tạo/sửa được lô và nhập CSV đè tồn. Lúc kho còn rỗng thì vô hại; sắp nhập tồn đầu
+   * kỳ (dự kiến cuối T9/2026) nên phải siết TRƯỚC khi có hàng thật.
+   *
+   * ⚠ CSV import KHÔNG chỉ thêm dòng — nó CỘNG TỒN vào lô trùng sáu thuộc tính (mục 10.40), tức
+   * một file nhập nhầm là sai số tồn kho mà không ai thấy. Đó là lý do mã này đi cùng nhóm với
+   * quyền sửa lô chứ không nằm ở mức "ai cũng dùng được".
+   *
+   * Bốn vai: Thủ kho (người làm chính) · Trưởng phòng Vận hành (chủ vận hành kho) · Trưởng phòng
+   * Nhân sự + Hành chính (đang hỗ trợ OPE phần quản lý kho — quyết định chủ dự án).
+   * ⚠ BGĐ CỐ Ý KHÔNG có: chủ dự án liệt kê đúng bốn vai trên. ADMIN vẫn vào được (sàn cứng trong
+   * code). Cần thì tick lại ở /settings/roles, không phải deploy.
+   * ⚠ WAREHOUSE_KEEPER đã có sẵn hai mã trong EXPLICIT_GRANTS — role hẹp KHÔNG ăn theo backfill
+   * chung (chốt ở vòng lặp backfill), nên phải giữ tên nó trong hằng này để vòng siết không xoá.
+   */
+  const INVENTORY_ITEM_POLICY: Record<string, string[]> = {
+    "inventory.item.manage": ["WAREHOUSE_KEEPER", "OPERATIONS_MANAGER", "HR_MANAGER", "ADMIN_STAFF"],
+    "inventory.import_csv": ["WAREHOUSE_KEEPER", "OPERATIONS_MANAGER", "HR_MANAGER", "ADMIN_STAFF"],
+  };
+  const inventoryItemCodesFor = (roleCode: string) =>
+    Object.entries(INVENTORY_ITEM_POLICY)
+      .filter(([, allowed]) => allowed.includes(roleCode))
+      .map(([code]) => code);
+
   const isRestricted = (code: string) =>
     code in MONEY_POLICY || // chính sách quyền chạm tiền — xem MONEY_POLICY ngay trên
+    code in INVENTORY_ITEM_POLICY || // tạo/sửa lô + nhập CSV — xem INVENTORY_ITEM_POLICY ngay trên
     code in RECRUIT_POLICY || // hồ sơ ứng viên = dữ liệu cá nhân người ngoài — xem RECRUIT_POLICY
     code in PUR_POLICY || // sub-module Thu mua — xem PUR_POLICY
     code in MEETING_POLICY || // họp Account team — xem MEETING_POLICY
@@ -2727,8 +2755,10 @@ async function main() {
     // K6-4 (18/08/2026): Senior HR Manager DUYỆT đề xuất dùng hàng OVERHEAD công ty (mua từ ngân sách chung). Cần CẢ
     // gate `inventory.request.approve` (câu đầu action) lẫn mã phạm vi `approve_overhead`; với phiếu của dự án thì
     // canApproveIssue vẫn đòi PIC/Leader/trưởng team nên HR không duyệt lấn được.
-    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "mkt.channel.manage", "inventory.request.approve", "inventory.request.approve_overhead"],
-    HR_STAFF: ["mkt.review", "mkt.generate"],
+    HR_MANAGER: ["clients.kb.compliance", "inventory.reservation.approve", "iso.manage", "iso.export", "mkt.review", "mkt.generate", "mkt.channel.manage", "inventory.request.approve", "inventory.request.approve_overhead", ...inventoryItemCodesFor("HR_MANAGER")],
+    HR_STAFF: ["mkt.review", "mkt.generate"], // CỐ Ý không có mã kho: hiện KHÔNG ai giữ role này (đo 10/09/2026)
+    // Hành chính hỗ trợ OPE phần quản lý kho (quyết định chủ dự án 10/09/2026) — xem INVENTORY_ITEM_POLICY.
+    ADMIN_STAFF: inventoryItemCodesFor("ADMIN_STAFF"),
     CFO: [...EXEC_EXTRA, ...BIDDING_APPROVE_EXTRA], // Phạm Thu Huyền — exec trong cả (2) và (3)
     PRODUCTION_MANAGER: AI_LEGACY_ALL, // Hồ Sĩ Bảo — all-access AI ở getAiVisibility cũ (hiện đúng 1 người giữ role này)
     // AD/AM duyệt được đề xuất của MỌI dự án (kể cả dự án chưa gán PIC — 21 dự án cũ)
@@ -2737,7 +2767,7 @@ async function main() {
     // Chưa ai giữ role Thủ kho → OPE Manager giữ tạm vai xác nhận kho như TRƯỚC khi có ma trận
     // (đúng nguyên tắc "grant mặc định = quyền mọi người đang có"). Giao người thật xong thì BGĐ bỏ tick.
     // Duyệt điều chuyển kho là việc của chủ vận hành kho; Thủ kho KHÔNG tự duyệt đề xuất của mình.
-    OPERATIONS_MANAGER: [...WAREHOUSE_EXTRA, "inventory.transfer.approve"],
+    OPERATIONS_MANAGER: [...WAREHOUSE_EXTRA, "inventory.transfer.approve", ...inventoryItemCodesFor("OPERATIONS_MANAGER")],
     // Điều phối phòng Creative — chia việc về team nhỏ, giao designer, duyệt bài (CREATIVE_TASK_POLICY).
     CREATIVE_DIRECTOR: Object.keys(CREATIVE_TASK_POLICY),
     BOARD_OF_MANAGEMENT: [...Object.keys(CREATIVE_TASK_POLICY), "tasks.view_all"],
@@ -3503,6 +3533,55 @@ async function main() {
       },
     });
     console.log(`🔒 Siết quyền điều hành Creative: xoá ${removed} dòng, cấp ${added} dòng`);
+  }
+
+  /* ── Vòng 4h: SIẾT tạo/sửa lô + nhập CSV theo INVENTORY_ITEM_POLICY — chạy đúng MỘT lần ──
+   *
+   * ⚠ VÒNG THỨ BA TRONG SEED XOÁ GRANT CỦA ROLE ĐANG HOẠT ĐỘNG (hai vòng kia: 4d siết quyền chạm
+   * tiền, 4f siết điều hành Creative). Bắt buộc phải có: isRestricted chỉ chặn DB DỰNG-TỪ-ĐẦU,
+   * KHÔNG siết lại DB đang chạy vì Vòng 4 bỏ qua role đã có grant.
+   *
+   * ⚠ PHẢI ĐẶT SAU TOÀN BỘ BACKFILL. Đặt trước thì backfill nào cấp lại hai mã này sẽ ghi đè
+   * trong im lặng (bài học Vòng 4f).
+   *
+   * Sau lần chạy này BGĐ toàn quyền tick lại ở /settings/roles — re-seed KHÔNG đè (có marker).
+   */
+  const INVENTORY_ITEM_NARROW_KEY = "20260910_inventory_item_narrow";
+  const inventoryItemMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: INVENTORY_ITEM_NARROW_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!inventoryItemMarker) {
+    let removed = 0;
+    for (const [code, allowed] of Object.entries(INVENTORY_ITEM_POLICY)) {
+      const del = await prisma.rolePermission.deleteMany({
+        where: { permissionCode: code, role: { code: { notIn: [...allowed, "ADMIN"] } } },
+      });
+      removed += del.count;
+    }
+    // Cấp cho role trong chính sách mà chưa có — để vòng này TỰ NÓ là bức tranh đầy đủ, không phụ
+    // thuộc việc Vòng 4 đã chạy hay chưa (đúng khuôn Vòng 4d/4f).
+    let added = 0;
+    for (const [code, allowed] of Object.entries(INVENTORY_ITEM_POLICY)) {
+      for (const roleCode of allowed) {
+        const role = roleByCode[roleCode];
+        if (!role) continue;
+        const has = await prisma.rolePermission.count({ where: { roleId: role.id, permissionCode: code } });
+        if (has === 0) {
+          await prisma.rolePermission.create({ data: { roleId: role.id, permissionCode: code } });
+          added++;
+        }
+      }
+    }
+    await prisma.setting.create({
+      data: {
+        module: "seed",
+        key: INVENTORY_ITEM_NARROW_KEY,
+        scope: "GLOBAL",
+        scopeRef: "",
+        value: JSON.stringify({ at: new Date().toISOString(), removed, added }),
+      },
+    });
+    console.log(`🔒 Siết quyền tạo/sửa lô + nhập CSV: xoá ${removed} dòng, cấp ${added} dòng`);
   }
 
   // ── Module ⑥ KPI — tiêu chí đánh giá + lương vị trí + điểm mẫu ──

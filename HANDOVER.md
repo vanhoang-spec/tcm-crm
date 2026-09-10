@@ -2353,6 +2353,22 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** duyệt hủy cho hàng TCM mua từ chi phí dự án (chỉ hàng khách
       qua cổng DH — đúng câu chốt) · duyệt hủy / giữ chỗ (RESERVE) cho hàng overhead qua HR (K6-4 chỉ định tuyến đề
       xuất XUẤT KHO; hủy hàng overhead thủ kho vẫn làm thẳng, giữ chỗ K3 vẫn Kế toán/HR theo mã cũ) · gộp cờ
+      · ✅ **ĐÃ SIẾT 10/09/2026 — `inventory.item.manage` + `inventory.import_csv` từ 21 vai xuống 4**
+        (quyết định chủ dự án): Thủ kho · Trưởng phòng Vận hành · Trưởng phòng Nhân sự · Hành chính
+        (HR/Admin đang hỗ trợ OPE phần quản lý kho). Nguồn sự thật `INVENTORY_ITEM_POLICY` trong
+        seed nuôi cả ba đường (`isRestricted` + `extraByRole` + **Vòng 4h** marker
+        `20260910_inventory_item_narrow`) — khuôn y hệt Vòng 4d/4f. ⚠ Vòng 4h là vòng THỨ BA trong
+        seed XOÁ grant của role đang chạy, phải đặt SAU toàn bộ backfill.
+        ⚠ Lý do siết trước khi có hàng: **CSV import không chỉ thêm dòng — nó CỘNG TỒN vào lô trùng
+        sáu thuộc tính** (mục 10.40), một file nhập nhầm là sai số tồn mà không ai thấy.
+        ⚠ **BGĐ CỐ Ý KHÔNG có** (chủ dự án liệt kê đúng bốn vai); ADMIN vẫn vào được nhờ sàn cứng.
+        ⚠ **HR_STAFF không có** vì đo 10/09 thì KHÔNG ai giữ role đó — tuyển người hỗ trợ kho sau
+        này thì tick ở /settings/roles, không cần deploy.
+        Đo GIỐNG HỆT NHAU hai đường: DB dựng-từ-đầu và bản sao DB đang chạy đều ra **4 vai** cùng
+        danh sách; thủ kho **14** · bảo vệ **2** · đối tác Creative **7** mã KHÔNG đổi; diễn tập
+        trên bản sao xoá đúng **34 dòng** (17 vai thừa × 2 mã), seed lần hai no-op.
+      · ⚠ **CÒN MỞ 21/21 vai: `inventory.transfer.create` / `.confirm` / `.cancel`** — chưa có
+        quyết định siết. `inventory.transfer.approve` thì đã hẹp sẵn 2 vai (BGĐ + OPE Manager).
       `isOverhead` + `ownerProjectId` thành một cột "chủ hàng" duy nhất · siết `inventory.item.manage` / `import_csv` / `transfer.*` đang mở 21/21 nhóm
       quyền (chính sách BGĐ, xem 10.11 nợ) · giữ chỗ K3 gộp theo sản phẩm · gợi ý tự chia lô theo số cần khi bấm
       "Chọn lô" (hiện OPS tự chọn từng lô) · Order PCC/PLANNING mang vật dụng (chỉ OPE/PRO — hai bộ phận nhận hàng

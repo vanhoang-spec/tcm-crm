@@ -238,11 +238,11 @@ export function buildSampleCsv(): string {
   const esc = (v: string) => (/[",;\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
   const lines = [
     INVENTORY_CSV_COLUMNS.map(esc).join(","),
-    ["", "Áo PG trắng size M", "DP", "R", "B", "", "", "", "", "cái", "Y", "", "HCM", "50", "Hàng chung TCM — Mã dự án trống"].map(esc).join(","),
-    ["", "Áo PG trắng size M", "DP", "R", "S", "", "", "", "", "cái", "Y", "", "HCM", "12", "Cùng sản phẩm dòng trên → lô thứ hai (.02)"].map(esc).join(","),
-    ["", "Loa di động JBL", "Âm thanh", "R", "S", "", "T013LO226A3", "", "", "cái", "Y", "", "HCM", "4", "Mua từ chi phí dự án T013 → team dự án đó duyệt khi ai xin dùng"].map(esc).join(","),
-    ["", "Backdrop khung rời", "Backdrop", "R", "S", "", "", "", "", "bộ", "Y", "3", "HCM", "2", "Số lượng = số bộ đủ"].map(esc).join(","),
-    ["", "Sữa mẫu 180ml", "Hàng hóa chạy project", "C", "B", "", "T013LO226A3", "2026-12-31", "PXK-0123", "thùng", "N", "", "HCM", "20", "Hàng khách gửi: khách suy từ dự án"].map(esc).join(","),
+    ["", "Áo PG trắng size M", "DP", "R", "B", "", "", "", "", "cái", "Y", "", "SG1", "50", "Hàng chung TCM — Mã dự án trống"].map(esc).join(","),
+    ["", "Áo PG trắng size M", "DP", "R", "S", "", "", "", "", "cái", "Y", "", "SG1", "12", "Cùng sản phẩm dòng trên → lô thứ hai (.02)"].map(esc).join(","),
+    ["", "Loa di động JBL", "Âm thanh", "R", "S", "", "T013LO226A3", "", "", "cái", "Y", "", "SG1", "4", "Mua từ chi phí dự án T013 → team dự án đó duyệt khi ai xin dùng"].map(esc).join(","),
+    ["", "Backdrop khung rời", "Backdrop", "R", "S", "", "", "", "", "bộ", "Y", "3", "SG1", "2", "Số lượng = số bộ đủ"].map(esc).join(","),
+    ["", "Sữa mẫu 180ml", "Hàng hóa chạy project", "C", "B", "", "T013LO226A3", "2026-12-31", "PXK-0123", "thùng", "N", "", "SG1", "20", "Hàng khách gửi: khách suy từ dự án"].map(esc).join(","),
   ];
   return lines.join("\r\n") + "\r\n";
 }

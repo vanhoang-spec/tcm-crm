@@ -3381,7 +3381,7 @@
       "errBAD_PART_COUNT": "Số phần tách phải là 1–4",
       "errMISSING_WAREHOUSE": "thiếu Kho",
       "errBAD_QUANTITY": "Số lượng phải là số nguyên ≥ 0",
-      "errUNKNOWN_WAREHOUSE": "Kho không tồn tại (dùng mã kho, vd HCM)",
+      "errUNKNOWN_WAREHOUSE": "Kho không tồn tại (dùng mã kho, vd SG1)",
       "statusR": "Sẵn sàng dùng",
       "statusP": "Theo dự án",
       "statusC": "Theo khách hàng",

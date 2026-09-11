@@ -3381,7 +3381,7 @@
       "errBAD_PART_COUNT": "Number of parts must be 1–4",
       "errMISSING_WAREHOUSE": "missing Warehouse",
       "errBAD_QUANTITY": "Quantity must be an integer ≥ 0",
-      "errUNKNOWN_WAREHOUSE": "warehouse not found (use the warehouse code, e.g. HCM)",
+      "errUNKNOWN_WAREHOUSE": "warehouse not found (use the warehouse code, e.g. SG1)",
       "statusR": "Ready to use",
       "statusP": "Project-bound",
       "statusC": "Client-bound",

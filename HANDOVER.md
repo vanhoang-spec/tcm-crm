@@ -2353,6 +2353,16 @@ Trước khi sửa một module lạ, tìm phần tương ứng trong file này 
     - **CHƯA LÀM (cố ý, muốn thêm phải hỏi chủ dự án):** duyệt hủy cho hàng TCM mua từ chi phí dự án (chỉ hàng khách
       qua cổng DH — đúng câu chốt) · duyệt hủy / giữ chỗ (RESERVE) cho hàng overhead qua HR (K6-4 chỉ định tuyến đề
       xuất XUẤT KHO; hủy hàng overhead thủ kho vẫn làm thẳng, giữ chỗ K3 vẫn Kế toán/HR theo mã cũ) · gộp cờ
+      · ✅ **11/09/2026 — MÃ KHO CHÍNH `HCM` → `SG1`** (quyết định chủ dự án, trước nhập tồn đầu kỳ). Đổi
+        MÃ, giữ tên "Kho tổng HCM". Trang `/settings/warehouses` KHÔNG sửa được mã (chỉ tên/địa điểm/bật-tắt)
+        nên đi qua seed: vòng one-shot `20260911_warehouse_hcm_to_sg1` đổi mã TẠI CHỖ (giữ nguyên id — mọi
+        FK trỏ theo id) rồi `upsert` theo `SG1`. ⚠ Vòng đổi mã PHẢI đứng TRƯỚC upsert, và upsert PHẢI theo
+        `SG1` — để nguyên `code: "HCM"` là seed DỰNG LẠI kho HCM ở lần deploy sau (bẫy seed-dựng-lại, 10.32).
+        Mã kho KHÔNG đi vào mã phiếu/mã lô (đã grep) nên đổi mã không lệch dữ liệu. File CSV mẫu + câu lỗi
+        `errUNKNOWN_WAREHOUSE` (vi/en) đổi theo. Đo: DB dựng-từ-đầu ra SG1, không có HCM · bản sao production
+        đổi HCM→SG1 **cùng id**, seed lần hai không dựng lại HCM, grant/nhân sự/dự án không đổi.
+        Kho `DN` (Đà Nẵng) CỐ Ý giữ nguyên — không dùng thì tắt ở `/settings/warehouses` (seed `update: {}`
+        nên không tự bật lại).
       · ✅ **10/09/2026 — CHỊ YẾN (Senior HR Manager) KIÊM VIỆC THỦ KHO** (quyết định chủ dự án).
         Role `WAREHOUSE_KEEPER` vẫn TRỐNG người; thay vì tạo tài khoản thủ kho riêng, 4 mã xác nhận
         thực tế (`issue.confirm` · `intake.confirm` · `lot.convert` · `destroy`) cấp thẳng cho vai

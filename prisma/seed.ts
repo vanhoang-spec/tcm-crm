@@ -2050,10 +2050,35 @@ async function main() {
     { code: "TOOL", labelVi: "Dụng cụ thi công", labelEn: "Tools" },
     { code: "CONSUMABLE", labelVi: "Vật tư tiêu hao", labelEn: "Consumables" },
   ]);
+  // 11/09/2026 — MÃ KHO CHÍNH HCM → SG1 (quyết định chủ dự án, trước khi nhập tồn đầu kỳ).
+  // ⚠ Vòng đổi mã PHẢI chạy TRƯỚC upsert bên dưới. Đảo thứ tự thì trên DB đang chạy upsert tạo SG1 MỚI
+  //   trong khi HCM còn đó ⇒ hai kho chính, rồi vòng đổi mã vướng unique. Và upsert PHẢI theo SG1: để
+  //   nguyên `code: "HCM"` là lần seed kế tiếp DỰNG LẠI kho HCM (đúng bẫy seed-dựng-lại ở HANDOVER 10.32).
+  // Mã kho KHÔNG đi vào mã phiếu hay mã lô (đã grep) nên đổi mã không làm lệch dữ liệu nào; FK trỏ theo id.
+  const WAREHOUSE_SG1_KEY = "20260911_warehouse_hcm_to_sg1";
+  const whRenameMarker = await prisma.setting.findUnique({
+    where: { module_key_scope_scopeRef: { module: "seed", key: WAREHOUSE_SG1_KEY, scope: "GLOBAL", scopeRef: "" } },
+  });
+  if (!whRenameMarker) {
+    const [oldWh, newWh] = await Promise.all([
+      prisma.warehouse.findUnique({ where: { code: "HCM" } }),
+      prisma.warehouse.findUnique({ where: { code: "SG1" } }),
+    ]);
+    if (oldWh && newWh) {
+      // Có sẵn cả hai: không đoán nên gộp thế nào. Bỏ qua, KHÔNG ghi marker để lần sau chạy lại.
+      console.log("⚠ Đổi mã kho HCM → SG1: đã có sẵn cả hai mã — bỏ qua, xử lý tay rồi chạy lại seed.");
+    } else {
+      if (oldWh) await prisma.warehouse.update({ where: { id: oldWh.id }, data: { code: "SG1" } });
+      await prisma.setting.create({
+        data: { module: "seed", key: WAREHOUSE_SG1_KEY, scope: "GLOBAL", scopeRef: "", value: JSON.stringify({ at: new Date().toISOString(), renamed: oldWh ? 1 : 0 }) },
+      });
+      if (oldWh) console.log("🏷 Đổi mã kho chính HCM → SG1");
+    }
+  }
   await prisma.warehouse.upsert({
-    where: { code: "HCM" },
+    where: { code: "SG1" },
     update: {},
-    create: { code: "HCM", name: "Kho tổng HCM", location: "TP. Hồ Chí Minh", isMain: true },
+    create: { code: "SG1", name: "Kho tổng HCM", location: "TP. Hồ Chí Minh", isMain: true },
   });
   await prisma.warehouse.upsert({
     where: { code: "DN" },
